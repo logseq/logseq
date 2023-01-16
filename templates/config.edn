@@ -27,6 +27,9 @@
  ;; Show brackets around page references
  ;; :ui/show-brackets? true
 
+ ;; Enable showing the body of blocks when referencing them.
+ :ui/show-full-blocks? false
+
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 
@@ -269,7 +272,7 @@
  ;; Enable logical outdenting
  ;; :editor/logical-outdenting? true
 
- ;; Enable preferring pasting file from clipboard
+ ;; When both text and a file are in the clipboard, paste the file
  ;; :editor/preferred-pasting-file? true
 
  ;; Quick capture templates for receiving contents from other apps.

@@ -23,7 +23,7 @@
 
 (rum/defc page-cp
   [props]
-  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
+  (page/page {:page-name (model/get-redirect-page-name (gobj/get props "pageName")) :whiteboard? true}))
 
 (rum/defc block-cp
   [props]
@@ -82,6 +82,7 @@
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
+   :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
    :addNewWhiteboard (fn [page-name]
@@ -100,9 +101,9 @@
                            page-exists? (model/page-exists? page-name)
                            whiteboard? (model/whiteboard-page? page-name)]
                        (when page-exists?
-                         (if whiteboard? (route-handler/redirect-to-whiteboard!
-                                          page-name {:block-id page-name-or-uuid})
-                             (route-handler/redirect-to-page! page-name-or-uuid)))))})
+                         (if whiteboard?
+                           (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
+                           (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
 
 (rum/defc tldraw-app
   [page-name block-id]

@@ -10,9 +10,15 @@
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn get-file-basename
+  "Returns the basename of a file path. e.g. /a/b/c.md -> c.md"
   [path]
   (when-not (string/blank? path)
-    ;; Same as util/node-path.name
+    (.-base (path/parse (string/replace path "+" "/")))))
+
+(defn get-file-rootname
+  "Returns the rootname of a file path. e.g. /a/b/c.md -> c"
+  [path]
+  (when-not (string/blank? path)
     (.-name (path/parse (string/replace path "+" "/")))))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
@@ -28,7 +34,7 @@
        (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
              (string/trim label))
            (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (some-> (get-file-basename path)
+             (some-> (get-file-rootname path)
                      (string/replace "." "/")))
            (-> (re-matches page-ref-re-0 s)
                second))))

@@ -5,10 +5,11 @@
             [frontend.db :as db]
             [logseq.db.schema :as db-schema]
             [rum.core :as rum]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.page :as page]
             [frontend.util :as util]
             [frontend.routes :as routes]
+            [frontend.context.i18n :as i18n]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [cljs.reader :as reader]
@@ -56,7 +57,7 @@
   []
   (rfe/start!
    (rf/router routes/routes {})
-   route/set-route-match!
+   route-handler/set-route-match!
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 
@@ -79,6 +80,8 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (register-components-fns!)
+  ;; Set :preferred-lang as some components depend on it
+  (i18n/start)
   (restore-from-transit-str!)
   (restore-state!)
   (shortcut/refresh!)

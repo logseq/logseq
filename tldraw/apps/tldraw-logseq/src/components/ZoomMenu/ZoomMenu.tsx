@@ -25,7 +25,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.zoomToFit}
         >
-          Zoom to fit
+          Zoom to drawing
           <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>⇧</code> <code>1</code>
@@ -38,7 +38,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomToSelection}
           disabled={app.selectedShapesArray.length === 0}
         >
-          Zoom to selection
+          Zoom to fit selection
           <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>

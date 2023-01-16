@@ -43,7 +43,11 @@ export const ContextMenu = observer(function ContextMenu({
         }
       }}
     >
-      <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
+      <ReactContextMenu.Trigger
+        disabled={app.editingShape && Object.keys(app.editingShape).length !== 0}
+      >
+        {children}
+      </ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
         ref={rContent}
@@ -58,26 +62,26 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Item>
                 <div className="tl-menu-button-row pb-0">
                   <Button
-                    title="Align left"
+                    tooltip="Align left"
                     onClick={() => runAndTransition(() => app.align(AlignType.Left))}
                   >
                     <TablerIcon name="layout-align-left" />
                   </Button>
                   <Button
-                    title="Align center horizontally"
+                    tooltip="Align center horizontally"
                     onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
                   >
                     <TablerIcon name="layout-align-center" />
                   </Button>
                   <Button
-                    title="Align right"
+                    tooltip="Align right"
                     onClick={() => runAndTransition(() => app.align(AlignType.Right))}
                   >
                     <TablerIcon name="layout-align-right" />
                   </Button>
                   <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                   <Button
-                    title="Distribute horizontally"
+                    tooltip="Distribute horizontally"
                     onClick={() =>
                       runAndTransition(() => app.distribute(DistributeType.Horizontal))
                     }
@@ -87,26 +91,26 @@ export const ContextMenu = observer(function ContextMenu({
                 </div>
                 <div className="tl-menu-button-row pt-0">
                   <Button
-                    title="Align top"
+                    tooltip="Align top"
                     onClick={() => runAndTransition(() => app.align(AlignType.Top))}
                   >
                     <TablerIcon name="layout-align-top" />
                   </Button>
                   <Button
-                    title="Align center vertically"
+                    tooltip="Align center vertically"
                     onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
                   >
                     <TablerIcon name="layout-align-middle" />
                   </Button>
                   <Button
-                    title="Align bottom"
+                    tooltip="Align bottom"
                     onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
                   >
                     <TablerIcon name="layout-align-bottom" />
                   </Button>
                   <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                   <Button
-                    title="Distribute vertically"
+                    tooltip="Distribute vertically"
                     onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
                   >
                     <TablerIcon name="layout-distribute-horizontal" />
@@ -121,6 +125,56 @@ export const ContextMenu = observer(function ContextMenu({
                 <TablerIcon className="tl-menu-icon" name="layout-grid" />
                 Pack into rectangle
               </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
+          {app.selectedShapes?.size > 0 && (
+            <>
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.api.zoomToSelection)}
+              >
+                Zoom to fit
+                <div className="tl-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
+          {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
+            app.selectedShapesArray.length > 1) && (
+            <>
+              {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.unGroup)}
+                >
+                  <TablerIcon className="tl-menu-icon" name="ungroup" />
+                  Ungroup
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
+              {app.selectedShapesArray.length > 1 && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.doGroup)}
+                >
+                  <TablerIcon className="tl-menu-icon" name="group" />
+                  Group
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
               <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
@@ -165,17 +219,17 @@ export const ContextMenu = observer(function ContextMenu({
             </div>
           </ReactContextMenu.Item>
           {app.selectedShapes?.size === 1 && (
-          <ReactContextMenu.Item
-            className="tl-menu-item"
-            onClick={() => runAndTransition(() => app.paste(undefined, true))}
-          >
-            Paste as link
-            <div className="tl-menu-right-slot">
-              <span className="keyboard-shortcut">
-                <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
-              </span>
-            </div>
-          </ReactContextMenu.Item>
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.paste(undefined, true))}
+            >
+              Paste as link
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+                </span>
+              </div>
+            </ReactContextMenu.Item>
           )}
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item

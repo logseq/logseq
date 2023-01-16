@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { merge } from 'lodash-es'
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
+import EventEmitter from 'eventemitter3'
 
 declare global {
   interface Window {
@@ -52,6 +53,74 @@ export function isObject(item: any) {
 }
 
 export const deepMerge = merge
+
+export class PluginLogger extends EventEmitter<'change'> {
+  private _logs: Array<[type: string, payload: any]> = []
+
+  constructor(
+    private _tag?: string,
+    private _opts?: {
+      console: boolean
+    }
+  ) {
+    super()
+  }
+
+  write(type: string, payload: any[], inConsole?: boolean) {
+    if (payload?.length && (true === payload[payload.length - 1])) {
+      inConsole = true
+      payload.pop()
+    }
+
+    const msg = payload.reduce((ac, it) => {
+      if (it && it instanceof Error) {
+        ac += `${it.message} ${it.stack}`
+      } else {
+        ac += it.toString()
+      }
+      return ac
+    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
+
+    this._logs.push([type, msg])
+
+    if (inConsole || this._opts?.console) {
+      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
+    }
+
+    this.emit('change')
+  }
+
+  clear() {
+    this._logs = []
+    this.emit('change')
+  }
+
+  info(...args: any[]) {
+    this.write('INFO', args)
+  }
+
+  error(...args: any[]) {
+    this.write('ERROR', args)
+  }
+
+  warn(...args: any[]) {
+    this.write('WARN', args)
+  }
+
+  setTag(s: string) {
+    this._tag = s
+  }
+
+  toJSON() {
+    return this._logs
+  }
+}
+
+export function isValidUUID(s: string) {
+  return (typeof s === 'string' &&
+    (s.length === 36) &&
+    (/^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi).test(s))
+}
 
 export function genID() {
   // Math.random should be unique because of its seeding algorithm.
@@ -190,9 +259,9 @@ export function setupInjectedStyle(
   el.textContent = style
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   document.head.append(el)
 
@@ -227,7 +296,7 @@ export function setupInjectedUI(
     float = true
   }
 
-  const id = `${pl.id}--${ui.key}`
+  const id = `${pl.id}--${ui.key || genID()}`
   const key = id
 
   const target = float
@@ -268,22 +337,22 @@ export function setupInjectedUI(
 
     // update attributes
     attrs &&
-      Object.entries(attrs).forEach(([k, v]) => {
-        el.setAttribute(k, v)
-      })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
     let positionDirty = el.dataset.dx != null
     ui.style &&
-      Object.entries(ui.style).forEach(([k, v]) => {
-        if (
-          positionDirty &&
-          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-        ) {
-          return
-        }
+    Object.entries(ui.style).forEach(([k, v]) => {
+      if (
+        positionDirty &&
+        ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
 
-        el.style[k] = v
-      })
+      el.style[k] = v
+    })
     return
   }
 
@@ -303,18 +372,19 @@ export function setupInjectedUI(
   content.innerHTML = ui.template
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      el.style[k] = v
-    })
+  Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
 
   let teardownUI: () => void
   let disposeFloat: () => void
 
+  // seu up float container
   if (float) {
     el.setAttribute('draggable', 'true')
     el.setAttribute('resizable', 'true')
@@ -322,11 +392,11 @@ export function setupInjectedUI(
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat =
       (pl._setupResizableContainer(el, key),
-      pl._setupDraggableContainer(el, {
-        key,
-        close: () => teardownUI(),
-        title: attrs?.title,
-      }))
+        pl._setupDraggableContainer(el, {
+          key,
+          close: () => teardownUI(),
+          title: attrs?.title,
+        }))
   }
 
   if (!!slot && ui.reset) {
@@ -354,6 +424,7 @@ export function setupInjectedUI(
     'keydown',
     'change',
     'input',
+    'contextmenu'
   ].forEach((type) => {
     el.addEventListener(
       type,
@@ -362,9 +433,10 @@ export function setupInjectedUI(
         const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
         if (!trigger) return
 
+        const { preventDefault } = trigger.dataset
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
-        msgType &&
-          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
       },
       false
     )
@@ -403,6 +475,8 @@ export function transformableEvent(target: HTMLElement, e: Event) {
   const obj: any = {}
 
   if (target) {
+    obj.type = e.type
+
     const ds = target.dataset
     const FLAG_RECT = 'rect'
 

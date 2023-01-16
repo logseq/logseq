@@ -4,7 +4,7 @@
             [frontend.util :as util]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
@@ -161,13 +161,13 @@
     (let [data (or alias data)]
       (cond
         (model/whiteboard-page? data)
-        (route/redirect-to-whiteboard! data)
+        (route-handler/redirect-to-whiteboard! data)
         :else
-        (route/redirect-to-page! data)))
+        (route-handler/redirect-to-page! data)))
 
     :file
-    (route/redirect! {:to :file
-                      :path-params {:path data}})
+    (route-handler/redirect! {:to :file
+                              :path-params {:path data}})
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
@@ -178,13 +178,13 @@
       (if page
         (cond
           (model/whiteboard-page? page-name)
-          (route/redirect-to-whiteboard! page-name {:block-id block-uuid})
+          (route-handler/redirect-to-whiteboard! page-name {:block-id block-uuid})
 
           (or collapsed? long-page?)
-          (route/redirect-to-page! block-uuid)
+          (route-handler/redirect-to-page! block-uuid)
 
           :else
-          (route/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
+          (route-handler/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
         ;; search indice outdated
         (println "[Error] Block page missing: "
                  {:block-id block-uuid
@@ -197,9 +197,9 @@
       (if page
         (cond
           (model/whiteboard-page? page-name)
-          (route/redirect-to-whiteboard! page-name)
+          (route-handler/redirect-to-whiteboard! page-name)
           :else
-          (route/redirect-to-page! page-name))
+          (route-handler/redirect-to-page! page-name))
         ;; search indice outdated
         (println "[Error] page missing: "
                  {:page-uuid page-uuid
@@ -219,7 +219,7 @@
          repo
          (:db/id page)
          :page)))
-    
+
     :page-content
     (let [page-uuid (uuid (:block/uuid data))
           page (model/get-block-by-uuid page-uuid)]
@@ -245,7 +245,7 @@
     (page-handler/create! search-q)
 
     :file
-    (route/redirect! {:to :file
+    (route-handler/redirect! {:to :file
                       :path-params {:path data}})
 
     nil)
@@ -331,6 +331,8 @@
        nil)]))
 
 (rum/defc search-auto-complete
+  "has-more? - if the result is truncated
+   all? - if true, in show-more mode"
   [{:keys [engine pages files pages-content blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
@@ -370,7 +372,7 @@
                  [{:type :graph-add-filter}]
                  result)
         repo (state/get-current-repo)]
-    [:div
+    [:div.results-inner
      (ui/auto-complete
       result
       {:class "search-results"
@@ -378,7 +380,7 @@
        :on-shift-chosen #(search-on-shift-chosen repo search-q %)
        :item-render #(search-item-render search-q %)
        :on-chosen-open-link #(search-on-chosen-open-link repo search-q %)})
-     (when (and has-more? (util/electron?) (not all?))
+     (when (and has-more? (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
                                  :on-click (fn []
@@ -411,7 +413,7 @@
                    :theme       "monospace"}
                   [:a.flex.fade-link.items-center
                    {:style {:margin-left 12}
-                    :on-click #(state/toggle! :ui/command-palette-open?)}
+                    :on-click #(state/pub-event! :modal/command-palette)}
                    (ui/icon "command" {:style {:font-size 20}})])])]]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
@@ -425,7 +427,7 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (do (route/redirect-to-page! data)
+                      (do (route-handler/redirect-to-page! data)
                           (state/close-modal!))
                       :search
                       (let [q data]
@@ -497,7 +499,7 @@
     [:div.cp__palette.cp__palette-main
      [:div.ls-search.p-2.md:p-0
       [:div.input-wrap
-      [:input.cp__palette-input.w-full
+      [:input.cp__palette-input.w-full.h-full
        {:type          "text"
         :auto-focus    true
         :placeholder   (case search-mode
@@ -554,7 +556,7 @@
                          [:span.pr-2 (ui/icon "puzzle")]
                          (:name v)
                          (when-let [result (and v (:result v))]
-                           (str " (" (count (:blocks result)) ")"))]
+                           (str " (" (apply + (map count ((juxt :blocks :pages :files) result))) ")"))]
                         :on-click #(reset! *active-engine-tab k))])])
 
        (if-not (nil? @*active-engine-tab)

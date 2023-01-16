@@ -99,6 +99,9 @@ nested keys or positional errors e.g. tuples"
                       (edn/read-string file-body)
                       (catch :default _ ::failed-to-read))]
     (cond
+      (nil? parsed-body)
+      true
+
       (= ::failed-to-read parsed-body)
       (do
         (notification/show! (gstring/format "Failed to read file '%s'. Make sure your config is wrapped

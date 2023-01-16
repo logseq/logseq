@@ -377,30 +377,37 @@
    :target "_blank"))
 
 (rum/defc user-proxy-settings-panel
-  [{:keys [protocol] :as agent-opts}]
-  (let [[opts set-opts!] (rum/use-state agent-opts)
+  [{:keys [protocol type] :as agent-opts}]
+  (let [type (or (not-empty type) (not-empty protocol) "system")
+        [opts set-opts!] (rum/use-state agent-opts)
         [testing? set-testing?!] (rum/use-state false)
         *test-input (rum/create-ref)
-        disabled?   (string/blank? (:protocol opts))]
+        disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-panel
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :type)]
-           (ui/select [{:label "Disabled" :value "" :selected disabled?}
-                       {:label "http" :value "http" :selected (= protocol "http")}
-                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
-                      #(set-opts!
-                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+           (ui/select [{:label "System" :value "system" :selected (= type "system")}
+                       {:label "Direct" :value "direct" :selected (= type "direct")}
+                       {:label "HTTP"   :value "http"   :selected (= type "http")}
+                       {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
+                      #(set-opts! (assoc opts :type % :protocol %)))]]
       [:p.flex
-       [:label.pr-4 [:strong (t :host)]
+       [:label.pr-4
+        {:class (if disabled? "opacity-50" nil)}
+        [:strong (t :host)]
         [:input.form-input.is-small
-         {:value     (:host opts) :disabled disabled?
+         {:value     (:host opts)
+          :disabled  disabled?
           :on-change #(set-opts!
                        (assoc opts :host (util/trim-safe (util/evalue %))))}]]
 
-       [:label [:strong (t :port)]
+       [:label
+        {:class (if disabled? "opacity-50" nil)}
+        [:strong (t :port)]
         [:input.form-input.is-small
-         {:value     (:port opts) :type "number" :disabled disabled?
+         {:value     (:port opts) :type "number" :min 1 :max 65535
+          :disabled  disabled?
           :on-change #(set-opts!
                        (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
 
@@ -409,26 +416,34 @@
        [:span.w-60
         [:input.form-input.is-small
          {:ref         *test-input
-          :placeholder "http://"
+          :list        "proxy-test-url-datalist"
+          :type        "url"
+          :placeholder "https://"
           :on-change   #(set-opts!
                          (assoc opts :test (util/trim-safe (util/evalue %))))
-          :value       (:test opts)}]]
+          :value       (:test opts)}]
+        [:datalist#proxy-test-url-datalist
+         [:option "https://www.google.com"]
+         [:option "https://s3.amazonaws.com"]
+         [:option "https://clients3.google.com/generate_204"]]]
 
        (ui/button (if testing? (ui/loading "Testing") "Test URL")
                   :intent "logseq" :large? false
-                  :style {:margin-top 0 :padding "5px 15px"}
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
                                  (set-testing?! true)
-                                 (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
-                                             _ (ipc/ipc :testProxyUrl val)])
-                                     (p/catch (fn [e] (notification/show! (str e) :error)))
+                                 (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
+                                       (js->clj result :keywordize-keys true))
+                                     (p/then (fn [{:keys [code response-ms]}]
+                                               (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
+                                     (p/catch (fn [e]
+                                                (notification/show! (str e) :error)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
        (ui/button (t :save)
                   :on-click (fn []
-                              (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                              (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
                                 (state/close-sub-modal! :https-proxy-panel))))]]]))
 
@@ -621,7 +636,8 @@
          (reload-fn false)
          (assoc s ::reload (partial reload-fn true))))}
   [state]
-  (let [pkgs               (state/sub :plugin/marketplace-pkgs)
+  (let [*list-node-ref     (rum/create-ref)
+        pkgs               (state/sub :plugin/marketplace-pkgs)
         stats              (state/sub :plugin/marketplace-stats)
         installed-plugins  (state/sub :plugin/installed-plugins)
         installing         (state/sub :plugin/installing)
@@ -673,7 +689,7 @@
         fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag     (fn-query-flag)
         _                  (when (not= str-query-flag @*cached-query-flag)
-                             (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                             (when-let [^js list-cnt (rum/deref *list-node-ref)]
                                (set! (.-scrollTop list-cnt) 0))
                              (reset! *current-page 1))
         _                  (reset! *cached-query-flag str-query-flag)
@@ -708,7 +724,7 @@
        [:div.cp__plugins-marketplace-cnt
         {:class (util/classnames [{:has-installing (boolean installing)}])}
         [:div.cp__plugins-item-lists
-         {:ref "list-ref"}
+         {:ref *list-node-ref}
          [:div.cp__plugins-item-lists-inner
           ;; items list
           (for [item sorted-plugins]
@@ -735,7 +751,8 @@
     (rum/local nil ::cached-query-flag)
     (rum/local 1 ::current-page)
   [state]
-  (let [installed-plugins     (state/sub [:plugin/installed-plugins])
+  (let [*list-node-ref        (rum/create-ref)
+        installed-plugins     (state/sub [:plugin/installed-plugins])
         installed-plugins     (vals installed-plugins)
         updating              (state/sub :plugin/installing)
         develop-mode?         (state/sub :ui/developer-mode?)
@@ -784,7 +801,7 @@
         fn-query-flag         (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag        (fn-query-flag)
         _                     (when (not= str-query-flag @*cached-query-flag)
-                                (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                                (when-let [^js list-cnt (rum/deref *list-node-ref)]
                                   (set! (.-scrollTop list-cnt) 0))
                                 (reset! *current-page 1))
         _                     (reset! *cached-query-flag str-query-flag)
@@ -806,8 +823,8 @@
       false develop-mode? nil
       agent-opts)
 
-     [:div.cp__plugins-item-lists
-      {:ref "list-ref"}
+     [:div.cp__plugins-item-lists.pb-6
+      {:ref *list-node-ref}
       [:div.cp__plugins-item-lists-inner
        (for [item sorted-plugins]
          (rum/with-key
@@ -913,23 +930,20 @@
      ;; all done
      [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
 
-
 (defn open-select-theme!
   []
   (state/set-sub-modal! installed-themes))
 
 (rum/defc hook-ui-slot
-  ([type payload] (hook-ui-slot type payload nil))
-  ([type payload opts]
+  ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
+  ([type payload opts callback]
    (let [rs      (util/rand-str 8)
          id      (str "slot__" rs)
          *el-ref (rum/use-ref nil)]
 
      (rum/use-effect!
       (fn []
-        (let [timer (js/setTimeout
-                     #(plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
-                     100)]
+        (let [timer (js/setTimeout #(callback {:type type :slot id :payload payload}) 50)]
           #(js/clearTimeout timer)))
       [id])
 
@@ -946,6 +960,10 @@
       (merge opts {:id            id
                    :ref           *el-ref
                    :on-mouse-down (fn [e] (util/stop e))})])))
+
+(rum/defc hook-block-slot < rum/static
+  [type block]
+  (hook-ui-slot type {} nil #(plugin-handler/hook-plugin-block-slot block %)))
 
 (rum/defc ui-item-renderer
   [pid type {:keys [key template prefix]}]

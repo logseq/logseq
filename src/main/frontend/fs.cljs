@@ -15,7 +15,8 @@
             [frontend.db :as db]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -56,9 +57,12 @@
   [dir & {:keys [path-only?]}]
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (if (and path-only? (map? (first result)))
-      (map :uri result)
-      result)))
+    (let [result (if (and path-only? (map? (first result)))
+                   (map :uri result)
+                   result)]
+      (if (and (map? (first result)) (:uri (first result)))
+        (map #(update % :uri gp-util/path-normalize) result)
+        (map gp-util/path-normalize result)))))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -229,3 +233,15 @@
 (defn dir-exists?
   [dir]
   (file-exists? dir ""))
+
+(defn backup-db-file!
+  [repo path db-content disk-content]
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
+
+    (mobile-util/native-platform?)
+    (capacitor-fs/backup-file repo :backup-dir path db-content)
+
+    ;; TODO: nfs
+    ))

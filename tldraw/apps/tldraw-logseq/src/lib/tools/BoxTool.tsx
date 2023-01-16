@@ -4,6 +4,6 @@ import { BoxShape, type Shape } from '../shapes'
 
 export class BoxTool extends TLBoxTool<BoxShape, Shape, TLReactEventMap> {
   static id = 'box'
-  static shortcut = ['7', 'r']
+  static shortcut = ['9', 'r']
   Shape = BoxShape
 }

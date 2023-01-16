@@ -1,11 +1,13 @@
 import type { Side } from '@radix-ui/react-popper'
 import { validUUID } from '@tldraw/core'
+import { useApp } from '@tldraw/react'
 import React from 'react'
 
 import { observer } from 'mobx-react-lite'
 import { LogseqContext } from '../../lib/logseq-context'
 import { BlockLink } from '../BlockLink'
 import { Button } from '../Button'
+import { Tooltip } from '../Tooltip'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
 import { LogseqQuickSearch } from '../QuickSearch'
@@ -30,6 +32,7 @@ function ShapeLinkItem({
   onRemove?: () => void
   showContent?: boolean
 }) {
+  const app = useApp<Shape>()
   const { handlers } = React.useContext(LogseqContext)
 
   return (
@@ -38,11 +41,13 @@ function ShapeLinkItem({
         <BlockLink id={id} showReferenceContent={showContent} />
       </div>
       <div className="flex-1" />
-      <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
-        <TablerIcon name="open-as-page" />
-      </Button>
+      {handlers.getBlockPageName(id) !== app.currentPage.name && (
+        <Button tooltip="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
+          <TablerIcon name="open-as-page" />
+        </Button>
+      )}
       <Button
-        title="Open Page in Right Sidebar"
+        tooltip="Open Page in Right Sidebar"
         type="button"
         onClick={() => handlers?.sidebarAddBlock(id, type === 'B' ? 'block' : 'page')}
       >
@@ -51,7 +56,7 @@ function ShapeLinkItem({
       {onRemove && (
         <Button
           className="tl-shape-links-panel-item-remove-button"
-          title="Remove link"
+          tooltip="Remove link"
           type="button"
           onClick={onRemove}
         >
@@ -89,10 +94,12 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
       align="start"
       alignOffset={-6}
       label={
-        <div className="flex gap-1 relative items-center justify-center px-1">
-          <TablerIcon name={noOfLinks > 0 ? 'link' : 'add-link'} />
-          {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
-        </div>
+        <Tooltip content={'Link'} sideOffset={14}>
+          <div className="flex gap-1 relative items-center justify-center px-1">
+            <TablerIcon name={noOfLinks > 0 ? 'link' : 'add-link'} />
+            {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
+          </div>
+        </Tooltip>
       }
     >
       <div className="color-level rounded-lg" data-show-reference-panel={showReferencePanel}>

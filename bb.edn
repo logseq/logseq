@@ -69,6 +69,9 @@
   dev:lint
   logseq.tasks.dev/lint
 
+  dev:gen-malli-kondo-config
+  logseq.tasks.dev/gen-malli-kondo-config
+
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
 

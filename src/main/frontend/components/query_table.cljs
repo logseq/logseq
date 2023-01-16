@@ -42,15 +42,15 @@
 (defn- locale-compare
   "Use locale specific comparison for strings and general comparison for others."
   [x y]
-  (if (and (string? x) (string? y))
-    (.localeCompare x y (state/sub :preferred-language))
-    (< x y)))
+    (if (and (number? x) (number? y))
+      (< x y)
+      (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
-(defn- sort-result [result {:keys [sort-by-column sort-desc?]}]
+(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date?]}]
   (if (some? sort-by-column)
     (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)]
       (sort-by (fn [item]
-                 (block/normalize-block (sort-by-fn sort-by-column item)))
+                 (block/normalize-block (sort-by-fn sort-by-column item) sort-nlp-date?))
                comp-fn
                result))
     result))
@@ -63,12 +63,15 @@
   (let [p-desc? (get-in current-block [:block/properties :query-sort-desc])
         desc? (if (some? p-desc?) p-desc? true)
         p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
+        ;; Starting with #6105, we started putting properties under namespaces.
+        nlp-date? (get-in current-block [:block/properties :logseq.query/nlp-date])
         sort-by-column (or (some-> p-sort-by keyword)
                          (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                            nil
                            :updated-at))]
     {:sort-desc? desc?
-     :sort-by-column sort-by-column}))
+     :sort-by-column sort-by-column
+     :sort-nlp-date? nlp-date?}))
 
 ;; Components
 ;; ==========
@@ -167,7 +170,9 @@
                               [:string (when-let [updated-at (:block/updated-at item)]
                                          (date/int->local-time-2 updated-at))]
 
-                              [:string (get-in item [:block/properties column])])]
+                              [:string (or (get-in item [:block/properties-text-values column])
+                                           ;; Fallback to property relationships for page blocks
+                                           (get-in item [:block/properties column]))])]
                   [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
                                           :on-mouse-move (fn [] (reset! select? true))
                                           :on-mouse-up (fn []

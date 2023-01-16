@@ -1,6 +1,8 @@
 import {
+  isValidUUID,
   deepMerge,
   mergeSettingsWithSchema,
+  PluginLogger,
   safeSnakeCase,
   safetyPathJoin,
 } from './helpers'
@@ -55,6 +57,7 @@ type callableMethods =
 
 const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
+const logger = new PluginLogger('', { console: true })
 
 /**
  * @param type (key of group commands)
@@ -87,10 +90,24 @@ function registerSimpleCommand(
     method: 'register-plugin-simple-command',
     args: [
       this.baseInfo.id,
+      // [cmd, action]
       [{ key, label, type, desc, keybinding, extras }, ['editor/hook', eventKey]],
       palette,
     ],
   })
+}
+
+function shouldValidUUID(uuid: string) {
+  if (!isValidUUID(uuid)) {
+    logger.error(`#${uuid} is not a valid UUID string.`)
+    return false
+  }
+
+  return true
+}
+
+function checkEffect(p: LSPluginUser) {
+  return p && (p.baseInfo?.effect || !p.baseInfo?.iir)
 }
 
 let _appBaseInfo: AppInfo = null
@@ -185,6 +202,45 @@ const app: Partial<IAppProxy> = {
         label,
       },
       action
+    )
+  },
+
+  onBlockRendererSlotted(
+    uuid,
+    callback: (payload: any) => void) {
+    if (!shouldValidUUID(uuid)) return
+
+    const pid = this.baseInfo.id
+    const hook = `hook:editor:${safeSnakeCase(`slot:${uuid}`)}`
+
+    this.caller.on(hook, callback)
+    this.App._installPluginHook(pid, hook)
+
+    return () => {
+      this.caller.off(hook, callback)
+      this.App._uninstallPluginHook(pid, hook)
+    }
+  },
+
+  invokeExternalPlugin(
+    this: LSPluginUser,
+    type: string,
+    ...args: Array<any>
+  ) {
+    type = type?.trim()
+    if (!type) return
+    let [pid, group] = type.split('.')
+    if (!['models', 'commands'].includes(group?.toLowerCase())) {
+      throw new Error(`Type only support '.models' or '.commands' currently.`)
+    }
+    const key = type.replace(`${pid}.${group}.`, '')
+
+    if (!pid || !group || !key) {
+      throw new Error(`Illegal type of #${type} to invoke external plugin.`)
+    }
+    return this._execCallableAPIAsync(
+      'invoke_external_plugin_cmd',
+      pid, group.toLowerCase(), key, args
     )
   },
 
@@ -328,6 +384,8 @@ const db: Partial<IDBProxy> = {
       txMeta?: { outlinerOp: string; [p: string]: any }
     ) => void
   ): IUserOffHook {
+    if (!shouldValidUUID(uuid)) return
+
     const pid = this.baseInfo.id
     const hook = `hook:db:${safeSnakeCase(`block:${uuid}`)}`
     const aBlockChange = ({ block, txData, txMeta }) => {
@@ -346,6 +404,25 @@ const db: Partial<IDBProxy> = {
       this.App._uninstallPluginHook(pid, hook)
     }
   },
+
+  datascriptQuery<T = any>(
+    this: LSPluginUser,
+    query: string,
+    ...inputs: Array<any>
+  ): Promise<T> {
+    // force remove proxy ns flag `db`
+    inputs.pop()
+
+    if (inputs?.some(it => (typeof it === 'function'))) {
+      const host = this.Experiments.ensureHostScope()
+      return host.logseq.api.datascript_query(query, ...inputs)
+    }
+
+    return this._execCallableAPIAsync(
+      `datascript_query`,
+      ...[query, ...inputs]
+    )
+  }
 }
 
 const git: Partial<IGitProxy> = {}
@@ -454,6 +531,13 @@ export class LSPluginUser
 
       baseInfo = deepMerge(this._baseInfo, baseInfo)
 
+      if (baseInfo?.id) {
+        this._debugTag =
+          this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
+
+        this.logger.setTag(this._debugTag)
+      }
+
       if (this._settingsSchema) {
         baseInfo.settings = mergeSettingsWithSchema(
           baseInfo.settings,
@@ -462,11 +546,6 @@ export class LSPluginUser
 
         // TODO: sync host settings schema
         await this.useSettingsSchema(this._settingsSchema)
-      }
-
-      if (baseInfo?.id) {
-        this._debugTag =
-          this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
       try {
@@ -605,6 +684,14 @@ export class LSPluginUser
     return this._baseInfo
   }
 
+  get effect(): Boolean {
+    return checkEffect(this)
+  }
+
+  get logger() {
+    return logger
+  }
+
   get settings() {
     return this.baseInfo?.settings
   }
@@ -650,6 +737,7 @@ export class LSPluginUser
 
               const type = `hook:${tag}:${safeSnakeCase(e)}`
               const handler = args[0]
+              const opts = args[1]
               caller[f](type, handler)
 
               const unlisten = () => {
@@ -660,7 +748,7 @@ export class LSPluginUser
               }
 
               if (!isOff) {
-                that.App._installPluginHook(pid, type)
+                that.App._installPluginHook(pid, type, opts)
               } else {
                 unlisten()
                 return

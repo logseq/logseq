@@ -24,7 +24,6 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
@@ -184,7 +183,7 @@
         large-graph? (> total 1000)
         *page-names (atom #{})
         *page-name->path (atom {})]
-    (when (seq delete-data) (db/transact! repo-url delete-data))
+    (when (seq delete-data) (db/transact! repo-url delete-data {:delete-files? true}))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
     ;; Synchronous for tests for not breaking anything
@@ -302,7 +301,7 @@
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
-                                   (gp-util/remove-nils))
+                                   (remove nil?))
               options {:delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
                        :re-render? true}]

@@ -4,7 +4,7 @@ import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   await page.evaluate(() => {
-    window.localStorage.removeItem('ls-onboarding-whiteboard?')
+    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
   })
 
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
@@ -19,25 +19,8 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
+  await page.waitForTimeout(1000)
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
-})
-
-test('check if the page contains the onboarding whiteboard', async ({
-  page,
-}) => {
-  await expect(
-    page.locator('.tl-text-shape-wrapper >> text=Welcome to')
-  ).toHaveCount(1)
-})
-
-test('cleanup the shapes', async ({ page }) => {
-  if (IsMac) {
-    await page.keyboard.press('Meta+a')
-  } else {
-    await page.keyboard.press('Control+a')
-  }
-  await page.keyboard.press('Delete')
-  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('can right click title to show context menu', async ({ page }) => {
@@ -80,18 +63,11 @@ test('set whiteboard title', async ({ page }) => {
   )
 })
 
-test('select rectangle tool', async ({ page }) => {
-  await page.keyboard.press('7')
-  await expect(
-    page.locator('.tl-geometry-tools-pane-anchor [title*="Rectangle"]')
-  ).toHaveAttribute('data-selected', 'true')
-})
-
 test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('7')
+  await page.keyboard.press('r')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
@@ -107,14 +83,29 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
+
+test('cleanup the shapes', async ({ page }) => {
+  if (IsMac) {
+    await page.keyboard.press('Meta+a')
+  } else {
+    await page.keyboard.press('Control+a')
+  }
+  await page.keyboard.press('Delete')
+  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
+})
+
 test('zoom in', async ({ page }) => {
+  await page.keyboard.press('Shift+0')
+  await page.waitForTimeout(1000)
   await page.click('#tl-zoom-in')
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
+  await page.keyboard.press('Shift+0')
+  await page.waitForTimeout(1000)
   await page.click('#tl-zoom-out')
-  await expect(page.locator('#tl-zoom')).toContainText('100%')
+  await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
 test('open context menu', async ({ page }) => {
@@ -169,10 +160,4 @@ test('go to another board and check reference', async ({ page }) => {
 
   const pageRefCount$ = page.locator('.whiteboard-page-refs-count')
   await expect(pageRefCount$.locator('.open-page-ref-link')).toContainText('1')
-
-  await pageRefCount$.click()
-  await expect(page.locator('.references-blocks')).toBeVisible()
-  await expect(
-    page.locator('.references-blocks >> .page-ref >> text=my-whiteboard-3')
-  ).toBeVisible()
 })

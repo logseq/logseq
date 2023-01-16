@@ -1,4 +1,4 @@
-import { Decoration, isNonNullable, validUUID } from '@tldraw/core'
+import { Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -15,7 +15,6 @@ import type {
   TextShape,
   YouTubeShape,
 } from '../../lib'
-import { LogseqContext } from '../../lib/logseq-context'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
@@ -28,6 +27,7 @@ import {
   type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -63,12 +63,12 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'TextStyle', 'Swatch', 'ArrowMode', 'Links'],
-  pencil: ['Swatch', 'Links'],
-  highlighter: ['Swatch', 'Links'],
+  box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
+  pencil: ['Swatch', 'Links', 'ScaleLevel'],
+  highlighter: ['Swatch', 'Links', 'ScaleLevel'],
   text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
@@ -86,8 +86,13 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 }
 
 const EditAction = observer(() => {
+  const {
+    handlers: { isWhiteboardPage, redirectToPage },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+
   const iconName =
     ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
       ? 'forms'
@@ -96,12 +101,16 @@ const EditAction = observer(() => {
   return (
     <Button
       type="button"
-      title="Edit"
+      tooltip="Edit"
       onClick={() => {
         app.api.editShape(shape)
         if (shape.props.type === 'logseq-portal') {
           let uuid = shape.props.pageId
           if (shape.props.blockType === 'P') {
+            if (isWhiteboardPage(uuid)) {
+              redirectToPage(uuid)
+            }
+
             const firstNonePropertyBlock = window.logseq?.api
               ?.get_page_blocks_tree?.(shape.props.pageId)
               .find(b => !('propertiesOrder' in b))
@@ -127,7 +136,7 @@ const AutoResizingAction = observer(() => {
 
   return (
     <ToggleInput
-      title="Auto Resize"
+      tooltip="Auto Resize"
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-button"
       pressed={pressed}
@@ -161,10 +170,12 @@ const LogseqPortalViewModeAction = observer(() => {
     {
       value: '1',
       icon: 'object-compact',
+      tooltip: 'Collapse',
     },
     {
       value: '0',
       icon: 'object-expanded',
+      tooltip: 'Expand',
     },
   ]
   return (
@@ -183,38 +194,42 @@ const LogseqPortalViewModeAction = observer(() => {
 })
 
 const ScaleLevelAction = observer(() => {
+  const {
+    handlers: { isMobile },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
   const sizeOptions: SelectOption[] = [
     {
-      label: 'Extra Small',
+      label: isMobile() ? 'XS' : 'Extra Small',
       value: 'xs',
     },
     {
-      label: 'Small',
+      label: isMobile() ? 'SM' : 'Small',
       value: 'sm',
     },
     {
-      label: 'Medium',
+      label: isMobile() ? 'MD' : 'Medium',
       value: 'md',
     },
     {
-      label: 'Large',
+      label: isMobile() ? 'LG' : 'Large',
       value: 'lg',
     },
     {
-      label: 'Extra Large',
+      label: isMobile() ? 'XL' : 'Extra Large',
       value: 'xl',
     },
     {
-      label: 'Huge',
+      label: isMobile() ? 'XXL' : 'Huge',
       value: 'xxl',
     },
   ]
   return (
     <SelectInput
-      title="Scale Level"
+      tooltip="Scale level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
@@ -242,7 +257,7 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <Button title="Reload" type="button" onClick={handleReload}>
+      <Button tooltip="Reload" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </Button>
       <TextInput
@@ -251,7 +266,7 @@ const IFrameSourceAction = observer(() => {
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <Button title="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
+      <Button tooltip="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
         <TablerIcon name="external-link" />
       </Button>
     </span>
@@ -275,7 +290,7 @@ const YoutubeLinkAction = observer(() => {
         onChange={handleChange}
       />
       <Button
-        title="Open YouTube Link"
+        tooltip="Open YouTube Link"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -300,7 +315,7 @@ const NoFillAction = observer(() => {
 
   return (
     <ToggleInput
-      title="Fill Toggle"
+      tooltip="Fill"
       className="tl-button"
       pressed={noFill}
       onPressedChange={handleChange}
@@ -334,7 +349,6 @@ const SwatchAction = observer(() => {
   const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
   return (
     <ColorInput
-      title="Color Picker"
       popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
@@ -354,10 +368,12 @@ const StrokeTypeAction = observer(() => {
     {
       value: 'line',
       icon: 'circle',
+      tooltip: 'Solid',
     },
     {
       value: 'dashed',
       icon: 'circle-dashed',
+      tooltip: 'Dashed',
     },
   ]
 
@@ -438,7 +454,7 @@ const TextStyleAction = observer(() => {
   return (
     <span className="flex gap-1">
       <ToggleInput
-        title="Bold"
+        tooltip="Bold"
         className="tl-button"
         pressed={bold}
         onPressedChange={v => {
@@ -454,7 +470,7 @@ const TextStyleAction = observer(() => {
         <TablerIcon name="bold" />
       </ToggleInput>
       <ToggleInput
-        title="Italic"
+        tooltip="Italic"
         className="tl-button"
         pressed={italic}
         onPressedChange={v => {

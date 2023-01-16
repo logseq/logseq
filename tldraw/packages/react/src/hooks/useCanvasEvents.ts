@@ -75,6 +75,10 @@ export function useCanvasEvents() {
       onPointerLeave,
       onDrop,
       onDragOver,
+      // fix touch callout in iOS
+      onTouchEnd: (e: TouchEvent) => {
+        e.preventDefault()
+      }
     }
   }, [callbacks])
 

@@ -11,15 +11,29 @@ import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextLabel } from './text/TextLabel'
+import type { SizeLevel } from '.'
+import { action, computed } from 'mobx'
+
 export interface EllipseShapeProps extends TLEllipseShapeProps, CustomStyleProps {
   type: 'ellipse'
   size: number[]
   label: string
+  fontSize: number
   fontWeight: number
   italic: boolean
+  scaleLevel?: SizeLevel
 }
 
 const font = '18px / 1 var(--ls-font-family)'
+
+const levelToScale = {
+  xs: 10,
+  sm: 16,
+  md: 20,
+  lg: 32,
+  xl: 48,
+  xxl: 60,
+}
 
 export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
   static id = 'ellipse'
@@ -34,6 +48,7 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     fill: '',
     noFill: false,
     fontWeight: 400,
+    fontSize: 20,
     italic: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -56,13 +71,14 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
         label,
         italic,
         fontWeight,
+        fontSize,
       } = this.props
 
       const labelSize =
         label || isEditing
           ? getTextLabelSize(
               label,
-              { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+              { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
               4
             )
           : [0, 0]
@@ -94,7 +110,9 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
             onChange={handleLabelChange}
             onBlur={onEditingEnd}
             fontStyle={italic ? 'italic' : 'normal'}
+            fontSize={fontSize}
             fontWeight={fontWeight}
+            pointerEvents={!!label}
           />
           <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
             <ellipse
@@ -120,43 +138,26 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     }
   )
 
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      fontSize: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
+
   ReactIndicator = observer(() => {
     const {
       size: [w, h],
-      label,
-      fontWeight,
     } = this.props
-
-    const bounds = this.getBounds()
-    const labelSize = label
-      ? getTextLabelSize(
-          label,
-          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
-          4
-        )
-      : [0, 0]
-    const scale = Math.max(0.5, Math.min(1, w / labelSize[0], h / labelSize[1]))
-    const midPoint = Vec.mul(this.props.size, 0.5)
-
-    const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
-    }, [bounds, scale, midPoint])
 
     return (
       <g>
         <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} strokeWidth={2} fill="transparent" />
-        {label && (
-          <rect
-            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
-            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
-            width={labelSize[0] * scale}
-            height={labelSize[1] * scale}
-            rx={4 * scale}
-            ry={4 * scale}
-            fill="transparent"
-          />
-        )}
       </g>
     )
   })

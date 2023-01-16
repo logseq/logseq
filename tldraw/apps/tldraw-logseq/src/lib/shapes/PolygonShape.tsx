@@ -11,15 +11,28 @@ import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextLabel } from './text/TextLabel'
+import type { SizeLevel } from '.'
+import { action, computed } from 'mobx'
 
 interface PolygonShapeProps extends TLPolygonShapeProps, CustomStyleProps {
   type: 'polygon'
   label: string
+  fontSize: number
   fontWeight: number
   italic: boolean
+  scaleLevel?: SizeLevel
 }
 
-const font = '18px / 1 var(--ls-font-family)'
+const font = '20px / 1 var(--ls-font-family)'
+
+const levelToScale = {
+  xs: 10,
+  sm: 16,
+  md: 20,
+  lg: 32,
+  xl: 48,
+  xxl: 60,
+}
 
 export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   static id = 'polygon'
@@ -36,6 +49,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     stroke: '',
     fill: '',
     fontWeight: 400,
+    fontSize: 20,
     italic: false,
     noFill: false,
     strokeType: 'line',
@@ -60,6 +74,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           label,
           italic,
           fontWeight,
+          fontSize,
         },
       } = this
 
@@ -69,7 +84,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
         label || isEditing
           ? getTextLabelSize(
               label,
-              { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+              { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
               4
             )
           : [0, 0]
@@ -102,6 +117,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           <TextLabel
             font={font}
             text={label}
+            fontSize={fontSize}
             color={getComputedColor(stroke, 'text')}
             offsetX={offset[0]}
             offsetY={offset[1] / scale}
@@ -111,8 +127,9 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
             onBlur={onEditingEnd}
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
+            pointerEvents={!!label}
           />
-          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             <g transform={`translate(${x}, ${y})`}>
               <polygon
                 className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
@@ -135,29 +152,23 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     }
   )
 
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      fontSize: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
+
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { label, strokeWidth, fontWeight },
+      props: { strokeWidth },
     } = this
-
-    const bounds = this.getBounds()
-    const labelSize = label
-      ? getTextLabelSize(
-          label,
-          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
-          4
-        )
-      : [0, 0]
-    const midPoint = [this.props.size[0] / 2, (this.props.size[1] * 2) / 3]
-    const scale = Math.max(
-      0.5,
-      Math.min(1, this.props.size[0] / (labelSize[0] * 2), this.props.size[1] / (labelSize[1] * 2))
-    )
-
-    const offset = React.useMemo(() => {
-      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-    }, [bounds, scale, midPoint])
 
     return (
       <g>
@@ -165,17 +176,6 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           transform={`translate(${x}, ${y})`}
           points={this.getVertices(strokeWidth / 2).join()}
         />
-        {label && (
-          <rect
-            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
-            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
-            width={labelSize[0] * scale}
-            height={labelSize[1] * scale}
-            rx={4 * scale}
-            ry={4 * scale}
-            fill="transparent"
-          />
-        )}
       </g>
     )
   })

@@ -19,7 +19,7 @@ import {
   cleanInjectedScripts,
   safeSnakeCase,
   injectTheme,
-  cleanInjectedUI,
+  cleanInjectedUI, PluginLogger,
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -132,59 +132,6 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
   }
 }
 
-class PluginLogger extends EventEmitter<'change'> {
-  private _logs: Array<[type: string, payload: any]> = []
-
-  constructor(private readonly _tag: string) {
-    super()
-  }
-
-  write(type: string, payload: any[], inConsole?: boolean) {
-    if (payload?.length && (true === payload[payload.length - 1])) {
-      inConsole = true
-      payload.pop()
-    }
-
-    const msg = payload.reduce((ac, it) => {
-      if (it && it instanceof Error) {
-        ac += `${it.message} ${it.stack}`
-      } else {
-        ac += it.toString()
-      }
-      return ac
-    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
-
-    this._logs.push([type, msg])
-
-    if (inConsole) {
-      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
-    }
-
-    this.emit('change')
-  }
-
-  clear() {
-    this._logs = []
-    this.emit('change')
-  }
-
-  info(...args: any[]) {
-    this.write('INFO', args)
-  }
-
-  error(...args: any[]) {
-    this.write('ERROR', args)
-  }
-
-  warn(...args: any[]) {
-    this.write('WARN', args)
-  }
-
-  toJSON() {
-    return this._logs
-  }
-}
-
 interface UserPreferences {
   theme: LegacyTheme
   themes: {
@@ -204,7 +151,6 @@ interface PluginLocalOptions {
   mode: 'shadow' | 'iframe'
   settingsSchema?: SettingSchemaDesc[]
   settings?: PluginSettings
-  logger?: PluginLogger
   effect?: boolean
   theme?: boolean
 
@@ -460,6 +406,7 @@ class PluginLocal extends EventEmitter<'loaded'
   private _localRoot?: string
   private _dotSettingsFile?: string
   private _caller?: LSPluginCaller
+  private _logger?: PluginLogger
 
   /**
    * @param _options
@@ -483,7 +430,7 @@ class PluginLocal extends EventEmitter<'loaded'
 
   async _setupUserSettings(reload?: boolean) {
     const { _options } = this
-    const logger = (_options.logger = new PluginLogger('Loader'))
+    const logger = (this._logger = new PluginLogger('Loader'))
 
     if (_options.settings && !reload) {
       return
@@ -1056,11 +1003,15 @@ class PluginLocal extends EventEmitter<'loaded'
   }
 
   get logger() {
-    return this.options.logger
+    return this._logger
   }
 
   get disabled() {
     return this.settings?.get('disabled')
+  }
+
+  get theme() {
+    return this.options.theme
   }
 
   get caller() {
@@ -1123,6 +1074,8 @@ class PluginLocal extends EventEmitter<'loaded'
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
+    json.settings = json.settings?.toJSON()
+
     return json
   }
 }
@@ -1445,8 +1398,15 @@ class LSPluginCore
       })
     }
 
+    const p = pid && this._registeredPlugins.get(pid)
+
+    if (p && !p.disabled && p.options.entry) {
+      act(p)
+      return
+    }
+
     for (const [_, p] of this._registeredPlugins) {
-      if (p.options.theme || p.disabled) {
+      if (!p.options.entry || p.disabled) {
         continue
       }
 
@@ -1533,6 +1493,16 @@ class LSPluginCore
 
   get themes() {
     return this._registeredThemes
+  }
+
+  get enabledPlugins() {
+    return [...this.registeredPlugins.entries()].reduce((a, b) => {
+      let p = b?.[1]
+      if (p?.disabled !== true) {
+        a.set(b?.[0], p)
+      }
+      return a
+    }, new Map())
   }
 
   async registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void> {

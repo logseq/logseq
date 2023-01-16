@@ -24,7 +24,7 @@
 
 (rum/defc toggle
   []
-  (when-not (util/mobile?)
+  (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"
@@ -115,7 +115,7 @@
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
-    
+
     :shortcut-settings
     [(t :help/shortcuts) (shortcut-settings)]
 
