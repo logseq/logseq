@@ -20,11 +20,11 @@ RUN apt-get update \
 WORKDIR /data
 
 # Build for static resources
-RUN git clone https://github.com/logseq/logseq.git \
-    && cd /data/logseq \
-    && yarn --network-timeout 100000 \
-    && yarn release \
-    && mv ./static ./public
+RUN git clone https://github.com/logseq/logseq.git && cd /data/logseq
+
+RUN yarn install --network-timeout 100000
+
+RUN yarn release  && mv ./static ./public
 
 # Web App Runner image
 FROM nginx:stable-alpine
