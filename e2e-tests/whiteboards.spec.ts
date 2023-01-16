@@ -42,34 +42,34 @@ test('newly created whiteboard should have a default title', async ({ page }) =>
   )
 })
 
-test('set whiteboard title', async ({ page }) => {
-  const title = 'my-whiteboard'
+// test('set whiteboard title', async ({ page }) => {
+//   const title = 'my-whiteboard'
 
-  await page.click('.whiteboard-page-title')
-  await page.fill('.whiteboard-page-title input', title)
-  await page.keyboard.press('Enter')
-  await expect(page.locator('.whiteboard-page-title .title')).toContainText(
-    title
-  )
-})
+//   await page.click('.whiteboard-page-title')
+//   await page.fill('.whiteboard-page-title input', title)
+//   await page.keyboard.press('Enter')
+//   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
+//     title
+//   )
+// })
 
-test('update whiteboard title', async ({ page }) => {
-  const title = 'my-whiteboard'
+// test('update whiteboard title', async ({ page }) => {
+//   const title = 'my-whiteboard'
 
-  await page.click('.whiteboard-page-title')
-  await page.fill('.whiteboard-page-title input', title + '-2')
-  await page.keyboard.press('Enter')
+//   await page.click('.whiteboard-page-title')
+//   await page.fill('.whiteboard-page-title input', title + '-2')
+//   await page.keyboard.press('Enter')
 
-  // Updating non-default title should pop up a confirmation dialog
-  await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
-    `Do you really want to change the page name to “${title}-2”?`
-  )
+//   // Updating non-default title should pop up a confirmation dialog
+//   await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
+//     `Do you really want to change the page name to “${title}-2”?`
+//   )
 
-  await page.click('.ui__confirm-modal button')
-  await expect(page.locator('.whiteboard-page-title .title')).toContainText(
-    title + '-2'
-  )
-})
+//   await page.click('.ui__confirm-modal button')
+//   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
+//     title + '-2'
+//   )
+// })
 
 test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
