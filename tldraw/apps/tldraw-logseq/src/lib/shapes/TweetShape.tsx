@@ -31,7 +31,6 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
   canEdit = true
   initialHeightCalculated = true
   getInnerHeight: (() => number) | null = null // will be overridden in the hook
-  ref = React.createRef<HTMLDivElement>()
 
   @computed get embedId() {
     const url = this.props.url
@@ -52,7 +51,18 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
 
     const cpRefContainer = React.useRef<HTMLDivElement>(null)
 
-    this.useComponentSize(cpRefContainer, '.twitter-tweet')
+    const [, innerHeight] = this.useComponentSize(cpRefContainer)
+
+    React.useEffect(() => {
+      const latestInnerHeight = this.getInnerHeight?.() ?? innerHeight
+      const newHeight = latestInnerHeight
+      if (innerHeight && Math.abs(newHeight - this.props.size[1]) > 1) {
+        this.update({
+          size: [this.props.size[0], newHeight],
+        })
+        app.persist(true)
+      }
+    }, [innerHeight])
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
@@ -80,7 +90,9 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
           }}
         >
           {this.embedId ? (
-              <Tweet tweetId={this.embedId}/>
+              <div ref={cpRefContainer}>
+                <Tweet tweetId={this.embedId}/>
+              </div>
           ) : (null)}
         </div>
       </HTMLContainer>
