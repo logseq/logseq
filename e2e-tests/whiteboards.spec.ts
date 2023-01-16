@@ -42,34 +42,47 @@ test('newly created whiteboard should have a default title', async ({ page }) =>
   )
 })
 
-// test('set whiteboard title', async ({ page }) => {
-//   const title = 'my-whiteboard'
+test('set whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
-//   await page.click('.whiteboard-page-title')
-//   await page.fill('.whiteboard-page-title input', title)
-//   await page.keyboard.press('Enter')
-//   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
-//     title
-//   )
-// })
+  await page.click('.whiteboard-page-title')
+  await page.fill('.whiteboard-page-title input', title)
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  await canvas.click({
+    position: {
+      x: 100,
+      y: 100,
+    },
+  })
 
-// test('update whiteboard title', async ({ page }) => {
-//   const title = 'my-whiteboard'
+  await expect(page.locator('.whiteboard-page-title .title')).toContainText(
+    title
+  )
+})
 
-//   await page.click('.whiteboard-page-title')
-//   await page.fill('.whiteboard-page-title input', title + '-2')
-//   await page.keyboard.press('Enter')
+test('update whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
-//   // Updating non-default title should pop up a confirmation dialog
-//   await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
-//     `Do you really want to change the page name to “${title}-2”?`
-//   )
+  await page.click('.whiteboard-page-title')
+  await page.fill('.whiteboard-page-title input', title + '-2')
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  await canvas.click({
+    position: {
+      x: 100,
+      y: 100,
+    },
+  })
 
-//   await page.click('.ui__confirm-modal button')
-//   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
-//     title + '-2'
-//   )
-// })
+  // Updating non-default title should pop up a confirmation dialog
+  await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
+    `Do you really want to change the page name to “${title}-2”?`
+  )
+
+  await page.click('.ui__confirm-modal button')
+  await expect(page.locator('.whiteboard-page-title .title')).toContainText(
+    title + '-2'
+  )
+})
 
 test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
@@ -133,9 +146,14 @@ test('quick add another whiteboard', async ({ page }) => {
 
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', 'my-whiteboard-3')
-  await page.keyboard.press('Enter')
-
   const canvas = await page.waitForSelector('.logseq-tldraw')
+  await canvas.click({
+    position: {
+      x: 100,
+      y: 100,
+    },
+  })
+
   await canvas.dblclick({
     position: {
       x: 100,
