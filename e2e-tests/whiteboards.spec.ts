@@ -14,9 +14,12 @@ test('enable whiteboards', async ({ page }) => {
 })
 
 test('create new whiteboard', async ({ page }) => {
+  await page.evaluate(() => {
+    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
+  })
+
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
-  await page.waitForTimeout(1500)
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
