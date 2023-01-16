@@ -69,7 +69,9 @@
   (testing "zotero path"
     (are [x y] (= (extractor/zotero-linked-file-macro x) y)
       ;; TODO provide some real samples on multiple platforms
-      "attachments://abc/def/ghi.pdf" "{{zotero-linked-file \"//abc/def/ghi.pdf\"}}"))
+      "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"abc/def/ghi.pdf\"}}"))
+      ;; Chinese and blank
+      "attachments:书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf" "{{zotero-linked-file \"书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf\"}}"
 
 ;; 2022.10.18. Should be deprecated since Hickory is invalid in Node test
 ;; Skip until we find an alternative
