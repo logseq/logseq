@@ -22,7 +22,7 @@ WORKDIR /data
 # Build for static resources
 RUN git clone https://github.com/logseq/logseq.git .
 
-RUN yarn install --network-timeout 100000
+RUN yarn install
 
 RUN yarn release  && mv ./static ./public
 
