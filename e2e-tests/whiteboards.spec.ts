@@ -14,10 +14,6 @@ test('enable whiteboards', async ({ page }) => {
 })
 
 test('create new whiteboard', async ({ page }) => {
-  await page.evaluate(() => {
-    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
-  })
-
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
@@ -44,6 +40,8 @@ test('newly created whiteboard should have a default title', async ({ page }) =>
 test('set whiteboard title', async ({ page }) => {
   const title = 'my-whiteboard'
 
+  await page.click('.nav-header .whiteboard')
+  await page.click('#tl-create-whiteboard')
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title)
   await page.keyboard.press('Enter')
