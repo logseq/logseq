@@ -853,8 +853,8 @@
   [name arguments]
   (if (and (seq arguments)
            (not= arguments ["null"]))
-    (util/format "{{{%s %s}}}" name (string/join ", " arguments))
-    (util/format "{{{%s}}}" name)))
+    (util/format "{{%s %s}}" name (string/join ", " arguments))
+    (util/format "{{%s}}" name)))
 
 (declare block-content)
 (declare block-container)
@@ -1361,9 +1361,9 @@
                 :width width
                 :height height}]))))
       [:span.warning.mr-1 {:title "Invalid URL"}
-       (str "{{video " url "}}")])
+       (macro->text "video" arguments)])
     [:span.warning.mr-1 {:title "Empty URL"}
-     (str "{{video}}")]))
+     (macro->text "video" arguments)]))
 
 (defn- macro-else-cp
   [name config arguments]
