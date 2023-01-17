@@ -25,7 +25,7 @@
               (-> path (string/replace-first "./" "")
                   (string/replace-first #"^/+" "")))))
 
-(defn inflate-assets-urls
+(defn inflate-content-assets-urls
   [content]
   (if-let [matches (and (not (string/blank? content))
                         (re-seq #"src=\"([^\"]+)\"" content))]
@@ -35,6 +35,13 @@
          (string/replace content matched (resolve-asset-url matched)) content))
      content matches)
     content))
+
+(defn load-glide-assets!
+  []
+  (p/let [_ (util/css-load$ (str util/JS_ROOT "/glide/glide.core.min.css"))
+          _ (util/css-load$ (str util/JS_ROOT "/glide/glide.theme.min.css"))
+          _ (when-not (aget js/window "Glide")
+              (util/js-load$ (str util/JS_ROOT "/glide/glide.min.js")))]))
 
 (rum/defc link-card
   [opts child]
@@ -70,20 +77,54 @@
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state _nav!]
 
-  (when-let [topic-key (:key (second pane-state))]
-    (when-let [topic (get handbook-nodes topic-key)]
-      [:div.pane.pane-topic-detail
-       [:h1.text-2xl.pb-3.font-semibold (:title topic)]
+  (let [[deps-pending?, set-deps-pending?] (rum/use-state false)
+        *id-ref (rum/use-ref (str "glide--" (js/Date.now)))]
 
-       ;; TODO: demo lists
-       (when-let [demo (first (:demos topic))]
-         [:div.flex.demos
-          [:img {:src (resolve-asset-url demo)}]])
+    ;; load deps assets
+    (rum/use-effect!
+     (fn []
+       (set-deps-pending? true)
+       (-> (load-glide-assets!)
+           (p/then (fn [] (js/setTimeout
+                           #(when (js/document.getElementById (rum/deref *id-ref))
+                              (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
+           (p/finally #(set-deps-pending? false))))
+     [])
 
-       [:div.content-wrap
-        (when-let [content (:content topic)]
-          [:div.content.markdown-body
-           {:dangerouslySetInnerHTML {:__html (inflate-assets-urls content)}}])]])))
+    (when-let [topic-key (:key (second pane-state))]
+      (when-let [topic (get handbook-nodes topic-key)]
+        (when-not deps-pending?
+          [:div.pane.pane-topic-detail
+           [:h1.text-2xl.pb-3.font-semibold (:title topic)]
+
+           ;; TODO: demo lists
+           (when-let [demos (:demos topic)]
+             (let [demos (cond-> demos
+                           (string? demos) [demos])]
+               (if (> (count demos) 1)
+                 [:div.flex.demos.glide
+                  {:id (rum/deref *id-ref)}
+
+                  [:div.glide__track {:data-glide-el "track"}
+                   [:div.glide__slides
+                    (for [demo demos]
+                      [:div.item.glide__slide
+                       [:img {:src (resolve-asset-url demo)}]])]]
+
+                  [:div.glide__bullets {:data-glide-el "controls[nav]"}
+                   (map-indexed
+                    (fn [idx]
+                      [:button.glide__bullet {:data-glide-dir (str "=" idx)}
+                       (inc idx)])
+                    demos)]]
+
+                 [:div.flex.demos
+                  [:img {:src (resolve-asset-url (first demos))}]])))
+
+           [:div.content-wrap
+            (when-let [content (:content topic)]
+              [:div.content.markdown-body
+               {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}}])]])))))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
