@@ -331,11 +331,6 @@
              new))
          configs))
 
-(defn validate-current-config
-  "TODO: Temporal fix"
-  [config]
-  (when (map? config) config))
-
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -345,7 +340,7 @@ should be done through this fn in order to get global config and config defaults
    (merge-configs
     default-config
     (get-in @state [:config ::global-config])
-    (validate-current-config (get-in @state [:config repo-url])))))
+    (get-in @state [:config repo-url]))))
 
 (defonce publishing? (atom nil))
 
@@ -557,10 +552,10 @@ Similar to re-frame subscriptions"
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
-   (let [config (validate-current-config (sub :config))]
+   (let [config (sub :config)]
      (merge-configs default-config
                     (get config ::global-config)
-                    (validate-current-config (get config repo))))))
+                    (get config repo)))))
 
 (defn enable-grammarly?
   []
