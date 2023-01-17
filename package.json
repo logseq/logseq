@@ -71,7 +71,7 @@
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
-        "tldraw:build": "cd tldraw && yarn",
+        "tldraw:build": "cd tldraw && yarn install --network-timeout 100000",
         "postinstall": "yarn tldraw:build"
     },
     "dependencies": {
