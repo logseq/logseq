@@ -1361,9 +1361,9 @@
                 :width width
                 :height height}]))))
       [:span.warning.mr-1 {:title "Invalid URL"}
-       (str "{{video " url "}}")])
+       (macro->text "video" arguments)])
     [:span.warning.mr-1 {:title "Empty URL"}
-     (str "{{video}}")]))
+     (macro->text "video" arguments)]))
 
 (defn- macro-else-cp
   [name config arguments]
