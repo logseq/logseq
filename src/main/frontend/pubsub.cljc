@@ -72,4 +72,5 @@
             :get-remote-graph-failed
             :get-deletion-logs-failed]]
    [:data :map]]
-  :topic-fn :event)
+  :topic-fn :event
+  :ch-buffer (a/sliding-buffer 10))

@@ -77,9 +77,12 @@ mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
 
 ## Testing
 
-We have unit and end to end tests.
+We have unit, performance and end to end tests.
 
 ### End to End Tests
+
+Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features.
+The only solution is automatic end-to-end tests - adding tests for GUI software is always painful but necessary. See https://github.com/logseq/logseq/pulls?q=E2E for e2e test examples.
 
 To run end to end tests
 
@@ -95,11 +98,15 @@ If e2e failed after first running:
 - `rm -rdf <repo dir>/tmp/`  
 - Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
 
-If e2e tests fail, they can be debugged by examining a trace dump with [the
+There's a `traceAll()` helper function to enable playwright trace file dump for specific test files https://github.com/logseq/logseq/pull/8332
+
+If e2e tests fail in the file, they can be debugged by examining a trace dump with [the
 playwright trace
-viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace). Locally
-this will get dumped into e2e-dump/. On CI the trace file will be under
-Artifacts at the bottom of a run page e.g.
+viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace).
+
+Locally this will get dumped into e2e-dump/.
+
+On CI the trace file will be under Artifacts at the bottom of a run page e.g.
 https://github.com/logseq/logseq/actions/runs/3574600322.
 
 ### Unit Testing
@@ -189,20 +196,32 @@ aren't readable.
 
 ## Data validation and generation
 
-We use both [spec](https://github.com/clojure/spec.alpha) and
-[malli](https://github.com/metosin/malli) for data validation and (and
-generation someday). malli has the advantage that its schema is data and can be
-used for additional purposes. See plugin-config for an example.
+We use [malli](https://github.com/metosin/malli) and
+[spec](https://github.com/clojure/spec.alpha)  data validation, fn validation
+(and generation someday). malli has the advantage that its schema is data and
+can be used for additional purposes.
 
-Specs should go under `src/main/frontend/spec/` and be compatible with clojure
-and clojurescript. See `frontend.spec.storage` for an example.
+Reusable malli schemas should go under `src/main/frontend/schema/` and be
+compatible with clojure and clojurescript. See
+`frontend.schema.handler.plugin-config` for an example.
 
-Malli schemas should go under `src/main/frontend/schema/` and be compatible with clojure
-and clojurescript. See `frontend.schema.handler.plugin-config` for an example.
+Reusable specs should go under `src/main/frontend/spec/` and be compatible with
+clojure and clojurescript. See `frontend.spec.storage` for an example.
 
 By following these conventions, these should also be usable by babashka. This is
 helpful as it allows for third party tools to be written with logseq's data
 model.
+
+### Optionally Validating Functions
+
+We use [malli](https://github.com/metosin/malli) for optionally validating fns
+a.k.a instrumenting fns. Function validation is enabled in dev mode. To add
+typing for a fn, just add it to a var's metadata [per this
+example](https://github.com/metosin/malli/blob/master/docs/function-schemas.md#function-schema-metadata).
+To re-generate the clj-kondo type annotations for malli typed fns, update
+`gen-malli-kondo-config.core` and then run `bb dev:gen-malli-kondo-config`. To
+learn more about fn instrumentation, see [this
+page](https://github.com/metosin/malli/blob/master/docs/clojurescript-function-instrumentation.md).
 
 ## Auto-formatting
 
@@ -227,6 +246,6 @@ cd static
 yarn
 cd ..
 yarn dev-electron-app
-``` 
+```
 and kill all electron process
 Then a normal start happens via `yarn dev-electron-app`

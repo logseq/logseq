@@ -1,5 +1,6 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
+  {:dev/always true}
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -13,7 +14,8 @@
             [reitit.frontend.easy :as rfe]
             [logseq.api]
             [frontend.fs.sync :as sync]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [malli.dev.cljs :as md]))
 
 (defn set-router!
   []
@@ -43,6 +45,8 @@
      "))
 
 (defn start []
+  (when config/dev?
+    (md/start!))
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
@@ -64,5 +68,6 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
-    (sync/<sync-stop))
+    (sync/<sync-stop)
+    (md/stop!))
   (js/console.log "stop"))

@@ -1730,6 +1730,7 @@ Similar to re-frame subscriptions"
   (:system/events @state))
 
 (defn pub-event!
+  {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
