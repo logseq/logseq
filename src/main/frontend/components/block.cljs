@@ -853,8 +853,8 @@
   [name arguments]
   (if (and (seq arguments)
            (not= arguments ["null"]))
-    (util/format "{{{%s %s}}}" name (string/join ", " arguments))
-    (util/format "{{{%s}}}" name)))
+    (util/format "{{%s %s}}" name (string/join ", " arguments))
+    (util/format "{{%s}}" name)))
 
 (declare block-content)
 (declare block-container)
