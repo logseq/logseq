@@ -129,3 +129,92 @@ created-at:: %s"
                                         [(>= ?timestamp ?start)]
                                         [(<= ?timestamp ?end)]]})))
         ":Xd-before-ms and :Xd-after-ms resolve to correct datetime range")))
+
+(deftest resolve-input-for-relative-date-queries 
+  (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}
+                    {:file/content "- -1m" :file/path "journals/2022_12_01.md"}
+                    {:file/content "- -1w" :file/path "journals/2022_12_25.md"}
+                    {:file/content "- -1d" :file/path "journals/2022_12_31.md"}
+                    {:file/content "- now" :file/path "journals/2023_01_01.md"}
+                    {:file/content "- +1d" :file/path "journals/2023_01_02.md"}
+                    {:file/content "- +1w" :file/path "journals/2023_01_08.md"}
+                    {:file/content "- +1m" :file/path "journals/2023_02_01.md"}
+                    {:file/content "- +1y" :file/path "journals/2024_01_01.md"}])
+  (with-redefs [t/today (constantly (t/date-time 2023 1 1))]
+    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] 
+           (map :block/content (custom-query {:inputs [:-365d :today]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":-365d and today resolve to correct journal range")
+    
+    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] 
+           (map :block/content (custom-query {:inputs [:-1y :today]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":-1y and today resolve to correct journal range")
+    
+    (is (= ["now" "-1d" "-1w" "-1m"] 
+           (map :block/content (custom-query {:inputs [:-1m :today]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":-1m and today resolve to correct journal range")
+
+    (is (= ["now" "-1d" "-1w"] 
+           (map :block/content (custom-query {:inputs [:-1w :today]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":-1w and today resolve to correct journal range")
+
+    (is (= ["now" "-1d"] 
+           (map :block/content (custom-query {:inputs [:-1d :today]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":-1d and today resolve to correct journal range")
+
+    (is (= ["+1y" "+1m" "+1w" "+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :+365d]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":+365d and today resolve to correct journal range")
+    
+    (is (= ["+1y" "+1m" "+1w" "+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :+1y]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":+1y and today resolve to correct journal range")
+    
+    (is (= ["+1m" "+1w" "+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :+1m]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":+1m and today resolve to correct journal range")
+
+    (is (= ["+1w" "+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :+1w]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":+1w and today resolve to correct journal range")
+
+    (is (= ["+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :+1d]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":+1d and today resolve to correct journal range")
+
+    (is (= ["+1d" "now"]
+           (map :block/content (custom-query {:inputs [:today :today/+1d]
+                                              :query '[:find (pull ?b [*])
+                                                       :in $ ?start ?end
+                                                       :where (between ?b ?start ?end)]})))
+        ":today/+1d and today resolve to correct journal range")))
+
