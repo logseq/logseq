@@ -1,4 +1,7 @@
 # NOTE: please keep it in sync with .github pipelines
+# NOTE: during testing make sure to change the branch below
+# NOTE: before runing the build-docker GH action edit
+#       build-docker.yml and change the release channel to testing
 
 # Builder image
 FROM clojure:openjdk-11-tools-deps-1.10.1.727 as builder
@@ -15,8 +18,8 @@ RUN apt-get update && apt-get install ca-certificates && \
 
 WORKDIR /data
 
-# Build for static resources
-RUN git clone -b master https://github.com/logseq/logseq.git . \
+# Build static resources
+RUN git clone -b fix/docker-bulid-timeout https://github.com/logseq/logseq.git . \
     yarn install --network-timeout 100000 && gulp build && yarn cljs:release
 
 # Web App Runner image
