@@ -135,7 +135,8 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [format (:block/format block)]
+      (let [format (:block/format block)
+            heading (-> block :block/properties :heading)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
@@ -156,6 +157,7 @@
            (for [i (range 1 7)]
              (ui/button
               ""
+              :disabled (= heading i)
               :icon (str "h-" i)
               :title (t :heading i)
               :class "to-heading-button"
@@ -166,6 +168,7 @@
            (ui/button
             ""
             :icon "h-auto"
+            :disabled (= heading true)
             :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :auto-heading)
@@ -176,6 +179,7 @@
            (ui/button
             ""
             :icon "heading-off"
+            :disabled (not heading)
             :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
