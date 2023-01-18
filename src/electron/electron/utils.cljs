@@ -37,10 +37,11 @@
 
 (defn get-ls-dotdir-root
   []
-  (let [lg-dir (path/join (.getPath app "home") ".logseq")]
-    (if-not (fs/existsSync lg-dir)
-      (do (fs/mkdirSync lg-dir) lg-dir)
-      lg-dir)))
+  (let [legacy-dir (path/join (.getPath app "home") ".logseq")
+        new-dir (path/join (.getPath app "userData") "Logseq")
+        exists? #(when (fs/existsSync %1) %1)]
+    (or (exists? legacy-dir) (exists? new-dir) 
+        (do (fs/mkdirSync new-dir) new-dir))))
 
 (defn get-ls-default-plugins
   []
