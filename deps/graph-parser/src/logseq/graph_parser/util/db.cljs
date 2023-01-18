@@ -82,10 +82,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 
 (defmethod resolve-keyword-input :relative-date [db input opts]
   (let [relative-to (case (or (namespace input) "today")
-                      "today" (t/today)
-                      "journal" nil
-                      "query" nil
-                      "current" nil)
+                      "today" (t/today))
         [_ offset-direction offset offset-unit offset-ms?] (re-find #"^([+-])(\d+)([dwmy])(-ms)?$" (name input))
         offset-fn (case offset-direction "+" t/plus "-" t/minus)
         offset-amount (parse-long offset) 
