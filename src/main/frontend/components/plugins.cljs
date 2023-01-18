@@ -636,7 +636,8 @@
          (reload-fn false)
          (assoc s ::reload (partial reload-fn true))))}
   [state]
-  (let [pkgs               (state/sub :plugin/marketplace-pkgs)
+  (let [*list-node-ref     (rum/create-ref)
+        pkgs               (state/sub :plugin/marketplace-pkgs)
         stats              (state/sub :plugin/marketplace-stats)
         installed-plugins  (state/sub :plugin/installed-plugins)
         installing         (state/sub :plugin/installing)
@@ -688,7 +689,7 @@
         fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag     (fn-query-flag)
         _                  (when (not= str-query-flag @*cached-query-flag)
-                             (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                             (when-let [^js list-cnt (rum/deref *list-node-ref)]
                                (set! (.-scrollTop list-cnt) 0))
                              (reset! *current-page 1))
         _                  (reset! *cached-query-flag str-query-flag)
@@ -723,7 +724,7 @@
        [:div.cp__plugins-marketplace-cnt
         {:class (util/classnames [{:has-installing (boolean installing)}])}
         [:div.cp__plugins-item-lists
-         {:ref "list-ref"}
+         {:ref *list-node-ref}
          [:div.cp__plugins-item-lists-inner
           ;; items list
           (for [item sorted-plugins]
@@ -750,7 +751,8 @@
     (rum/local nil ::cached-query-flag)
     (rum/local 1 ::current-page)
   [state]
-  (let [installed-plugins     (state/sub [:plugin/installed-plugins])
+  (let [*list-node-ref        (rum/create-ref)
+        installed-plugins     (state/sub [:plugin/installed-plugins])
         installed-plugins     (vals installed-plugins)
         updating              (state/sub :plugin/installing)
         develop-mode?         (state/sub :ui/developer-mode?)
@@ -799,7 +801,7 @@
         fn-query-flag         (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag        (fn-query-flag)
         _                     (when (not= str-query-flag @*cached-query-flag)
-                                (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                                (when-let [^js list-cnt (rum/deref *list-node-ref)]
                                   (set! (.-scrollTop list-cnt) 0))
                                 (reset! *current-page 1))
         _                     (reset! *cached-query-flag str-query-flag)
@@ -822,7 +824,7 @@
       agent-opts)
 
      [:div.cp__plugins-item-lists.pb-6
-      {:ref "list-ref"}
+      {:ref *list-node-ref}
       [:div.cp__plugins-item-lists-inner
        (for [item sorted-plugins]
          (rum/with-key
@@ -927,7 +929,6 @@
                                (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
      ;; all done
      [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
-
 
 (defn open-select-theme!
   []

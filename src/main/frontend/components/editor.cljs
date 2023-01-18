@@ -381,8 +381,8 @@
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (let [^js/HTMLElement editor
-                     (js/document.querySelector ".editor-wrapper")]
+               (when-let [^js/HTMLElement editor
+                          (js/document.querySelector ".editor-wrapper")]
                  (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
                    {:right 0}
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
@@ -555,6 +555,7 @@
       (= :property-value-search action)
       (animated-modal "property-value-search" (property-value-search id) true)
 
+      ;; date-picker in editing-mode
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 

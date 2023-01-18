@@ -29,21 +29,20 @@
 
 (defn inflate-asset
   [original-path]
-  (let [filename (util/node-path.basename original-path)
+  (let [filename  (util/node-path.basename original-path)
         web-link? (string/starts-with? original-path "http")
-        ext-name (util/get-file-ext filename)
-        url (assets-handler/normalize-asset-resource-url original-path)]
-    (when-let [key
-               (if web-link?
-                 (str (hash url))
-                 (and
-                   (= ext-name "pdf")
-                   (subs filename 0 (- (count filename) 4))))]
-      {:key      key
-       :identity (subs key (- (count key) 15))
-       :filename filename
-       :url      url
-       :hls-file (str "assets/" key ".edn")
+        ext-name  (util/get-file-ext filename)
+        url       (assets-handler/normalize-asset-resource-url original-path)
+        filekey   (util/safe-sanitize-file-name (subs filename 0 (- (count filename) (inc (count ext-name)))))]
+    (when-let [key (and (not (string/blank? filekey))
+                        (if web-link?
+                          (str filekey "__" (hash url)) filekey))]
+
+      {:key           key
+       :identity      (subs key (- (count key) 15))
+       :filename      filename
+       :url           url
+       :hls-file      (str "assets/" key ".edn")
        :original-path original-path})))
 
 (defn resolve-area-image-file
@@ -184,25 +183,26 @@
   ([pdf hl] (ensure-ref-block! pdf hl nil))
   ([pdf-current {:keys [id content page properties]} insert-opts]
    (when-let [ref-page (and pdf-current (resolve-ref-page pdf-current))]
-     (if-let [ref-block (db-model/query-block-by-uuid id)]
-       (do
-         (println "[existed ref block]" ref-block)
-         ref-block)
-       (let [text       (:text content)
-             wrap-props #(if-let [stamp (:image content)]
-                           (assoc % :hl-type "area" :hl-stamp stamp) %)]
+     (let [ref-block (db-model/query-block-by-uuid id)]
+       (if-not (nil? (:block/content ref-block))
+         (do
+           (println "[existed ref block]" ref-block)
+           ref-block)
+         (let [text       (:text content)
+               wrap-props #(if-let [stamp (:image content)]
+                             (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
-         (when (string? text)
-           (editor-handler/api-insert-new-block!
-            text (merge {:page        (:block/name ref-page)
-                         :custom-uuid id
-                         :properties  (wrap-props
-                                       {:ls-type  "annotation"
-                                        :hl-page  page
-                                        :hl-color (:color properties)
-                                        ;; force custom uuid
-                                        :id       (str id)})}
-                        insert-opts))))))))
+           (when (string? text)
+             (editor-handler/api-insert-new-block!
+              text (merge {:page        (:block/name ref-page)
+                           :custom-uuid id
+                           :properties  (wrap-props
+                                         {:ls-type  "annotation"
+                                          :hl-page  page
+                                          :hl-color (:color properties)
+                                          ;; force custom uuid
+                                          :id       (str id)})}
+                          insert-opts)))))))))
 
 (defn del-ref-block!
   [{:keys [id]}]

@@ -22,7 +22,7 @@
     (ui/icon icon {:size ui/icon-size})]])
 
 (rum/defc command
-  [command-handler icon & [event?]]
+  [command-handler {:keys [icon class]} & [event?]]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
@@ -30,7 +30,7 @@
                       (if event?
                         (command-handler e)
                         (command-handler)))}
-    (ui/icon icon {:size ui/icon-size})]])
+    (ui/icon icon {:size ui/icon-size :class class})]])
 
 (rum/defc timestamp-submenu
   [parent-id]
@@ -71,9 +71,9 @@
   (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
                              (util/scroll-editor-cursor input :to-vw-one-quarter? true)
                              (.focus input)))]
-    [(command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) "brackets" true)
-     (command #(do (viewport-fn) (editor-handler/toggle-block-reference-embed parent-id)) "parentheses" true)
-     (command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)]))
+    [(command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) {:icon "brackets"} true)
+     (command #(do (viewport-fn) (editor-handler/toggle-block-reference-embed parent-id)) {:icon "parentheses"} true)
+     (command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) {:icon "command"} true)]))
 
 (rum/defc mobile-bar < rum/reactive
   []
@@ -86,17 +86,17 @@
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
         (indent-outdent true "indent-increase")
-        (command (editor-handler/move-up-down true) "arrow-bar-to-up")
-        (command (editor-handler/move-up-down false) "arrow-bar-to-down")
+        (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
+        (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
         (command #(if (state/sub :document/mode?)
                     (editor-handler/insert-new-block! nil)
-                    (commands/simple-insert! parent-id "\n" {})) "arrow-back")
-        (command editor-handler/cycle-todo! "checkbox" true)
-        (command #(mobile-camera/embed-photo parent-id) "camera" true)
-        (command history/undo! "rotate" true true)
-        (command history/redo! "rotate-clockwise" true true)
+                    (commands/simple-insert! parent-id "\n" {})) {:icon "arrow-back"})
+        (command editor-handler/cycle-todo! {:icon "checkbox"} true)
+        (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
+        (command history/undo! {:icon "rotate" :class "rotate-180"} true)
+        (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
         (timestamp-submenu parent-id)
         (for [command commands]
           command)]
        [:div.toolbar-hide-keyboard
-        (command #(state/clear-edit!) "keyboard-show")]])))
+        (command #(state/clear-edit!) {:icon "keyboard-show"})]])))

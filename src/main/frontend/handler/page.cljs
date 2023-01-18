@@ -427,6 +427,31 @@
     (doseq [page-id page-ids]
       (outliner-file/sync-to-file page-id))))
 
+(defn- rename-update-namespace!
+  "update :block/namespace of the renamed block"
+  [page old-original-name new-name]
+  (let [old-namespace? (text/namespace-page? old-original-name)
+        new-namespace? (text/namespace-page? new-name)
+        update-namespace! (fn [] (let [namespace (first (gp-util/split-last "/" new-name))]
+                                   (when namespace
+                                     (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
+                                     (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
+                                           repo                (state/get-current-repo)
+                                           page-txs [{:db/id (:db/id page)
+                                                      :block/namespace (:db/id namespace-block)}]]
+                                       (d/transact! (db/get-db repo false) page-txs)))))
+        remove-namespace! (fn []
+                            (db/transact! [[:db/retract (:db/id page) :block/namespace]]))]
+
+    (when old-namespace?
+      (if new-namespace?
+        (update-namespace!)
+        (remove-namespace!)))
+
+    (when-not old-namespace?
+      (when new-namespace?
+        (update-namespace!)))))
+
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
@@ -473,6 +498,8 @@
             (config-handler/set-config! :default-home (assoc home :page new-name))))
 
         (rename-update-refs! page old-original-name new-name)
+
+        (rename-update-namespace! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
 
@@ -580,7 +607,12 @@
 
       (rename-update-refs! from-page
                            (util/get-page-original-name from-page)
-                           (util/get-page-original-name to-page)))
+                           (util/get-page-original-name to-page))
+
+      (rename-update-namespace! from-page
+                                (util/get-page-original-name from-page)
+                                (util/get-page-original-name to-page)))
+
 
     (delete! from-page-name nil)
 

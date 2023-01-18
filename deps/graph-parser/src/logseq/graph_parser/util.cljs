@@ -28,7 +28,8 @@
   (.normalize s "NFC"))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
+  "remove pairs of key-value that has nil value from a (possibly nested) map or
+  coll of maps."
   [nm]
   (walk/postwalk
    (fn [el]
@@ -36,6 +37,16 @@
        (into {} (remove (comp nil? second)) el)
        el))
    nm))
+
+(defn remove-nils-non-nested
+  "remove pairs of key-value that has nil value from a map (nested not supported)."
+  [nm]
+  (into {} (remove (comp nil? second)) nm))
+
+(defn fast-remove-nils
+  "remove pairs of key-value that has nil value from a coll of maps."
+  [nm]
+  (keep (fn [m] (if (map? m) (remove-nils-non-nested m) m)) nm))
 
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]

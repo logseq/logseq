@@ -109,7 +109,7 @@
         invalid-properties (set (->> (map (comp name first) *invalid-properties)
                                      (concat invalid-properties)))
         page-m (->
-                (gp-util/remove-nils
+                (gp-util/remove-nils-non-nested
                  (assoc
                   (gp-block/page-name->map page false db true date-formatter
                                            :from-page from-page)

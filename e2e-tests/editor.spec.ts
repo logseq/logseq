@@ -596,3 +596,90 @@ test('should not erase typed text when expanding block quickly after typing #389
     ''
   )
 })
+
+test('should keep correct undo and redo seq after indenting or outdenting the block #7615',async({page,block}) => {
+  await createRandomPage(page)
+
+  await block.mustFill("foo")
+  
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await block.indent()
+  await block.mustFill("bar")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
+
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  // should undo "bar" input
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  if (IsMac) {
+    await page.keyboard.press('Shift+Meta+z')
+  } else {
+    await page.keyboard.press('Shift+Control+z')
+  }
+  // should redo "bar" input
+  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
+  await page.keyboard.press("Shift+Tab")
+  
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  // swap input seq
+  await block.mustFill("baz")
+  await block.indent()
+
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  // should undo indention
+  await expect(page.locator('textarea >> nth=0')).toHaveText("baz")
+  await page.keyboard.press("Shift+Tab")
+
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  // #7615
+  await page.keyboard.type("aaa")
+  await block.indent()
+  await page.keyboard.type(" bbb")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  if (IsMac) {
+    await page.keyboard.press('Shift+Meta+z')
+  } else {
+    await page.keyboard.press('Shift+Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  if (IsMac) {
+    await page.keyboard.press('Shift+Meta+z')
+  } else {
+    await page.keyboard.press('Shift+Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  if (IsMac) {
+    await page.keyboard.press('Shift+Meta+z')
+  } else {
+    await page.keyboard.press('Shift+Control+z')
+  }
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+})

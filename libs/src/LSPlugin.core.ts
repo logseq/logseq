@@ -1398,8 +1398,15 @@ class LSPluginCore
       })
     }
 
+    const p = pid && this._registeredPlugins.get(pid)
+
+    if (p && !p.disabled && p.options.entry) {
+      act(p)
+      return
+    }
+
     for (const [_, p] of this._registeredPlugins) {
-      if (p.options.theme || p.disabled) {
+      if (!p.options.entry || p.disabled) {
         continue
       }
 

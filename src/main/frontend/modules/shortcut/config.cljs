@@ -36,6 +36,9 @@
 ;; :inactive key is for commands that are not active for a given platform or feature condition
 ;; Avoid using single letter shortcuts to allow chords that start with those characters
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
+  ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
+  ;; So this setting item does not cover all cases.
+  ;; See-also: frontend.components.datetime/time-repeater
   {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
 
@@ -328,7 +331,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
