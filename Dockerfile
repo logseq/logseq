@@ -18,9 +18,9 @@ RUN apt-get update && apt-get install ca-certificates && \
 
 WORKDIR /data
 
-RUN git clone -b master https://github.com/logseq/logseq.git .
+RUN git clone -b fix/docker-bulid-timeout https://github.com/logseq/logseq.git .
 
-RUN print "network-timeout 240000" >> ~/.yarnrc
+RUN printf "%s\n" "network-timeout 240000" >> ~/.yarnrc
 
 RUN yarn install
 
