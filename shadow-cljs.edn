@@ -75,6 +75,13 @@
          :compiler-options {:static-fns false}
          :main            frontend.test.frontend-node-test-runner/main}
 
+  :gen-malli-kondo-config {:target :node-script
+                           :closure-defines {frontend.util/NODETEST true}
+                           :devtools        {:enabled false}
+                           :compiler-options {:static-fns false}
+                           :output-to "static/gen-malli-kondo-config.js"
+                           :main gen-malli-kondo-config.core/main}
+
   :publishing {:target        :browser
                :module-loader true
                :js-options    {:ignore-asset-requires true}
