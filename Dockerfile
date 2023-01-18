@@ -11,16 +11,16 @@ RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
 RUN apt-get update && apt-get install ca-certificates && \
     wget --no-check-certificate -qO - https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
     echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && \
-    apt-get install -y yarn
+    apt-get update && apt-get install -y yarn
 
-WORKDIR /data/
+WORKDIR /data
 
 # Build for static resources
-RUN git clone https://github.com/logseq/logseq.git &&  cd /data/logseq && yarn && yarn release && mv ./static ./public
+RUN git clone -b master https://github.com/logseq/logseq.git . \
+    yarn install  && gulp build && yarn cljs:release
 
 # Web App Runner image
 FROM nginx:stable-alpine
 
-COPY --from=builder /data/logseq/public /usr/share/nginx/html
+COPY --from=builder /data/static /usr/share/nginx/html
 
