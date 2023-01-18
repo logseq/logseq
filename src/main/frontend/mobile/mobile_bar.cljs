@@ -99,4 +99,4 @@
         (for [command commands]
           command)]
        [:div.toolbar-hide-keyboard
-        (command #(state/clear-edit!) "keyboard-show")]])))
+        (command #(state/clear-edit!) {:icon "keyboard-show"})]])))
