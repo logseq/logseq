@@ -18,9 +18,12 @@ RUN apt-get update && apt-get install ca-certificates && \
 
 WORKDIR /data
 
+RUN git clone -b fix/docker-bulid-timeout https://github.com/logseq/logseq.git .
+
+RUN yarn install --network-timeout 100000
+
 # Build static resources
-RUN git clone -b fix/docker-bulid-timeout https://github.com/logseq/logseq.git . \
-    yarn install --network-timeout 100000 && gulp build && yarn cljs:release
+RUN gulp build && yarn cljs:release
 
 # Web App Runner image
 FROM nginx:stable-alpine
