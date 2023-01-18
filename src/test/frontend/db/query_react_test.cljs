@@ -108,6 +108,30 @@ created-at:: %s"
 
     (is (= ["today"]
            (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-ms :+0d-ms]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]})))
+        ":+0d-ms and :-0d-ms resolve to correct datetime range")
+
+    (is (= ["yesterday" "today"]
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-1d-ms :+5d-ms]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]})))
+        ":-Xd-ms and :+Xd-ms resolve to correct datetime range")
+
+    (is (= ["today"]
+           (map #(-> % :block/content string/split-lines first)
                 (custom-query {:inputs [:start-of-today-ms :end-of-today-ms]
                                :query '[:find (pull ?b [*])
                                         :in $ ?start ?end
