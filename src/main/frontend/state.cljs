@@ -117,7 +117,7 @@
      :editor/content                        {}
      :editor/block                          nil
      :editor/block-dom-id                   nil
-     :editor/set-timestamp-block            nil
+     :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
      :editor/last-input-time                nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
@@ -1837,6 +1837,7 @@ Similar to re-frame subscriptions"
                       :editor/block block
                       :editor/editing? {edit-input-id true}
                       :editor/last-key-code nil
+                      :editor/set-timestamp-block nil
                       :cursor-range cursor-range))))
         (when-let [input (gdom/getElement edit-input-id)]
           (let [pos (count cursor-range)]

@@ -43,6 +43,7 @@
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
+            [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
@@ -61,7 +62,6 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
-            [frontend.handler.notification :as notification]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -948,18 +948,19 @@
 
 (defn- render-macro
   [config name arguments macro-content format]
-  (if macro-content
-    (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
-                   (map first))
-          paragraph? (and (= 1 (count ast))
-                          (= "Paragraph" (ffirst ast)))]
-      (if (and (not paragraph?)
-               (mldoc/block-with-title? (ffirst ast)))
-        [:div
-         (markup-elements-cp (assoc config :block/format format) ast)]
-        (inline-text format macro-content)))
-    [:span.warning {:title (str "Unsupported macro name: " name)}
-     (macro->text name arguments)]))
+  [:div.macro {:data-macro-name name}
+   
+   (if macro-content
+     (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
+                    (map first))
+           paragraph? (and (= 1 (count ast))
+                           (= "Paragraph" (ffirst ast)))]
+       (if (and (not paragraph?)
+                (mldoc/block-with-title? (ffirst ast)))
+         (markup-elements-cp (assoc config :block/format format) ast)
+         (inline-text format macro-content)))
+     [:span.warning {:title (str "Unsupported macro name: " name)}
+      (macro->text name arguments)])])
 
 (rum/defc nested-link < rum/reactive
   [config html-export? link]
@@ -2101,10 +2102,13 @@
         [:button.p-1.mr-2 p])]
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
-(rum/defcs timestamp-cp < rum/reactive
+(rum/defcs timestamp-cp
+  < rum/reactive
+  (rum/local false ::show-datepicker?)
   [state block typ ast]
-  (let [ts-block (state/sub :editor/set-timestamp-block)
-        active? #(= (get block :block/uuid) (get-in ts-block [:block :block/uuid]))]
+  (let [ts-block-id (state/sub [:editor/set-timestamp-block :block :block/uuid])
+        active? (= (get block :block/uuid) ts-block-id)
+        *show-datapicker? (get state ::show-datepicker?)]
     [:div.flex.flex-col.gap-4.timestamp
      [:div.text-sm.flex.flex-row
       [:div.opacity-50.font-medium.timestamp-label
@@ -2112,19 +2116,23 @@
       [:a.opacity-80.hover:opacity-100
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (if (active?)
-                          (do
-                            (reset! commands/*current-command nil)
-                            (state/clear-editor-action!)
-                            (state/set-timestamp-block! nil))
+                         (state/clear-editor-action!)
+                         (editor-handler/escape-editing false)
+                         (if active?
                            (do
+                             (reset! *show-datapicker? false)
+                             (reset! commands/*current-command nil)
+                             (state/set-timestamp-block! nil))
+                           (do
+                             (reset! *show-datapicker? true)
                              (reset! commands/*current-command typ)
-                             (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ}))))}
        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
-     (when (active?)
-          (datetime-comp/date-picker nil nil (repeated/timestamp->map ast)))]))
+     ;; date-picker in rendering-mode
+     (if (and active? @*show-datapicker?)
+       (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
+       (reset! *show-datapicker? false))]))
 
 (defn- target-forbidden-edit?
   [target]
