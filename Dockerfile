@@ -17,7 +17,7 @@ WORKDIR /data
 
 # Build for static resources
 RUN git clone -b master https://github.com/logseq/logseq.git . \
-    yarn install  && gulp build && yarn cljs:release
+    yarn install --network-timeout 100000 && gulp build && yarn cljs:release
 
 # Web App Runner image
 FROM nginx:stable-alpine
