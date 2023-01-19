@@ -236,10 +236,10 @@
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
+       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       )]
+       
 
     (headings)
 

@@ -51,7 +51,12 @@
   "Properties used by logseq that user can edit"
   []
   (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
-          :logseq.query/nlp-date
+          :logseq.query/nlp-date 
+          ;; view props 
+          :logseq.color
+          ;; table props
+          :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover 
+          :logseq.table.borders :logseq.table.stripes :logseq.table.max-width
           ;; org-mode only
           :macro :filetags}
         editable-linkable-built-in-properties))
