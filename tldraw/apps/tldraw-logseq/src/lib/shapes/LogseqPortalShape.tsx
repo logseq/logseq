@@ -140,7 +140,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
   }
 
-  @action setCollapsed = async (collapsed: boolean) => {
+  @action toggleCollapsed = async () => {
+    const collapsed = !this.collapsed
     if (this.props.blockType === 'B') {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
@@ -311,6 +312,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
+            textRendering: app.viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto',
             background:
               fill && fill !== 'var(--ls-secondary-background-color)'
                 ? `var(--ls-highlight-color-${fill})`
@@ -509,7 +511,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 active={!!this.collapsed}
                 style={{ opacity: isSelected ? 1 : 0 }}
                 icon={this.props.blockType === 'B' ? 'block' : 'page'}
-                onClick={() => this.setCollapsed(!this.collapsed)}
+                onClick={this.toggleCollapsed}
                 otherIcon={'whiteboard-element'}
               />
             </>
