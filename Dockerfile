@@ -4,7 +4,7 @@
 #       build-docker.yml and change the release channel from :latest to :testing
 
 # Builder image
-FROM clojure:openjdk-11-tools-deps-1.10.1.727 as builder
+FROM clojure:temurin-11-tools-deps-1.11.1.1208-bullseye-slim as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
