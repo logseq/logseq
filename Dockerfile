@@ -20,7 +20,7 @@ WORKDIR /data
 
 RUN git clone -b master https://github.com/logseq/logseq.git .
 
-RUN printf "%s\n" "network-timeout 240000" >> ~/.yarnrc && yarn install
+RUN yarn config set network-timeout 240000 -g && yarn install
 
 # Build static resources
 RUN  yarn release 
