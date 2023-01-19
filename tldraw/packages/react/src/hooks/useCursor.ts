@@ -1,5 +1,7 @@
 import { GeomUtils, TLCursor } from '@tldraw/core'
+import { useApp } from './useApp'
 import * as React from 'react'
+
 
 function getCursorCss(svg: string, r: number, f = false) {
   return (
@@ -43,9 +45,11 @@ const CURSORS: Record<TLCursor, (r: number, f?: boolean) => string> = {
 }
 
 export function useCursor(ref: React.RefObject<HTMLDivElement>, cursor: TLCursor, rotation = 0) {
+  const app = useApp()
+
   React.useEffect(() => {
     const elm = ref.current
-    if (!elm) return
+    if (!elm || app.currentState.id === 'move') return
     elm.style.setProperty('--tl-cursor', CURSORS[cursor](GeomUtils.radiansToDegrees(rotation)))
   }, [cursor, rotation])
 }

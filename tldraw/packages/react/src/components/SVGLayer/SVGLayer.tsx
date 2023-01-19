@@ -19,16 +19,21 @@ export const SVGLayer = observer(function SVGLayer({ children }: SVGLayerProps) 
         if (!group) return
 
         const { zoom, point } = viewport.camera
-        group.style.setProperty(
-          'transform',
-          `scale(${zoom}) translateX(${point[0]}px) translateY(${point[1]}px)`
-        )
+        let transform = 'scale('
+        transform += zoom
+        transform += ') translateX('
+        transform += point[0]
+        transform += 'px) translateY('
+        transform += point[1]
+        transform += 'px)'
+
+        group.style.transform = transform
       }),
     []
   )
 
   return (
-    <svg className="tl-absolute tl-overlay" pointerEvents="none">
+    <svg className="tl-absolute tl-overlay" pointerEvents="none" style={{shapeRendering: 'optimizeSpeed', textRendering: viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto'}}>
       <g ref={rGroup} pointerEvents="none">
         {children}
       </g>
