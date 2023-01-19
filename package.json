@@ -93,6 +93,7 @@
         "@logseq/capacitor-file-sync": "0.0.24",
         "@logseq/diff-merge": "^0.0.2",
         "@logseq/react-tweet-embed": "1.3.1-1",
+        "@radix-ui/colors": "^0.1.8",
         "@sentry/react": "^6.18.2",
         "@sentry/tracing": "^6.18.2",
         "@tabler/icons": "^1.96.0",
@@ -133,6 +134,7 @@
         "remove-accents": "0.4.2",
         "sanitize-filename": "1.6.3",
         "send-intent": "3.0.11",
+        "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
         "url": "^0.11.0",
         "yargs-parser": "20.2.4"
