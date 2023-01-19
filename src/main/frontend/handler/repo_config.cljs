@@ -6,11 +6,10 @@
   (:require [frontend.db :as db]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.common.file :as file-common-handler]
-            [cljs.reader :as reader]
             [frontend.fs :as fs]
             [promesa.core :as p]
+            [clojure.edn :as edn]
             [frontend.spec :as spec]))
 
 (defn- get-repo-config-content
@@ -18,19 +17,14 @@
   (db/get-file repo-url (config/get-repo-config-path)))
 
 (defn read-repo-config
-  "Converts file content to edn and handles read failure by backing up file and
-  reverting to a default file"
-  [repo content]
-  (common-handler/safe-read-string
-   content
-   (fn [_e]
-     (state/pub-event! [:backup/broken-config repo content])
-     (reader/read-string config/config-default-content))))
+  "Converts file content to edn"
+  [content]
+  (edn/read-string content))
 
 (defn set-repo-config-state!
   "Sets repo config state using given file content"
   [repo-url content]
-  (let [config (read-repo-config repo-url content)]
+  (let [config (read-repo-config content)]
     (state/set-config! repo-url config)
     config))
 
