@@ -15,10 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     gpg
 
-# install NodeJS
+# install NodeJS & yarn
 RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
 
-# install yarn
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
     tee /etc/apt/trusted.gpg.d/yarn.gpg && \
     echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
@@ -27,11 +26,11 @@ RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
 
 WORKDIR /data
 
+# build Logseq static resources
 RUN git clone -b master https://github.com/logseq/logseq.git .
 
 RUN yarn config set network-timeout 240000 -g && yarn install
 
-# Build static resources
 RUN  yarn release 
 
 # Web App Runner image
