@@ -261,7 +261,7 @@
   (state/set-parsing-state! {:graph-loading? true})
   (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (repo-config-handler/read-repo-config repo-url content))
+                     (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
