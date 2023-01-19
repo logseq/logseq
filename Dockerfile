@@ -12,18 +12,18 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    apt-transport-https \
     gpg
 
 # install NodeJS
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
-    apt-get install -y nodejs
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
 
 # install yarn
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
     tee /etc/apt/trusted.gpg.d/yarn.gpg && \
-    echo "deb [signed-by=/etc/apt/trusted.gpg.d/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
     tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && apt-get install -y yarn
+    apt-get update && apt-get install -y nodejs yarn
 
 WORKDIR /data
 
