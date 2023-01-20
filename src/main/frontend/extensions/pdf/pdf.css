@@ -61,8 +61,8 @@ input::-webkit-inner-spin-button {
     justify-content: flex-end;
     position: absolute;
     top: 0;
-    right: 0px;
-    width: 100%;
+    right: 10px; // Allows clicking on the scrollbar
+    width: calc(100% - 10px);
     padding: 0 20px;
     z-index: 5;
     -webkit-app-region: drag;
