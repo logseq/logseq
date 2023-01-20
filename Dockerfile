@@ -4,25 +4,33 @@
 #       build-docker.yml and change the release channel from :latest to :testing
 
 # Builder image
-FROM clojure:openjdk-11-tools-deps-1.10.1.727 as builder
+FROM clojure:temurin-11-tools-deps-1.11.1.1208-bullseye-slim as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
-    apt-get install -y nodejs
+# Install reqs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    apt-transport-https \
+    gpg
 
-RUN apt-get update && apt-get install ca-certificates && \
-    wget --no-check-certificate -qO - https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && apt-get install -y yarn
+# install NodeJS & yarn
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
+    tee /etc/apt/trusted.gpg.d/yarn.gpg && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
+    tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && apt-get install -y nodejs yarn
 
 WORKDIR /data
 
+# build Logseq static resources
 RUN git clone -b master https://github.com/logseq/logseq.git .
 
 RUN yarn config set network-timeout 240000 -g && yarn install
 
-# Build static resources
 RUN  yarn release 
 
 # Web App Runner image
