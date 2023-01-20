@@ -4,9 +4,11 @@ This page describes development practices for this codebase.
 
 ## Linting
 
-Most of our linters require babashka. Before running them, please install
-https://github.com/babashka/babashka#installation. To invoke all the linters in
-this section, run `bb dev:lint`.
+Most of our linters require babashka. Before running them, please [install babashka](https://github.com/babashka/babashka#installation). To invoke all the linters in this section, run
+
+```sh
+bb dev:lint
+```
 
 ### Clojure code
 
@@ -95,7 +97,7 @@ yarn e2e-test # or npx playwright test
 If e2e failed after first running:
 - `rm -rdf ~/.logseq`
 - `rm -rdf ~/.config/Logseq`
-- `rm -rdf <repo dir>/tmp/`  
+- `rm -rdf <repo dir>/tmp/`
 - Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
 
 There's a `traceAll()` helper function to enable playwright trace file dump for specific test files https://github.com/logseq/logseq/pull/8332
