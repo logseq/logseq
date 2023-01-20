@@ -69,8 +69,6 @@ input::-webkit-inner-spin-button {
   }
 
   &-toolbar {
-    height: 42px;
-    padding: 8px 0;
     -webkit-app-region: no-drag;
 
     > .inner {
