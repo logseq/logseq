@@ -63,7 +63,7 @@ input::-webkit-inner-spin-button {
     top: 0;
     right: 10px; // Allows clicking on the scrollbar
     width: calc(100% - 10px);
-    padding: 0 20px;
+    padding: 8px 20px;
     z-index: 5;
     -webkit-app-region: drag;
   }
