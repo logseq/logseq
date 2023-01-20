@@ -1,4 +1,7 @@
 # NOTE: please keep it in sync with .github pipelines
+# NOTE: during testing make sure to change the branch below
+# NOTE: before runing the build-docker GH action edit
+#       build-docker.yml and change the release channel from :latest to :testing
 
 # Builder image
 FROM clojure:openjdk-11-tools-deps-1.10.1.727 as builder
@@ -11,16 +14,19 @@ RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
 RUN apt-get update && apt-get install ca-certificates && \
     wget --no-check-certificate -qO - https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
     echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && \
-    apt-get install -y yarn
+    apt-get update && apt-get install -y yarn
 
-WORKDIR /data/
+WORKDIR /data
 
-# Build for static resources
-RUN git clone https://github.com/logseq/logseq.git &&  cd /data/logseq && yarn && yarn release && mv ./static ./public
+RUN git clone -b master https://github.com/logseq/logseq.git .
+
+RUN yarn config set network-timeout 240000 -g && yarn install
+
+# Build static resources
+RUN  yarn release 
 
 # Web App Runner image
 FROM nginx:stable-alpine
 
-COPY --from=builder /data/logseq/public /usr/share/nginx/html
+COPY --from=builder /data/static /usr/share/nginx/html
 
