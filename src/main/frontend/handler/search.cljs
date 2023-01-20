@@ -88,17 +88,24 @@
         (ipc/ipc "find-in-page" q option)))))
 
 ;; TODO move to ns frontend.util
-(defn debounce [f interval]
+(defn cancelable-debounce
+  "Create a stateful debounce function with specified interval
+   
+   Returns [fire-fn, cancel-fn]
+   
+   Use `fire-fn` to call the function(debounced)
+   
+   Use `cancel-fn` to cancel pending callback if there is"
+  [f interval]
   (let [debouncer (Debouncer. f interval)]
     (js/console.log debouncer)
-    [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args))) ;; fire
-     (fn [] (.stop debouncer)) ;; cancel pending callback
-     ]))
+    [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
+     (fn [] (.stop debouncer))]))
 
 ;; TODO more graceful way to destruct from array and defonce them?
-(defonce debouncer-search (debounce electron-find-in-page! 500))
-(defonce debounced-search (get debouncer-search 0))
-(defonce stop-debounced-search! (get debouncer-search 1))
+(defonce cancelable-debounce-search (cancelable-debounce electron-find-in-page! 500))
+(defonce debounced-search (get cancelable-debounce-search 0))
+(defonce stop-debounced-search! (get cancelable-debounce-search 1))
 
 (defn loop-find-in-page!
   [backward?]
