@@ -34,6 +34,12 @@ adds rules that users often use"
                                   [(>= ?timestamp ?start)]
                                   [(<= ?timestamp ?end)]]}))))
 
+(defn- blocks-journaled-between-inputs [a b]
+  (map :block/content (custom-query {:inputs [a b]
+                                     :query '[:find (pull ?b [*])
+                                              :in $ ?start ?end
+                                              :where (between ?b ?start ?end)]})))
+
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content
@@ -229,81 +235,38 @@ created-at:: %s"
                     {:file/content "- +1w" :file/path "journals/2023_01_08.md"}
                     {:file/content "- +1m" :file/path "journals/2023_02_01.md"}
                     {:file/content "- +1y" :file/path "journals/2024_01_01.md"}])
+
   (with-redefs [t/today (constantly (t/date-time 2023 1 1))]
-    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] 
-           (map :block/content (custom-query {:inputs [:-365d :today]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-365d :today))
         ":-365d and today resolve to correct journal range")
     
-    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] 
-           (map :block/content (custom-query {:inputs [:-1y :today]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-1y :today))
         ":-1y and today resolve to correct journal range")
     
-    (is (= ["now" "-1d" "-1w" "-1m"] 
-           (map :block/content (custom-query {:inputs [:-1m :today]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["now" "-1d" "-1w" "-1m"] (blocks-journaled-between-inputs :-1m :today))
         ":-1m and today resolve to correct journal range")
 
-    (is (= ["now" "-1d" "-1w"] 
-           (map :block/content (custom-query {:inputs [:-1w :today]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["now" "-1d" "-1w"] (blocks-journaled-between-inputs :-1w :today))
         ":-1w and today resolve to correct journal range")
 
-    (is (= ["now" "-1d"] 
-           (map :block/content (custom-query {:inputs [:-1d :today]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["now" "-1d"] (blocks-journaled-between-inputs :-1d :today))
         ":-1d and today resolve to correct journal range")
 
-    (is (= ["+1y" "+1m" "+1w" "+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :+365d]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+365d))
         ":+365d and today resolve to correct journal range")
     
-    (is (= ["+1y" "+1m" "+1w" "+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :+1y]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1y))
         ":+1y and today resolve to correct journal range")
     
-    (is (= ["+1m" "+1w" "+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :+1m]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1m))
         ":+1m and today resolve to correct journal range")
 
-    (is (= ["+1w" "+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :+1w]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1w))
         ":+1w and today resolve to correct journal range")
 
-    (is (= ["+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :+1d]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1d" "now"] (blocks-journaled-between-inputs :today :+1d))
         ":+1d and today resolve to correct journal range")
 
-    (is (= ["+1d" "now"]
-           (map :block/content (custom-query {:inputs [:today :today/+1d]
-                                              :query '[:find (pull ?b [*])
-                                                       :in $ ?start ?end
-                                                       :where (between ?b ?start ?end)]})))
+    (is (= ["+1d" "now"] (blocks-journaled-between-inputs :today :today/+1d))
         ":today/+1d and today resolve to correct journal range")))
 
