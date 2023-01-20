@@ -254,6 +254,84 @@ created-at:: %s"
                                         [(<= ?timestamp ?end)]]}))))
       ":today-HHMM and :today-HHMM resolve to correct datetime range")
 
+  (is (= ["today"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:today-115959 :today-120001]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":today-HHMMSS and :today-HHMMSS resolve to correct datetime range")
+
+  (is (= ["today"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:today-115959999 :today-120000001]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":today-HHMMSSmmm and :today-HHMMSSmmm resolve to correct datetime range")
+
+  (is (= ["today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:today-1199 :today-9901]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":today-HHMM and :today-HHMM resolve to valid datetime ranges")
+
+  (is (= ["+1d" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-1201 :+1d-2359]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range")
+
+  (is (= ["+1d" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-120001 :+1d-235959]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-XT-HHMMSS and :+XT-HHMMSS resolve to correct datetime range")
+
+  (is (= ["+1d" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-120000001 :+1d-235959999]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-XT-HHMMSSmmm and :+XT-HHMMSSmmm resolve to correct datetime range")
+
   (is (= ["+1d" "tonight"]
          (sort
            (map #(-> % :block/content string/split-lines first)
@@ -266,9 +344,6 @@ created-at:: %s"
                                         [(>= ?timestamp ?start)]
                                         [(<= ?timestamp ?end)]]}))))
       ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range"))
-
-
-  
 
 (deftest resolve-input-for-relative-date-queries 
   (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}
