@@ -91,22 +91,41 @@ adds rules that users often use"
 ;; These tests rely on seeding timestamps with properties. If this ability goes
 ;; away we could still test page-level timestamps
 (deftest resolve-input-for-timestamp-inputs
-  (let [today-timestamp (db-util/date-at-local-ms 0 0 0 0)
-        next-week-timestamp (db-util/date-at-local-ms (t/plus (t/today) (t/days 7))
-                                                      0 0 0 0)]
-    (load-test-files [{:file/path "pages/page1.md"
-                       :file/content (gstring/format "foo::bar
-- yesterday
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content (gstring/format "foo::bar
+- -1y
+created-at:: %s
+- -1m
+created-at:: %s
+- -1w
+created-at:: %s
+- -1d
 created-at:: %s
 - today
 created-at:: %s
-- next week
+- tonight
+created-at:: %s
+- +1d
+created-at:: %s
+- +1w
+created-at:: %s
+- +1m
+created-at:: %s
+- +1y
 created-at:: %s"
-                                                     (dec today-timestamp)
-                                                     (inc today-timestamp)
-                                                     next-week-timestamp)}])
+                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/years 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/months 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/weeks 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/days 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/today) 12 0 0 0)
+                                                   (db-util/date-at-local-ms (t/today) 18 0 0 0)
+                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/days 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/weeks 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/months 1)) 0 0 0 0)
+                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/years 1)) 0 0 0 0))}])
 
-    (is (= ["today"]
+  (is (= ["today" "tonight"]
+         (sort
            (map #(-> % :block/content string/split-lines first)
                 (custom-query {:inputs [:-0d-ms :+0d-ms]
                                :query '[:find (pull ?b [*])
@@ -115,10 +134,11 @@ created-at:: %s"
                                         [?b :block/content]
                                         [?b :block/created-at ?timestamp]
                                         [(>= ?timestamp ?start)]
-                                        [(<= ?timestamp ?end)]]})))
-        ":+0d-ms and :-0d-ms resolve to correct datetime range")
+                                        [(<= ?timestamp ?end)]]}))))
+      ":+0d-ms and :-0d-ms resolve to correct datetime range")
 
-    (is (= ["yesterday" "today"]
+  (is (= ["+1d" "-1d" "today" "tonight"]
+         (sort
            (map #(-> % :block/content string/split-lines first)
                 (custom-query {:inputs [:-1d-ms :+5d-ms]
                                :query '[:find (pull ?b [*])
@@ -127,10 +147,50 @@ created-at:: %s"
                                         [?b :block/content]
                                         [?b :block/created-at ?timestamp]
                                         [(>= ?timestamp ?start)]
-                                        [(<= ?timestamp ?end)]]})))
-        ":-Xd-ms and :+Xd-ms resolve to correct datetime range")
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-Xd-ms and :+Xd-ms resolve to correct datetime range")
 
-    (is (= ["today"]
+  (is (= ["+1d" "+1w" "-1d" "-1w" "today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-1w-ms :+1w-ms]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-Xw-ms and :+Xw-ms resolve to correct datetime range")
+
+  (is (= ["+1d" "+1m" "+1w" "-1d" "-1m" "-1w" "today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-1m-ms :+1m-ms]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-Xm-ms and :+Xm-ms resolve to correct datetime range")
+
+  (is (= ["+1d" "+1m" "+1w" "+1y" "-1d" "-1m" "-1w" "-1y" "today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-1y-ms :+1y-ms]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-Xy-ms and :+Xy-ms resolve to correct datetime range")
+
+  (is (= ["today" "tonight"]
+         (sort
            (map #(-> % :block/content string/split-lines first)
                 (custom-query {:inputs [:start-of-today-ms :end-of-today-ms]
                                :query '[:find (pull ?b [*])
@@ -139,10 +199,11 @@ created-at:: %s"
                                         [?b :block/content]
                                         [?b :block/created-at ?timestamp]
                                         [(>= ?timestamp ?start)]
-                                        [(<= ?timestamp ?end)]]})))
-        ":start-of-today-ms and :end-of-today-ms resolve to correct datetime range")
+                                        [(<= ?timestamp ?end)]]}))))
+      ":start-of-today-ms and :end-of-today-ms resolve to correct datetime range")
 
-    (is (= ["yesterday" "today"]
+  (is (= ["+1d" "-1d" "today" "tonight"]
+         (sort
            (map #(-> % :block/content string/split-lines first)
                 (custom-query {:inputs [:1d-before-ms :5d-after-ms]
                                :query '[:find (pull ?b [*])
@@ -151,8 +212,63 @@ created-at:: %s"
                                         [?b :block/content]
                                         [?b :block/created-at ?timestamp]
                                         [(>= ?timestamp ?start)]
-                                        [(<= ?timestamp ?end)]]})))
-        ":Xd-before-ms and :Xd-after-ms resolve to correct datetime range")))
+                                        [(<= ?timestamp ?end)]]}))))
+      ":Xd-before-ms and :Xd-after-ms resolve to correct datetime range")
+
+  (is (= ["today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:today-start :today-end]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":today-start and :today-end resolve to correct datetime range")
+
+  (is (= ["+1d" "today" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-start :+1d-end]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-XT-start and :+XT-end resolve to correct datetime range")
+
+  (is (= ["today"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:today-1159 :today-1201]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":today-HHMM and :today-HHMM resolve to correct datetime range")
+
+  (is (= ["+1d" "tonight"]
+         (sort
+           (map #(-> % :block/content string/split-lines first)
+                (custom-query {:inputs [:-0d-1201 :+1d-2359]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where
+                                        [?b :block/content]
+                                        [?b :block/created-at ?timestamp]
+                                        [(>= ?timestamp ?start)]
+                                        [(<= ?timestamp ?end)]]}))))
+      ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range"))
+
+
+  
 
 (deftest resolve-input-for-relative-date-queries 
   (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}
