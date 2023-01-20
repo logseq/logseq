@@ -220,7 +220,8 @@ We use [malli](https://github.com/metosin/malli) for optionally validating fns
 a.k.a instrumenting fns. Function validation is enabled in dev mode. To add
 typing for a fn, just add it to a var's metadata [per this
 example](https://github.com/metosin/malli/blob/master/docs/function-schemas.md#function-schema-metadata).
-To re-generate the clj-kondo type annotations for malli typed fns, update
+We also have clj-kondo type annotations derived from these fn schemas. To
+re-generate them after new schemas have been added, update the namespaces in
 `gen-malli-kondo-config.core` and then run `bb dev:gen-malli-kondo-config`. To
 learn more about fn instrumentation, see [this
 page](https://github.com/metosin/malli/blob/master/docs/clojurescript-function-instrumentation.md).
