@@ -20,6 +20,9 @@ import {
   LogseqPortalShape,
   VideoShape,
   YouTubeShape,
+  YOUTUBE_REGEX,
+  TweetShape,
+  TWITTER_REGEX,
   type Shape,
 } from '../lib'
 import { LogseqContext, LogseqContextValue } from '../lib/logseq-context'
@@ -269,15 +272,20 @@ const handleCreatingShapes = async (
 
   async function tryCreateShapeFromURL(rawText: string) {
     if (isValidURL(rawText) && !(shiftKey || fromDrop)) {
-      const isYoutubeUrl = (url: string) => {
-        const youtubeRegex =
-          /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
-        return youtubeRegex.test(url)
-      }
-      if (isYoutubeUrl(rawText)) {
+      if (YOUTUBE_REGEX.test(rawText)) {
         return [
           {
             ...YouTubeShape.defaultProps,
+            url: rawText,
+            point: [point[0], point[1]],
+          },
+        ]
+      }
+
+      if (TWITTER_REGEX.test(rawText)) {
+        return [
+          {
+            ...TweetShape.defaultProps,
             url: rawText,
             point: [point[0], point[1]],
           },
