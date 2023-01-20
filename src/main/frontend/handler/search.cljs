@@ -10,8 +10,7 @@
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [electron.ipc :as ipc]
-            [dommy.core :as dom])
-  (:import [goog.async Debouncer]))
+            [dommy.core :as dom]))
 
 (defn add-search-to-recent!
   [repo q]
@@ -87,23 +86,8 @@
                           (str " " (subs q 1)))))
         (ipc/ipc "find-in-page" q option)))))
 
-;; TODO move to ns frontend.util
-(defn cancelable-debounce
-  "Create a stateful debounce function with specified interval
-   
-   Returns [fire-fn, cancel-fn]
-   
-   Use `fire-fn` to call the function(debounced)
-   
-   Use `cancel-fn` to cancel pending callback if there is"
-  [f interval]
-  (let [debouncer (Debouncer. f interval)]
-    (js/console.log debouncer)
-    [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
-     (fn [] (.stop debouncer))]))
-
 ;; TODO more graceful way to destruct from array and defonce them?
-(defonce cancelable-debounce-search (cancelable-debounce electron-find-in-page! 500))
+(defonce cancelable-debounce-search (util/cancelable-debounce electron-find-in-page! 500))
 (defonce debounced-search (get cancelable-debounce-search 0))
 (defonce stop-debounced-search! (get cancelable-debounce-search 1))
 
