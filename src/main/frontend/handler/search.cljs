@@ -86,10 +86,9 @@
                           (str " " (subs q 1)))))
         (ipc/ipc "find-in-page" q option)))))
 
-;; TODO more graceful way to destruct from array and defonce them?
-(defonce cancelable-debounce-search (util/cancelable-debounce electron-find-in-page! 500))
-(defonce debounced-search (get cancelable-debounce-search 0))
-(defonce stop-debounced-search! (get cancelable-debounce-search 1))
+(let [cancelable-debounce-search (util/cancelable-debounce electron-find-in-page! 500)]
+  (defonce debounced-search (first cancelable-debounce-search))
+  (defonce stop-debounced-search! (second cancelable-debounce-search)))
 
 (defn loop-find-in-page!
   [backward?]
