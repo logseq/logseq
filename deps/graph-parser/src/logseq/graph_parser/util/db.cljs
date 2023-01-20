@@ -36,25 +36,44 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (old->new-relative-date-format "1d-after-ms")
   (old->new-relative-date-format "1w-after-ms"))
 
+(defn get-relative-date [input]
+  (case (or (namespace input) "today")
+    "today" (t/today)))
+
+(defn get-offset-date [relative-date direction amount unit]
+  (let [offset-fn (case direction "+" t/plus "-" t/minus)
+        offset-amount (parse-long amount) 
+        offset-unit-fn (case unit
+                         "d" t/days
+                         "w" t/weeks
+                         "m" t/months
+                         "y" t/years)]
+    (offset-fn (offset-fn relative-date (offset-unit-fn offset-amount)))))
+
+(defn get-offset-hh-mm 
+  "There are currently 4 time suffixes being used in inputs:
+  - ms: milliseconds, will return a time relative to the direction the date is being adjusted
+  - start: will return the time at the start of the day [00:00:00]
+  - end: will return the time at the end of the day [24:00:00]
+  - HHMM: will return the specified time at the turn of the minute [HH:MM:00]
+  "
+  [offset-direction offset-time]
+  (case offset-time 
+    "ms" (if (= offset-direction "+") [24 0] [0 0]) 
+    "start" [0 0] 
+    "end" [24 0] 
+    :else [(parse-long (subs offset-time 0 2)) (parse-long (subs offset-time 2 4))]))
+
 (defn keyword-input-dispatch [input]
   (cond 
     (#{:current-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
-    (re-find #"^[+-]\d+[dwmy](-ms)?$" (name input)) :relative-date
-    (re-find #"^\d+d(-before|-after|-before-ms|-after-ms)?$" (name input)) :DEPRECATED-relative-date
-    (= :start-of-today-ms input) :DEPRECATED-start-of-today-ms 
-    (= :end-of-today-ms input) :DEPRECATED-end-of-today-ms))
+    (re-find #"^[+-]\d+[dwmy]?$" (name input)) :relative-date
+    (re-find #"^[+-]\d+[dwmy]-(ms|start|end|\d\d\d\d)?$" (name input)) :relative-date-time
+    (re-find #"^today-(start|end|\d\d\d\d)$" (name input)) :today-time
+    (= :start-of-today-ms input) :today-time 
+    (= :end-of-today-ms input) :today-time
+    (re-find #"^\d+d(-before|-after|-before-ms|-after-ms)?$" (name input)) :DEPRECATED-relative-date))
 (defmulti resolve-keyword-input (fn [_db input _opts] (keyword-input-dispatch input))) 
-
-(defmethod resolve-keyword-input :DEPRECATED-relative-date [db input opts]
-  ;; This handles all of the cases covered by the following:
-  ;; :Xd, :Xd-before, :Xd-before-ms, :Xd-after, :Xd-after-ms
-  (resolve-keyword-input db (old->new-relative-date-format input) opts))
-
-(defmethod resolve-keyword-input :DEPRECATED-start-of-today-ms [db _ opts]
-  (resolve-keyword-input db :today/-0d-ms opts))
-
-(defmethod resolve-keyword-input :DEPRECATED-end-of-today-ms [db _ opts] 
-  (resolve-keyword-input db :today/+0d-ms opts))
 
 (defmethod resolve-keyword-input :current-page [_ _ {:keys [current-page-fn]}]
   ;; TODO: handle current-page-fn not being provided
@@ -80,21 +99,30 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 (defmethod resolve-keyword-input :right-now-ms [_ _ _]
   (date-time-util/time-ms))
 
-(defmethod resolve-keyword-input :relative-date [db input opts]
-  (let [relative-to (case (or (namespace input) "today")
-                      "today" (t/today))
-        [_ offset-direction offset offset-unit offset-ms?] (re-find #"^([+-])(\d+)([dwmy])(-ms)?$" (name input))
-        offset-fn (case offset-direction "+" t/plus "-" t/minus)
-        offset-amount (parse-long offset) 
-        offset-unit-fn (case offset-unit
-                         "d" t/days
-                         "w" t/weeks
-                         "m" t/months
-                         "y" t/years)
-        offset-hour (case offset-direction "+" 24 "-" 0)]
-    (if offset-ms?
-      (date-at-local-ms (offset-fn relative-to (offset-unit-fn offset-amount)) offset-hour 0 0 0)
-      (date->int (offset-fn relative-to (offset-unit-fn offset-amount))))))
+(defmethod resolve-keyword-input :today-time [_db input _opts]
+  (let [[hour minute] (case input 
+                        :start-of-today-ms [0 0]
+                        :end-of-today-ms [24 0]
+                        (get-offset-hh-mm nil (subs (name input) 6)))]
+    (date-at-local-ms (t/today) hour minute 0 0)))
+
+(defmethod resolve-keyword-input :relative-date [_ input _]
+  (let [relative-to (get-relative-date input)
+        [_ offset-direction offset offset-unit] (re-find #"^([+-])(\d+)([dwmy])$" (name input))
+        offset-date (get-offset-date relative-to offset-direction offset offset-unit)]
+    (date->int offset-date)))
+
+(defmethod resolve-keyword-input :relative-date-time [_ input _]
+  (let [relative-to (get-relative-date input)
+        [_ offset-direction offset offset-unit offset-time] (re-find #"^([+-])(\d+)([dwmy])-(ms|before|after|\d\d\d\d)$" (name input))
+        offset-date (get-offset-date relative-to offset-direction offset offset-unit)
+        [offset-hour offset-min] (get-offset-hh-mm offset-direction offset-time)]
+    (date-at-local-ms offset-date offset-hour offset-min 0 0)))
+
+(defmethod resolve-keyword-input :DEPRECATED-relative-date [db input opts]
+  ;; This handles all of the cases covered by the following:
+  ;; :Xd, :Xd-before, :Xd-before-ms, :Xd-after, :Xd-after-ms
+  (resolve-keyword-input db (old->new-relative-date-format input) opts))
 
 (defn resolve-input
   "Main fn for resolving advanced query :inputs"
