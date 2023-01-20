@@ -39,6 +39,16 @@ adds rules that users often use"
                                         [?bp :block/name ?current-page]]}))))
       ":current-page input resolves to current page name")
 
+  (is (= []
+         (map :block/content
+              (custom-query {:inputs [:current-page]
+                             :query '[:find (pull ?b [*])
+                                      :in $ ?current-page
+                                      :where [?b :block/page ?bp]
+                                      [?bp :block/name ?current-page]]}
+                            {:current-page-fn nil})))
+      ":current-page input fails gracefully when not present")
+
   (is (= ["child 1" "child 2"]
          (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
                                             :where [?b :block/content "parent"]])
@@ -51,6 +61,24 @@ adds rules that users often use"
                                         :where [?b :block/parent ?current-block]]}
                               {:current-block-uuid block-uuid}))))
       ":current-block input resolves to current block's :db/id")
+
+  (is (= []
+         (map :block/content
+              (custom-query {:inputs [:current-block]
+                             :query '[:find (pull ?b [*])
+                                      :in $ ?current-block
+                                      :where [?b :block/parent ?current-block]]})))
+      ":current-block input fails gracefuly when current-block-uuid is not provided")
+
+  (is (= []
+         (map :block/content
+              (custom-query {:inputs [:current-block]
+                             :query '[:find (pull ?b [*])
+                                      :in $ ?current-block
+                                      :where [?b :block/parent ?current-block]]}
+                            {:current-block-uuid :magic})))
+      ":current-block input fails gracefuly when current-block-uuid is invalid")
+
   (is (= ["parent"]
          (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
                                             :where [?b :block/content "child 1"]])
@@ -343,7 +371,20 @@ created-at:: %s"
                                         [?b :block/created-at ?timestamp]
                                         [(>= ?timestamp ?start)]
                                         [(<= ?timestamp ?end)]]}))))
-      ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range"))
+      ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range")
+
+  (is (= []
+         (map #(-> % :block/content string/split-lines first)
+              (custom-query {:inputs [:-0d-abcd :+1d-23.45]
+                             :query '[:find (pull ?b [*])
+                                      :in $ ?start ?end
+                                      :where
+                                      [?b :block/content]
+                                      [?b :block/created-at ?timestamp]
+                                      [(>= ?timestamp ?start)]
+                                      [(<= ?timestamp ?end)]]})))
+      ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully")) 
+        
 
 (deftest resolve-input-for-relative-date-queries 
   (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}

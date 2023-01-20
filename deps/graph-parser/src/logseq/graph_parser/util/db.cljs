@@ -72,9 +72,6 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
        (min 59  (parse-long (str s1 s2)))
        (min 999 (parse-long (str ms1 ms2 ms3)))])))
 
-(let [[h1 h2 m1 m2 s1 s2 ms1 ms2 ms3] (str "235959" "0000000000")]
-  [(parse-long (str h1 h2)) (parse-long (str m1 m2)) (parse-long (str s1 s2)) (parse-long (str ms1 ms2 ms3))])
-
 (defn keyword-input-dispatch [input]
   (cond 
     (#{:current-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
@@ -91,16 +88,16 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 (defmulti resolve-keyword-input (fn [_db input _opts] (keyword-input-dispatch input))) 
 
 (defmethod resolve-keyword-input :current-page [_ _ {:keys [current-page-fn]}]
-  ;; TODO: handle current-page-fn not being provided
-  (some-> (current-page-fn) string/lower-case))
+  (when current-page-fn
+    (some-> (current-page-fn) string/lower-case)))
 
 (defmethod resolve-keyword-input :current-block [db _ {:keys [current-block-uuid]}]
-  ;; TODO: handle current-block-uuid not being provided
-  (:db/id (d/entity db [:block/uuid current-block-uuid])))
+  (when current-block-uuid
+    (:db/id (d/entity db [:block/uuid current-block-uuid]))))
 
 (defmethod resolve-keyword-input :parent-block [db _ {:keys [current-block-uuid]}]
-  ;; TODO: handle current-block-uuid not being provided
-  (:db/id (:block/parent (d/entity db [:block/uuid current-block-uuid]))))
+  (when current-block-uuid
+    (:db/id (:block/parent (d/entity db [:block/uuid current-block-uuid])))))
 
 (defmethod resolve-keyword-input :today [_ _ _]
   (date->int (t/today)))
@@ -142,18 +139,19 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   ;; :Xd, :Xd-before, :Xd-before-ms, :Xd-after, :Xd-after-ms
   (resolve-keyword-input db (old->new-relative-date-format input) opts))
 
+(defmethod resolve-keyword-input :default [_ _ _]
+  nil)
+
 (defn resolve-input
   "Main fn for resolving advanced query :inputs"
   [db input {:keys [current-block-uuid current-page-fn]
              :or {current-page-fn (constantly nil)}}]
   (cond
     (keyword? input) 
-    (try 
+    (or
       (resolve-keyword-input db input {:current-block-uuid current-block-uuid
                                        :current-page-fn current-page-fn})
-      (catch js/Error e
-        (println "Error resolving input" input e)
-        input))
+      input)
     
     (and (string? input) (page-ref/page-ref? input))
     (-> (page-ref/get-page-name input)
