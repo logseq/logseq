@@ -3,15 +3,12 @@ import { test } from './fixtures'
 import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
-  await page.evaluate(() => {
-    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
-  })
-
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
   await page.click('#head .toolbar-dots-btn')
   await page.click('#head .dropdown-wrapper >> text=Settings')
   await page.click('.settings-modal a[data-id=features]')
   await page.click('text=Whiteboards >> .. >> .ui__toggle')
+  await page.waitForTimeout(1000)
   await page.keyboard.press('Escape')
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
@@ -19,7 +16,6 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
-  await page.waitForTimeout(1000)
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
@@ -35,19 +31,27 @@ test('can right click title to show context menu', async ({ page }) => {
   await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
-test('set whiteboard title', async ({ page }) => {
-  const title = 'my-whiteboard'
-  // Newly created whiteboard should have a default title
+test('newly created whiteboard should have a default title', async ({ page }) => {
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     'Untitled'
   )
+})
 
+test('set whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
+
+  await page.click('.nav-header .whiteboard')
+  await page.click('#tl-create-whiteboard')
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title)
   await page.keyboard.press('Enter')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title
   )
+})
+
+test('update whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
@@ -57,6 +61,7 @@ test('set whiteboard title', async ({ page }) => {
   await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
     `Do you really want to change the page name to “${title}-2”?`
   )
+
   await page.click('.ui__confirm-modal button')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
@@ -95,17 +100,17 @@ test('cleanup the shapes', async ({ page }) => {
 })
 
 test('zoom in', async ({ page }) => {
-  await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1000)
+  await page.keyboard.press('Shift+0') // reset zoom
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await page.click('#tl-zoom-in')
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(1500)
   await page.click('#tl-zoom-out')
-  await expect(page.locator('#tl-zoom')).toContainText('100%')
+  await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
 test('open context menu', async ({ page }) => {

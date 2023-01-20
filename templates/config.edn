@@ -272,7 +272,7 @@
  ;; Enable logical outdenting
  ;; :editor/logical-outdenting? true
 
- ;; Enable preferring pasting file from clipboard
+ ;; When both text and a file are in the clipboard, paste the file
  ;; :editor/preferred-pasting-file? true
 
  ;; Quick capture templates for receiving contents from other apps.
