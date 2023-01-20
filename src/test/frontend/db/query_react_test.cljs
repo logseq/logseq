@@ -65,7 +65,7 @@ adds rules that users often use"
                                       :where [?b :block/page ?bp]
                                       [?bp :block/name ?current-page]]}
                             {:current-page-fn nil})))
-      ":current-page input fails gracefully when not present")
+      ":current-page input doesn't resolve when not present")
 
   (is (= ["child 1" "child 2"]
          (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
@@ -86,7 +86,7 @@ adds rules that users often use"
                              :query '[:find (pull ?b [*])
                                       :in $ ?current-block
                                       :where [?b :block/parent ?current-block]]})))
-      ":current-block input fails gracefuly when current-block-uuid is not provided")
+      ":current-block input doesn't resolve when current-block-uuid is not provided")
 
   (is (= []
          (map :block/content
@@ -95,7 +95,7 @@ adds rules that users often use"
                                       :in $ ?current-block
                                       :where [?b :block/parent ?current-block]]}
                             {:current-block-uuid :magic})))
-      ":current-block input fails gracefuly when current-block-uuid is invalid")
+      ":current-block input doesn't resolve when current-block-uuid is invalid")
 
   (is (= ["parent"]
          (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])

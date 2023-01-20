@@ -149,10 +149,13 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (cond
     (keyword? input) 
     (or
-      (resolve-keyword-input db input {:current-block-uuid current-block-uuid
-                                       :current-page-fn current-page-fn})
-      input)
-    
+     (resolve-keyword-input db input {:current-block-uuid current-block-uuid
+                                      :current-page-fn current-page-fn})
+     ;; The input is returned back unresolved if a resolver communicates it
+     ;; can't resolve it by returning nil. We may want to error if this is too
+     ;; subtle for the user
+     input)
+
     (and (string? input) (page-ref/page-ref? input))
     (-> (page-ref/get-page-name input)
         (string/lower-case))
