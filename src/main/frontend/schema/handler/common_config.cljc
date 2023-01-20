@@ -48,7 +48,9 @@
     [:default-queries [:map
                        ;; Maybe validate these query maps later
                        [:journals [:vector :map]]]]
-    [:commands [:vector [:tuple :string :string]]]
+    [:commands [:vector [:tuple
+                         :string
+                         [:or :string [:vector :some]]]]]
     [:outliner/block-title-collapse-enabled? :boolean]
     [:macros [:map-of
               :string
