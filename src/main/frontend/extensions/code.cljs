@@ -226,6 +226,18 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
+
+        (.addEventListener element "keydown" (fn [e]
+                                               (let [key-code (.-code e)
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
+                                                 (when meta-or-ctrl-pressed?
+                                                   ;; prevent default behavior of browser
+                                                   ;; Cmd + [ => Go back in browser, outdent in CodeMirror
+                                                   ;; Cmd + ] => Go forward in browser, indent in CodeMirror
+                                                   (case key-code
+                                                     "BracketLeft" (util/stop e)
+                                                     "BracketRight" (util/stop e)
+                                                     nil)))))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (util/stop e)
