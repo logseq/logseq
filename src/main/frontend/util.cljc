@@ -742,9 +742,13 @@
             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
 #?(:cljs
-   (defn get-blocks-noncollapse []
-     (->> (d/sel "div:not(.reveal) .ls-block")
-          (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
+   (defn get-blocks-noncollapse
+     ([]
+      (->> (d/sel "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))
+     ([blocks-container]
+      (->> (d/sel blocks-container "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))))
 
 #?(:cljs
    (defn remove-embedded-blocks [blocks]
@@ -821,6 +825,17 @@
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
+       (let [block-id (.-id block)
+             block-ids (mapv #(.-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+           (let [idx (dec index)]
+             (when (>= idx 0)
+               (nth-safe blocks idx))))))))
+
+#?(:cljs
+   (defn get-prev-block-non-collapsed-in-embed
+     [blocks-container block]
+     (when-let [blocks (get-blocks-noncollapse blocks-container)]
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
