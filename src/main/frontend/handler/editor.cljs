@@ -786,7 +786,7 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
-   (let [{:keys [id block-id block-parent-id value format]} (get-state)]
+   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
@@ -801,10 +801,19 @@
                                              (seq (:block/_parent block)))))]
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
-                 (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
-                   (delete-block-aux! block delete-children?)
-                   (move-to-prev-block repo sibling-block format id value)))))))))
+                 (cond
+                   (:page-embed? config)
+                   (let [block-parent (gdom/getElement block-parent-id)
+                         blocks-container (util/rec-get-blocks-container block-parent)
+                         sibling-block (util/get-prev-block-non-collapsed-in-embed blocks-container block-parent)]
+                     (delete-block-aux! block delete-children?)
+                     (move-to-prev-block repo sibling-block format id value)) 
+                   
+                   :else
+                   (let [block-parent (gdom/getElement block-parent-id)
+                         sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
+                     (delete-block-aux! block delete-children?)
+                     (move-to-prev-block repo sibling-block format id value))))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
