@@ -802,7 +802,7 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (cond
-                   (:page-embed? config)
+                   (:embed? config)
                    (let [block-parent (gdom/getElement block-parent-id)
                          blocks-container (util/rec-get-blocks-container block-parent)
                          sibling-block (util/get-prev-block-non-collapsed-in-embed blocks-container block-parent)]
