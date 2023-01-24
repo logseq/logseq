@@ -147,16 +147,18 @@ const handleCreatingShapes = async (
       tryCreateShapeFromFiles,
       tryCreateShapeFromPageName,
       tryCreateShapeFromBlockUUID,
+      tryCreateShapeFromTextPlain,
       tryCreateShapeFromTextHTML,
-      tryCreateShapeFromTextPlain
+      tryCreateLogseqPortalShapesFromString
     )(dataTransfer)
   }
 
   async function tryCreateShapesFromClipboard() {
     const items = await navigator.clipboard.read()
     const createShapesFn = tryCreateShapeHelper(
+      tryCreateShapeFromTextPlain,
       tryCreateShapeFromTextHTML,
-      tryCreateShapeFromTextPlain
+      tryCreateLogseqPortalShapesFromString
     )
     const allShapes = (await Promise.all(items.map(item => createShapesFn(item))))
       .flat()
@@ -220,7 +222,7 @@ const handleCreatingShapes = async (
           : [text]
       // ensure all uuid in blockUUIDs is persisted
       window.logseq?.api?.set_blocks_id?.(blockUUIDs)
-      const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromString(`((${uuid}))`))
+      const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromUUID(`((${uuid}))`))
       const newShapes = (await Promise.all(tasks)).flat().filter(isNonNullable)
       return newShapes.map((s, idx) => {
         // if there are multiple shapes, shift them to the right
@@ -240,7 +242,7 @@ const handleCreatingShapes = async (
     if (rawText) {
       const text = rawText.trim()
 
-      return tryCreateLogseqPortalShapesFromString(`[[${text}]]`)
+      return tryCreateLogseqPortalShapesFromUUID(`[[${text}]]`)
     }
     return null
   }
@@ -252,7 +254,7 @@ const handleCreatingShapes = async (
       return tryCreateShapeHelper(
         tryCreateShapeFromURL,
         tryCreateShapeFromIframeString,
-        tryCreateLogseqPortalShapesFromString
+        tryCreateLogseqPortalShapesFromUUID
       )(text)
     }
 
@@ -317,7 +319,7 @@ const handleCreatingShapes = async (
     return null
   }
 
-  async function tryCreateLogseqPortalShapesFromString(rawText: string) {
+  async function tryCreateLogseqPortalShapesFromUUID(rawText: string) {
     if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
       const blockRef = rawText.slice(2, -2)
       if (validUUID(blockRef)) {
@@ -350,22 +352,30 @@ const handleCreatingShapes = async (
       ]
     }
 
-    // Otherwise, creating a new block that belongs to the current whiteboard
-    const uuid = handlers?.addNewBlock(rawText)
-    if (uuid) {
-      // create text shape
-      return [
-        {
-          ...LogseqPortalShape.defaultProps,
-          size: [400, 0], // use 0 here to enable auto-resize
-          point: [point[0], point[1]],
-          pageId: uuid,
-          fill: app.settings.color,
-          stroke: app.settings.color,
-          blockType: 'B' as 'B',
-          compact: true,
-        },
-      ]
+    return null
+  }
+
+  async function tryCreateLogseqPortalShapesFromString(item: DataTransfer | ClipboardItem) {
+    const rawText = await getDataFromType(item, 'text/plain')
+    if (rawText) {
+      const text = rawText.trim()
+      // Create a new block that belongs to the current whiteboard
+      const uuid = handlers?.addNewBlock(text)
+      if (uuid) {
+        // create text shape
+        return [
+          {
+            ...LogseqPortalShape.defaultProps,
+            size: [400, 0], // use 0 here to enable auto-resize
+            point: [point[0], point[1]],
+            pageId: uuid,
+            fill: app.settings.color,
+            stroke: app.settings.color,
+            blockType: 'B' as 'B',
+            compact: true,
+          },
+        ]
+      }
     }
 
     return null
