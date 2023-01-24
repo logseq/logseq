@@ -123,7 +123,7 @@
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
          block-uuid (:block/uuid page-entity)
-         refs-count (model/get-block-references-count block-uuid)]
+         refs-count (model/get-block-references-count block-uuid {:use-cache? false})]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]
@@ -132,7 +132,7 @@
                                  (when render-fn (render-fn open? refs-count))])
                        :hover? hover?
                        :portal? portal?
-                       :children (reference/block-linked-references block-uuid)})))))
+                       :children (reference/block-linked-references block-uuid {:use-cache? false})})))))
 
 (defn- get-page-display-name
   [page-name]

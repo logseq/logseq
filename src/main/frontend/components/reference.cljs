@@ -94,18 +94,20 @@
     (filter-dialog-inner filters-atom *references page-name)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
-  [block-id]
-  (let [ref-blocks (db/get-block-referenced-blocks block-id)
-        ref-hiccup (block/->hiccup ref-blocks
-                                   {:id (str block-id)
-                                    :ref? true
-                                    :breadcrumb-show? true
-                                    :group-by-page? true
-                                    :editor-box editor/box}
-                                   {})]
-    [:div.references-blocks
-     (content/content block-id
-                      {:hiccup ref-hiccup})]))
+  ([block-id]
+   (block-linked-references block-id {}))
+  ([block-id options]
+   (let [ref-blocks (db/get-block-referenced-blocks block-id options)
+         ref-hiccup (block/->hiccup ref-blocks
+                                    {:id (str block-id)
+                                     :ref? true
+                                     :breadcrumb-show? true
+                                     :group-by-page? true
+                                     :editor-box editor/box}
+                                    {})]
+     [:div.references-blocks
+      (content/content block-id
+                       {:hiccup ref-hiccup})])))
 
 (rum/defc references-inner
   [page-name filters filtered-ref-blocks]
