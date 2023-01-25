@@ -71,6 +71,10 @@
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
 
+ ;; Specify a custom js import
+ ;; This option take precedence over your local `logseq/custom.js` file
+ ;; :custom-js-url ""
+
  ;; Set Bullet indentation when exporting
  ;; default option: tab
  ;; Possible options are for `:sidebar` are
