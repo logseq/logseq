@@ -75,6 +75,10 @@
  ;; This option take precedence over your local `logseq/custom.js` file
  ;; :custom-js-url ""
 
+ ;; Set a custom Arweave gateway
+ ;; Default gateway: https://arweave.net
+ ;; :arweave/gateway ""
+
  ;; Set Bullet indentation when exporting
  ;; default option: tab
  ;; Possible options are for `:sidebar` are
@@ -82,7 +86,6 @@
  ;; 2. `:four-spaces` as four spaces
  ;; 3. `:two-spaces` as two spaces
  ;; :export/bullet-indentation :tab
-
 
  ;; When :all-pages-public? true, export repo would export all pages within that repo.
  ;; Regardless of whether you've set any page to public or not.
