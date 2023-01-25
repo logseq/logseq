@@ -1051,9 +1051,10 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:on-mouse-down (fn [_event]
+         {:on-mouse-down (fn [event]
                            (when-let [current (pdf-assets/inflate-asset s)]
-                             (state/set-current-pdf! current)))}
+                             (state/set-current-pdf! current)
+                             (util/stop event)))}
          (or label-text
              (->elem :span (map-inline config label)))]
 

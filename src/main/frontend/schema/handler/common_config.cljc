@@ -53,7 +53,7 @@
                          [:or :string [:vector :some]]]]]
     [:outliner/block-title-collapse-enabled? :boolean]
     [:macros [:map-of
-              :string
+              [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
     [:ref/linked-references-collapsed-threshold :int]
