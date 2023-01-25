@@ -47,6 +47,9 @@
  ;; Enable flashcards
  ;; :feature/enable-flashcards? true
 
+ ;; Enable Whiteboards
+ ;; :feature/enable-whiteboards?
+
  ;; Disable the built-in Scheduled tasks and deadlines query
  ;; :feature/disable-scheduled-and-deadline-query? true
  
