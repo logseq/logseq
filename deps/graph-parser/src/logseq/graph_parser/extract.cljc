@@ -48,7 +48,6 @@
                             (let [properties-ast (second (first ast))
                                   properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
                                                      (map second properties-ast))]
-                              (print properties)
                               (:title properties)))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
