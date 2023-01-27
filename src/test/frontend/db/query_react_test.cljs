@@ -53,6 +53,17 @@ adds rules that users often use"
                                                      [?e :block/name ?page]]}
                                     {:current-block-uuid (get (block-with-content block-content) :block/uuid)})))
 
+(defn- blocks-with-tag-on-specified-current-page [& {:keys [current-page tag]}]
+  (map :block/content (custom-query {:title "Query title"
+                                     :inputs [:current-page tag] 
+                                     :query '[:find (pull ?b [*]) 
+                                              :in $ ?current-page ?tag-name
+                                              :where [?b :block/page ?bp] 
+                                                     [?bp :block/name ?current-page] 
+                                                     [?b :block/ref-pages ?t] 
+                                                     [?t :block/name ?tag-name]]}
+                                    {:current-page-fn (constantly current-page)})))
+
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content
@@ -67,7 +78,7 @@ adds rules that users often use"
                                :query '[:find (pull ?b [*])
                                         :in $ ?current-page
                                         :where [?b :block/page ?bp]
-                                        [?bp :block/name ?current-page]]}))))
+                                               [?bp :block/name ?current-page]]}))))
       ":current-page input resolves to current page name")
 
   (is (= []
@@ -302,22 +313,10 @@ created-at:: %s"
         ":query-page resolves to the parent page when called from another page")))
 
 (deftest cache-input-for-page-inputs
-  (load-test-files [{:file/path "pages/content.md"
-                     :file/content
-                     "- 1 #item1
-- 2 #item2"}])
+  (load-test-files [{:file/path "pages/a.md" :file/content "- a #shared-tag"}
+                    {:file/path "pages/b.md" :file/content "- b #shared-tag"}])
 
-  (letfn [(query-content-in-page [current-page]
-            (with-redefs [state/get-current-page (constantly current-page)]
-              (map :block/content
-                   (custom-query {:inputs [:current-page]
-                                  :query '[:find (pull ?b [*])
-                                           :in $ ?current-page
-                                           :where
-                                           [?p :page/name ?current-page]
-                                           [?b :block/ref-pages ?p]
-                                           [?b :block/page ?bp]
-                                           [?bp :page/name ?bp-name]]}))))]
-
-    (let [i1 (query-content-in-page "item1") i2 (query-content-in-page "item2")]
-      (is (not= i1 i2) ":current-page input is not corrected cached"))))
+  (is (not= (blocks-with-tag-on-specified-current-page :current-page "a" :tag "shared-tag")
+            (blocks-with-tag-on-specified-current-page :current-page "b" :tag "shared-tag")
+            [])
+      "Querying for blocks with tag on current page from page returns not-empty but differing results"))
