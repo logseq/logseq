@@ -298,14 +298,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [innerHeight, this.props.isAutoResizing])
 
+    const [loaded, setLoaded] = React.useState(false)
+
     React.useEffect(() => {
-      if (!this.initialHeightCalculated) {
-        setTimeout(() => {
-          this.onResetBounds()
-          app.persist(true)
-        })
-      }
-    }, [this.initialHeightCalculated])
+      setTimeout(function () {
+        setLoaded(true)
+      })
+    }, [])
 
     return (
       <>
@@ -325,11 +324,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           className="relative tl-logseq-cp-container"
           style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
         >
-          {this.props.blockType === 'B' && this.props.compact ? (
+          {loaded && (this.props.blockType === 'B' && this.props.compact ? (
             <Block blockId={pageId} />
           ) : (
             <Page pageName={pageId} />
-          )}
+          ))}
         </div>
       </>
     )
