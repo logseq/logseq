@@ -35,7 +35,7 @@ export const HTMLLayer = observer(function HTMLLayer({ children }: HTMLLayerProp
   )
 
   return (
-    <div ref={rLayer} className="tl-absolute tl-layer" style={{willChange: 'transform',  textRendering: viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto'}}>
+    <div ref={rLayer} className="tl-absolute tl-layer">
       {children}
     </div>
   )
