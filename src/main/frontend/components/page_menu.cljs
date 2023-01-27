@@ -1,6 +1,5 @@
 (ns frontend.components.page-menu
-  (:require [cljs.pprint :as pprint]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -16,8 +15,7 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [frontend.handler.file-sync :as file-sync-handler]))
 
 (defn- delete-page!
   [page-name]
@@ -164,35 +162,13 @@
           (when developer-mode?
             {:title   "(Dev) Show page data"
              :options {:on-click (fn []
-                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                     (println page-data)
-                                     (notification/show!
-                                      [:div
-                                       [:pre.code page-data]
-                                       [:br]
-                                       (ui/button
-                                        "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard page-data))]
-                                      :success
-                                      false)))}})
+                                   (state/pub-event! [:dev/show-entity-data (:db/id page)]))}})
 
           (when developer-mode?
             {:title   "(Dev) Show page AST"
              :options {:on-click (fn []
-                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))
-                                         page-data (-> (gp-mldoc/->edn (get-in page [:block/file :file/content])
-                                                                       (gp-mldoc/default-config (:block/format page)))
-                                                       pprint/pprint
-                                                       with-out-str)]
-                                     (println page-data)
-                                     (notification/show!
-                                      [:div
-                                       (ui/button
-                                        "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard page-data))
-                                       [:br]
-                                       [:pre.code page-data]]
-                                      :success
-                                      false)))}})]
+                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
+                                     (state/pub-event! [:dev/show-content-ast (get-in page [:block/file :file/content])
+                                                        (:block/format page)])))}})]
          (flatten)
          (remove nil?))))))

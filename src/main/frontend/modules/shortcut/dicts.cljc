@@ -128,7 +128,12 @@
    :ui/install-plugins-from-file    "Install plugins from plugins.edn"
    :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
    :ui/toggle-cards                 "Toggle cards"
-   :git/commit                      "Create git commit with message"})
+   :ui/clear-all-notifications      "Clear all notifications"
+   :git/commit                      "Create git commit with message"
+   :dev/show-block-data             "(Dev) Show block data"
+   :dev/show-block-ast              "(Dev) Show block AST"
+   :dev/show-page-data              "(Dev) Show page data"
+   :dev/show-page-ast               "(Dev) Show page AST"})
 
 (def category
   {:shortcut.category/basics "Basics"
@@ -1154,7 +1159,7 @@
              :command.go/electron-jump-to-the-next    "Ir para a próxima correspondência da sua pesquisa"
              :command.go/electron-jump-to-the-previous "Voltar para a correspondência anterior da sua pesquisa"
              :command.graph/re-index                  "Reindexar o grafo atual"
-             
+
              :command.editor/new-whiteboard           "Novo quadro branco"
              :command.editor/select-parent            "Selecione o bloco pai"
              :command.go/whiteboards                  "Ir para os quadros brancos"

@@ -8,6 +8,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
             [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.diff :as diff]
@@ -65,6 +66,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [cljs-bean.core :as bean]
             ["@sentry/react" :as Sentry]
             [frontend.modules.instrumentation.sentry :as sentry-event]))
@@ -918,6 +920,33 @@
 (defmethod handle :run/cli-command [[_ command content]]
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
+
+(defmethod handle :dev/show-entity-data [[_ & pull-args]]
+  (let [pull-data (with-out-str (pprint/pprint (apply db/pull pull-args)))]
+    (println pull-data)
+    (notification/show!
+     [:div
+      [:pre.code pull-data]
+      [:br]
+      (ui/button "Copy to clipboard"
+                 :on-click #(.writeText js/navigator.clipboard pull-data))]
+     :success
+     false)))
+
+(defmethod handle :dev/show-content-ast [[_ content format]]
+  (let [ast-data (-> (gp-mldoc/->edn content (gp-mldoc/default-config format))
+                       pprint/pprint
+                       with-out-str)]
+    (println ast-data)
+    (notification/show!
+     [:div
+      ;; Show clipboard at top since content is really long for pages
+      (ui/button "Copy to clipboard"
+                 :on-click #(.writeText js/navigator.clipboard ast-data))
+      [:br]
+      [:pre.code ast-data]]
+     :success
+     false)))
 
 (defn run!
   []
