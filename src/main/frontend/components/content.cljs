@@ -1,6 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
@@ -20,7 +19,6 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -295,37 +293,16 @@
            (ui/menu-link
             {:key      "(Dev) Show block data"
              :on-click (fn []
-                         (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                           (println block-data)
-                           (notification/show!
-                            [:div
-                             [:pre.code block-data]
-                             [:br]
-                             (ui/button "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard block-data))]
-                            :success
-                            false)))}
+                         (state/pub-event! [:dev/show-entity-data [:block/uuid block-id]]))}
             "(Dev) Show block data"
             nil))
-  
+
          (when (state/sub [:ui/developer-mode?])
            (ui/menu-link
             {:key      "(Dev) Show block AST"
              :on-click (fn []
-                         (let [block (db/pull [:block/uuid block-id])
-                               block-data (-> (gp-mldoc/->edn (:block/content block)
-                                                              (gp-mldoc/default-config (:block/format block)))
-                                              pprint/pprint
-                                              with-out-str)]
-                           (println block-data)
-                           (notification/show!
-                            [:div
-                             [:pre.code block-data]
-                             [:br]
-                             (ui/button "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard block-data))]
-                            :success
-                            false)))}
+                         (let [block (db/pull [:block/uuid block-id])]
+                           (state/pub-event! [:dev/show-content-ast (:block/content block) (:block/format block)])))}
             "(Dev) Show block AST"
             nil))])))
 

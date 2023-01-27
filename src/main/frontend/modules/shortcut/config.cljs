@@ -1,5 +1,6 @@
 (ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
+            [frontend.handler.notification :as notification]
             [frontend.extensions.srs.handler :as srs]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
@@ -18,6 +19,7 @@
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
+            [frontend.db :as db]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
             [frontend.config :as config]
@@ -331,7 +333,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -423,6 +425,9 @@
                                      :inactive (not (config/plugin-config-enabled?))
                                      :fn       plugin-config-handler/open-replace-plugins-modal}
 
+   :ui/clear-all-notifications      {:binding false
+                                     :fn       notification/clear-all!}
+
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
 
@@ -430,7 +435,42 @@
                                      :fn      ui-handler/toggle-cards!}
 
    :git/commit                      {:binding "mod+g c"
-                                     :fn      commit/show-commit-modal!}})
+                                     :fn      commit/show-commit-modal!}
+
+   :dev/show-block-data            {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn (fn []
+                                          ;; Use editor state to locate most recent block
+                                          (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
+                                            (state/pub-event! [:dev/show-entity-data [:block/uuid block-uuid]])
+                                            (notification/show! "No block found" :error)))}
+
+   :dev/show-block-ast             {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn (fn []
+                                          (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
+                                            (state/pub-event! [:dev/show-content-ast content format])
+                                            (notification/show! "No block found" :error)))}
+
+   :dev/show-page-data             {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn (fn []
+                                          ;; Use editor state to locate most recent page.
+                                          ;; Consider replacing with navigation history if it's more useful
+                                          (if-let [page-id (get-in (first (state/get-editor-args))
+                                                                   [:block :block/page :db/id])]
+                                            (state/pub-event! [:dev/show-entity-data page-id])
+                                            (notification/show! "No page found" :error)))}
+
+   :dev/show-page-ast              {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn (fn []
+                                          (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
+                                                                   (get-in (first (state/get-editor-args))
+                                                                           [:block :block/page :db/id]))]
+                                            (if (seq page-data)
+                                              (state/pub-event! [:dev/show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data)])
+                                              (notification/show! "No page found" :error))))}})
 
 (let [keyboard-shortcuts
       {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
@@ -593,9 +633,13 @@
                           :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
+                          :ui/clear-all-notifications
                           :git/commit
                           :sidebar/close-top
-                          ])
+                          :dev/show-block-data
+                          :dev/show-block-ast
+                          :dev/show-page-data
+                          :dev/show-page-ast])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
@@ -736,7 +780,12 @@
     :date-picker/prev-week
     :date-picker/next-week
     :date-picker/complete
-    :git/commit]})
+    :git/commit
+    :dev/show-block-data
+    :dev/show-block-ast
+    :dev/show-page-data
+    :dev/show-page-ast
+    :ui/clear-all-notifications]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
