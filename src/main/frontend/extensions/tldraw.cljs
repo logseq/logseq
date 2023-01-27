@@ -37,6 +37,10 @@
                     {:end-separator? (gobj/get props "endSeparator")
                      :level-limit (gobj/get props "levelLimit" 3)}))
 
+(rum/defc tweet
+  [props]
+  (ui/tweet-embed (gobj/get props "tweetId")))
+
 (rum/defc block-reference
   [props]
   (block/block-reference {} (gobj/get props "blockId") nil))
@@ -71,6 +75,7 @@
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
+                       :Tweet tweet
                        :PageName page-name-link
                        :BacklinksCount references-count
                        :BlockReference block-reference})
@@ -82,8 +87,11 @@
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
+   :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
+   :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
                        (whiteboard-handler/create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]

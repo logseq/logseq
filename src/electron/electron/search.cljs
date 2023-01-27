@@ -169,7 +169,8 @@
   [repo pages]
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
-    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
+    ;; Should update all values on id conflict
+    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)")
           insert-many (.transaction ^object db
                                     (fn [pages]
                                       (doseq [page pages]
@@ -190,7 +191,8 @@
   [repo blocks]
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
-    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET content = @content")
+    ;; Should update all values on id conflict
+    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)")
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]

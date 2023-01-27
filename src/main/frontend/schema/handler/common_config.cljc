@@ -13,15 +13,20 @@
     [:default-templates [:map-of
                          [:enum :journals]
                          :string]]
+    [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
     [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
+    [:feature/enable-whiteboards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
+    [:scheduled/future-days :int]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
+    [:custom-js-url :string]
+    [:arweave/gateway :string]
     [:export/bullet-indentation
      [:enum :eight-spaces :four-spaces :two-spaces :tab]]
     [:publishing/all-pages-public? :boolean]
@@ -38,6 +43,7 @@
     [:block/content-max-length :int]
     [:ui/show-command-doc? :boolean]
     [:ui/show-empty-bullets? :boolean]
+    [:ui/show-full-blocks? :boolean]
     [:query/views [:map-of
                    :keyword
                    [:sequential any?]]]
@@ -47,10 +53,12 @@
     [:default-queries [:map
                        ;; Maybe validate these query maps later
                        [:journals [:vector :map]]]]
-    [:commands [:vector [:tuple :string :string]]]
+    [:commands [:vector [:tuple
+                         :string
+                         [:or :string [:vector :some]]]]]
     [:outliner/block-title-collapse-enabled? :boolean]
     [:macros [:map-of
-              :string
+              [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
     [:ref/linked-references-collapsed-threshold :int]
@@ -80,4 +88,5 @@
                              [:redirect-page? {:optional true} :boolean]]]
     [:file-sync/ignore-files [:vector :string]]
     [:dwim/settings [:map-of :keyword :boolean]]
-    [:file/name-format [:enum :legacy :triple-lowbar]]]))
+    [:file/name-format [:enum :legacy :triple-lowbar]]
+    [:journal/file-name-format :string]]))

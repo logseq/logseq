@@ -887,9 +887,8 @@
 
 (defn set-block-timestamp!
   [block-id key value]
-  (let [key (string/lower-case key)
+  (let [key (string/lower-case (str key))
         block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/lower-case (str key))
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
@@ -902,6 +901,20 @@
                      (string/ends-with? input-id (str block-id)))
               (state/set-edit-content! input-id new-content)
               (save-block-if-changed! block new-content))))))))
+
+(defn set-editing-block-timestamp!
+  "Almost the same as set-block-timestamp! except for:
+   - it doesn't save the block
+   - it extracts current content from current input"
+  [key value]
+  (let [key (string/lower-case (str key))
+        value (str value)
+        content (state/get-edit-content)
+        new-content (-> (text-util/remove-timestamp content key)
+                        (text-util/add-timestamp key value))]
+    (when (not= content new-content)
+      (let [input-id (state/get-edit-input-id)]
+        (state/set-edit-content! input-id new-content)))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
@@ -1660,11 +1673,11 @@
   [up?]
   (fn [event]
     (util/stop event)
+    (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (outliner-tx/transact!
                         {:outliner-op :move-blocks}
-                        (save-current-block!)
                         (outliner-core/move-blocks-up-down! blocks up?))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
@@ -2139,10 +2152,10 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
+      (save-current-block!)
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (save-current-block!)
        (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
 (defn- last-top-level-child?
@@ -2666,6 +2679,7 @@
 
 (defn indent-outdent
   [indent?]
+  (save-current-block!)
   (state/set-editor-op! :indent-outdent)
   (let [pos (some-> (state/get-input) cursor/pos)
         {:keys [block]} (get-state)]
@@ -2674,8 +2688,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (save-current-block!)
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+        (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -2725,16 +2738,9 @@
         ;; can't be deleted. Need to figure out why and find a better solution.
         (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (zero? pos))
-        (do
-          (util/stop e)
-          (let [block (state/get-edit-block)
-                top-block? (= (:block/left block) (:block/page block))
-                root-block? (= (:block/container block) (str (:block/uuid block)))
-                repo (state/get-current-repo)]
-            (when (and (if top-block? (string/blank? value) true)
-                       (not root-block?))
-              (delete-block! repo false))))
+             (zero? pos)
+             (string/blank? (.toString (js/window.getSelection))))
+        (keydown-backspace-handler false e)
 
         (and (= key "#")
              (and (> pos 0)
@@ -3072,7 +3078,8 @@
 (defn shortcut-up-down [direction]
   (fn [e]
     (when (and (not (auto-complete?))
-               (not (slide-focused?)))
+               (not (slide-focused?))
+               (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
         (state/editing?)
@@ -3129,7 +3136,8 @@
 
 (defn shortcut-left-right [direction]
   (fn [e]
-    (when-not (auto-complete?)
+    (when (and (not (auto-complete?))
+               (not (state/get-timestamp-block)))
       (cond
         (state/editing?)
         (do

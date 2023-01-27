@@ -14,6 +14,7 @@ import type {
   Shape,
   TextShape,
   YouTubeShape,
+  TweetShape,
 } from '../../lib'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
@@ -39,6 +40,7 @@ export const contextBarActionTypes = [
   'ScaleLevel',
   'TextStyle',
   'YoutubeLink',
+  'TwitterLink',
   'IFrameSource',
   'LogseqPortalViewMode',
   'ArrowMode',
@@ -46,7 +48,7 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'Links']
+const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'TwitterLink', 'IFrameSource', 'Links']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -62,13 +64,14 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
     'Links',
   ],
   youtube: ['YoutubeLink', 'Links'],
+  tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
   box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
-  pencil: ['Swatch', 'Links'],
-  highlighter: ['Swatch', 'Links'],
+  pencil: ['Swatch', 'Links', 'ScaleLevel'],
+  highlighter: ['Swatch', 'Links', 'ScaleLevel'],
   text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
@@ -87,7 +90,7 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 
 const EditAction = observer(() => {
   const {
-    handlers: { isWhiteboardPage, redirectToPage },
+    handlers: { isWhiteboardPage, redirectToPage, getRedirectPageName, insertFirstPageBlock },
   } = React.useContext(LogseqContext)
 
   const app = useApp<Shape>()
@@ -111,10 +114,17 @@ const EditAction = observer(() => {
               redirectToPage(uuid)
             }
 
-            const firstNonePropertyBlock = window.logseq?.api
-              ?.get_page_blocks_tree?.(shape.props.pageId)
-              .find(b => !('propertiesOrder' in b))
-            uuid = firstNonePropertyBlock.uuid
+            const pageId = getRedirectPageName(shape.props.pageId)
+            let pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
+
+            if (pageBlocksTree?.length === 0) {
+              insertFirstPageBlock(pageId)
+              pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
+            }
+
+            const firstNonePropertyBlock = pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
+
+            uuid = firstNonePropertyBlock?.uuid
           }
           window.logseq?.api?.edit_block?.(uuid)
         }
@@ -194,32 +204,36 @@ const LogseqPortalViewModeAction = observer(() => {
 })
 
 const ScaleLevelAction = observer(() => {
+  const {
+    handlers: { isMobile },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
   const sizeOptions: SelectOption[] = [
     {
-      label: 'Extra Small',
+      label: isMobile() ? 'XS' : 'Extra Small',
       value: 'xs',
     },
     {
-      label: 'Small',
+      label: isMobile() ? 'SM' : 'Small',
       value: 'sm',
     },
     {
-      label: 'Medium',
+      label: isMobile() ? 'MD' : 'Medium',
       value: 'md',
     },
     {
-      label: 'Large',
+      label: isMobile() ? 'LG' : 'Large',
       value: 'lg',
     },
     {
-      label: 'Extra Large',
+      label: isMobile() ? 'XL' : 'Extra Large',
       value: 'xl',
     },
     {
-      label: 'Huge',
+      label: isMobile() ? 'XXL' : 'Huge',
       value: 'xxl',
     },
   ]
@@ -287,6 +301,33 @@ const YoutubeLinkAction = observer(() => {
       />
       <Button
         tooltip="Open YouTube Link"
+        type="button"
+        onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
+      >
+        <TablerIcon name="external-link" />
+      </Button>
+    </span>
+  )
+})
+
+const TwitterLinkAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = filterShapeByAction<TweetShape>(app.selectedShapesArray, 'TwitterLink')[0]
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    shape.onTwitterLinkChange(e.target.value)
+    app.persist()
+  }, [])
+
+  return (
+    <span className="flex gap-3">
+      <TextInput
+        title="Twitter Link"
+        className="tl-twitter-link"
+        value={`${shape.props.url}`}
+        onChange={handleChange}
+      />
+      <Button
+        tooltip="Open Twitter Link"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -511,6 +552,7 @@ contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
+contextBarActionMapping.set('TwitterLink', TwitterLinkAction)
 contextBarActionMapping.set('IFrameSource', IFrameSourceAction)
 contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)

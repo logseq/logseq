@@ -1,55 +1,33 @@
 (ns frontend.db.query-react
   "Custom queries."
-  (:require [cljs-time.core :as t]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.config :as config]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils :refer [date->int]]
+            [frontend.db.utils :as db-utils]
             [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
+            [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
-  [input]
-  (cond
-    (= :right-now-ms input) (util/time-ms)
-    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
-    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
-
-    (= :today input)
-    (date->int (t/today))
-    (= :yesterday input)
-    (date->int (t/minus (t/today) (t/days 1)))
-    (= :tomorrow input)
-    (date->int (t/plus (t/today) (t/days 1)))
-    (= :current-page input)
-    (some-> (or (state/get-current-page)
-                (:page (state/get-default-home))
-                (date/today)) string/lower-case)
-
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-before)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/minus (t/today) (t/days days))))
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-after)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/plus (t/today) (t/days days))))
-
-    (and (string? input) (page-ref/page-ref? input))
-    (-> (page-ref/get-page-name input)
-        (string/lower-case))
-
-    :else
-    input))
+  "Wrapper around db-util/resolve-input which provides editor-specific state"
+  ([db input]
+   (resolve-input db input {}))
+  ([db input opts]
+   (db-util/resolve-input db
+                          input
+                          (merge {:current-page-fn (fn []
+                                                     (or (state/get-current-page)
+                                                         (:page (state/get-default-home))
+                                                         (date/today)))}
+                                 opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -119,11 +97,14 @@
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
     (let [query (resolve-query query)
-          resolved-inputs (mapv resolve-input inputs)
+          current-block-uuid (:current-block-uuid query-opts)
+          repo (or repo (state/get-current-repo))
+          db (conn/get-db repo)
+          resolved-inputs (mapv #(resolve-input db % {:current-block-uuid current-block-uuid})
+                                inputs)
           inputs (cond-> resolved-inputs
                          rules
                          (conj rules))
-          repo (or repo (state/get-current-repo))
           k [:custom (or (:query-string query') query')]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)

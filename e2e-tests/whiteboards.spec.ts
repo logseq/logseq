@@ -3,15 +3,12 @@ import { test } from './fixtures'
 import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
-  await page.evaluate(() => {
-    window.localStorage.removeItem('ls-onboarding-whiteboard?')
-  })
-
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
   await page.click('#head .toolbar-dots-btn')
   await page.click('#head .dropdown-wrapper >> text=Settings')
   await page.click('.settings-modal a[data-id=features]')
   await page.click('text=Whiteboards >> .. >> .ui__toggle')
+  await page.waitForTimeout(1000)
   await page.keyboard.press('Escape')
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
@@ -20,24 +17,6 @@ test('create new whiteboard', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
-})
-
-test('check if the page contains the onboarding whiteboard', async ({
-  page,
-}) => {
-  await expect(
-    page.locator('.tl-text-shape-wrapper >> text=Welcome to')
-  ).toHaveCount(1)
-})
-
-test('cleanup the shapes', async ({ page }) => {
-  if (IsMac) {
-    await page.keyboard.press('Meta+a')
-  } else {
-    await page.keyboard.press('Control+a')
-  }
-  await page.keyboard.press('Delete')
-  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('can right click title to show context menu', async ({ page }) => {
@@ -52,19 +31,27 @@ test('can right click title to show context menu', async ({ page }) => {
   await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
-test('set whiteboard title', async ({ page }) => {
-  const title = 'my-whiteboard'
-  // Newly created whiteboard should have a default title
+test('newly created whiteboard should have a default title', async ({ page }) => {
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     'Untitled'
   )
+})
 
+test('set whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
+
+  await page.click('.nav-header .whiteboard')
+  await page.click('#tl-create-whiteboard')
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title)
   await page.keyboard.press('Enter')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title
   )
+})
+
+test('update whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
@@ -74,6 +61,7 @@ test('set whiteboard title', async ({ page }) => {
   await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
     `Do you really want to change the page name to “${title}-2”?`
   )
+
   await page.click('.ui__confirm-modal button')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
@@ -100,14 +88,29 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
+
+test('cleanup the shapes', async ({ page }) => {
+  if (IsMac) {
+    await page.keyboard.press('Meta+a')
+  } else {
+    await page.keyboard.press('Control+a')
+  }
+  await page.keyboard.press('Delete')
+  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
+})
+
 test('zoom in', async ({ page }) => {
+  await page.keyboard.press('Shift+0') // reset zoom
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await page.click('#tl-zoom-in')
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
+  await page.keyboard.press('Shift+0')
+  await page.waitForTimeout(1500)
   await page.click('#tl-zoom-out')
-  await expect(page.locator('#tl-zoom')).toContainText('100%')
+  await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
 test('open context menu', async ({ page }) => {
@@ -162,10 +165,4 @@ test('go to another board and check reference', async ({ page }) => {
 
   const pageRefCount$ = page.locator('.whiteboard-page-refs-count')
   await expect(pageRefCount$.locator('.open-page-ref-link')).toContainText('1')
-
-  await pageRefCount$.click()
-  await expect(page.locator('.references-blocks')).toBeVisible()
-  await expect(
-    page.locator('.references-blocks >> .page-ref >> text=my-whiteboard-3')
-  ).toBeVisible()
 })

@@ -55,6 +55,7 @@ base.beforeAll(async () => {
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
+  await context.tracing.startChunk();
 
   // NOTE: The following ensures App first start with the correct path.
   const info = await electronApp.evaluate(async ({ app }) => {
@@ -131,14 +132,6 @@ base.beforeEach(async () => {
       await page.click('button.toggle-right-sidebar', {delay: 100})
     }
   }
-})
-
-base.afterAll(async () => {
-  // if (electronApp) {
-  //  await electronApp.close()
-  //}
-  // use .dump as extension to avoid unfolded when zip by github
-  await context.tracing.stop({ path: `e2e-dump/trace-${Date.now()}.zip.dump` });
 })
 
 // hijack electron app into the test context
@@ -283,3 +276,27 @@ export const test = base.extend<LogseqFixtures>({
     await use(graphDir);
   },
 });
+
+
+let getTracingFilePath = function(): string {
+  return `e2e-dump/trace-${Date.now()}.zip.dump`
+}
+
+
+test.afterAll(async () => {
+  await context.tracing.stopChunk({ path: getTracingFilePath() });
+})
+
+
+/**
+ * Trace all tests in a file
+ */
+export let traceAll = function(){
+  test.beforeAll(async () => {
+    await context.tracing.startChunk();
+  })
+  
+  test.afterAll(async () => {
+    await context.tracing.stopChunk({ path: getTracingFilePath() });
+  })
+}

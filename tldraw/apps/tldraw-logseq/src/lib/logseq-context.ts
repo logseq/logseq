@@ -19,6 +19,9 @@ export interface LogseqContextValue {
       levelLimit?: number
       endSeparator?: boolean
     }>
+    Tweet: React.FC<{
+      tweetId: string
+    }>
     PageName: React.FC<{
       pageName: string
     }>
@@ -44,7 +47,10 @@ export interface LogseqContextValue {
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
     getBlockPageName: (uuid: string) => string
+    getRedirectPageName: (uuidOrPageName: string) => string
+    insertFirstPageBlock: (pageName: string) => string
     isWhiteboardPage: (pageName: string) => boolean
+    isMobile: () => boolean
     saveAsset: (file: File) => Promise<string>
     makeAssetUrl: (relativeUrl: string) => string
     sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void

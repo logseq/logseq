@@ -22,7 +22,9 @@
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
-                             frontend.util/node-path.name]}
+                             frontend.util/node-path.name
+                             ;; frontend.pubsub/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubsub]}
 
   :consistent-alias
   {:aliases {cljs.reader reader
@@ -42,6 +44,7 @@
              frontend.db.query-dsl query-dsl
              frontend.db.react react
              frontend.db.query-react query-react
+             frontend.db.util db-utils
              frontend.diff diff
              frontend.encrypt encrypt
              frontend.extensions.sci sci
@@ -94,6 +97,7 @@
              logseq.graph-parser.config gp-config
              logseq.graph-parser.util.page-ref page-ref
              logseq.graph-parser.util.block-ref block-ref
+             logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
              medley.core medley
              promesa.core p}}

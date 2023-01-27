@@ -117,7 +117,7 @@
      :editor/content                        {}
      :editor/block                          nil
      :editor/block-dom-id                   nil
-     :editor/set-timestamp-block            nil
+     :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
      :editor/last-input-time                nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
@@ -331,11 +331,6 @@
              new))
          configs))
 
-(defn validate-current-config
-  "TODO: Temporal fix"
-  [config]
-  (when (map? config) config))
-
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -345,7 +340,7 @@ should be done through this fn in order to get global config and config defaults
    (merge-configs
     default-config
     (get-in @state [:config ::global-config])
-    (validate-current-config (get-in @state [:config repo-url])))))
+    (get-in @state [:config repo-url]))))
 
 (defonce publishing? (atom nil))
 
@@ -557,10 +552,10 @@ Similar to re-frame subscriptions"
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
-   (let [config (validate-current-config (sub :config))]
+   (let [config (sub :config)]
      (merge-configs default-config
                     (get config ::global-config)
-                    (validate-current-config (get config repo))))))
+                    (get config repo)))))
 
 (defn enable-grammarly?
   []
@@ -669,6 +664,10 @@ Similar to re-frame subscriptions"
 (defn logical-outdenting?
   []
   (:editor/logical-outdenting? (sub-config)))
+
+(defn show-full-blocks?
+  []
+  (:ui/show-full-blocks? (sub-config)))
 
 (defn preferred-pasting-file?
   []
@@ -1542,21 +1541,22 @@ Similar to re-frame subscriptions"
                 (update-vals engines #(assoc % :result nil)))))
 
 (defn install-plugin-hook
-  [pid hook]
-  (when-let [pid (keyword pid)]
-    (set-state!
+  ([pid hook] (install-plugin-hook pid hook true))
+  ([pid hook opts]
+   (when-let [pid (keyword pid)]
+     (set-state!
       [:plugin/installed-hooks hook]
-      (conj
-        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
-        pid)) true))
+      (assoc
+        ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
+        pid opts)) true)))
 
 (defn uninstall-plugin-hook
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (disj ids pid))))
+      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (dissoc ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
-        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+        (set-state! [:plugin/installed-hooks hook-or-all] (dissoc coll pid))))
     true))
 
 (defn slot-hook-exist?
@@ -1724,6 +1724,7 @@ Similar to re-frame subscriptions"
   (:system/events @state))
 
 (defn pub-event!
+  {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
@@ -1761,14 +1762,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn whiteboard-active-but-not-editing-portal?
+(defn editing-whiteboard-portal?
   []
-  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
 
 (defn block-component-editing?
   []
-  (or (:block/component-editing-mode? @state)
-      (whiteboard-active-but-not-editing-portal?)))
+  (and (:block/component-editing-mode? @state)
+       (not (editing-whiteboard-portal?))))
 
 (defn set-block-component-editing-mode!
   [value]
@@ -1831,6 +1832,7 @@ Similar to re-frame subscriptions"
                       :editor/block block
                       :editor/editing? {edit-input-id true}
                       :editor/last-key-code nil
+                      :editor/set-timestamp-block nil
                       :cursor-range cursor-range))))
         (when-let [input (gdom/getElement edit-input-id)]
           (let [pos (count cursor-range)]

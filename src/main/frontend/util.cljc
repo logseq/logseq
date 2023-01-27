@@ -28,7 +28,8 @@
             [rum.core :as rum]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.pubsub :as pubsub]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -58,6 +59,7 @@
 
 #?(:cljs
    (defn safe-re-find
+     {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
      [pattern s]
      (when-not (string? s)
        ;; TODO: sentry
@@ -70,15 +72,26 @@
      (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
      (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
      (defn uuid-string?
+       {:malli/schema [:=> [:cat :string] :boolean]}
        [s]
-       (safe-re-find exactly-uuid-pattern s))
-     (defn check-password-strength [input]
+       (boolean (safe-re-find exactly-uuid-pattern s)))
+     (defn check-password-strength
+       {:malli/schema [:=> [:cat :string] [:maybe
+                                           [:map
+                                            [:contains [:sequential :string]]
+                                            [:length :int]
+                                            [:id :int]
+                                            [:value :string]]]]}
+       [input]
        (when-let [^js ret (and (string? input)
                                (not (string/blank? input))
                                (passwordStrength input))]
          (bean/->clj ret)))
-     (defn safe-sanitize-file-name [s]
+     (defn safe-sanitize-file-name
+       {:malli/schema [:=> [:cat :string] :string]}
+       [s]
        (sanitizeFilename (str s)))))
+
 
 #?(:cljs
    (do
@@ -248,9 +261,11 @@
     (str "0" n)
     (str n)))
 
+
 #?(:cljs
    (defn safe-parse-int
      "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
+     {:malli/schema [:=> [:cat [:or :int :string]] :int]}
      [x]
      (if (string? x)
        (parse-long x)
@@ -259,10 +274,12 @@
 #?(:cljs
    (defn safe-parse-float
      "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
+     {:malli/schema [:=> [:cat [:or :double :string]] :double]}
      [x]
      (if (string? x)
        (parse-double x)
        x)))
+
 
 #?(:cljs
    (defn debounce
@@ -761,13 +778,6 @@
 (defn time-ms
   []
   #?(:cljs (tc/to-long (t/now))))
-
-;; Returns the milliseconds representation of the provided time, in the local timezone.
-;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
-;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
-#?(:cljs
-   (defn today-at-local-ms [hours mins secs millisecs]
-     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
 
 (defn d
   [k f]
@@ -1452,3 +1462,21 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
+
+#?(:cljs
+   (do
+     (defn <app-wake-up-from-sleep-loop
+       "start a async/go-loop to check the app awake from sleep.
+Use (async/tap `pubsub/app-wake-up-from-sleep-mult`) to receive messages.
+Arg *stop: atom, reset to true to stop the loop"
+       [*stop]
+       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
+         (async/go-loop []
+           (if @*stop
+             (println :<app-wake-up-from-sleep-loop :stop)
+             (let [now-epoch (tc/to-epoch (t/now))]
+               (when (< @*last-activated-at (- now-epoch 10))
+                 (async/>! pubsub/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
+               (vreset! *last-activated-at now-epoch)
+               (async/<! (async/timeout 5000))
+               (recur))))))))
