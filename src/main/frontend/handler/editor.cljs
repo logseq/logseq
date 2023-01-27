@@ -801,19 +801,15 @@
                                              (seq (:block/_parent block)))))]
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
-                 (cond
-                   (:embed? config)
-                   (let [block-parent (gdom/getElement block-parent-id)
-                         blocks-container (util/rec-get-blocks-container block-parent)
-                         sibling-block (util/get-prev-block-non-collapsed-in-embed blocks-container block-parent)]
-                     (delete-block-aux! block delete-children?)
-                     (move-to-prev-block repo sibling-block format id value)) 
-                   
-                   :else
-                   (let [block-parent (gdom/getElement block-parent-id)
-                         sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
-                     (delete-block-aux! block delete-children?)
-                     (move-to-prev-block repo sibling-block format id value))))))))))
+                 (let [block-parent (gdom/getElement block-parent-id)
+                       sibling-block (cond (:embed? config)
+                                           (util/get-prev-block-non-collapsed-in-embed
+                                            (util/rec-get-blocks-container block-parent)
+                                            block-parent)
+                                           :else
+                                           (util/get-prev-block-non-collapsed-non-embed block-parent))]
+                   (delete-block-aux! block delete-children?)
+                   (move-to-prev-block repo sibling-block format id value)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
