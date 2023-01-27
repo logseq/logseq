@@ -1,8 +1,6 @@
-import { autorun } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { useRendererContext } from '../../hooks'
-import { useApp } from '@tldraw/react'
 
 interface HTMLLayerProps {
   children: React.ReactNode
@@ -10,21 +8,17 @@ interface HTMLLayerProps {
 
 export const HTMLLayer = observer(function HTMLLayer({ children }: HTMLLayerProps) {
   const rLayer = React.useRef<HTMLDivElement>(null)
-  const app = useApp()
 
   const { viewport } = useRendererContext()
   const layer = rLayer.current
 
   const { zoom, point } = viewport.camera
 
-  React.useEffect(
-    () => {
-        if (!layer) return
+  React.useEffect(() => {
+    if (!layer) return
 
-        layer.style.transform = `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
-      },
-    [zoom, point, layer]
-  )
+    layer.style.transform = `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
+  }, [zoom, point, layer])
 
   return (
     <div ref={rLayer} className="tl-absolute tl-layer">
