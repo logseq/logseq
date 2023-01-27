@@ -16,7 +16,8 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]))
+            [frontend.handler.file-sync :as file-sync-handler]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn- delete-page!
   [page-name]
@@ -113,7 +114,7 @@
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when (and (not (mobile-util/native-platform?)) 
+          (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
@@ -172,6 +173,25 @@
                                        (ui/button
                                         "Copy to clipboard"
                                         :on-click #(.writeText js/navigator.clipboard page-data))]
+                                      :success
+                                      false)))}})
+
+          (when developer-mode?
+            {:title   "(Dev) Show page AST"
+             :options {:on-click (fn []
+                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))
+                                         page-data (-> (gp-mldoc/->edn (get-in page [:block/file :file/content])
+                                                                       (gp-mldoc/default-config (:block/format page)))
+                                                       pprint/pprint
+                                                       with-out-str)]
+                                     (println page-data)
+                                     (notification/show!
+                                      [:div
+                                       (ui/button
+                                        "Copy to clipboard"
+                                        :on-click #(.writeText js/navigator.clipboard page-data))
+                                       [:br]
+                                       [:pre.code page-data]]
                                       :success
                                       false)))}})]
          (flatten)
