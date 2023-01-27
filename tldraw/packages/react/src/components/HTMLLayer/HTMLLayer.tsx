@@ -21,15 +21,7 @@ export const HTMLLayer = observer(function HTMLLayer({ children }: HTMLLayerProp
     () => {
         if (!layer) return
 
-        let transform = 'scale('
-        transform += zoom
-        transform += ') translateX('
-        transform += point[0]
-        transform += 'px) translateY('
-        transform += point[1]
-        transform += 'px)'
-
-        layer.style.transform = transform
+        layer.style.transform = `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
       },
     [zoom, point, layer]
   )
