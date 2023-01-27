@@ -1,7 +1,6 @@
 import { GeomUtils, TLCursor } from '@tldraw/core'
 import * as React from 'react'
 
-
 function getCursorCss(svg: string, r: number, f = false) {
   return (
     `url("data:image/svg+xml,<svg height='32' width='32' viewBox='0 0 35 35' xmlns='http://www.w3.org/2000/svg'><g fill='none' style='transform-origin:center center' transform='rotate(${r})${

@@ -329,8 +329,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               <Block blockId={pageId} />
             ) : (
               <Page pageName={pageId} />
-            ))
-          }
+            ))}
         </div>
       </>
     )
