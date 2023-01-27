@@ -19,15 +19,8 @@ export const SVGLayer = observer(function SVGLayer({ children }: SVGLayerProps) 
         if (!group) return
 
         const { zoom, point } = viewport.camera
-        let transform = 'scale('
-        transform += zoom
-        transform += ') translateX('
-        transform += point[0]
-        transform += 'px) translateY('
-        transform += point[1]
-        transform += 'px)'
 
-        group.style.transform = transform
+        group.style.transform = `scale(${zoom}) translateX(${point[0]}px) translateY(${point[1]}px)`
       }),
     []
   )
