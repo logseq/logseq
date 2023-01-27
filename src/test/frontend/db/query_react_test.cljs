@@ -4,6 +4,7 @@
             [clojure.pprint]
             [clojure.string :as string]
             [frontend.state :as state]
+            [frontend.date :as date]
             [logseq.graph-parser.util.db :as db-util]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
@@ -39,6 +40,34 @@ adds rules that users often use"
                                      :query '[:find (pull ?b [*])
                                               :in $ ?start ?end
                                               :where (between ?b ?start ?end)]})))
+
+         ; (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
+         ;                                    :where [?b :block/content "parent"]])
+         ;                      ffirst
+         ;                      :block/uuid)]
+         ;   (map :block/content
+         ;        (custom-query {:inputs [:current-block]
+         ;                       :query '[:find (pull ?b [*])
+         ;                                :in $ ?current-block
+         ;                                :where [?b :block/parent ?current-block]]}
+         ;                      {:current-block-uuid block-uuid})))))
+
+(defn- block-with-content [block-content]
+  (-> (db-utils/q '[:find (pull ?b [:block/uuid])
+                    :in $ ?content
+                    :where [?b :block/content ?content]]
+                  block-content)
+      ffirst))
+
+(defn- blocks-on-journal-page-from-block-with-content [page-input block-content]
+  (prn :blocks-on-journal-page-from-block-with-content page-input)
+  (prn :blocks-on-journal-page-from-block-with-content block-content)
+  (map :block/content (custom-query {:inputs [page-input] 
+                                     :query '[:find (pull ?b [*])
+                                              :in $ ?page
+                                              :where [?b :block/page ?e] 
+                                                     [?e :block/name ?page]]}
+                                    {:current-block-uuid (get (block-with-content block-content) :block/uuid)})))
 
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
@@ -269,4 +298,22 @@ created-at:: %s"
 
     (is (= ["+1d" "now"] (blocks-journaled-between-inputs :today :today/+1d))
         ":today/+1d and today resolve to correct journal range")))
+
+(deftest resolve-input-for-query-page 
+  (load-test-files [{:file/content "- -1d" :file/path "journals/2022_12_31.md"}
+                    {:file/content "- now" :file/path "journals/2023_01_01.md"}
+                    {:file/content "- +1d" :file/path "journals/2023_01_02.md"}])
+
+  (with-redefs [state/get-current-page (constantly (date/journal-name (t/date-time 2023 1 1)))]
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :current-page "now"))
+        ":current-page resolves to the stateful page when called from a block on the stateful page")
+
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :query-page "now"))
+        ":query-page resolves to the stateful page when called from a block on the stateful page")
+
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :current-page "+1d"))
+        ":current-page resolves to the stateful page when called from a block on another page")
+
+    (is (= ["+1d"] (blocks-on-journal-page-from-block-with-content :query-page "+1d"))
+        ":query-page resolves to the parent page when called from another page")))
 
