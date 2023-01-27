@@ -324,11 +324,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           className="relative tl-logseq-cp-container"
           style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
         >
-          {loaded && (this.props.blockType === 'B' && this.props.compact ? (
-            <Block blockId={pageId} />
-          ) : (
-            <Page pageName={pageId} />
-          ))}
+          {(loaded || !this.initialHeightCalculated) &&
+            (this.props.blockType === 'B' && this.props.compact ? (
+              <Block blockId={pageId} />
+            ) : (
+              <Page pageName={pageId} />
+            ))
+          }
         </div>
       </>
     )
