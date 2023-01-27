@@ -20,6 +20,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -168,8 +169,8 @@
             :icon "h-auto"
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (if (= format :markdown) 
-                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+            :title (if (= format :markdown)
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format))
                      (t :auto-heading))
             :disabled (= format :markdown)
             :on-click (fn [_e]
@@ -212,7 +213,7 @@
           (t :content/copy-block-emebed)
           nil)
 
-          ;; TODO Logseq protocol mobile support
+         ;; TODO Logseq protocol mobile support
          (when (util/electron?)
            (ui/menu-link
             {:key      "Copy block URL"
@@ -305,6 +306,27 @@
                             :success
                             false)))}
             "(Dev) Show block data"
+            nil))
+  
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key      "(Dev) Show block AST"
+             :on-click (fn []
+                         (let [block (db/pull [:block/uuid block-id])
+                               block-data (-> (gp-mldoc/->edn (:block/content block)
+                                                              (gp-mldoc/default-config (:block/format block)))
+                                              pprint/pprint
+                                              with-out-str)]
+                           (println block-data)
+                           (notification/show!
+                            [:div
+                             [:pre.code block-data]
+                             [:br]
+                             (ui/button "Copy to clipboard"
+                                        :on-click #(.writeText js/navigator.clipboard block-data))]
+                            :success
+                            false)))}
+            "(Dev) Show block AST"
             nil))])))
 
 (rum/defc block-ref-custom-context-menu-content
