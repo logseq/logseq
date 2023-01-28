@@ -20,6 +20,10 @@
  :default-templates
  {:journals ""}
 
+ ;; Set a custom date format for journal page title
+ ;; Example:
+ ;; :journal/page-title-format "EEE, do MMM yyyy"
+
  ;; Whether to enable hover on tooltip preview feature
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
@@ -43,8 +47,18 @@
  ;; Enable flashcards
  ;; :feature/enable-flashcards? true
 
- ;; Disable Built-in Scheduled and deadline Query
+ ;; Enable Whiteboards
+ ;; :feature/enable-whiteboards? true
+
+ ;; Disable the built-in Scheduled tasks and deadlines query
  ;; :feature/disable-scheduled-and-deadline-query? true
+
+ ;; Specify the number of days in the future to display in the
+ ;; scheduled tasks and deadlines query, with a default value of 0 which
+ ;; only displays tasks for today.
+ ;; Example usage:
+ ;; Display all scheduled tasks and deadlines in the next 7 days
+ ;; :scheduled/future-days 7
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6
@@ -57,6 +71,14 @@
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
 
+ ;; Specify a custom js import
+ ;; This option take precedence over your local `logseq/custom.js` file
+ ;; :custom-js-url ""
+
+ ;; Set a custom Arweave gateway
+ ;; Default gateway: https://arweave.net
+ ;; :arweave/gateway ""
+
  ;; Set Bullet indentation when exporting
  ;; default option: tab
  ;; Possible options are for `:sidebar` are
@@ -64,7 +86,6 @@
  ;; 2. `:four-spaces` as four spaces
  ;; 3. `:two-spaces` as two spaces
  ;; :export/bullet-indentation :tab
-
 
  ;; When :all-pages-public? true, export repo would export all pages within that repo.
  ;; Regardless of whether you've set any page to public or not.
@@ -317,4 +338,8 @@
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
  :file/name-format :triple-lowbar
+
+ ;; specify the format of the filename for journal files
+ ;; :journal/file-name-format "yyyy_MM_dd"
+
  }
