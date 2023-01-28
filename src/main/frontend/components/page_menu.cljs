@@ -6,6 +6,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -162,13 +163,14 @@
           (when developer-mode?
             {:title   "(Dev) Show page data"
              :options {:on-click (fn []
-                                   (state/pub-event! [:dev/show-entity-data (:db/id page)]))}})
+                                   (dev-common-handler/show-entity-data (:db/id page)))}})
 
           (when developer-mode?
             {:title   "(Dev) Show page AST"
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
-                                     (state/pub-event! [:dev/show-content-ast (get-in page [:block/file :file/content])
-                                                        (:block/format page)])))}})]
+                                     (dev-common-handler/show-content-ast
+                                      (get-in page [:block/file :file/content])
+                                      (:block/format page))))}})]
          (flatten)
          (remove nil?))))))
