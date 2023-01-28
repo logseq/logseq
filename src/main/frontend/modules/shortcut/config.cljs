@@ -1,6 +1,5 @@
 (ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
-            [frontend.handler.notification :as notification]
             [frontend.extensions.srs.handler :as srs]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
@@ -19,7 +18,6 @@
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
-            [frontend.db :as db]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
             [frontend.config :as config]
@@ -33,10 +31,14 @@
 ;; almost everywhere else they are not which could cause needless conflicts
 ;; with other config keys
 
-;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
-;; :inactive key is for commands that are not active for a given platform or feature condition
-;; Avoid using single letter shortcuts to allow chords that start with those characters
+;; To add a new entry to this map, first add it here and then a description for
+;; it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; A shortcut is a map with the following keys:
+;;  * :binding - A string representing a keybinding. Avoid using single letter
+;;    shortcuts to allow chords that start with those characters
+;;  * :fn - Fn or a qualified keyword that represents a fn
+;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
+;;    e.g. a given platform or feature condition
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
   ;; So this setting item does not cover all cases.
@@ -426,7 +428,7 @@
                                      :fn       plugin-config-handler/open-replace-plugins-modal}
 
    :ui/clear-all-notifications      {:binding false
-                                     :fn       notification/clear-all!}
+                                     :fn      :frontend.handler.notification/clear-all!}
 
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
@@ -439,38 +441,19 @@
 
    :dev/show-block-data            {:binding false
                                     :inactive (not (state/developer-mode?))
-                                    :fn (fn []
-                                          ;; Use editor state to locate most recent block
-                                          (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
-                                            (state/pub-event! [:dev/show-entity-data [:block/uuid block-uuid]])
-                                            (notification/show! "No block found" :error)))}
+                                    :fn :frontend.handler.common.developer/show-block-data}
 
    :dev/show-block-ast             {:binding false
                                     :inactive (not (state/developer-mode?))
-                                    :fn (fn []
-                                          (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
-                                            (state/pub-event! [:dev/show-content-ast content format])
-                                            (notification/show! "No block found" :error)))}
+                                    :fn :frontend.handler.common.developer/show-block-ast}
 
    :dev/show-page-data             {:binding false
                                     :inactive (not (state/developer-mode?))
-                                    :fn (fn []
-                                          ;; Use editor state to locate most recent page.
-                                          ;; Consider replacing with navigation history if it's more useful
-                                          (if-let [page-id (get-in (first (state/get-editor-args))
-                                                                   [:block :block/page :db/id])]
-                                            (state/pub-event! [:dev/show-entity-data page-id])
-                                            (notification/show! "No page found" :error)))}
+                                    :fn :frontend.handler.common.developer/show-page-data}
 
    :dev/show-page-ast              {:binding false
                                     :inactive (not (state/developer-mode?))
-                                    :fn (fn []
-                                          (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                                                                   (get-in (first (state/get-editor-args))
-                                                                           [:block :block/page :db/id]))]
-                                            (if (seq page-data)
-                                              (state/pub-event! [:dev/show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data)])
-                                              (notification/show! "No page found" :error))))}})
+                                    :fn :frontend.handler.common.developer/show-page-ast}})
 
 (let [keyboard-shortcuts
       {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
@@ -479,11 +462,27 @@
           (str "Keys for keyboard shortcuts must be the same "
                (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
 
+(defn- resolve-fn
+  "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
+  marked as ^:export for advanced mode"
+  [keyword-fn]
+  (fn []
+    (if-let [resolved-fn (some-> (find-ns-obj (namespace keyword-fn))
+                                 (aget (munge (name keyword-fn))))]
+      (resolved-fn)
+      (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
+
 (defn build-category-map [ks]
   (->> (select-keys all-default-keyboard-shortcuts ks)
        (remove (comp :inactive val))
+       ;; Convert keyword fns to real fns
+       (map (fn [[k v]]
+              [k (if (keyword? (:fn v))
+                   (assoc v :fn (resolve-fn (:fn v)))
+                   v)]))
        (into {})))
 
+;; This is the only var that should be publicly expose :fn functionality
 (defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker

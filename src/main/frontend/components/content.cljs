@@ -13,6 +13,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -293,7 +294,7 @@
            (ui/menu-link
             {:key      "(Dev) Show block data"
              :on-click (fn []
-                         (state/pub-event! [:dev/show-entity-data [:block/uuid block-id]]))}
+                         (dev-common-handler/show-entity-data [:block/uuid block-id]))}
             "(Dev) Show block data"
             nil))
 
@@ -302,7 +303,7 @@
             {:key      "(Dev) Show block AST"
              :on-click (fn []
                          (let [block (db/pull [:block/uuid block-id])]
-                           (state/pub-event! [:dev/show-content-ast (:block/content block) (:block/format block)])))}
+                           (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
             "(Dev) Show block AST"
             nil))])))
 
