@@ -17,6 +17,7 @@
                                   use-click-outside]]
             [frontend.state :as state]
             [frontend.storage :as storage]
+            [frontend.config :as config]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -300,6 +301,7 @@
   []
   (when (and (user-handler/feature-available? :whiteboard)
              (not (or (state/sub :whiteboard/onboarding-tour?)
+                      (config/demo-graph?)
                       (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding-tour?] true)

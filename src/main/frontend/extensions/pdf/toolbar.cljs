@@ -20,7 +20,7 @@
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 (def *area-mode? (atom false))
 (def *highlight-mode? (atom false))
-(rum/defcontext *highlights-ctx* )
+(rum/defcontext *highlights-ctx*)
 
 (rum/defc pdf-settings
   [^js viewer theme {:keys [hide-settings! select-theme! t]}]
@@ -85,8 +85,8 @@
 
         [:span.flex.items-center.justify-between.w-full
          (t :pdf/doc-metadata)
-         (svg/icon-info)]]]
-      ]]))
+         (svg/icon-info)]]]]]))
+
 
 (rum/defc docinfo-display
   [info close-fn!]
@@ -243,9 +243,9 @@
             (apply max (map :current [find-state matches])) " of "
             (:total find-state)
             (str " matches (\"" (:query find-state) "\")")]
-           [:div.px-3.py-3.text-xs.opacity-80.text-red-600 "Not found."])
-         )
-       ]]]))
+           [:div.px-3.py-3.text-xs.opacity-80.text-red-600 "Not found."]))]]]))
+
+
 
 (rum/defc pdf-outline-item
   [^js viewer
@@ -462,97 +462,98 @@
          (set! (. input -value) current-page-num)))
      [current-page-num])
 
-    [:div.extensions__pdf-toolbar
-     [:div.inner
-      [:div.r.flex.buttons
+    [:div.extensions__pdf-header
+      [:div.extensions__pdf-toolbar
+       [:div.inner
+        [:div.r.flex.buttons
 
-       ;; appearance
-       [:a.button
-        {:title    "More settings"
-         :on-click #(set-settings-visible! (not settings-visible?))}
-        (svg/adjustments 18)]
+         ;; appearance
+         [:a.button
+          {:title    "More settings"
+           :on-click #(set-settings-visible! (not settings-visible?))}
+          (svg/adjustments 18)]
 
-       ;; selection
-       [:a.button
-        {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
-         :class    (when area-mode? "is-active")
-         :on-click #(set-area-mode! (not area-mode?))}
-        (svg/icon-area 18)]
+         ;; selection
+         [:a.button
+          {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
+           :class    (when area-mode? "is-active")
+           :on-click #(set-area-mode! (not area-mode?))}
+          (svg/icon-area 18)]
 
-       [:a.button
-        {:title    "Highlight mode"
-         :class    (when highlight-mode? "is-active")
-         :on-click #(set-highlight-mode! (not highlight-mode?))}
-        (svg/highlighter 16)]
+         [:a.button
+          {:title    "Highlight mode"
+           :class    (when highlight-mode? "is-active")
+           :on-click #(set-highlight-mode! (not highlight-mode?))}
+          (svg/highlighter 16)]
 
-       ;; zoom
-       [:a.button
-        {:title    "Zoom out"
-         :on-click (partial pdf-utils/zoom-out-viewer viewer)}
-        (svg/zoom-out 18)]
+         ;; zoom
+         [:a.button
+          {:title    "Zoom out"
+           :on-click (partial pdf-utils/zoom-out-viewer viewer)}
+          (svg/zoom-out 18)]
 
-       [:a.button
-        {:title    "Zoom in"
-         :on-click (partial pdf-utils/zoom-in-viewer viewer)}
-        (svg/zoom-in 18)]
+         [:a.button
+          {:title    "Zoom in"
+           :on-click (partial pdf-utils/zoom-in-viewer viewer)}
+          (svg/zoom-in 18)]
 
-       [:a.button
-        {:title    "Outline"
-         :on-click #(set-outline-visible! (not outline-visible?))}
-        (svg/view-list 16)]
+         [:a.button
+          {:title    "Outline"
+           :on-click #(set-outline-visible! (not outline-visible?))}
+          (svg/view-list 16)]
 
-       ;; search
-       [:a.button
-        {:title    "Search"
-         :on-click #(set-finder-visible! (not finder-visible?))}
-        (svg/search2 19)]
+         ;; search
+         [:a.button
+          {:title    "Search"
+           :on-click #(set-finder-visible! (not finder-visible?))}
+          (svg/search2 19)]
 
-       ;; annotations
-       [:a.button
-        {:title    "Annotations page"
-         :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
-        (svg/annotations 16)]
+         ;; annotations
+         [:a.button
+          {:title    "Annotations page"
+           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+          (svg/annotations 16)]
 
-       ;; pager
-       [:div.pager.flex.items-center.ml-1
+         ;; pager
+         [:div.pager.flex.items-center.ml-1
 
-        [:span.nu.flex.items-center.opacity-70
-         [:input {:ref            *page-ref
-                  :type           "number"
-                  :min            1
-                  :max            total-page-num
-                  :class          (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
-                  :default-value  current-page-num
-                  :on-mouse-enter #(.select ^js (.-target %))
-                  :on-key-up      (fn [^js e]
-                                    (let [^js input (.-target e)
-                                          value     (util/safe-parse-int (.-value input))]
-                                      (set-current-page-num! value)
-                                      (when (and (= (.-keyCode e) 13) value (> value 0))
-                                        (->> (if (> value total-page-num) total-page-num value)
-                                             (set! (. viewer -currentPageNumber))))))}]
-         [:small "/ " total-page-num]]
+          [:span.nu.flex.items-center.opacity-70
+           [:input {:ref            *page-ref
+                    :type           "number"
+                    :min            1
+                    :max            total-page-num
+                    :class          (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
+                    :default-value  current-page-num
+                    :on-mouse-enter #(.select ^js (.-target %))
+                    :on-key-up      (fn [^js e]
+                                      (let [^js input (.-target e)
+                                            value     (util/safe-parse-int (.-value input))]
+                                        (set-current-page-num! value)
+                                        (when (and (= (.-keyCode e) 13) value (> value 0))
+                                          (->> (if (> value total-page-num) total-page-num value)
+                                               (set! (. viewer -currentPageNumber))))))}]
+           [:small "/ " total-page-num]]
 
-        [:span.ct.flex.items-center
-         [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
-         [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
+          [:span.ct.flex.items-center
+           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
-       [:a.button
-        {:on-click #(state/set-state! :pdf/current nil)}
-        (t :close)]]]
+         [:a.button
+          {:on-click #(state/set-state! :pdf/current nil)}
+          (t :close)]]]
 
-     ;; contents outline
-     (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)
+       ;; contents outline
+       (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)
 
-     ;; finder
-     (when finder-visible?
-       (pdf-finder viewer {:hide-finder! #(set-finder-visible! false)}))
+       ;; finder
+       (when finder-visible?
+         (pdf-finder viewer {:hide-finder! #(set-finder-visible! false)}))
 
-     ;; settings
-     (when settings-visible?
-       (pdf-settings
-        viewer
-        viewer-theme
-        {:t              t
-         :hide-settings! #(set-settings-visible! false)
-         :select-theme!  #(set-viewer-theme! %)}))]))
+       ;; settings
+       (when settings-visible?
+         (pdf-settings
+          viewer
+          viewer-theme
+          {:t              t
+           :hide-settings! #(set-settings-visible! false)
+           :select-theme!  #(set-viewer-theme! %)}))]]))

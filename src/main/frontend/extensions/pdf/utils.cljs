@@ -183,6 +183,7 @@
         (-> filename
             (subs 0 (if local-asset? (- len 15) len))
             (string/replace #"^hls__" "")
+            (string/replace #"__[-\d]+$" "")
             (string/replace "_" " ")
             (string/trimr))
         filename))))

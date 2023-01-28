@@ -4,6 +4,7 @@
             [malli.error :as me]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
             [frontend.schema.handler.global-config :as global-config-schema]
+            [frontend.schema.handler.repo-config :as repo-config-schema]
             [clojure.pprint :as pprint]
             [clojure.edn :as edn]))
 
@@ -20,16 +21,25 @@
       (pprint/pprint errors))
     (println "Valid!")))
 
-;; This fn should be split if the global and repo definitions diverge
-(defn validate-config-edn
-  "Validate a global or repo config.edn file"
-  [file]
+(defn- validate-file-with-schema
+  "Validate a file given its schema"
+  [file schema]
   (if-let [errors (->> file
                        slurp
                        edn/read-string
-                       (m/explain global-config-schema/Config-edn)
+                       (m/explain schema)
                        me/humanize)]
     (do
       (println "Found errors:")
       (pprint/pprint errors))
     (println "Valid!")))
+
+(defn validate-repo-config-edn
+  "Validate a repo config.edn"
+  [file]
+  (validate-file-with-schema file global-config-schema/Config-edn))
+
+(defn validate-global-config-edn
+  "Validate a global config.edn"
+  [file]
+  (validate-file-with-schema file repo-config-schema/Config-edn))
