@@ -331,6 +331,8 @@
        nil)]))
 
 (rum/defc search-auto-complete
+  "has-more? - if the result is truncated
+   all? - if true, in show-more mode"
   [{:keys [engine pages files pages-content blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
@@ -411,7 +413,7 @@
                    :theme       "monospace"}
                   [:a.flex.fade-link.items-center
                    {:style {:margin-left 12}
-                    :on-click #(state/pub-event! :modal/command-palette)}
+                    :on-click #(state/pub-event! [:modal/command-palette])}
                    (ui/icon "command" {:style {:font-size 20}})])])]]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)

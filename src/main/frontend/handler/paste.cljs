@@ -81,7 +81,7 @@
         input-id (state/get-edit-input-id)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
         shape-refs-text (when (and (not (string/blank? html))
-                                   (get-whiteboard-tldr-from-text html)) 
+                                   (get-whiteboard-tldr-from-text html))
                           ;; text should alway be prepared block-ref generated in tldr
                           text)
         internal-paste? (and

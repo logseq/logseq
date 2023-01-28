@@ -7,9 +7,12 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.schema.handler.global-config :as global-config-schema]
+            [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
@@ -88,11 +91,17 @@
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
   that are not validated just return true"
-  [path content]
-  (if (and
-       (config/global-config-enabled?)
-       (= (path/dirname path) (global-config-handler/global-config-dir)))
-    (global-config-handler/validate-config-edn path content)
+  [repo path content]
+  (cond
+    (= path (config/get-repo-config-path repo))
+    (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn)
+
+    (and
+     (config/global-config-enabled?)
+     (= (path/dirname path) (global-config-handler/global-config-dir)))
+    (config-edn-common-handler/validate-config-edn path content global-config-schema/Config-edn)
+
+    :else
     true))
 
 (defn- validate-and-write-file
@@ -109,7 +118,7 @@
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
     (p/do!
-     (if (validate-file path content)
+     (if (validate-file repo path content)
        (do
          (fs/write-file! repo path-dir path content write-file-options')
          true)
@@ -125,7 +134,7 @@
                            skip-compare? false}}]
   (let [path (gp-util/path-normalize path)
         write-file! (if from-disk?
-                      #(p/promise (validate-file path content))
+                      #(p/promise (validate-file repo path content))
                       #(validate-and-write-file repo path content {:skip-compare? skip-compare?}))
         opts {:new-graph? new-graph?
               :from-disk? from-disk?
@@ -149,7 +158,8 @@
                        (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!)
 
-                       (= path (config/get-repo-config-path repo))
+                       (and (= path (config/get-repo-config-path repo))
+                            valid-result?)
                        (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
                               (state/pub-event! [:shortcut/refresh]))
 

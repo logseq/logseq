@@ -13,6 +13,7 @@ import { PolygonShape } from './PolygonShape'
 import { TextShape } from './TextShape'
 import { VideoShape } from './VideoShape'
 import { YouTubeShape } from './YouTubeShape'
+import { TweetShape } from './TweetShape'
 
 export type Shape =
   // | PenShape
@@ -27,6 +28,7 @@ export type Shape =
   | PolygonShape
   | TextShape
   | YouTubeShape
+  | TweetShape
   | IFrameShape
   | HTMLShape
   | LogseqPortalShape
@@ -46,6 +48,7 @@ export * from './PolygonShape'
 export * from './TextShape'
 export * from './VideoShape'
 export * from './YouTubeShape'
+export * from './TweetShape'
 
 export const shapes: TLReactShapeConstructor<Shape>[] = [
   // DotShape,
@@ -59,6 +62,7 @@ export const shapes: TLReactShapeConstructor<Shape>[] = [
   PolygonShape,
   TextShape,
   YouTubeShape,
+  TweetShape,
   IFrameShape,
   HTMLShape,
   LogseqPortalShape,

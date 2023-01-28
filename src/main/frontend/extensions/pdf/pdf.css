@@ -56,15 +56,20 @@ input::-webkit-inner-spin-button {
     position: relative;
   }
 
-  &-toolbar {
+&-header {
+    display: flex;
+    justify-content: flex-end;
     position: absolute;
     top: 0;
-    right: 20px;
-    width: 90%;
-    height: 42px;
-    z-index: 5;
+    right: 10px; /* Allows clicking on the scrollbar */
+    width: calc(100% - 10px);
     padding: 8px 20px;
-    padding-right: 0;
+    z-index: 5;
+    -webkit-app-region: drag;
+  }
+
+  &-toolbar {
+    -webkit-app-region: no-drag;
 
     > .inner {
       display: flex;
@@ -101,7 +106,7 @@ input::-webkit-inner-spin-button {
 
         > .nu {
           padding-right: 4px;
-          
+
           input {
             user-select: inherit;
             width: 35px;
@@ -112,7 +117,7 @@ input::-webkit-inner-spin-button {
             border: none;
             background: transparent;
             font-size: 15px;
-            
+
             &.is-long {
               font-size: 12px;
             }
