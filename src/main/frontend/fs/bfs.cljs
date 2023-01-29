@@ -30,7 +30,7 @@
     (js/window.pfs.rename old-path new-path))
   (stat [_this dir path]
     (js/window.pfs.stat (str dir path)))
-  (open-dir [_this _ok-handler]
+  (open-dir [_this _dir _ok-handler]
     nil)
   (get-files [_this _path-or-handle _ok-handler]
     nil)

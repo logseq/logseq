@@ -79,9 +79,9 @@ export const sanitize = (message, allowedOrigin) => {
  *                            passed to functions in the child model
  * @return {Promise}
  */
-export const resolveValue = (model, property) => {
+export const resolveValue = (model, property, args) => {
   const unwrappedContext =
-    typeof model[property] === 'function' ? model[property]() : model[property]
+    typeof model[property] === 'function' ? model[property].apply(null, args) : model[property]
   return Promise.resolve(unwrappedContext)
 }
 
@@ -134,7 +134,7 @@ export class ParentAPI {
     }
   }
 
-  get(property) {
+  get(property, ...args) {
     return new Promise((resolve) => {
       // Extract data from response and kill listeners
       const uid = generateNewMessageId()
@@ -154,6 +154,7 @@ export class ParentAPI {
           postmate: 'request',
           type: messageType,
           property,
+          args,
           uid,
         },
         this.childOrigin
@@ -218,7 +219,7 @@ export class ChildAPI {
         log('Child: Received request', e.data)
       }
 
-      const { property, uid, data } = e.data
+      const { property, uid, data, args } = e.data
 
       if (e.data.postmate === 'call') {
         if (
@@ -231,7 +232,7 @@ export class ChildAPI {
       }
 
       // Reply to Parent
-      resolveValue(this.model, property).then((value) => {
+      resolveValue(this.model, property, args).then((value) => {
         ;(e.source as WindowProxy).postMessage(
           {
             property,
@@ -374,7 +375,6 @@ export class Postmate {
       this.frame.src = url
     })
   }
-
 
   destroy() {
     if (process.env.NODE_ENV !== 'production') {

@@ -9,8 +9,6 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
             [electron.ipc :as ipc]
             [goog.functions :refer [debounce]]
             [dommy.core :as dom]))
@@ -26,30 +24,31 @@
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]
-  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
-       (drawer/remove-logbook)
-       (property/remove-built-in-properties format)))
+  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
+  "The aggretation of search results"
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]
-   (search repo q {:limit 20}))
+   (search repo q {:limit 10}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
-                 limit 20}
+                 limit 10}
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
                         (:db/id (db/entity repo [:block/name (util/page-name-sanity-lc page-db-id)]))
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-       (p/let [blocks (search/block-search repo q opts)]
+       (p/let [blocks (search/block-search repo q opts)
+               pages-content (search/page-content-search repo q opts)]
          (let [result (merge
                        {:blocks blocks
                         :has-more? (= limit (count blocks))}
                        (when-not page-db-id
-                         {:pages (search/page-search q)
+                         {:pages-content pages-content
+                          :pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)
@@ -111,7 +110,8 @@
   ([clear-search-mode?]
    (let [m {:search/result nil
             :search/q ""}]
-     (swap! state/state merge m))
+     (swap! state/state merge m)
+     (when config/lsp-enabled? (state/reset-plugin-search-engines)))
    (when (and clear-search-mode? (not= (state/get-search-mode) :graph))
      (state/set-search-mode! :global))))
 

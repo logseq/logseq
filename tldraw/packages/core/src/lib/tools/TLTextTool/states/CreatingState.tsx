@@ -36,6 +36,8 @@ export class CreatingState<
       text: '',
       size: [16, 32],
       isSizeLocked: true,
+      fill: this.app.settings.color,
+      stroke: this.app.settings.color,
     })
     this.creatingShape = shape
     transaction(() => {

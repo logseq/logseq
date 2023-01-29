@@ -102,6 +102,10 @@ export type IUserHook<E = any, R = IUserOffHook> = (
 export type IUserSlotHook<E = any> = (
   callback: (e: IHookEvent & UISlotIdentity & E) => void
 ) => void
+export type IUserConditionSlotHook<C = any, E = any> = (
+  condition: C,
+  callback: (e: IHookEvent & UISlotIdentity & E) => void
+) => void
 
 export type EntityID = number
 export type BlockUUID = string
@@ -214,7 +218,7 @@ export type SlashCommandActionCmd =
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
-export type SimpleCommandCallback = (e: IHookEvent) => void
+export type SimpleCommandCallback<E = any> = (e: IHookEvent & E) => void
 export type BlockCommandCallback = (
   e: IHookEvent & { uuid: BlockUUID }
 ) => Promise<void>
@@ -289,6 +293,34 @@ export type ExternalCommandType =
 
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
+export type SearchIndiceInitStatus = boolean
+export type SearchBlockItem = { id: EntityID, uuid: BlockIdentity, content: string, page: EntityID }
+export type SearchPageItem = string
+export type SearchFileItem = string
+
+export interface IPluginSearchServiceHooks {
+  name: string
+  options?: Record<string, any>
+
+  onQuery: (
+    graph: string,
+    key: string,
+    opts: Partial<{ limit: number }>
+  ) =>
+    Promise<{
+      graph: string,
+      key: string,
+      blocks?: Array<Partial<SearchBlockItem>>,
+      pages?: Array<SearchPageItem>,
+      files?: Array<SearchFileItem>
+    }>
+
+  onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
+  onIndiceReset: (graph: string) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
+  onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
+}
+
 /**
  * App level APIs
  */
@@ -301,6 +333,9 @@ export interface IAppProxy {
 
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
+
+  // services
+  registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void
 
   // commands
   registerCommand: (
@@ -335,10 +370,32 @@ export interface IAppProxy {
     action: SimpleCommandCallback
   ) => void
 
+  /**
+   * Supported all registered palette commands
+   * @param type
+   * @param args
+   */
   invokeExternalCommand: (
     type: ExternalCommandType,
     ...args: Array<any>
   ) => Promise<void>
+
+  /**
+   * Call external plugin command provided by models or registerd commands
+   * @added 0.0.13
+   * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
+   * @param args
+   */
+  invokeExternalPlugin: (
+    type: string,
+    ...args: Array<any>
+  ) => Promise<unknown>
+
+  /**
+   * @added 0.0.13
+   * @param pid
+   */
+  getExternalPlugin: (pid: string) => Promise<{} | null>
 
   /**
    * Get state from app store
@@ -352,6 +409,7 @@ export interface IAppProxy {
    * @param path
    */
   getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
+  setStateFromStore: (path: string | Array<string>, value: any) => Promise<void>
 
   // native
   relaunch: () => Promise<void>
@@ -367,6 +425,9 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  getCurrentGraphConfigs: () => Promise<any>
+  getCurrentGraphFavorites: () => Promise<Array<string> | null>
+  getCurrentGraphRecent: () => Promise<Array<string> | null>
 
   // router
   pushState: (
@@ -403,6 +464,7 @@ export interface IAppProxy {
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
+  clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
@@ -419,7 +481,13 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
-  onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+
+  /**
+   * provide ui slot to specific block with UUID
+   *
+   * @added 0.0.13
+   */
+  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, Omit<BlockEntity, 'children' | 'page'>>
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
@@ -450,7 +518,7 @@ export interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
-  _installPluginHook: (pid: string, hook: string) => void
+  _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 
@@ -487,13 +555,27 @@ export interface IEditorProxy extends Record<string, any> {
   ) => unknown
 
   /**
-   * register a custom command in the block context menu (triggered by right clicking the block dot)
-   * @param tag - displayed name of command
+   * register a custom command in the block context menu (triggered by right-clicking the block dot)
+   * @param label - displayed name of command
    * @param action - can be a single callback function to run when the command is called
    */
   registerBlockContextMenuItem: (
-    tag: string,
+    label: string,
     action: BlockCommandCallback
+  ) => unknown
+
+  /**
+   * Current it's only available for pdf viewer
+   * @param label - displayed name of command
+   * @param action - callback for the clickable item
+   * @param opts - clearSelection: clear highlight selection when callback invoked
+   */
+  registerHighlightContextMenuItem: (
+    label: string,
+    action: SimpleCommandCallback,
+    opts?: {
+      clearSelection: boolean
+    }
   ) => unknown
 
   // block related APIs
@@ -578,15 +660,21 @@ export interface IEditorProxy extends Record<string, any> {
       before: boolean
       sibling: boolean
       isPageBlock: boolean
+      focus: boolean
       customUUID: string
       properties: {}
     }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
+   *
+   * `keepUUID` will allow you to set a custom UUID for blocks by setting their properties.id
+   */
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
-    opts?: Partial<{ before: boolean; sibling: boolean }>
+    opts?: Partial<{ before: boolean; sibling: boolean, keepUUID: boolean }>
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
@@ -665,6 +753,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
   selectBlock: (srcBlock: BlockIdentity) => Promise<void>
+
+  saveFocusedCodeEditorContent: () => Promise<void>
 
   upsertBlockProperty: (
     block: BlockIdentity,
@@ -790,14 +880,14 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<Array<{
     path: string
     size: number
     accessTime: number
     modifiedTime: number
     changeTime: number
     birthTime: number
-  }>
+  }>>
 
   /**
    * @example https://github.com/logseq/logseq/pull/6488

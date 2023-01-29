@@ -76,9 +76,8 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?})
-              (state/pub-event! [:instrument {:type :editor/command-triggered
-                                              :payload {:command command}}]))))
+                                              {:restore? restore-slash?
+                                               :command command}))))
         :class
         "black"}))))
 
@@ -91,14 +90,14 @@
        {:on-chosen (fn [chosen]
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
-                                                     {:last-pattern commands/angle-bracket}))
+                                                     {:last-pattern commands/angle-bracket
+                                                      :command :block-commands}))
         :class     "black"}))))
 
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
 
 (rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
   [id format]
   (let [action (state/sub :editor/action)]
@@ -110,7 +109,7 @@
                 edit-content (or (state/sub [:editor/content id]) "")
                 sidebar? (in-sidebar? input)
                 q (or
-                   @editor-handler/*selected-text
+                   (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
                      (gp-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
@@ -162,26 +161,31 @@
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 
+(defn- search-blocks!
+  [state result]
+  (let [[edit-block _ _ q] (:rum/args state)]
+    (p/let [matched-blocks (when-not (string/blank? q)
+                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+      (reset! result matched-blocks))))
+
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
-           (assoc state ::result (atom nil)))
+           (let [result (atom nil)]
+             (search-blocks! state result)
+             (assoc state ::result result)))
    :did-update (fn [state]
-                 (let [result (::result state)
-                       [edit-block _ _ q] (:rum/args state)]
-                   (p/let [matched-blocks (when-not (string/blank? q)
-                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-                     (reset! result matched-blocks)))
+                 (search-blocks! state (::result state))
                  state)}
-  [state _edit-block input id q format]
+  [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 (t :editor/block-search)]
+      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -191,11 +195,10 @@
                            content (:block/content block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
-      :class       "black"})))
+      :class       "ac-block-search"})))
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
-                   (reset! editor-handler/*selected-text nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
@@ -206,15 +209,15 @@
           current-pos (cursor/pos input)
           edit-content (state/sub [:editor/content id])
           edit-block (state/get-edit-block)
+          selected-text (editor-handler/get-selected-text)
           q (or
-             @editor-handler/*selected-text
+             selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))]
       (when input
-        (block-search-auto-complete edit-block input id q format)))))
+        (block-search-auto-complete edit-block input id q format selected-text)))))
 
 (rum/defc template-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (let [pos (state/get-editor-last-pos)
         input (gdom/getElement id)]
@@ -238,7 +241,6 @@
           :class       "black"})))))
 
 (rum/defc property-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [input (gdom/getElement id)]
     (when input
@@ -258,7 +260,6 @@
           :class       "black"})))))
 
 (rum/defc property-value-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [property (:property (state/get-editor-action-data))
         input (gdom/getElement id)]
@@ -339,10 +340,14 @@
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
-  (let [max-height 370
-        max-width 300
-        offset-top 24
+  (let [vw-width js/window.innerWidth
         vw-height js/window.innerHeight
+        vw-max-width (- vw-width (:left rect))
+        vw-max-height (- vw-height (:top rect))
+        sm? (< vw-width 415)
+        max-height (min (- vw-max-height 20) 800)
+        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        offset-top 24
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
@@ -376,8 +381,8 @@
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (let [^js/HTMLElement editor
-                     (js/document.querySelector ".editor-wrapper")]
+               (when-let [^js/HTMLElement editor
+                          (js/document.querySelector ".editor-wrapper")]
                  (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
                    {:right 0}
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
@@ -451,8 +456,6 @@
     (set-up-key-up! state input input-id)
     (set-up-input-handler! state format input input-id)))
 
-(def starts-with? clojure.string/starts-with?)
-
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
   [content format]
@@ -467,17 +470,17 @@
      (case format
        :markdown
        (cond
-         (starts-with? content "# ") "h1"
-         (starts-with? content "## ") "h2"
-         (starts-with? content "### ") "h3"
-         (starts-with? content "#### ") "h4"
-         (starts-with? content "##### ") "h5"
-         (starts-with? content "###### ") "h6"
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (string/starts-with? content "# ") "h1"
+         (string/starts-with? content "## ") "h2"
+         (string/starts-with? content "### ") "h3"
+         (string/starts-with? content "#### ") "h4"
+         (string/starts-with? content "##### ") "h5"
+         (string/starts-with? content "###### ") "h6"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")
        ;; other formats
        (cond
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
 (defn editor-row-height-unchanged?
@@ -560,6 +563,7 @@
       (= :property-value-search action)
       (animated-modal "property-value-search" (property-value-search id) true)
 
+      ;; date-picker in editing-mode
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 

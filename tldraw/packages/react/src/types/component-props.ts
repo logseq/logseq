@@ -72,6 +72,26 @@ export type TLHandleComponent<
   H extends TLHandle = TLHandle
 > = (props: TLHandleComponentProps<S, H>) => JSX.Element | null
 
+export interface TLBacklinksCountComponentProps<S extends TLReactShape = TLReactShape> {
+  shape: S
+  id: string
+  className?: string
+}
+
+export type TLBacklinksCountComponent<S extends TLReactShape = TLReactShape> = (
+  props: TLBacklinksCountComponentProps<S>
+) => JSX.Element | null
+
+export interface TLQuickLinksComponentProps<S extends TLReactShape = TLReactShape> {
+  shape: S
+  id: string
+  className?: string
+}
+
+export type TLQuickLinksComponent<S extends TLReactShape = TLReactShape> = (
+  props: TLQuickLinksComponentProps<S>
+) => JSX.Element | null
+
 export interface TLGridProps {
   size: number
 }
@@ -82,6 +102,8 @@ export type TLReactComponents<S extends TLReactShape = TLReactShape> = {
   SelectionBackground?: TLBoundsComponent<S> | null
   SelectionForeground?: TLBoundsComponent<S> | null
   SelectionDetail?: TLSelectionDetailComponent<S> | null
+  BacklinksCount?: TLBacklinksCountComponent<S> | null
+  QuickLinks?: TLQuickLinksComponent<S> | null
   DirectionIndicator?: TLDirectionIndicatorComponent<S> | null
   Handle?: TLHandleComponent<S> | null
   ContextBar?: TLContextBarComponent<S> | null

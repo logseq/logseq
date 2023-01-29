@@ -1,20 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { EMPTY_OBJECT, TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
+import {
+  EMPTY_OBJECT,
+  isNonNullable,
+  TLAsset,
+  TLBinding,
+  TLBounds,
+  TLCursor,
+  TLTheme,
+} from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { NOOP } from '../../constants'
 import {
-  useRendererContext,
   useApp,
-  useStylesheet,
-  usePreventNavigation,
-  useResizeObserver,
-  useGestureEvents,
-  useCursor,
-  useZoom,
   useCanvasEvents,
+  useCursor,
+  useGestureEvents,
+  usePreventNavigation,
+  useRendererContext,
+  useResizeObserver,
   useRestoreCamera,
+  useStylesheet,
+  useZoom,
 } from '../../hooks'
 import { useKeyboardEvents } from '../../hooks/useKeyboardEvents'
 import type { TLReactShape } from '../../lib'
@@ -22,6 +30,8 @@ import { Container } from '../Container'
 import { ContextBarContainer } from '../ContextBarContainer'
 import { HTMLLayer } from '../HTMLLayer'
 import { Indicator } from '../Indicator'
+import { QuickLinksContainer } from '../QuickLinksContainer'
+import { BacklinksCountContainer } from '../BacklinksCountContainer'
 import { SelectionDetailContainer } from '../SelectionDetailContainer'
 import { Shape } from '../Shape'
 import { SVGContainer } from '../SVGContainer'
@@ -36,6 +46,7 @@ export interface TLCanvasProps<S extends TLReactShape> {
   assets: Record<string, TLAsset>
   theme: TLTheme
   hoveredShape: S
+  hoveredGroup: S
   editingShape: S
   bindingShapes: S[]
   selectionDirectionHint: number[]
@@ -67,6 +78,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   bindingShapes,
   editingShape,
   hoveredShape,
+  hoveredGroup,
   selectionBounds,
   selectedShapes,
   erasingShapes,
@@ -107,6 +119,9 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
     onlySelectedShape && 'handles' in onlySelectedShape.props ? selectedShapes?.[0] : undefined
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
+  const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
+
+  const hoveredShapes: S[] = [...new Set([hoveredGroup, hoveredShape])].filter(isNonNullable)
 
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
@@ -150,8 +165,18 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={true}
               />
             ))}
-          {hoveredShape && app.isInAny('creating') && (
-            <Indicator key={'hovered_indicator_' + hoveredShape.id} shape={hoveredShape} />
+          {hoveredShapes.map(
+            s => s !== editingShape && <Indicator key={'hovered_indicator_' + s.id} shape={s} />
+          )}
+          {singleSelectedShape && components.BacklinksCount && (
+            <BacklinksCountContainer
+              hidden={false}
+              bounds={singleSelectedShape.bounds}
+              shape={singleSelectedShape}
+            />
+          )}
+          {hoveredShape && hoveredShape !== singleSelectedShape && components.QuickLinks && (
+            <QuickLinksContainer hidden={false} bounds={hoveredShape.bounds} shape={hoveredShape} />
           )}
           {brush && components.Brush && <components.Brush bounds={brush} />}
           {selectedShapes && selectionBounds && (
@@ -199,15 +224,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   rotation={selectionRotation}
                 />
               )}
-              {selectedShapes && components.ContextBar && (
-                <ContextBarContainer
-                  key={'context' + selectedShapes.map(shape => shape.id).join('')}
-                  shapes={selectedShapes}
-                  hidden={!showContextBar}
-                  bounds={selectedShapes.length === 1 ? selectedShapes[0].bounds : selectionBounds}
-                  rotation={selectedShapes.length === 1 ? selectedShapes[0].props.rotation : 0}
-                />
-              )}
             </>
           )}
         </HTMLLayer>
@@ -221,6 +237,22 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
 
         <div id="tl-dev-tools-canvas-anchor" />
       </div>
+      <HTMLLayer>
+        {selectedShapes && selectionBounds && (
+          <>
+            {selectedShapes && components.ContextBar && (
+              <ContextBarContainer
+                key={'context' + selectedShapes.map(shape => shape.id).join('')}
+                shapes={selectedShapes}
+                hidden={!showContextBar}
+                bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
+                rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}
+              />
+            )}
+          </>
+        )}
+      </HTMLLayer>
+
       {children}
     </div>
   )

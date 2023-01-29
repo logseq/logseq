@@ -68,7 +68,7 @@
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
 
-(defn- tree [parent->children root]
+(defn- tree [parent->children root default-level]
   (let [root-id (:db/id root)
         nodes (fn nodes [parent-id level]
                 (mapv (fn [b]
@@ -81,7 +81,7 @@
                         (-> (get parent->children parent)
                             (model/try-sort-by-left parent)))))
         children (nodes root-id 1)
-        root' (assoc root :block/level 1)]
+        root' (assoc root :block/level (or default-level 1))]
     (if (seq children)
       (assoc root' :block/children children)
       root')))
@@ -93,7 +93,8 @@
    :block/parent {:db/id (:db/id (:block/parent e))}
    :block/left {:db/id (:db/id (:block/left e))}
    :block/page (:block/page e)
-   :block/refs (:block/refs e)})
+   :block/refs (:block/refs e)
+   :block/children (:block/children e)})
 
 (defn filter-top-level-blocks
   [blocks]
@@ -104,12 +105,14 @@
 
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
-  [blocks]
-  (let [blocks (map block-entity->map blocks)
-        top-level-blocks (filter-top-level-blocks blocks)
-        top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
-        parent->children (group-by :block/parent blocks)]
-    (map #(tree parent->children %) top-level-blocks')))
+  ([blocks]
+   (non-consecutive-blocks->vec-tree blocks 1))
+  ([blocks default-level]
+   (let [blocks (map block-entity->map blocks)
+         top-level-blocks (filter-top-level-blocks blocks)
+         top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
+         parent->children (group-by :block/parent blocks)]
+     (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

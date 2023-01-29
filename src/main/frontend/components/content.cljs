@@ -6,12 +6,9 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
-            [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.image :as image-handler]
@@ -30,29 +27,6 @@
 
 ;; TODO i18n support
 
-(defn- set-format-js-loading!
-  [format value]
-  (when format
-    (swap! state/state assoc-in [:format/loading format] value)))
-
-(defn- lazy-load
-  [format]
-  (let [format (gp-util/normalize-format format)]
-    (when-let [record (format/get-format-record format)]
-      (when-not (protocol/loaded? record)
-        (set-format-js-loading! format true)
-        (protocol/lazyLoad record
-                           (fn [_result]
-                             (set-format-js-loading! format false)))))))
-
-(defn lazy-load-js
-  [state]
-  (when-let [format (:format (last (:rum/args state)))]
-    (let [loader? (contains? config/html-render-formats format)]
-      (when loader?
-        (when-not (format/loaded? format)
-          (lazy-load format))))))
-
 (rum/defc custom-context-menu-content
   []
   [:.menu-links-wrapper
@@ -60,6 +34,12 @@
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
     "Cut"
+    nil)
+   (ui/menu-link
+    {:key      "delete"
+     :on-click #(do (editor-handler/delete-selection %)
+                    (state/hide-custom-context-menu!))}
+    "Delete"
     nil)
    (ui/menu-link
     {:key "copy"
@@ -97,8 +77,8 @@
 
 (rum/defc template-checkbox
   [template-including-parent?]
-  [:div.flex.flex-row
-   [:span.text-medium.mr-2 "Including the parent block in the template?"]
+  [:div.flex.flex-row.w-auto.items-center
+   [:p.text-medium.mr-2 "Including the parent block in the template?"]
    (ui/toggle template-including-parent?
               #(swap! *template-including-parent? not))])
 
@@ -121,27 +101,29 @@
     (if @edit?
       (do
         (state/clear-edit!)
-        [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
-         [:p "What's the template's name?"]
-         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-          {:auto-focus true
-           :on-change (fn [e]
-                        (reset! input (util/evalue e)))}]
-         (when has-children?
-           (template-checkbox template-including-parent?))
-         (ui/button "Submit"
-                    :on-click (fn []
-                                (let [title (string/trim @input)]
-                                  (when (not (string/blank? title))
-                                    (if (page-handler/template-exists? title)
-                                      (notification/show!
-                                       [:p "Template already exists!"]
-                                       :error)
-                                      (do
-                                        (editor-handler/set-block-property! block-id :template title)
-                                        (when (false? template-including-parent?)
-                                          (editor-handler/set-block-property! block-id :template-including-parent false))
-                                        (state/hide-custom-context-menu!)))))))])
+        [:<>
+         [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
+          [:p "What's the template's name?"]
+          [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+           {:auto-focus true
+            :on-change (fn [e]
+                         (reset! input (util/evalue e)))}]
+          (when has-children?
+            (template-checkbox template-including-parent?))
+          (ui/button "Submit"
+                     :on-click (fn []
+                                 (let [title (string/trim @input)]
+                                   (when (not (string/blank? title))
+                                     (if (page-handler/template-exists? title)
+                                       (notification/show!
+                                        [:p "Template already exists!"]
+                                        :error)
+                                       (do
+                                         (editor-handler/set-block-property! block-id :template title)
+                                         (when (false? template-including-parent?)
+                                           (editor-handler/set-block-property! block-id :template-including-parent false))
+                                         (state/hide-custom-context-menu!)))))))]
+         [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"
         :on-click (fn [e]
@@ -156,14 +138,14 @@
       (let [format (:block/format block)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1
+          [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
            (for [color ui/block-background-colors]
-             [:a.m-2.shadow-sm
+             [:a.shadow-sm
               {:title (t (keyword "color" color))
                :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-           [:a.m-2.shadow-sm
+           [:a.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
@@ -173,14 +155,31 @@
           [:div.flex.flex-row.justify-between.flex-1.px-1
            (for [i (range 1 7)]
              (ui/button
-              (str "H" i)
+              ""
+              :icon (str "h-" i)
+              :title (t :heading i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
               :intent "link"
               :small? true))
            (ui/button
-            "H-"
+            ""
+            :icon "h-auto"
+            :icon-props {:extension? true}
+            :class "to-heading-button"
+            :title (if (= format :markdown) 
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+                     (t :auto-heading))
+            :disabled (= format :markdown)
+            :on-click (fn [_e]
+                        (editor-handler/set-heading! block-id format true))
+            :intent "link"
+            :small? true)
+           (ui/button
+            ""
+            :icon "heading-off"
+            :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
             :on-click (fn [_e]
@@ -194,7 +193,7 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          "Open in sidebar"
+          (t :content/open-in-sidebar)
           ["⇧" "click"])
 
          [:hr.menu-separator]
@@ -203,14 +202,14 @@
           {:key      "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
-          "Copy block ref"
+          (t :content/copy-block-ref)
           nil)
 
          (ui/menu-link
           {:key      "Copy block embed"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          "Copy block embed"
+          (t :content/copy-block-emebed)
           nil)
 
           ;; TODO Logseq protocol mobile support
@@ -239,11 +238,17 @@
           "Cut"
           nil)
 
+         (ui/menu-link
+          {:key      "delete"
+           :on-click #(editor-handler/delete-block-aux! block true)}
+          "Delete"
+          nil)
+
          [:hr.menu-separator]
 
          (block-template block-id)
 
-         (cond 
+         (cond
            (srs/card-block? block)
            (ui/menu-link
             {:key      "Preview Card"
@@ -342,12 +347,9 @@
     (let [page-menu-options (page-menu/page-menu page)]
       [:.menu-links-wrapper
        (for [{:keys [title options]} page-menu-options]
-         (ui/menu-link
-          (merge
-           {:key title}
-           options)
-          title
-          nil))])))
+         (rum/with-key
+           (ui/menu-link options title nil)
+           title))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -355,6 +357,8 @@
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
+     ;; fixme: this mixin will register global event listeners on window
+     ;; which might cause unexpected issues
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
@@ -386,8 +390,8 @@
                             (when block
                               (util/select-highlight! [block]))
                             (common-handler/show-custom-context-menu!
-                            e
-                            (block-context-menu-content target (uuid block-id))))
+                             e
+                             (block-context-menu-content target (uuid block-id))))
 
                           :else
                           nil))))))
@@ -395,21 +399,17 @@
   [:div {:id id}
    (if hiccup
      hiccup
-     [:div.text-gray-500.cursor "Click to edit"])])
+     [:div.cursor "Click to edit"])])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (state/sub [:editor/editing? id])
-        loading (state/sub :format/loading)]
+  (let [edit? (state/sub [:editor/editing? id])]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
                   id
                   config)
-      (let [format (gp-util/normalize-format format)
-            loading? (get loading format)
-            markup? (contains? config/html-render-formats format)
-            on-click (fn [e]
+      (let [on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
                          (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
@@ -417,17 +417,12 @@
                          (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]
-        (cond
-          (and markup? loading?)
-          [:div "loading ..."]
-
-          :else                       ; other text formats
-          [:pre.cursor.content.pre-white-space
-           {:id id
-            :on-click on-click}
-           (if (string/blank? content)
-             [:div.text-gray-500.cursor "Click to edit"]
-             content)])))))
+        [:pre.cursor.content.pre-white-space
+         {:id id
+          :on-click on-click}
+         (if (string/blank? content)
+           [:div.cursor "Click to edit"]
+           content)]))))
 
 (defn- set-draw-iframe-style!
   []
@@ -442,16 +437,12 @@
           (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
-  {:will-mount (fn [state]
-                 (lazy-load-js state)
-                 state)
-   :did-mount (fn [state]
+  {:did-mount (fn [state]
                 (set-draw-iframe-style!)
                 (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-draw-iframe-style!)
-                 (lazy-load-js state)
                  (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format

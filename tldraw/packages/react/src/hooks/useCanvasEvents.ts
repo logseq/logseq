@@ -20,6 +20,12 @@ export function useCanvasEvents() {
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
       const { order = 0 } = e
       if (!order) e.currentTarget?.setPointerCapture(e.pointerId)
+
+      if (!e.isPrimary) {
+        // ignore secondary pointers (in multi-touch scenarios)
+        return
+      }
+
       callbacks.onPointerDown?.({ type: TLTargetType.Canvas, order }, e)
 
       const now = Date.now()
@@ -69,6 +75,10 @@ export function useCanvasEvents() {
       onPointerLeave,
       onDrop,
       onDragOver,
+      // fix touch callout in iOS
+      onTouchEnd: (e: TouchEvent) => {
+        e.preventDefault()
+      }
     }
   }, [callbacks])
 

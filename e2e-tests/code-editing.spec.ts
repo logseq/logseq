@@ -194,8 +194,6 @@ test('click outside to exit', async ({ page }) => {
 test('click language label to exit #3463', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await block.enterNext();
-
   await page.fill('.block-editor textarea', '```cpp\n```')
   await page.waitForTimeout(200)
   await escapeToCodeEditor(page)

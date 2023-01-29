@@ -9,22 +9,30 @@ export interface TextLabelProps {
   font: string
   text: string
   color: string
+  fontStyle: string
+  fontSize: number
+  fontWeight: number
   onBlur?: () => void
   onChange: (text: string) => void
   offsetY?: number
   offsetX?: number
   scale?: number
   isEditing?: boolean
+  pointerEvents?: boolean
 }
 
 export const TextLabel = React.memo(function TextLabel({
   font,
   text,
   color,
+  fontStyle,
+  fontSize,
+  fontWeight,
   offsetX = 0,
   offsetY = 0,
   scale = 1,
   isEditing = false,
+  pointerEvents = false,
   onBlur,
   onChange,
 }: TextLabelProps) {
@@ -121,11 +129,15 @@ export const TextLabel = React.memo(function TextLabel({
   React.useLayoutEffect(() => {
     const elm = rInnerWrapper.current
     if (!elm) return
-    const size = getTextLabelSize(text, font, 4)
+    const size = getTextLabelSize(
+      text,
+      { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
+      4
+    )
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
-  }, [text, font, offsetY, offsetX, scale])
+  }, [text, fontWeight, fontSize, offsetY, offsetX, scale])
 
   return (
     <div className="tl-text-label-wrapper">
@@ -134,8 +146,11 @@ export const TextLabel = React.memo(function TextLabel({
         ref={rInnerWrapper}
         style={{
           font,
+          fontStyle,
+          fontSize,
+          fontWeight,
           color,
-          pointerEvents: text ? 'all' : 'none',
+          pointerEvents: pointerEvents ? 'all' : 'none',
           userSelect: isEditing ? 'text' : 'none',
         }}
       >
@@ -145,6 +160,9 @@ export const TextLabel = React.memo(function TextLabel({
             style={{
               font,
               color,
+              fontStyle,
+              fontSize,
+              fontWeight,
             }}
             className="tl-text-label-textarea"
             name="text"

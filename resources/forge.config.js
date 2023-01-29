@@ -50,7 +50,10 @@ module.exports = {
     },
     {
       name: 'electron-forge-maker-appimage',
-      platforms: ['linux']
+      platforms: ['linux'],
+      config: {
+        mimeType: ["x-scheme-handler/logseq"]
+      }
     }
   ],
 

@@ -1,8 +1,8 @@
-import { type TLEventMap, TLCursor } from '../../../types'
+import { type TLEventMap, TLCursor, TLEvents } from '../../../types'
 import type { TLDrawShape, TLShape, TLDrawShapeProps } from '../../shapes'
 import type { TLApp } from '../../TLApp'
 import { TLTool } from '../../TLTool'
-import { IdleState, CreatingState } from './states'
+import { IdleState, CreatingState, PinchingState } from './states'
 
 export abstract class TLDrawTool<
   T extends TLDrawShape = TLDrawShape,
@@ -12,7 +12,7 @@ export abstract class TLDrawTool<
 > extends TLTool<S, K, R> {
   static id = 'draw'
 
-  static states = [IdleState, CreatingState]
+  static states = [IdleState, CreatingState, PinchingState]
 
   static initial = 'idle'
 
@@ -29,5 +29,9 @@ export abstract class TLDrawTool<
   abstract Shape: {
     new (props: TLDrawShapeProps): T
     id: string
+  }
+
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.transition('pinching', { info, event })
   }
 }

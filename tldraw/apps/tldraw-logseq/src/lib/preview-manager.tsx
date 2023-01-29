@@ -24,16 +24,19 @@ export class PreviewManager {
   }
 
   load(snapshot: TLDocumentModel) {
-    const page = snapshot.pages.find(p => snapshot.currentPageId === p.id)
+    const page = snapshot.pages[0]
     this.pageId = page?.id
     this.assets = snapshot.assets
-    this.shapes = page?.shapes.map(s => {
-      const ShapeClass = getShapeClass(s.type)
-      return new ShapeClass(s)
-    })
+    this.shapes = page?.shapes
+      .map(s => {
+        const ShapeClass = getShapeClass(s.type)
+        return new ShapeClass(s)
+      })
+      // do not need to render group shape because it is invisible in preview
+      .filter(s => s.type !== 'group')
   }
 
-  generatePreviewJsx(viewport?: TLViewport) {
+  generatePreviewJsx(viewport?: TLViewport, ratio?: number) {
     const allBounds = [...(this.shapes ?? []).map(s => s.getRotatedBounds())]
     const vBounds = viewport?.currentView
     if (vBounds) {
@@ -47,7 +50,7 @@ export class PreviewManager {
     commonBounds = BoundsUtils.expandBounds(commonBounds, SVG_EXPORT_PADDING)
 
     // make sure commonBounds is of ratio 4/3 (should we have another ratio setting?)
-    commonBounds = BoundsUtils.ensureRatio(commonBounds, 4 / 3)
+    commonBounds = ratio ? BoundsUtils.ensureRatio(commonBounds, ratio) : commonBounds
 
     const translatePoint = (p: [number, number]): [string, string] => {
       return [(p[0] - commonBounds.minX).toFixed(2), (p[1] - commonBounds.minY).toFixed(2)]
@@ -123,8 +126,8 @@ export class PreviewManager {
     return svgElement
   }
 
-  exportAsSVG() {
-    const svgElement = this.generatePreviewJsx()
+  exportAsSVG(ratio: number) {
+    const svgElement = this.generatePreviewJsx(undefined, ratio)
     return svgElement ? ReactDOMServer.renderToString(svgElement) : ''
   }
 }
@@ -134,12 +137,12 @@ export class PreviewManager {
  *
  * @param serializedApp
  */
-export function generateSVGFromApp(serializedApp: TLDocumentModel<Shape>) {
+export function generateSVGFromModel(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
   const preview = new PreviewManager(serializedApp)
-  return preview.exportAsSVG()
+  return preview.exportAsSVG(ratio)
 }
 
-export function generateJSXFromApp(serializedApp: TLDocumentModel<Shape>) {
+export function generateJSXFromModel(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
   const preview = new PreviewManager(serializedApp)
-  return preview.generatePreviewJsx()
+  return preview.generatePreviewJsx(undefined, ratio)
 }

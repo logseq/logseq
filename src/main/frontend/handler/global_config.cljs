@@ -5,9 +5,9 @@
   (:require [frontend.fs :as fs]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.state :as state]
-            [cljs.reader :as reader]
             [promesa.core :as p]
             [shadow.resource :as rc]
+            [clojure.edn :as edn]
             [electron.ipc :as ipc]
             ["path" :as path]))
 
@@ -15,6 +15,12 @@
 ;; Also known as home directory a.k.a. '~'
 (defonce root-dir
   (atom nil))
+
+(defn global-config-dir-exists?
+  "This is used in contexts where we are unusure whether global-config has been
+  started correctly e.g. an error handler"
+  []
+  (some? @root-dir))
 
 (defn global-config-dir
   []
@@ -26,7 +32,7 @@
 
 (defn- set-global-config-state!
   [content]
-  (let [config (reader/read-string content)]
+  (let [config (edn/read-string content)]
     (state/set-global-config! config)
     config))
 
@@ -48,7 +54,7 @@
   (let [config-dir (global-config-dir)
         config-path (global-config-path)]
     (p/let [config-content (fs/read-file config-dir config-path)]
-      (set-global-config-state! config-content))))
+           (set-global-config-state! config-content))))
 
 (defn start
   "This component has four responsibilities on start:

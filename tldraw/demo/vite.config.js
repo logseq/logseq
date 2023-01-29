@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+// import swc from 'unplugin-swc'
+// import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'path'
 import { defineConfig } from 'vite'
 
@@ -12,6 +13,23 @@ const bases = {
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
+    // swc.vite({
+    //   jsc: {
+    //     target: 'es2022',
+    //     parser: {
+    //       decorators: true,
+    //       tsx: true,
+    //       jsx: true,
+    //     },
+    //     transform: {
+    //       legacyDecorator: true,
+    //       react: {
+    //         refresh: true,
+    //         runtime: 'automatic',
+    //       }
+    //     }
+    //   }
+    // }),
     react({
       babel: {
         parserOpts: {
@@ -20,12 +38,12 @@ export default defineConfig({
         plugins: [[require.resolve('@babel/plugin-proposal-decorators'), { legacy: true }]],
       },
     }),
-    basicSsl(),
+    // basicSsl(),
   ],
   server: {
     port: '3031',
     fs: { strict: false },
-    https: true,
+    // https: true,
   },
   resolve: {
     alias: [

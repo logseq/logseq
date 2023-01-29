@@ -4,5 +4,6 @@ import { EllipseShape, type Shape } from '../shapes'
 
 export class EllipseTool extends TLBoxTool<EllipseShape, Shape, TLReactEventMap> {
   static id = 'ellipse'
+  static shortcut = ['o']
   Shape = EllipseShape
 }

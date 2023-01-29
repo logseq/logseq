@@ -1,19 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
+import { SvgPathUtils, TLDrawShape, TLDrawShapeProps, getComputedColor } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
-import { computed, makeObservable } from 'mobx'
+import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import getStroke, {
+import {
   getStrokeOutlinePoints,
   getStrokePoints,
   StrokeOptions,
   StrokePoint,
 } from 'perfect-freehand'
+import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'pencil'
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 1,
+  sm: 1.6,
+  md: 2,
+  lg: 3.2,
+  xl: 4.8,
+  xxl: 6,
 }
 
 const simulatePressureSettings: StrokeOptions = {
@@ -85,8 +96,8 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: 'var(--tl-foreground, #000)',
-    fill: 'var(--tl-foreground, #000)',
+    stroke: '',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
@@ -108,6 +119,18 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     )
   })
 
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      strokeWidth: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
+
   ReactIndicator = observer(() => {
     const { pointsPath } = this
     return <path d={pointsPath} />
@@ -122,17 +145,17 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   getShapeSVGJsx() {
     const {
       pointsPath,
-      props: { stroke, noFill, strokeWidth, strokeType },
+      props: { stroke, strokeWidth, strokeType },
     } = this
     return (
       <path
-        pointerEvents="none"
+        pointerEvents="all"
         d={pointsPath}
         strokeWidth={strokeWidth / 2}
         strokeLinejoin="round"
         strokeLinecap="round"
-        stroke={stroke}
-        fill={stroke}
+        stroke={getComputedColor(stroke, 'text')}
+        fill={getComputedColor(stroke, 'text')}
         strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )

@@ -1,12 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
+import { SvgPathUtils, TLDrawShape, TLDrawShapeProps, getComputedColor } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import { computed, makeObservable } from 'mobx'
+import { action, computed, makeObservable } from 'mobx'
+import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface HighlighterShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'highlighter'
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 1,
+  sm: 1.6,
+  md: 2,
+  lg: 3.2,
+  xl: 4.8,
+  xxl: 6,
 }
 
 export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
@@ -24,12 +35,12 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: '#ffcc00',
-    fill: '#ffcc00',
+    stroke: '',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
-    opacity: 1,
+    opacity: 0.5,
   }
 
   @computed get pointsPath() {
@@ -44,20 +55,32 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     } = this
 
     return (
-      <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+      <SVGContainer {...events} opacity={isErasing ? 0.2 : 1}>
         <path
           d={pointsPath}
           strokeWidth={strokeWidth * 16}
-          stroke={stroke}
+          stroke={getComputedColor(stroke, 'stroke')}
           fill="none"
           pointerEvents="all"
           strokeLinejoin="round"
           strokeLinecap="round"
-          opacity={0.5}
+          opacity={opacity}
         />
       </SVGContainer>
     )
   })
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      strokeWidth: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
 
   ReactIndicator = observer(() => {
     const { pointsPath } = this
@@ -73,18 +96,18 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
   getShapeSVGJsx() {
     const {
       pointsPath,
-      props: { stroke, strokeWidth },
+      props: { stroke, strokeWidth, opacity },
     } = this
     return (
       <path
         d={pointsPath}
         strokeWidth={strokeWidth * 16}
-        stroke={stroke}
+        stroke={getComputedColor(stroke, 'stroke')}
         fill="none"
         pointerEvents="all"
         strokeLinejoin="round"
         strokeLinecap="round"
-        opacity={0.5}
+        opacity={opacity}
       />
     )
   }

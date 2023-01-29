@@ -3,34 +3,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
-  TLEventMap,
-  TLShortcut,
-  TLSubscription,
-  TLSubscriptionEventName,
   TLCallback,
-  TLSubscriptionEventInfo,
-  TLStateEvents,
+  TLEventMap,
   TLEvents,
-  TLHandle,
+  TLShortcut,
+  TLStateEvents,
+  TLSubscription,
+  TLSubscriptionEventInfo,
+  TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
-import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
+import {
+  BoundsUtils,
+  createNewLineBinding,
+  dedupe,
+  isNonNullable,
+  KeyUtils,
+  uniqueId,
+} from '../../utils'
+import type { TLGroupShape, TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
 import { TLHistory } from '../TLHistory'
 import { TLInputs } from '../TLInputs'
-import { type TLPageModel, TLPage } from '../TLPage'
+import { TLPage, type TLPageModel } from '../TLPage'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
 import type { TLToolConstructor } from '../TLTool'
 import { TLViewport } from '../TLViewport'
-import { TLSelectTool, TLMoveTool } from '../tools'
+import { TLMoveTool, TLSelectTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   // currentPageId: string
@@ -70,6 +76,7 @@ export class TLApp<
   }
 
   keybindingRegistered = false
+  uuid = uniqueId()
 
   static id = 'app'
   static initial = 'select'
@@ -170,7 +177,22 @@ export class TLApp<
       {
         keys: ['del', 'backspace'],
         fn: () => {
-          this.api.deleteShapes()
+          if (!this.editingShape) {
+            this.api.deleteShapes()
+            this.selectedTool.transition('idle')
+          }
+        },
+      },
+      {
+        keys: 'mod+g',
+        fn: () => {
+          this.api.doGroup()
+        },
+      },
+      {
+        keys: 'mod+shift+g',
+        fn: () => {
+          this.api.unGroup()
         },
       },
     ]
@@ -184,9 +206,11 @@ export class TLApp<
         return {
           // @ts-expect-error ???
           keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: Event) => {
+          fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-            e.stopPropagation()
+            // hack: allows logseq related shortcut combinations to work
+            // fixme?: unsure if it will cause unexpected issues
+            // e.stopPropagation()
           },
         }
       })
@@ -296,7 +320,7 @@ export class TLApp<
   /* --------------------- Shapes --------------------- */
 
   getShapeById = <T extends S>(id: string, pageId = this.currentPage.id): T | undefined => {
-    const shape = this.getPageById(pageId)?.shapes.find(shape => shape.id === id) as T
+    const shape = this.getPageById(pageId)?.shapesById[id] as T
     return shape
   }
 
@@ -315,17 +339,57 @@ export class TLApp<
 
   @action readonly deleteShapes = (shapes: S[] | string[]): this => {
     if (shapes.length === 0) return this
-    let ids: Set<string>
-    if (typeof shapes[0] === 'string') {
-      ids = new Set(shapes as string[])
-    } else {
-      ids = new Set((shapes as S[]).map(shape => shape.id))
-    }
+    const normalizedShapes: S[] = shapes
+      .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
+      .filter(isNonNullable)
+
+    // delete a group shape should also delete its children
+    const shapesInGroups = this.shapesInGroups(normalizedShapes)
+
+    normalizedShapes.forEach(shape => {
+      if (this.getParentGroup(shape)) {
+        shapesInGroups.push(shape)
+      }
+    })
+
+    let ids: Set<string> = new Set([...normalizedShapes, ...shapesInGroups].map(s => s.id))
+
+    shapesInGroups.forEach(shape => {
+      // delete a shape in a group should also update the group shape
+      const parentGroup = this.getParentGroup(shape)
+      if (parentGroup) {
+        const newChildren: string[] | undefined = parentGroup.props.children?.filter(
+          id => id !== shape.id
+        )
+        if (!newChildren || newChildren?.length <= 1) {
+          // remove empty group or group with only one child
+          ids.add(parentGroup.id)
+        } else {
+          parentGroup.update({ children: newChildren })
+        }
+      }
+    })
+
+    const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
+
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
-    const removedShapes = this.currentPage.removeShapes(...shapes)
+    const removedShapes = this.currentPage.removeShapes(...allShapesToDelete)
     if (removedShapes) this.notify('delete-shapes', removedShapes)
     this.persist()
     return this
+  }
+
+  /** Get all shapes in groups */
+  shapesInGroups(groups = this.shapes): S[] {
+    return groups
+      .flatMap(shape => shape.props.children)
+      .filter(isNonNullable)
+      .map(id => this.getShapeById(id))
+      .filter(isNonNullable)
+  }
+
+  getParentGroup(shape: S) {
+    return this.shapes.find(group => group.props.children?.includes(shape.id))
   }
 
   bringForward = (shapes: S[] | string[] = this.selectedShapesArray): this => {
@@ -417,6 +481,21 @@ export class TLApp<
     return this
   }
 
+  packIntoRectangle = (shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const deltaMap = Object.fromEntries(
+      BoundsUtils.getPackedDistributions(shapes).map(d => [d.id, d])
+    )
+
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
   /* --------------------- Assets --------------------- */
 
   @observable assets: Record<string, TLAsset> = {}
@@ -435,8 +514,18 @@ export class TLApp<
     return this
   }
 
+  @action removeUnusedAssets = (): this => {
+    const usedAssets = this.getCleanUpAssets()
+    Object.keys(this.assets).forEach(assetId => {
+      if (!usedAssets.some(asset => asset.id === assetId)) {
+        delete this.assets[assetId]
+      }
+    })
+    this.persist()
+    return this
+  }
+
   getCleanUpAssets<T extends TLAsset>(): T[] {
-    let deleted = false
     const usedAssets = new Set<T>()
 
     this.pages.forEach(p =>
@@ -459,17 +548,27 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
-      const tldrawString = JSON.stringify({
-        type: 'logseq/whiteboard-shapes',
-        shapes: this.selectedShapesArray.map(shape => shape.serialized),
-        // pasting into other whiteboard may require this if any shape uses asset
+      const selectedShapes = this.allSelectedShapesArray
+      const jsonString = JSON.stringify({
+        shapes: selectedShapes.map(shape => shape.serialized),
+        // pasting into other whiteboard may require this if any shape uses the assets
         assets: this.getCleanUpAssets().filter(asset => {
-          return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
+          return selectedShapes.some(shape => shape.props.assetId === asset.id)
         }),
+        // convey the bindings to maintain the new links after pasting
+        bindings: toJS(this.currentPage.bindings),
       })
+      const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
+
+      const shapeBlockRefs = this.selectedShapesArray.map(s => `((${s.props.id}))`).join(' ')
+
+      // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
-          'text/plain': new Blob([tldrawString], { type: 'text/plain' }),
+          'text/html': new Blob([tldrawString], { type: 'text/html' }),
+          'text/plain': new Blob([shapeBlockRefs], {
+            type: 'text/plain',
+          }),
         }),
       ])
     }
@@ -542,6 +641,14 @@ export class TLApp<
     return hoveredId ? currentPage.shapes.find(shape => shape.id === hoveredId) : undefined
   }
 
+  @computed get hoveredGroup(): S | undefined {
+    const { hoveredShape } = this
+    const hoveredGroup = hoveredShape
+      ? this.shapes.find(s => s.type === 'group' && s.props.children?.includes(hoveredShape.id))
+      : undefined
+    return hoveredGroup as S | undefined
+  }
+
   @action readonly setHoveredShape = (shape?: string | S): this => {
     this.hoveredId = typeof shape === 'string' ? shape : shape?.id
     return this
@@ -560,6 +667,17 @@ export class TLApp<
     const stateId = selectedTool.id
     if (stateId !== 'select') return []
     return Array.from(selectedShapes.values())
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapes() {
+    return new Set(this.allSelectedShapesArray)
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapesArray() {
+    const { selectedShapesArray } = this
+    return dedupe([...selectedShapesArray, ...this.shapesInGroups(selectedShapesArray)])
   }
 
   @action setSelectedShapes = (shapes: S[] | string[]): this => {
@@ -829,7 +947,18 @@ export class TLApp<
   Shapes = new Map<string, TLShapeConstructor<S>>()
 
   registerShapes = (Shapes: TLShapeConstructor<S>[]) => {
-    Shapes.forEach(Shape => this.Shapes.set(Shape.id, Shape))
+    Shapes.forEach(Shape => {
+      // monkey patch Shape
+      if (Shape.id === 'group') {
+        // Group Shape requires this hack to get the real children shapes
+        const app = this
+        Shape.prototype.getShapes = function () {
+          // @ts-expect-error FIXME: this is a hack to get around the fact that we can't use computed properties in the constructor
+          return this.props.children?.map(id => app.getShapeById(id)).filter(Boolean) ?? []
+        }
+      }
+      return this.Shapes.set(Shape.id, Shape)
+    })
   }
 
   deregisterShapes = (Shapes: TLShapeConstructor<S>[]) => {
@@ -895,18 +1024,7 @@ export class TLApp<
     this.selectedTool.transition('idleHold')
   }
 
-  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {
-    this.settings.update({ isToolLocked: false })
-  }
-
-  readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey || e.metaKey || this.isIn('select.contextMenu')) {
-      return
-    }
-
-    this.viewport.panCamera(info.delta)
-    this.inputs.onWheel([...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5], e)
-  }
+  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {}
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
     // Pan canvas when holding middle click
@@ -916,7 +1034,8 @@ export class TLApp<
     }
 
     // Switch to select on right click to enable contextMenu state
-    if (e.button === 2) {
+    if (e.button === 2 && !this.editingShape) {
+      e.preventDefault()
       this.transition('select')
       return
     }

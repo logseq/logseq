@@ -7,9 +7,12 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.schema.handler.global-config :as global-config-schema]
+            [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
@@ -85,6 +88,42 @@
     :else
     nil))
 
+(defn- validate-file
+  "Returns true if valid and if false validator displays error message. Files
+  that are not validated just return true"
+  [repo path content]
+  (cond
+    (= path (config/get-repo-config-path repo))
+    (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn)
+
+    (and
+     (config/global-config-enabled?)
+     (= (path/dirname path) (global-config-handler/global-config-dir)))
+    (config-edn-common-handler/validate-config-edn path content global-config-schema/Config-edn)
+
+    :else
+    true))
+
+(defn- validate-and-write-file
+  "Validates and if valid writes file. Returns boolean indicating if file content was valid"
+  [repo path content write-file-options]
+  (let [original-content (db/get-file repo path)
+        path-dir (if (and
+                      (config/global-config-enabled?)
+                      ;; Hack until we better understand failure in error handler
+                      (global-config-handler/global-config-dir-exists?)
+                      (= (path/dirname path) (global-config-handler/global-config-dir)))
+                   (global-config-handler/global-config-dir)
+                   (config/get-repo-dir repo))
+        write-file-options' (merge write-file-options
+                                   (when original-content {:old-content original-content}))]
+    (p/do!
+     (if (validate-file repo path content)
+       (do
+         (fs/write-file! repo path-dir path content write-file-options')
+         true)
+       false))))
+
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
@@ -93,17 +132,10 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [original-content (db/get-file repo path)
+  (let [path (gp-util/path-normalize path)
         write-file! (if from-disk?
-                      #(p/resolved nil)
-                      #(let [path-dir (if (and
-                                            (config/global-config-enabled?)
-                                            (= (path/dirname path) (global-config-handler/global-config-dir)))
-                                        (global-config-handler/global-config-dir)
-                                        (config/get-repo-dir repo))]
-                         (fs/write-file! repo path-dir path content
-                                        (assoc (when original-content {:old-content original-content})
-                                               :skip-compare? skip-compare?))))
+                      #(p/promise (validate-file repo path content))
+                      #(validate-and-write-file repo path content {:skip-compare? skip-compare?}))
         opts {:new-graph? new-graph?
               :from-disk? from-disk?
               :skip-db-transact? skip-db-transact?}
@@ -112,36 +144,46 @@
                    (when-not skip-db-transact?
                      (when-let [page-id (db/get-file-page-id path)]
                        (db/transact! repo
-                         [[:db/retract page-id :block/alias]
-                          [:db/retract page-id :block/tags]]
-                         opts)))
+                                     [[:db/retract page-id :block/alias]
+                                      [:db/retract page-id :block/tags]]
+                                     opts)))
                    (file-common-handler/reset-file! repo path content (merge opts
                                                                              (when (some? verbose) {:verbose verbose}))))
                  (db/set-file-content! repo path content opts))]
     (util/p-handle (write-file!)
-                   (fn [_]
+                   (fn [valid-result?]
                      (when re-render-root? (ui-handler/re-render-root!))
 
                      (cond
                        (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!)
 
-                       (= path (config/get-repo-config-path repo))
+                       (and (= path (config/get-repo-config-path repo))
+                            valid-result?)
                        (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-                         (state/pub-event! [:shortcut/refresh]))
+                              (state/pub-event! [:shortcut/refresh]))
 
-                       (and (config/global-config-enabled?) (= path (global-config-handler/global-config-path)))
+                       (and (config/global-config-enabled?)
+                            (= path (global-config-handler/global-config-path))
+                            valid-result?)
                        (p/let [_ (global-config-handler/restore-global-config!)]
-                         (state/pub-event! [:shortcut/refresh]))))
+                              (state/pub-event! [:shortcut/refresh]))))
                    (fn [error]
                      (when (and (config/global-config-enabled?)
+                                ;; Global-config not started correctly but don't
+                                ;; know root cause yet
+                                ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
+                                (global-config-handler/global-config-dir-exists?)
                                 (= path (global-config-handler/global-config-path)))
                        (state/pub-event! [:notification/show
-                                         {:content (str "Failed to write to file " path)
-                                          :status :error}]))
+                                          {:content (str "Failed to write to file " path)
+                                           :status :error}]))
 
                      (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)))
+                     (log/error :write/failed error)
+                     (state/pub-event! [:capture-error
+                                        {:error error
+                                         :payload {:type :write-file/failed-for-alter-file}}])))
     result))
 
 (defn set-file-content!
@@ -153,7 +195,8 @@
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
-                         (let [original-content (get file->content path)]
+                         (let [path (gp-util/path-normalize path)
+                               original-content (get file->content path)]
                           (-> (p/let [_ (or
                                          (util/electron?)
                                          (nfs/check-directory-permission! repo))]
@@ -165,11 +208,9 @@
                                                                            (str error))
                                                              :status :error
                                                              :clear? false}])
-                                         (state/pub-event! [:instrument {:type :write-file/failed
-                                                                         :payload {:path path
-                                                                                   :content-length (count content)
-                                                                                   :error-str (str error)
-                                                                                   :error error}}])
+                                         (state/pub-event! [:capture-error
+                                                            {:error error
+                                                             :payload {:type :write-file/failed}}])
                                          (log/error :write-file/failed {:path path
                                                                         :content content
                                                                         :error error})))))))
@@ -208,25 +249,3 @@
       ;; after an app refresh can cause stale page data to load
       (fs/unwatch-dir! dir)
       (fs/watch-dir! dir))))
-
-(defn create-metadata-file
-  [repo-url encrypted?]
-  (let [repo-dir (config/get-repo-dir repo-url)
-        path (str config/app-name "/" config/metadata-file)
-        file-path (str "/" path)
-        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-common-handler/reset-file! repo-url path default-content)))))
-
-(defn create-pages-metadata-file
-  [repo-url]
-  (let [repo-dir (config/get-repo-dir repo-url)
-        path (str config/app-name "/" config/pages-metadata-file)
-        file-path (str "/" path)
-        default-content "{}"]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-common-handler/reset-file! repo-url path default-content)))))

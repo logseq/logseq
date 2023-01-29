@@ -4,7 +4,7 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-main-content-max-width: 810px;
-  --ls-main-content-max-width-wide: 100%;
+  --ls-main-content-max-width-wide: 1280px;
   --ls-font-family: Inter;
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
@@ -12,11 +12,13 @@
   --ls-headbar-height: 3rem;
   --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 246px;
-  --ls-left-sidebar-sm-width: 70%;
+  --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
+  --ls-native-kb-height: 0px;
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
   --ls-success-color: var(--color-green-500);
+  --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,12 +49,6 @@ html[data-theme='dark'] {
   --ls-block-properties-background-color: #06323e;
   --ls-page-properties-background-color: #02171d;
   --ls-block-ref-link-text-color: #1a6376;
-  --ls-search-background-color: linear-gradient(
-    to right,
-    #021c23 0,
-    #021b21 200px,
-    #002b36 100%
-  );
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-tertiary-border-color: rgba(0, 2, 0, 0.10);
@@ -78,17 +74,18 @@ html[data-theme='dark'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
   --ls-page-blockquote-border-color: var(--ls-border-color);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
   --ls-scrollbar-foreground-color: #11505f;
   --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #8fbc8f;
   --ls-icon-color: var(--ls-link-text-color);
-  --ls-search-icon-color: var(--ls-link-text-color);
-  --ls-a-chosen-bg: var(--ls-secondary-background-color);
-  --ls-right-sidebar-code-bg-color: #04303c;
+  --ls-search-icon-color: var(--ls-primary-text-color);
+  --ls-search-icon-hover-color: var(--ls-secondary-text-color);
+  --ls-a-chosen-bg: var(--ls-quaternary-background-color);
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
   --ls-highlight-color-gray: var(--color-gray-900);
@@ -102,7 +99,10 @@ html[data-theme='dark'] {
   --ls-error-background-color: var(--color-red-900);
   --ls-warning-text-color: var(--color-yellow-100);
   --ls-warning-background-color: var(--color-yellow-900);
+  --ls-success-text-color: var(--color-green-100);
+  --ls-success-background-color: var(--color-green-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
+  --ls-header-button-background: #dee4ea;
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -121,13 +121,12 @@ html[data-theme='light'] {
   --ls-secondary-background-color: #f7f7f7;
   --ls-tertiary-background-color: #eaeaea;
   --ls-quaternary-background-color: #dcdcdc;
-  --ls-table-tr-even-background-color: #f7f7f7;
+  --ls-table-tr-even-background-color: var(--ls-secondary-background-color);
   --ls-active-primary-color: rgb(0, 105, 182);
   --ls-active-secondary-color: #00477c;
-  --ls-block-properties-background-color: #f7f7f7;
-  --ls-page-properties-background-color: #f7f7f7;
+  --ls-block-properties-background-color: var(--ls-secondary-background-color);
+  --ls-page-properties-background-color: var(--ls-secondary-background-color);
   --ls-block-ref-link-text-color: #d8e1e8;
-  --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
   --ls-tertiary-border-color: rgba(200, 200, 200, 0.30);
@@ -135,11 +134,11 @@ html[data-theme='light'] {
   --ls-menu-hover-color: var(--ls-a-chosen-bg);
   --ls-primary-text-color: #433f38;
   --ls-secondary-text-color: #161e2e;
-  --ls-title-text-color: var(--ls-primary-text-color);
+  --ls-title-text-color: var(--ls-header-button-background);
   --ls-link-text-color: #106ba3;
   --ls-link-text-hover-color: #1a537c;
-  --ls-link-ref-text-color: #106ba3;
-  --ls-link-ref-text-hover-color: #1a537c;
+  --ls-link-ref-text-color: var(--ls-link-text-color);
+  --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
   --ls-tag-text-color: var(--ls-link-ref-text-color);
   --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
   --ls-slide-background-color: #fff;
@@ -147,22 +146,24 @@ html[data-theme='light'] {
   --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
+  --ls-selection-text-color: var(--ls-secondary-text-color);
   --ls-page-checkbox-color: #9dbbd8;
   --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: #fbfaf8;
   --ls-page-blockquote-border-color: #799bbc;
-  --ls-page-inline-code-bg-color: #f7f7f7;
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
+  --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #0000cd;
   --ls-icon-color: #646464;
-  --ls-search-icon-color: var(--ls-icon-color);
-  --ls-a-chosen-bg: #f7f7f7;
-  --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
+  --ls-search-icon-color: var(--ls-primary-text-color);
+  --ls-search-icon-hover-color: var(--ls-secondary-text-color);
+  --ls-a-chosen-bg: var(--ls-quaternary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
   --ls-highlight-color-gray: var(--color-gray-100);
@@ -176,12 +177,16 @@ html[data-theme='light'] {
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-800);
   --ls-warning-background-color: var(--color-yellow-100);
+  --ls-success-text-color: var(--color-green-800);
+  --ls-success-background-color: var(--color-green-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
+  --ls-header-button-background: rgba(15, 20, 25, 1);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
   --color-level-4: #d0e6fa;
   --color-level-5: #bbdaf6;
+  --color-level-6: #a7cef1;
 }
 
 html:not(.is-native-android) {
@@ -301,9 +306,10 @@ blockquote {
   font-size: 1rem;
 }
 
-input {
+input[type=text], input[type=password] {
   color: var(--ls-primary-text-color);
   background: transparent;
+  font-size: inherit;
 }
 
 summary {
@@ -508,7 +514,7 @@ i.ti {
 }
 
 .to-heading-button {
-  @apply px-1 !important;
+  @apply px-1 text-lg !important;
 }
 
 /** endregion **/
@@ -518,7 +524,7 @@ h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .title .page-icon {
@@ -629,7 +635,7 @@ span.warning, div.warning:not(.admonitionblock), p.warning {
 }
 
 .bg-warning {
-  background: var(--ls-waring-background-color);
+  background: var(--ls-warning-background-color);
 }
 
 a.error,
@@ -666,7 +672,7 @@ img.small {
 }
 
 a.tag {
-  font-size: 13px;
+  font-size: 0.9em;
   text-align: center;
   text-decoration: none;
   display: inline-block;
@@ -751,8 +757,8 @@ a.navigation {
 /* text mark/highlight */
 
 mark {
-  background: #fef3ac;
-  color: #262626;
+  background: var(--ls-page-mark-bg-color);
+  color: var(--ls-page-mark-color);
   padding: 2px 4px;
   border-radius: 3px;
 }
@@ -898,4 +904,14 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 
 .katex .tag {
     overflow-x: clip;
+}
+
+html.is-mobile {
+  h1.title {
+    margin-bottom: 10px;
+  }
+
+  #journals .journal-item:first-child {
+    margin-top: 5px;
+  }
 }

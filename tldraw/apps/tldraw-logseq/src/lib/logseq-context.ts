@@ -16,9 +16,26 @@ export interface LogseqContextValue {
     }>
     Breadcrumb: React.FC<{
       blockId: string
+      levelLimit?: number
+      endSeparator?: boolean
     }>
-    PageNameLink: React.FC<{
+    Tweet: React.FC<{
+      tweetId: string
+    }>
+    PageName: React.FC<{
       pageName: string
+    }>
+    BlockReference: React.FC<{
+      blockId: string
+    }>
+    BacklinksCount: React.FC<{
+      id: string
+      className?: string
+      options?: {
+        'portal?'?: boolean
+        'hover?'?: boolean
+        renderFn?: (open?: boolean, count?: number) => React.ReactNode
+      }
     }>
   }
   handlers: {
@@ -26,9 +43,14 @@ export interface LogseqContextValue {
       query: string,
       filters: { 'pages?': boolean; 'blocks?': boolean; 'files?': boolean }
     ) => Promise<SearchResult>
+    addNewWhiteboard: (pageName: string) => void
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
+    getBlockPageName: (uuid: string) => string
+    getRedirectPageName: (uuidOrPageName: string) => string
+    insertFirstPageBlock: (pageName: string) => string
     isWhiteboardPage: (pageName: string) => boolean
+    isMobile: () => boolean
     saveAsset: (file: File) => Promise<string>
     makeAssetUrl: (relativeUrl: string) => string
     sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void

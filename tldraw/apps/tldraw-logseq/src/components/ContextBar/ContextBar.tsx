@@ -1,3 +1,4 @@
+import * as Separator from '@radix-ui/react-separator'
 import {
   getContextBarTranslation,
   HTMLContainer,
@@ -5,11 +6,10 @@ import {
   useApp,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import * as Separator from '@radix-ui/react-separator'
 
 import * as React from 'react'
-import type { Shape } from '~lib/shapes'
-import { getContextBarActionsForTypes as getContextBarActionsForShapes } from './contextBarActionFactory'
+import type { Shape } from '../../lib'
+import { getContextBarActionsForShapes } from './contextBarActionFactory'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()
@@ -29,7 +29,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
     const elm = rContextBar.current
     if (!elm) return
     const size = rSize.current ?? [0, 0]
-    const [x, y] = getContextBarTranslation(size, { ...offsets, bottom: offsets.bottom - 32 })
+    const [x, y] = getContextBarTranslation(size, offsets)
     elm.style.setProperty('transform', `translateX(${x}px) translateY(${y}px)`)
   }, [offsets])
 

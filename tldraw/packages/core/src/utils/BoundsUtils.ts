@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-extra-semi */
 import { Vec } from '@tldraw/vec'
+import potpack from 'potpack'
 import type { TLShape } from '../lib'
 import {
   type TLBounds,
@@ -63,13 +64,16 @@ export class BoundsUtils {
   }
 
   /**
-   * Get whether the bounds of A contain the bounds of B. A perfect match will return true.
+   * Get whether the bounds of A contain the bounds/point of B. A perfect match will return true.
    *
    * @param a Bounds
-   * @param b Bounds
+   * @param b Bounds|point
    * @returns
    */
-  static boundsContain(a: TLBounds, b: TLBounds): boolean {
+  static boundsContain(a: TLBounds, b: TLBounds | number[]): boolean {
+    if (Array.isArray(b)) {
+      return a.minX < b[0] && a.minY < b[1] && a.maxY > b[1] && a.maxX > b[0]
+    }
     return a.minX < b.minX && a.minY < b.minY && a.maxY > b.maxY && a.maxX > b.maxX
   }
 
@@ -991,5 +995,38 @@ left past the initial left edge) then swap points on that axis.
     }
 
     return results
+  }
+
+  // pack shapes into a rectangle
+  static getPackedDistributions(shapes: TLShape[]) {
+    const commonBounds = BoundsUtils.getCommonBounds(shapes.map(({ bounds }) => bounds))
+    const origin = [commonBounds.minX, commonBounds.minY]
+    const shapesPosOriginal: Record<string, number[]> = Object.fromEntries(
+      shapes.map(s => [s.id, [s.bounds.minX, s.bounds.minY]])
+    )
+    const entries = shapes
+      .filter(s => !(s.props.handles?.start?.bindingId || s.props.handles?.end?.bindingId))
+      .map(shape => {
+        const bounds = shape.getBounds()
+        return {
+          id: shape.id,
+          w: bounds.width + 16,
+          h: bounds.height + 16,
+          x: bounds.minX,
+          y: bounds.minY,
+        }
+      })
+
+    potpack(entries)
+
+    const entriesToMove = entries.map(({ id, x, y }) => {
+      return {
+        id,
+        prev: shapesPosOriginal[id],
+        next: [x + origin[0], y + origin[1]],
+      }
+    })
+
+    return entriesToMove
   }
 }

@@ -1,55 +1,58 @@
 import type { TLReactShapeConstructor } from '@tldraw/react'
 import { BoxShape } from './BoxShape'
-import { DotShape } from './DotShape'
 import { EllipseShape } from './EllipseShape'
+import { GroupShape } from './GroupShape'
 import { HighlighterShape } from './HighlighterShape'
 import { HTMLShape } from './HTMLShape'
-import { ImageShape } from './ImageShape'
-import { VideoShape } from './VideoShape'
 import { IFrameShape } from './IFrameShape'
+import { ImageShape } from './ImageShape'
 import { LineShape } from './LineShape'
 import { LogseqPortalShape } from './LogseqPortalShape'
 import { PencilShape } from './PencilShape'
 import { PolygonShape } from './PolygonShape'
 import { TextShape } from './TextShape'
+import { VideoShape } from './VideoShape'
 import { YouTubeShape } from './YouTubeShape'
-import type { PenShape } from './PenShape'
+import { TweetShape } from './TweetShape'
 
 export type Shape =
+  // | PenShape
+  // | DotShape
   | BoxShape
-  | DotShape
   | EllipseShape
   | HighlighterShape
   | ImageShape
   | VideoShape
   | LineShape
-  | PenShape
   | PencilShape
   | PolygonShape
   | TextShape
   | YouTubeShape
+  | TweetShape
   | IFrameShape
   | HTMLShape
   | LogseqPortalShape
+  | GroupShape
 
 export * from './BoxShape'
 export * from './DotShape'
 export * from './EllipseShape'
 export * from './HighlighterShape'
 export * from './HTMLShape'
-export * from './ImageShape'
-export * from './VideoShape'
 export * from './IFrameShape'
+export * from './ImageShape'
 export * from './LineShape'
 export * from './LogseqPortalShape'
 export * from './PencilShape'
 export * from './PolygonShape'
 export * from './TextShape'
+export * from './VideoShape'
 export * from './YouTubeShape'
+export * from './TweetShape'
 
 export const shapes: TLReactShapeConstructor<Shape>[] = [
+  // DotShape,
   BoxShape,
-  DotShape,
   EllipseShape,
   HighlighterShape,
   ImageShape,
@@ -59,9 +62,11 @@ export const shapes: TLReactShapeConstructor<Shape>[] = [
   PolygonShape,
   TextShape,
   YouTubeShape,
+  TweetShape,
   IFrameShape,
   HTMLShape,
   LogseqPortalShape,
+  GroupShape,
 ]
 
 export type SizeLevel = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'

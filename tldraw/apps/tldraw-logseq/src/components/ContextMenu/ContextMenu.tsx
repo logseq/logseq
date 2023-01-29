@@ -7,8 +7,7 @@ import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
 import * as Separator from '@radix-ui/react-separator'
-
-const preventDefault = (e: Event) => e.stopPropagation()
+import { toJS } from 'mobx'
 
 interface ContextMenuProps {
   children: React.ReactNode
@@ -27,9 +26,28 @@ export const ContextMenu = observer(function ContextMenu({
     app.transition('select')
   }
 
+  const developerMode = React.useMemo(() => {
+    return (
+      window?.logseq?.api?.get_state_from_store?.('ui/developer-mode?') ||
+      process.env.NODE_ENV === 'development'
+    )
+  }, [])
+
   return (
-    <ReactContextMenu.Root>
-      <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
+    <ReactContextMenu.Root
+      onOpenChange={open => {
+        if (open && !app.isIn('select.contextMenu')) {
+          app.transition('select').selectedTool.transition('contextMenu')
+        } else if (!open && app.isIn('select.contextMenu')) {
+          app.selectedTool.transition('idle')
+        }
+      }}
+    >
+      <ReactContextMenu.Trigger
+        disabled={app.editingShape && Object.keys(app.editingShape).length !== 0}
+      >
+        {children}
+      </ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
         ref={rContent}
@@ -40,63 +58,125 @@ export const ContextMenu = observer(function ContextMenu({
       >
         <div>
           {app.selectedShapes?.size > 1 && (
-            <ReactContextMenu.Item>
-              <div className="tl-menu-button-row pb-0">
-                <Button
-                  title="Align left"
-                  onClick={() => runAndTransition(() => app.align(AlignType.Left))}
-                >
-                  <TablerIcon name="layout-align-left" />
-                </Button>
-                <Button
-                  title="Align center horizontally"
-                  onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
-                >
-                  <TablerIcon name="layout-align-center" />
-                </Button>
-                <Button
-                  title="Align right"
-                  onClick={() => runAndTransition(() => app.align(AlignType.Right))}
-                >
-                  <TablerIcon name="layout-align-right" />
-                </Button>
-                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button
-                  title="Distribute horizontally"
-                  onClick={() => runAndTransition(() => app.distribute(DistributeType.Horizontal))}
-                >
-                  <TablerIcon name="layout-distribute-vertical" />
-                </Button>
-              </div>
-              <div className="tl-menu-button-row pt-0">
-                <Button
-                  title="Align top"
-                  onClick={() => runAndTransition(() => app.align(AlignType.Top))}
-                >
-                  <TablerIcon name="layout-align-top" />
-                </Button>
-                <Button
-                  title="Align center vertically"
-                  onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
-                >
-                  <TablerIcon name="layout-align-middle" />
-                </Button>
-                <Button
-                  title="Align bottom"
-                  onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
-                >
-                  <TablerIcon name="layout-align-bottom" />
-                </Button>
-                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button
-                  title="Distribute vertically"
-                  onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
-                >
-                  <TablerIcon name="layout-distribute-horizontal" />
-                </Button>
-              </div>
+            <>
+              <ReactContextMenu.Item>
+                <div className="tl-menu-button-row pb-0">
+                  <Button
+                    tooltip="Align left"
+                    onClick={() => runAndTransition(() => app.align(AlignType.Left))}
+                  >
+                    <TablerIcon name="layout-align-left" />
+                  </Button>
+                  <Button
+                    tooltip="Align center horizontally"
+                    onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
+                  >
+                    <TablerIcon name="layout-align-center" />
+                  </Button>
+                  <Button
+                    tooltip="Align right"
+                    onClick={() => runAndTransition(() => app.align(AlignType.Right))}
+                  >
+                    <TablerIcon name="layout-align-right" />
+                  </Button>
+                  <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                  <Button
+                    tooltip="Distribute horizontally"
+                    onClick={() =>
+                      runAndTransition(() => app.distribute(DistributeType.Horizontal))
+                    }
+                  >
+                    <TablerIcon name="layout-distribute-vertical" />
+                  </Button>
+                </div>
+                <div className="tl-menu-button-row pt-0">
+                  <Button
+                    tooltip="Align top"
+                    onClick={() => runAndTransition(() => app.align(AlignType.Top))}
+                  >
+                    <TablerIcon name="layout-align-top" />
+                  </Button>
+                  <Button
+                    tooltip="Align center vertically"
+                    onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
+                  >
+                    <TablerIcon name="layout-align-middle" />
+                  </Button>
+                  <Button
+                    tooltip="Align bottom"
+                    onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
+                  >
+                    <TablerIcon name="layout-align-bottom" />
+                  </Button>
+                  <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                  <Button
+                    tooltip="Distribute vertically"
+                    onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
+                  >
+                    <TablerIcon name="layout-distribute-horizontal" />
+                  </Button>
+                </div>
+              </ReactContextMenu.Item>
               <ReactContextMenu.Separator className="menu-separator" />
-            </ReactContextMenu.Item>
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.packIntoRectangle)}
+              >
+                <TablerIcon className="tl-menu-icon" name="layout-grid" />
+                Pack into rectangle
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
+          {app.selectedShapes?.size > 0 && (
+            <>
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.api.zoomToSelection)}
+              >
+                Zoom to fit
+                <div className="tl-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
+          {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
+            app.selectedShapesArray.length > 1) && (
+            <>
+              {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.unGroup)}
+                >
+                  <TablerIcon className="tl-menu-icon" name="ungroup" />
+                  Ungroup
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
+              {app.selectedShapesArray.length > 1 && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.doGroup)}
+                >
+                  <TablerIcon className="tl-menu-icon" name="group" />
+                  Group
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
           )}
           {app.selectedShapes?.size > 0 && (
             <>
@@ -104,6 +184,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-menu-item"
                 onClick={() => runAndTransition(app.cut)}
               >
+                <TablerIcon className="tl-menu-icon" name="cut" />
                 Cut
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
@@ -115,6 +196,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-menu-item"
                 onClick={() => runAndTransition(app.copy)}
               >
+                <TablerIcon className="tl-menu-icon" name="copy" />
                 Copy
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
@@ -128,6 +210,7 @@ export const ContextMenu = observer(function ContextMenu({
             className="tl-menu-item"
             onClick={() => runAndTransition(app.paste)}
           >
+            <TablerIcon className="tl-menu-icon" name="clipboard" />
             Paste
             <div className="tl-menu-right-slot">
               <span className="keyboard-shortcut">
@@ -135,6 +218,19 @@ export const ContextMenu = observer(function ContextMenu({
               </span>
             </div>
           </ReactContextMenu.Item>
+          {app.selectedShapes?.size === 1 && (
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.paste(undefined, true))}
+            >
+              Paste as link
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+                </span>
+              </div>
+            </ReactContextMenu.Item>
+          )}
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
             className="tl-menu-item"
@@ -161,6 +257,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-menu-item"
                 onClick={() => runAndTransition(app.api.deleteShapes)}
               >
+                <TablerIcon className="tl-menu-icon" name="backspace" />
                 Delete
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
@@ -175,12 +272,14 @@ export const ContextMenu = observer(function ContextMenu({
                     className="tl-menu-item"
                     onClick={() => runAndTransition(app.flipHorizontal)}
                   >
+                    <TablerIcon className="tl-menu-icon" name="flip-horizontal" />
                     Flip horizontally
                   </ReactContextMenu.Item>
                   <ReactContextMenu.Item
                     className="tl-menu-item"
                     onClick={() => runAndTransition(app.flipVertical)}
                   >
+                    <TablerIcon className="tl-menu-icon" name="flip-vertical" />
                     Flip vertically
                   </ReactContextMenu.Item>
                 </>
@@ -208,6 +307,21 @@ export const ContextMenu = observer(function ContextMenu({
                   </span>
                 </div>
               </ReactContextMenu.Item>
+
+              {developerMode && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => {
+                    if (app.selectedShapesArray.length === 1) {
+                      console.log(toJS(app.selectedShapesArray[0].serialized))
+                    } else {
+                      console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))
+                    }
+                  }}
+                >
+                  (Dev) Print shape props
+                </ReactContextMenu.Item>
+              )}
             </>
           )}
         </div>

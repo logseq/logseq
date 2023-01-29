@@ -24,10 +24,15 @@
                  "logseq/version-files" "logseq/graphs-txid.edn"]]
     (when (string? path)
       (or
-       (some #(string/starts-with? path (str dir "/" %)) ignores)
-       (some #(string/includes? path (str "/" % "/")) ignores)
+       (some #(string/starts-with? path
+                                   (if (= dir "")
+                                     %
+                                     (str dir "/" %))) ignores)
+       (some #(string/includes? path (if (= dir "")
+                                       (str "/" % "/")
+                                       (str % "/"))) ignores)
        (some #(string/ends-with? path %)
-             [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
+             [".DS_Store" "logseq/graphs-txid.edn"])
       ;; hidden directory or file
        (let [relpath (path/relative dir path)]
          (or (re-find #"/\.[^.]+" relpath)
@@ -74,7 +79,7 @@
   (re-pattern (str "[" multiplatform-reserved-chars "]+")))
 
 (defn include-reserved-chars?
-  "Includes reserved charcters that would broken FS"
+  "Includes reserved characters that would broken FS"
   [s]
   (util/safe-re-find reserved-chars-pattern s))
 
@@ -136,22 +141,23 @@
 ;; Source: https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L930
 (defn legacy-dot-file-name-sanity
   [page-name]
-  (let [normalize (fn [s] (.normalize s "NFC"))
-        remove-boundary-slashes (fn [s] (when (string? s)
-                                          (let [s (if (= \/ (first s))
-                                                    (subs s 1)
-                                                    s)]
-                                            (if (= \/ (last s))
-                                              (subs s 0 (dec (count s)))
-                                              s))))
-        page (some-> page-name
-                     (remove-boundary-slashes)
-                      ;; Windows reserved path characters
-                     (string/replace #"[:\\*\\?\"<>|]+" "_")
-                      ;; for android filesystem compatiblity
-                     (string/replace #"[\\#|%]+" "_")
-                     (normalize))]
-    (string/replace page #"/" ".")))
+  (when (string? page-name)
+    (let [normalize (fn [s] (.normalize s "NFC"))
+          remove-boundary-slashes (fn [s] (when (string? s)
+                                            (let [s (if (= \/ (first s))
+                                                      (subs s 1)
+                                                      s)]
+                                              (if (= \/ (last s))
+                                                (subs s 0 (dec (count s)))
+                                                s))))
+          page (some-> page-name
+                       (remove-boundary-slashes)
+                       ;; Windows reserved path characters
+                       (string/replace #"[:\\*\\?\"<>|]+" "_")
+                       ;; for android filesystem compatibility
+                       (string/replace #"[\\#|%]+" "_")
+                       (normalize))]
+      (string/replace page #"/" "."))))
 
 ;; Rule of dir-ver 0 (after 2022 May)
 ;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/src/main/frontend/util.cljc#L927
@@ -160,7 +166,7 @@
   (let [url-encode #(some-> % str (js/encodeURIComponent) (.replace "+" "%20"))]
     (some-> page-name
             gp-util/page-name-sanity
-             ;; for android filesystem compatiblity
+             ;; for android filesystem compatibility
             (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
             (string/replace #"[:\\*\\?\"<>|]+" url-encode)
@@ -175,10 +181,12 @@
   ([title]
    (file-name-sanity title (state/get-filename-format)))
   ([title file-name-format]
-   (case file-name-format
-     :triple-lowbar (tri-lb-file-name-sanity title)
-     :legacy-dot    (legacy-dot-file-name-sanity title) ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this.
-     (legacy-url-file-name-sanity title))))
+   (when (string? title)
+     (case file-name-format
+       :triple-lowbar (tri-lb-file-name-sanity title)
+       ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this or show up in config, as it's not handled.
+       :legacy-dot    (legacy-dot-file-name-sanity title)
+       (legacy-url-file-name-sanity title)))))
 
 (defn create-title-property?
   [page-name]

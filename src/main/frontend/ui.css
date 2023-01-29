@@ -68,7 +68,7 @@
   .wrapper {
     @apply relative flex-shrink-0
     h-6 w-11 border-2 border-transparent flex
-    rounded-full cursor-pointer focus:outline-none focus:shadow-outline;
+    rounded-full cursor-pointer focus:outline-none;
   }
 
   .switcher {
@@ -87,7 +87,8 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center
+  top-12 sm:top-[calc(3vh+50px)];
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -106,16 +107,16 @@
     .panel-content {
       overflow-y: auto;
       overflow-x: hidden;
-      width: 94vw;
+      width: calc(94vw - 2rem);
       max-height: 89vh;
       padding: 2rem 1.5rem;
 
       @screen sm {
         overflow-y: overlay;
-        min-width: 720px;
         max-height: 85vh;
         padding: 2rem;
         width: auto;
+        min-width: 600px;
 
         .ls-card,
         .ls-search {
@@ -129,6 +130,10 @@
         .ls-search {
           width: var(--ls-main-content-max-width);
         }
+      }
+
+      @screen md {
+          min-width: 720px;
       }
     }
   }
@@ -225,7 +230,23 @@ html.is-native-iphone-without-notch
 
 html.is-mobile {
   .ui__modal {
-    @apply bottom-0 inset-x-0;
+    @apply bottom-0 inset-x-0 top-20;
+
+    &[label="ls-modal-search"] {
+      .panel-content {
+        padding-bottom: 0;
+      }
+
+      .ls-search {
+        padding-bottom: 0;
+      }
+    }
+  }
+
+  .ui__modal-panel .panel-content {
+    width: calc(98vw - 2rem);
+    max-width: var(--ls-main-content-max-width);
+    padding-top: 24px;
   }
 }
 
@@ -243,7 +264,7 @@ html.is-mobile {
 }
 
 .ui__button {
-  @apply flex items-center px-3 py-2 border border-transparent
+  @apply inline-flex items-center px-3 py-2 border border-transparent
   text-sm leading-4 font-medium rounded-md text-white
   focus:outline-none transition ease-in-out duration-150;
 
@@ -312,8 +333,8 @@ html.is-mobile {
 }
 
 .form-select {
-  @apply block w-full pl-3 pr-10 py-2 text-base leading-6
-  border-gray-300 focus:outline-none focus:shadow-outline-blue sm:text-sm sm:leading-5;
+  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
+  border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
   background-color: var(--ls-primary-background-color, transparent);
   background-repeat: no-repeat;
@@ -327,7 +348,7 @@ html.is-mobile {
 
 .form-input {
   @apply block w-full pl-2
-  sm:text-sm sm:leading-5;
+  sm:text-sm sm:leading-5 rounded;
 
   border-width: 1px;
   border-color: var(--ls-border-color);
@@ -358,10 +379,10 @@ html.is-mobile {
 }
 
 .type-icon {
-  @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
+  @apply text-base text-center flex items-center justify-center rounded border mr-2 relative;
 
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-color: var(--ls-primary-background-color);
   overflow: hidden;
@@ -376,15 +397,5 @@ html.is-mobile {
     @apply block absolute inset-0 ;
     background: var(--ls-primary-background-color);
     content: " ";
-  }
-
-  &.highlight {
-    color: var(--ls-selection-text-color);
-    border-color: var(--ls-selection-background-color);
-
-    &:before {
-      opacity: 0.5;
-      background: var(--ls-selection-background-color);
-    }
   }
 }

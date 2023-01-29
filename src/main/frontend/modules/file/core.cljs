@@ -4,10 +4,12 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.file :as file-handler]))
+            [frontend.handler.file :as file-handler]
+            [frontend.db.model :as model]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -110,11 +112,12 @@
       (let [format (name (get page :block/format
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
-            whiteboard-page? (= "whiteboard" (:block/type page))
+            whiteboard-page? (model/whiteboard-page? page)
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
-            filename (if journal-page?
-                       (date/date->file-name journal-page?)
+            journal-title (date/normalize-journal-title title)
+            filename (if (and journal-page? (not (string/blank? journal-title)))
+                       (date/date->file-name journal-title)
                        (-> (or (:block/original-name page) (:block/name page))
                            (fs-util/file-name-sanity)))
             sub-dir (cond
@@ -133,25 +136,31 @@
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
 (defn save-tree-aux!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   (let [page-block (db/pull (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks tree
-                                   :pages (list (remove-transit-ids page-block))})
-                          (tree->file-content tree {:init-level init-level}))
-            files [[file-path new-content]]
-            repo (state/get-current-repo)]
-        (file-handler/alter-files-handler! repo files {} {}))
+                          (->
+                           (up/ugly-pr-str {:blocks tree
+                                            :pages (list (remove-transit-ids page-block))})
+                           (string/triml))
+                          (tree->file-content tree {:init-level init-level}))]
+        (if (and (string/blank? new-content)
+                 (not blocks-just-deleted?))
+          (state/pub-event! [:capture-error {:error (js/Error. "Empty content")
+                                             :payload {:file-path file-path}}])
+          (let [files [[file-path new-content]]
+                repo (state/get-current-repo)]
+            (file-handler/alter-files-handler! repo files {} {}))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   {:pre [(map? page-block)]}
-  (let [ok-handler #(save-tree-aux! page-block tree)
+  (let [ok-handler #(save-tree-aux! page-block tree blocks-just-deleted?)
         file (or (:block/file page-block)
                  (when-let [page (:db/id (:block/page page-block))]
                    (:block/file (db-utils/entity page))))]

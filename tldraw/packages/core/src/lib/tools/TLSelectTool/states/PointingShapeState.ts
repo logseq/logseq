@@ -18,15 +18,12 @@ export class PointingShapeState<
       selectedIds,
       inputs: { shiftKey },
     } = this.app
+    const shape = this.app.getParentGroup(info.shape) ?? info.shape
     if (shiftKey) {
-      this.app.setSelectedShapes([...Array.from(selectedIds.values()), info.shape.id])
+      this.app.setSelectedShapes([...Array.from(selectedIds.values()), shape.id])
     } else {
-      this.app.setSelectedShapes([info.shape])
+      this.app.setSelectedShapes([shape])
     }
-  }
-
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
   }
 
   onPointerMove: TLEvents<S>['pointer'] = () => {

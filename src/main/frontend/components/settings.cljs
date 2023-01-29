@@ -2,9 +2,11 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.components.plugins :as plugins]
+            [frontend.components.assets :as assets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -75,7 +77,21 @@
                :else
                nil)]
 
-       [:div.text-sm.opacity-50 (str "Version " version)]]]
+       [:div.text-sm.cursor
+        {:title (str "Revision: " config/revison)
+         :on-click (fn []
+                     (notification/show! [:div "Current Revision: "
+                                          [:a {:target "_blank"
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
+                                           config/revison]]
+                                         :info
+                                         false))}
+        version]
+
+       [:a.text-sm.fade-link.underline.inline
+        {:target "_blank"
+         :href "https://docs.logseq.com/#/page/changelog"}
+        "What's new?"]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
@@ -196,7 +212,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
-           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
+           (p/then (ipc/ipc :userAppCfgs :spell-check (not enabled?))
                    #(when (js/confirm (t :relaunch-confirm-to-work))
                       (js/logseq.api.relaunch))))
          true)]]]))
@@ -213,7 +229,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc "userAppCfgs" :git/disable-auto-commit? enabled?))
+           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -233,7 +249,7 @@
                                      (< 0 value (inc 600)))
                               (do
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
                                  [:div "Invalid value! Must be a number between 1 and 600."]
@@ -247,7 +263,7 @@
             (t :settings-page/auto-updater)
             enabled?
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-              (ipc/ipc "userAppCfgs" :auto-update (not enabled?))))))
+              (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
   (let [on-change (fn [e]
@@ -298,7 +314,12 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings-page/custom-date-format)]
+    (t :settings-page/custom-date-format)
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
+               :class       "tippy-hover ml-2"
+               :interactive true
+               :disabled    false}
+              (svg/info))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -344,6 +365,18 @@
                      (svg/info))]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
+
+(defn showing-full-blocks [t show-full-blocks?]
+  (toggle "show_full_blocks"
+          (t :settings-page/show-full-blocks)
+          show-full-blocks?
+          config-handler/toggle-show-full-blocks!))
+
+(defn preferred-pasting-file [t preferred-pasting-file?]
+  (toggle "preferred_pasting_file"
+          (t :settings-page/preferred-pasting-file)
+          preferred-pasting-file?
+          config-handler/toggle-preferred-pasting-file!))
 
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
@@ -409,29 +442,12 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
-(defn encryption-row [enable-encryption?]
-  (toggle "enable_encryption"
-          (t :settings-page/enable-encryption)
-          enable-encryption?
-          #(let [value (not enable-encryption?)]
-             (config-handler/set-config! :feature/enable-encryption? value)
-             (when value
-               (state/close-modal!)
-               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
-                              100)))
-          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
-           [:span "You can use "]
-           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
-                :target "_blank"}
-            "logseq-encrypt-ui"]
-           [:span " to decrypt your graph."]]))
-
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
      :button-label (t :settings-page/shortcut-settings)
-     :on-click      #((state/close-settings!)
+     :on-click      (fn []
+                      (state/close-settings!)
                       (route-handler/redirect! {:to :shortcut-setting}))
      :-for         "customize_shortcuts"}))
 
@@ -443,7 +459,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Settings"
+       (t :settings)
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
@@ -466,7 +482,7 @@
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
                    (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
+          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
 (defn clear-cache-row [t]
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
@@ -494,7 +510,7 @@
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
-                     (storage/set :lsp-core-enabled v))]
+                     (storage/set ::storage-spec/lsp-core-enabled v))]
     [:div.flex.items-center
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
@@ -505,6 +521,23 @@
                     :on-click #(js/logseq.api.relaunch)
            :small? true :intent "logseq")]])]))
 
+(rum/defc http-server-enabled-switcher
+  [t]
+  (let [[value _] (rum/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
+        [on? set-on?] (rum/use-state value)
+        on-toggle #(let [v (not on?)]
+                     (set-on? v)
+                     (storage/set ::storage-spec/http-server-enabled v))]
+    [:div.flex.items-center
+     (ui/toggle on? on-toggle true)
+     (when (not= (boolean value) on?)
+       [:div.relative.opacity-70
+        [:span.absolute.whitespace-nowrap
+         {:style {:top -18 :left 10}}
+         (ui/button (t :plugin/restart)
+                    :on-click #(js/logseq.api.relaunch)
+                    :small? true :intent "logseq")]])]))
+
 (rum/defc flashcards-enabled-switcher
   [enable-flashcards?]
   (ui/toggle enable-flashcards?
@@ -514,10 +547,13 @@
              true))
 
 (rum/defc user-proxy-settings
-  [{:keys [protocol host port] :as agent-opts}]
-  (ui/button [:span
-              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
-                [:strong.pr-1 e])
+  [{:keys [type protocol host port] :as agent-opts}]
+  (ui/button [:span.flex.items-center
+              [:strong.pr-1
+               (case type
+                 "system" "System Default"
+                 "direct" "Direct"
+                 (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :small? true
              :on-click #(state/set-sub-modal!
@@ -528,6 +564,11 @@
   (row-with-button-action
    {:left-label (t :settings-page/plugin-system)
     :action (plugin-enabled-switcher t)}))
+
+(defn http-server-switcher-row []
+  (row-with-button-action
+   {:left-label "HTTP APIs server"
+    :action (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
@@ -572,6 +613,8 @@
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
+        show-full-blocks? (state/show-full-blocks?)
+        preferred-pasting-file? (state/preferred-pasting-file?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -583,8 +626,11 @@
      (workflow-row t preferred-workflow)
      ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
+
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
+     (showing-full-blocks t show-full-blocks?)
+     (preferred-pasting-file t preferred-pasting-file?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
@@ -628,15 +674,13 @@
 
      (ui/admonition
        :warning
-       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])]))
+       [:p (t :settings-page/clear-cache-warning)])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
              (fn []
-               (let [value (not enabled?)]
-                 (storage/set :logseq-sync-enabled value)
-                 (state/set-state! :feature/enable-sync? value)))
+               (file-sync-handler/set-sync-enabled! (not enabled?)))
              true))
 
 (defn sync-switcher-row [enabled?]
@@ -649,7 +693,8 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+                 (when (user-handler/feature-available? :whiteboard)
+                   (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 
 (defn whiteboards-switcher-row [enabled?]
@@ -661,7 +706,6 @@
   []
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
-        enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
@@ -681,34 +725,54 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/feature-plugin-system-on?)
+       (plugin-system-switcher-row))
+     (when (and (util/electron?) (state/developer-mode?))
+       (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
-     (encryption-row enable-encryption?)
+     (when-not web-platform?
+       [:div.mt-1.sm:mt-0.sm:col-span-2
+        [:hr]
+        (if logged-in?
+          [:div
+           (user-handler/email)
+           [:p (ui/button (t :logout) {:class "p-1"
+                                       :icon "logout"
+                                       :on-click user-handler/logout})]]
+          [:div
+           (ui/button (t :login) {:class "p-1"
+                                  :icon "login"
+                                  :on-click (fn []
+                                              (state/close-settings!)
+                                              (js/window.open config/LOGIN-URL))})
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
 
      (when-not web-platform?
        [:<>
-        [:hr]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          (if logged-in?
-            [:div 
-              (user-handler/email)
-              [:p (ui/button (t :logout) {:class "p-1"
-                                          :icon "logout"
-                                          :on-click user-handler/logout})]]
-            [:div
-             (ui/button (t :login) {:class "p-1"
-                                    :icon "login"
-                                    :on-click (fn []
-                                                (state/close-settings!)
-                                                (js/window.open config/LOGIN-URL))})
-             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
-         (whiteboards-switcher-row enable-whiteboards?)]])]))
+         [:div.text-sm
+          "Click"
+          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
+                    :target "_blank"}
+           "here"]
+          "for instructions on how to set up and use Sync."]
+         (whiteboards-switcher-row enable-whiteboards?)]])
+
+     ;; (when-not web-platform?
+     ;;   [:<>
+     ;;    [:hr]
+     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
+     ;;    [:div.flex.flex-col.gap-4
+     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+     ;;     ;; features
+     ;;     ]])
+     ]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)
@@ -725,7 +789,7 @@
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
-        plugins-of-settings (and plugin-handler/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
+        plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
 
     [:div#settings.cp__settings-main
@@ -737,15 +801,21 @@
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
+
                (when (and
                       (util/electron?)
                       (not (file-sync-handler/synced-file-graph? current-repo)))
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 18}
-                                                                                             :extension? true})]
+                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+
+               ;; (when (util/electron?)
+               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+
+               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
+                                                                                             :style {:margin-left 2}})]
+
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
@@ -778,6 +848,9 @@
 
          :git
          (settings-git)
+
+         :assets
+         (assets/settings-content)
 
          :advanced
          (settings-advanced current-repo)

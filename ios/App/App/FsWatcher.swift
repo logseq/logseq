@@ -12,8 +12,8 @@ import Capacitor
 
 @objc(FsWatcher)
 public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
-    private var watcher: PollingWatcher? = nil
-    private var baseUrl: URL? = nil
+    private var watcher: PollingWatcher?
+    private var baseUrl: URL?
 
     override public func load() {
         print("debug FsWatcher iOS plugin loaded!")
@@ -28,6 +28,7 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
             self.baseUrl = url
             self.watcher = PollingWatcher(at: url)
             self.watcher?.delegate = self
+            self.watcher?.start()
 
             call.resolve(["ok": true])
 
@@ -51,11 +52,11 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.notifyListeners("watcher", data: ["event": "unlink",
                                                        "dir": self.baseUrl?.description as Any,
-                                                       "path": url.description,
-                                                      ])
+                                                       "path": url.description
+                ])
             }
         case .Add, .Change:
-            var content: String? = nil
+            var content: String?
             if url.shouldNotifyWithContent() {
                 content = try? String(contentsOf: url, encoding: .utf8)
             }
@@ -66,7 +67,7 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
                                                    "stat": ["mtime": metadata?.contentModificationTimestamp ?? 0,
                                                             "ctime": metadata?.creationTimestamp ?? 0,
                                                             "size": metadata?.fileSize as Any]
-                                                  ])
+            ])
 
         case .Error:
             // TODO: handle error?
@@ -83,7 +84,7 @@ extension URL {
         if self.lastPathComponent.starts(with: ".") {
             return true
         }
-        if self.absoluteString.contains("/logseq/bak/") || self.absoluteString.contains("/logseq/version-files/"){
+        if self.absoluteString.contains("/logseq/bak/") || self.absoluteString.contains("/logseq/version-files/") {
             return true
         }
         if self.lastPathComponent == "graphs-txid.edn" || self.lastPathComponent == "broken-config.edn" {
@@ -134,7 +135,6 @@ public enum PollingWatcherEvent {
     }
 }
 
-
 public struct SimpleFileMetadata: CustomStringConvertible, Equatable {
     var contentModificationTimestamp: Double
     var creationTimestamp: Double
@@ -142,7 +142,7 @@ public struct SimpleFileMetadata: CustomStringConvertible, Equatable {
 
     public init?(of fileURL: URL) {
         do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey, .creationDateKey])
+            let fileAttributes = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey, .creationDateKey])
             if fileAttributes.isRegularFile! {
                 contentModificationTimestamp = fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0
                 creationTimestamp = fileAttributes.creationDate?.timeIntervalSince1970 ?? 0.0
@@ -163,20 +163,24 @@ public struct SimpleFileMetadata: CustomStringConvertible, Equatable {
 public class PollingWatcher {
     private let url: URL
     private var timer: DispatchSourceTimer?
-    public var delegate: PollingWatcherDelegate? = nil
+    public var delegate: PollingWatcherDelegate?
     private var metaDb: [URL: SimpleFileMetadata] = [:]
 
     public init?(at: URL) {
         url = at
-
+    }
+    
+    public func start() {
+        
+        self.tick(notify: false)
+        
         let queue = DispatchQueue(label: Bundle.main.bundleIdentifier! + ".timer")
         timer = DispatchSource.makeTimerSource(queue: queue)
         timer!.setEventHandler(qos: .background, flags: []) { [weak self] in
-            self?.tick()
+            self?.tick(notify: true)
         }
         timer!.schedule(deadline: .now())
         timer!.resume()
-
     }
 
     deinit {
@@ -188,7 +192,7 @@ public class PollingWatcher {
         timer = nil
     }
 
-    private func tick() {
+    private func tick(notify: Bool) {
         // let startTime = DispatchTime.now()
 
         if let enumerator = FileManager.default.enumerator(
@@ -224,7 +228,11 @@ public class PollingWatcher {
                 }
             }
 
-            self.updateMetaDb(with: newMetaDb)
+            if notify {
+                self.updateMetaDb(with: newMetaDb)
+            } else {
+                self.metaDb = newMetaDb
+            }
         }
 
         // let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds

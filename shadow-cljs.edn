@@ -16,9 +16,6 @@
                         :code-editor
                         {:entries    [frontend.extensions.code]
                          :depends-on #{:main}}
-                        :age-encryption
-                        {:entries    [frontend.extensions.age-encryption]
-                         :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
                          :depends-on #{:main}}
@@ -36,9 +33,14 @@
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
+        :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.config/ENABLE-PLUGINS   #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
-                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]}
+                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
+                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
+                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
@@ -73,6 +75,13 @@
          :compiler-options {:static-fns false}
          :main            frontend.test.frontend-node-test-runner/main}
 
+  :gen-malli-kondo-config {:target :node-script
+                           :closure-defines {frontend.util/NODETEST true}
+                           :devtools        {:enabled false}
+                           :compiler-options {:static-fns false}
+                           :output-to "static/gen-malli-kondo-config.js"
+                           :main gen-malli-kondo-config.core/main}
+
   :publishing {:target        :browser
                :module-loader true
                :js-options    {:ignore-asset-requires true}
@@ -80,9 +89,6 @@
                                {:init-fn    frontend.publishing/init}
                                :code-editor
                                {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :age-encryption
-                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]

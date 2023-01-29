@@ -10,8 +10,8 @@
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]))
-
+            [frontend.util :as util]
+            [cljs-bean.core :as bean]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -23,8 +23,13 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (capacitor-fs/ios-ensure-documents!)]
-    (println "iOS container path: " (js->clj path)))
+  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
+    (when-let [path' (bean/->clj path)]
+      (state/set-state! :mobile/container-urls
+                        (update-vals path' #(cond-> %
+                                              string?
+                                              (js/decodeURIComponent))))
+      (println "iOS container path: " path')))
 
   (state/pub-event! [:validate-appId])
 
@@ -37,9 +42,17 @@
 
   (mobile-util/check-ios-zoomed-display)
 
+  ;; keep this the same logic as src/main/electron/listener.cljs
   (.addListener mobile-util/file-sync "debug"
                 (fn [event]
-                  (js/console.log "🔄" event))))
+                  (js/console.log "🔄" event)
+                  (let [event (js->clj event :keywordize-keys true)
+                        payload (:data event)]
+                    (when (or (= (:event event) "download:progress")
+                              (= (:event event) "upload:progress"))
+                      (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))))
+
+
 
 (defn- android-init
   "Initialize Android-specified event listeners"
@@ -66,15 +79,22 @@
                        (js/window.history.back)))))
 
   (.addEventListener js/window "sendIntentReceived"
-                       #(intent/handle-received)))
+                     #(intent/handle-received))
+
+  (.addListener mobile-util/file-sync "progress"
+                (fn [event]
+                  (js/console.log "🔄" event)
+                  (let [event (js->clj event :keywordize-keys true)]
+                    (state/set-state! [:file-sync/graph-state (:graphUUID event) :file-sync/progress (:file event)] event)))))
+
 (defn- app-state-change-handler
   [^js state]
   (println :debug :app-state-change-handler state (js/Date.))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
-      (state/set-mobile-app-state-change is-active?)
       (when-not is-active?
-        (editor-handler/save-current-block!)))))
+        (editor-handler/save-current-block!))
+      (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
@@ -92,7 +112,7 @@
 
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
-                  (state/pub-event! [:file-watcher/changed event])))
+                  (state/pub-event! [:mobile-file-watcher/changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]

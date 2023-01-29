@@ -12,6 +12,7 @@
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -35,6 +36,8 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(declare icon)
+
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
@@ -53,12 +56,13 @@
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
 (def block-background-colors
-  ["gray"
+  ["yellow"
    "red"
-   "yellow"
+   "pink"
    "green"
    "blue"
-   "purple"])
+   "purple"
+   "gray"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -158,7 +162,7 @@
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
      options
-     [:span child]
+     [:span.flex-1 child]
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
@@ -214,29 +218,15 @@
     (let [svg
           (case status
             :success
-            [:svg.h-6.w-6.text-green-400
-             {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
-             [:path
-              {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-               :stroke-width    "2"
-               :stroke-linejoin "round"
-               :stroke-linecap  "round"}]]
-            :warning
-            [:svg.h-6.w-6.text-yellow-500
-             {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
-             [:path
-              {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-               :stroke-width    "2"
-               :stroke-linejoin "round"
-               :stroke-linecap  "round"}]]
+            (icon "circle-check" {:class "text-green-500" :size "22"})
 
-            [:svg.h-6.w-6.text-red-500
-             {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
-             [:path
-              {:clip-rule "evenodd"
-               :d
-               "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-               :fill-rule "evenodd"}]])]
+            :warning
+            (icon "alert-circle" {:class "text-yellow-500" :size "22"})
+
+            :error
+            (icon "circle-x" {:class "text-red-500" :size "22"})
+
+            (icon "info-circle" {:class "text-indigo-500" :size "22"}))]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -256,34 +246,49 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
+            [:div.text-sm.leading-6.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
-             {:on-click (fn []
+             {:aria-label "Close"
+              :on-click (fn []
                           (notification/clear! uid))}
-             [:svg.h-5.w-5
-              {:fill "currentColor", :view-Box "0 0 20 20"}
-              [:path
-               {:clip-rule "evenodd"
-                :d
-                "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                :fill-rule "evenodd"}]]]]]]]]])))
+
+             (icon "x" {:fill "currentColor"})]]]]]]])))
+
+(declare button)
+
+(rum/defc notification-clear-all
+  []
+  [:div.ui__notifications-content
+   [:div.pointer-events-auto
+    (button (t :notification/clear-all)
+     :intent "logseq"
+     :on-click (fn []
+                 (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
     (transition-group
      {:class-name "notifications ui__notifications"}
-     (doall (map (fn [el]
-                   (let [k (first el)
-                         v (second el)]
-                     (css-transition
-                      {:timeout 100
-                       :key     (name k)}
-                      (fn [state]
-                        (notification-content state (:content v) (:status v) k)))))
-                 contents)))))
+     (let [notifications (map (fn [el]
+                                (let [k (first el)
+                                      v (second el)]
+                                  (css-transition
+                                   {:timeout 100
+                                    :key     (name k)}
+                                   (fn [state]
+                                     (notification-content state (:content v) (:status v) k)))))
+                           contents)
+           clear-all (when (> (count contents) 1)
+                       (css-transition
+                        {:timeout 100
+                         :k       "clear-all"}
+                        (fn [_state]
+                          (notification-clear-all))))
+           items (if clear-all (cons clear-all notifications) notifications)]
+       (doall items)))))
 
 (rum/defc humanity-time-ago
   [input opts]
@@ -328,6 +333,7 @@
 (defn inject-document-devices-envs!
   []
   (let [^js cl (.-classList js/document.documentElement)]
+    (when config/publishing? (.add cl "is-publish-mode"))
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))
@@ -359,12 +365,14 @@
       style)))
 
 (defn apply-custom-theme-effect! [theme]
-  (when plugin-handler/lsp-enabled?
+  (when config/lsp-enabled?
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
-      (when-let [url (:url custom-theme)]
+      ;; If the name is nil, the user has not set a custom theme (initially {:mode light/dark}).
+      ;; The url is not used because the default theme does not have an url.
+      (if (some? (:name custom-theme))
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:emit true}))
-        (state/set-state! :plugin/selected-theme url)))))
+                                     (bean/->js {:emit false}))
+        (state/set-state! :plugin/selected-theme (:url custom-theme))))))
 
 (defn setup-system-theme-effect!
   []
@@ -403,6 +411,13 @@
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
+(defn setup-viewport-listeners! []
+  (when-let [^js vw (gobj/get js/window "visualViewport")]
+    (let [handler #(state/set-state! :ui/viewport {:width (.-width vw) :height (.-height vw) :scale (.-scale vw)})]
+      (.addEventListener js/window.visualViewport "resize" handler)
+      (handler)
+      #(.removeEventListener js/window.visualViewport "resize" handler))))
+
 (defonce last-scroll-top (atom 0))
 
 (defn scroll-down?
@@ -428,7 +443,7 @@
                           (bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
-    (when (and down? bottom-reached? on-load)
+    (when (and bottom-reached? on-load)
       (on-load))
     (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
@@ -638,6 +653,8 @@
         [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
           {:type     "button"
+           :autoFocus "on"
+           :class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)
                            (on-confirm % {:close-fn close-fn
                                           :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))}
@@ -794,20 +811,24 @@
   block-error)
 
 (rum/defc select
-  [options on-change class]
-  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
-   {:class     (or class "form-select")
-    :style     {:padding "0 0 0 6px"}
-    :on-change (fn [e]
-                 (let [value (util/evalue e)]
-                   (on-change value)))}
-   (for [{:keys [label value selected]} options]
-     [:option (cond->
-               {:key   label
-                :default-value (or value label)}
-                selected
-                (assoc :selected selected))
-      label])])
+  ([options on-change]
+   (select options on-change nil))
+  ([options on-change class]
+   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+    {:class     (or class "form-select")
+     :on-change (fn [e]
+                  (let [value (util/evalue e)]
+                    (on-change value)))}
+    (for [{:keys [label value selected disabled]
+           :or {selected false disabled false}} options]
+      [:option (cond->
+                {:key   label
+                 :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
+                 disabled
+                 (assoc :disabled disabled)
+                 selected
+                 (assoc :selected selected))
+       label])]))
 
 (rum/defc radio-list
   [options on-change class]
@@ -926,45 +947,47 @@
   (memoize (fn [klass] (r/adapt-class klass))))
 
 (defn icon
-  ([class] (icon class nil))
-  ([class {:keys [extension? font?] :as opts}]
-   (when-not (string/blank? class)
+  ([name] (icon name nil))
+  ([name {:keys [extension? font? class] :as opts}]
+   (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
-                     (util/format
-                      (str "%s-" class
-                           (when (:class opts)
-                             (str " " (string/trim (:class opts)))))
-                      (if extension? "tie tie" "ti ti"))}
-                    (dissoc opts :class :extension?))]
+                                 (util/format
+                                  (str "%s-" name
+                                       (when (:class opts)
+                                         (str " " (string/trim (:class opts)))))
+                                  (if extension? "tie tie" "ti ti"))}
+                                (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
+         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
-              {:class (str "ls-icon-" class)}
-              (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+              {:class (str "ls-icon-" name " " class)}
+              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large? title icon]
+  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
            :or   {small? false large? false}
            :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
+  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
+        klass (if large? (str klass ".text-base") klass)
+        klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
       {:type  "button"
        :title title
+       :disabled disabled?
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
         {:on-click (fn []
                      (util/open-url href)
                      (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
 (rum/defc type-icon

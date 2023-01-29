@@ -71,7 +71,7 @@ h1.title.whiteboard-dashboard-title {
 .dashboard-create-card:hover {
   background-color: var(--ls-selection-background-color);
   box-shadow: 0 4px 8px -2px rgba(16, 24, 40, 0.1),
-    0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  0 2px 4px -2px rgba(16, 24, 40, 0.06);
   border: 1px solid var(--ls-page-blockquote-border-color);
 }
 
@@ -90,7 +90,6 @@ h1.title.whiteboard-dashboard-title {
 
 .single-block > :is(.block-content-wrapper, .editor-wrapper) {
   width: 100% !important;
-  background-color: var(--ls-secondary-background-color);
   padding: 8px 12px;
   border-radius: 8px;
 }
@@ -101,6 +100,15 @@ h1.title.whiteboard-dashboard-title {
 
 .tl-logseq-cp-container > .ls-block {
   padding: 0;
+}
+
+input.tl-text-input {
+  border: none;
+  padding: 0;
+
+  &:focus {
+    box-shadow: none;
+  }
 }
 
 /**
@@ -117,6 +125,7 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .whiteboard-page-refs-count {
+  @apply whitespace-nowrap;
   border-radius: 8px;
   background: var(--ls-primary-background-color);
 }
@@ -129,7 +138,7 @@ h1.title.whiteboard-dashboard-title {
 .whiteboard-page-title-root {
   @apply shadow-md flex items-center;
   position: absolute;
-  left: 53px;
+  left: 2.5rem;
   top: 0;
   background: var(--ls-primary-background-color);
   padding: 4px;
@@ -140,11 +149,32 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .whiteboard-page-title {
-  @apply inline-flex px-2 py-1;
+  @apply px-2 py-1 flex-1 overflow-ellipsis overflow-hidden;
+
   font-size: 20px;
   border-radius: 8px;
   border: 1px solid transparent;
   background: var(--ls-secondary-background-color);
+
+  &-root {
+    max-width: 70%;
+    overflow: hidden;
+  }
+
+  .page-title-sizer-wrapper {
+    width: calc(100% - 20px);
+
+    > .title {
+      @apply whitespace-nowrap min-w-[80px];
+    }
+  }
+
+  .edit-input {
+    width: 100%;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
 }
 
 .whiteboard-page-title:hover {
@@ -154,4 +184,85 @@ h1.title.whiteboard-dashboard-title {
 .whiteboard-page-title:focus-within {
   border: 1px solid var(--ls-border-color);
   box-shadow: 0 0 0 4px var(--ls-focus-ring-color);
+}
+
+.whiteboard-page-refs-count-label {
+  @apply flex gap-1 items-center;
+}
+
+.whiteboard-page-refs {
+  @apply flex-shrink-0;
+}
+
+.whiteboard-page[data-breakpoint=sm] {
+  .whiteboard-page-refs-count-label {
+    display: none;
+  }
+
+  .whiteboard-page-title-root {
+    left: 0.5rem;
+  }
+
+  .tl-action-bar {
+    left: 0.5rem;
+    bottom: 0.5rem;
+  }
+
+  .tl-primary-tools {
+    right: 0;
+  }
+}
+
+/* disable user select globally for whiteboard on iOS/iPad. Is there a better option? */
+html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.cp__whiteboard-welcome {
+  > .head-bg {
+    @apply flex m-auto mb-10 w-auto sm:w-[500px];
+
+    background-image: url("../img/whiteboard-welcome-dark.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    padding-top: 86px;
+    max-width: 90vw;
+
+    > strong {
+      @apply block rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5
+      m-auto translate-y-8 uppercase;
+
+      background-color: var(--ls-link-text-color);
+      color: var(--ls-primary-background-color);
+    }
+  }
+
+  > h1 {
+    color: var(--ls-title-text-color);
+  }
+
+  > h1, p {
+    @apply flex justify-center text-center;
+  }
+
+  > p {
+    @apply text-sm mx-10;
+
+    max-width: 540px;
+  }
+}
+
+
+html[data-theme='light'] {
+  .cp__whiteboard-welcome {
+    > .head-bg {
+      background-image: url("../img/whiteboard-welcome-light.png");
+    }
+  }
 }

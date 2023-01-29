@@ -42,7 +42,7 @@
                              (fs/read-file dir path)))
                          (fn [content]
                            (when (not-empty content)
-                             (try (cljs.reader/read-string content)
+                             (try (reader/read-string content)
                                   (catch :default e
                                     (println (util/format "read persist-var failed: %s" (load-path location)))
                                     (js/console.dir e)))))

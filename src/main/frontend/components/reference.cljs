@@ -59,7 +59,7 @@
     [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-       (ui/icon "filter" {:style {:fontSize 20}})]
+       (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
@@ -127,12 +127,12 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-80 (str
-                                 (when (seq filters)
-                                   (str filter-n " of "))
-                                 total
-                                 " Linked Reference"
-                                 (when (> total 1) "s"))]
+      [:h2.font-medium (str
+                        (when (seq filters)
+                          (str filter-n " of "))
+                        total
+                        " Linked Reference"
+                        (when (> total 1) "s"))]
       [:a.filter.fade-link
        {:title "Filter"
         :on-mouse-over (fn [_e]
@@ -146,14 +146,14 @@
                                       {:center? true}))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
-                                   ""
+                                   "opacity-60 hover:opacity-100"
                                    (every? true? (vals filter-state))
                                    "text-success"
                                    (every? false? (vals filter-state))
                                    "text-error"
                                    :else
                                    "text-warning")
-                          :style {:fontSize 24}})]]
+                          :size  22})]]
 
      (fn []
        (references-inner page-name filters filtered-ref-blocks))
@@ -229,7 +229,7 @@
                      frequencies)]
       (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
-        [:div.references.flex-1.flex-row
+        [:div.references.page-linked.flex-1.flex-row
          [:div.content.pt-6
           (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
@@ -272,10 +272,10 @@
   (let [n-ref (get state ::n-ref)]
     (when page-name
       (let [page-name (string/lower-case page-name)]
-        [:div.references.mt-6.flex-1.flex-row
+        [:div.references.page-unlinked.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-bold.opacity-80
+           [:h2.font-medium
             (if @n-ref
               (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))

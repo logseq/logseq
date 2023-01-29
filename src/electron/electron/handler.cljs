@@ -1,32 +1,34 @@
 (ns electron.handler
   "This ns starts the event handling for the electron main process and defines
   all the application-specific event types"
-  (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
-            [cljs-bean.core :as bean]
-            ["fs" :as fs]
-            ["buffer" :as buffer]
-            ["fs-extra" :as fs-extra]
-            ["path" :as path]
-            ["os" :as os]
-            ["diff-match-patch" :as google-diff]
-            ["/electron/utils" :as js-utils]
+  (:require ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
-            [electron.fs-watcher :as watcher]
-            [electron.configs :as cfgs]
-            [promesa.core :as p]
-            [clojure.string :as string]
-            [electron.utils :as utils]
-            [electron.logger :as logger]
-            [electron.state :as state]
-            [clojure.core.async :as async]
-            [electron.search :as search]
-            [electron.git :as git]
-            [electron.plugin :as plugin]
-            [electron.window :as win]
-            [electron.file-sync-rsapi :as rsapi]
-            [electron.backup-file :as backup-file]
+            ["buffer" :as buffer]
+            ["diff-match-patch" :as google-diff]
+            ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["fs" :as fs]
+            ["fs-extra" :as fs-extra]
+            ["os" :as os]
+            ["path" :as path]
+            [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [electron.find-in-page :as find]))
+            [clojure.core.async :as async]
+            [clojure.string :as string]
+            [electron.backup-file :as backup-file]
+            [electron.configs :as cfgs]
+            [electron.file-sync-rsapi :as rsapi]
+            [electron.find-in-page :as find]
+            [electron.fs-watcher :as watcher]
+            [electron.git :as git]
+            [electron.logger :as logger]
+            [electron.plugin :as plugin]
+            [electron.search :as search]
+            [electron.server :as server]
+            [electron.shell :as shell]
+            [electron.state :as state]
+            [electron.utils :as utils]
+            [electron.window :as win]
+            [promesa.core :as p]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -36,20 +38,24 @@
 (defmethod handle :mkdir-recur [_window [_ dir]]
   (fs/mkdirSync dir #js {:recursive true}))
 
-;; {encoding: 'utf8', withFileTypes: true}
 (defn- readdir
-  [dir]
+  "Read directory recursively, return all filenames"
+  [root-dir]
   (->> (tree-seq
-        (fn [^js fpath]
-          (.isDirectory (fs/statSync fpath)))
-        (fn [dir]
-          (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))]
+        (fn [[is-dir _fpath]]
+          is-dir)
+        (fn [[_is-dir dir]]
+          (let [files (fs/readdirSync dir #js {:withFileTypes true})]
             (->> files
                  (remove #(.isSymbolicLink ^js %))
                  (remove #(string/starts-with? (.-name ^js %) "."))
-                 (map #(.join path dir (.-name %))))))
-        dir)
-       (doall)
+                 (map #(do
+                         [(.isDirectory %)
+                          (.join path dir (.-name %))])))))
+        [true root-dir])
+       (filter (complement first))
+       (map second)
+       (map utils/fix-win-path!)
        (vec)))
 
 (defmethod handle :readdir [_window [_ dir]]
@@ -171,12 +177,34 @@
           result (get (js->clj result) "filePaths")]
     (p/resolved (first result))))
 
-(defmethod handle :openDir [^js _window _messages]
+(defn- pretty-print-js-error
+  "Converts file related JS Error messages to a human readable format.
+   Ex.:
+   Error: EACCES: permission denied, scandir '/tmp/test'
+   Permission denied for path: '/tmp/test' (Code: EACCES)"
+  [e]
+  (some->>
+   e
+   str
+   ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function $PATH$"
+   (re-matches #"(?:Error\: )(.+)(?:\: )(.+)(?:, \w+ )('.+')")
+   rest
+   (#(str (string/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
+
+(defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
   (p/let [path (open-dir-dialog)]
     (logger/debug ::open-dir {:path path})
     (if path
-      (p/resolved (bean/->js (get-files path)))
+      (try
+        (p/resolved (bean/->js (get-files path)))
+        (catch js/Error e 
+          (do
+            (utils/send-to-renderer window "notification" {:type "error"
+                                                           :payload (str "Opening the specified directory failed.\n"
+                                                                         (or (pretty-print-js-error e) (str "Unexpected error: " e)))})
+            (p/rejected e))))
+
       (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [_window [_ path]]
@@ -285,28 +313,47 @@
   (async/put! state/persistent-dbs-chan true)
   true)
 
+;; Search related IPCs
 (defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
-(defmethod handle :rebuild-blocks-indice [_window [_ repo data]]
+(defmethod handle :search-pages [_window [_ repo q opts]]
+  (search/search-pages repo q opts))
+
+(defmethod handle :rebuild-indice [_window [_ repo block-data page-data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js data))
+  (search/upsert-blocks! repo (bean/->js block-data))
+  (search/truncate-pages-table! repo)
+  (search/upsert-pages! repo (bean/->js page-data))
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
       ;; unneeded serialization
       (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
-(defmethod handle :truncate-blocks [_window [_ repo]]
-  (search/truncate-blocks-table! repo))
+(defmethod handle :transact-pages [_window [_ repo data]]
+  (let [{:keys [pages-to-remove-set pages-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
+    (when (seq pages-to-remove-set)
+      (search/delete-pages! repo pages-to-remove-set))
+    (when (seq pages-to-add)
+      ;; unneeded serialization
+      (search/upsert-pages! repo (bean/->js pages-to-add)))))
+
+(defmethod handle :truncate-indice [_window [_ repo]]
+  (search/truncate-blocks-table! repo)
+  (search/truncate-pages-table! repo))
 
 (defmethod handle :remove-db [_window [_ repo]]
   (search/delete-db! repo))
+;; ^^^^
+;; Search related IPCs End
 
 (defn clear-cache!
   [window]
@@ -337,9 +384,35 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
-(defmethod handle :testProxyUrl [win [_ url]]
-  (p/let [_ (utils/fetch url)]
-    (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
+(defmethod handle :getSystemProxy [^js window]
+  (if-let [sess (.. window -webContents -session)]
+    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
+      proxy)
+    (p/resolved nil)))
+
+(defmethod handle :setProxy [_win [_ options]]
+  ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
+  (p/do!
+   (utils/<set-proxy options)
+   (utils/save-proxy-settings options)))
+
+(defmethod handle :testProxyUrl [_win [_ url options]]
+  ;; FIXME: better not to set proxy while testing url
+  (let [_ (utils/<set-proxy options)
+        start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url)
+        (p/timeout 10000)
+        (p/then (fn [resp]
+                  (let [code (.-status resp)
+                        response-ms (- (.getTime (js/Date.)) start-ms)]
+                    (if (<= 200 code 299)
+                      #js {:code code
+                           :response-ms response-ms}
+                      (p/rejected (js/Error. (str "HTTP status " code)))))))
+        (p/catch (fn [e]
+                   (if (instance? p/TimeoutException e)
+                     (p/rejected (js/Error. "Timeout"))
+                     (p/rejected e)))))))
 
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)
@@ -364,11 +437,12 @@
 
 (defmethod handle :userAppCfgs [_window [_ k v]]
   (let [config (cfgs/get-config)]
-    (if-not k
-      config
+    (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (cfgs/set-item! (keyword k) v)
-        (cfgs/get-item (keyword k))))))
+        (do (cfgs/set-item! k v)
+            (state/set-state! [:config k] v))
+        (cfgs/get-item k))
+     config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -410,6 +484,24 @@
   (when (seq args)
     (git/init!)
     (git/run-git2! (clj->js args))))
+
+(defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
+  (try
+    (let [on-data-handler (fn [message]
+                            (let [result (str "Running " command ": " message)]
+                              (when returnResult
+                                (utils/send-to-renderer window "notification"
+                                                        {:type    "success"
+                                                         :payload result}))))
+          deferred        (p/deferred)
+          on-exit-handler (fn [code]
+                            (p/resolve! deferred code))
+          _job            (shell/run-command-safely! command args on-data-handler on-exit-handler)]
+      deferred)
+    (catch js/Error e
+      (utils/send-to-renderer window "notification"
+                              {:type    "error"
+                               :payload (.-message e)}))))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
@@ -530,9 +622,6 @@
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
 
-(defmethod handle :setHttpsAgent [^js _win [_ opts]]
-  (utils/set-fetch-agent opts))
-
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -614,6 +703,15 @@
 
 (defmethod handle :clear-find-in-page [^js win [_]]
   (find/clear! win))
+
+(defmethod handle :server/load-state []
+  (server/load-state-to-renderer!))
+
+(defmethod handle :server/do [^js _win [_ action]]
+  (server/do-server! action))
+
+(defmethod handle :server/set-config [^js _win [_ config]]
+  (server/set-config! config))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

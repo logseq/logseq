@@ -32,3 +32,13 @@ logseq.graph-parser.property/->block-content
 logseq.graph-parser.property/property-value-from-content
 ;; API
 logseq.graph-parser.whiteboard/page-block->tldr-page
+;; API
+logseq.graph-parser/get-blocks-to-delete
+;; Future use & be unified with markdown colon
+logseq.graph-parser.property/colons-org
+;; API
+logseq.graph-parser.util.db/resolve-input
+;; TODO: use fast-remove-nils instead
+logseq.graph-parser.util/remove-nils
+;; API
+logseq.graph-parser.text/get-file-basename

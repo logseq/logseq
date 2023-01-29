@@ -77,12 +77,12 @@
     (-> (string/replace template "{time}" time)
         (string/replace "{url}" (or url "")))))
 
-(defn- embed-text-file 
-  "Store external content with url into Logseq repo" 
+(defn- embed-text-file
+  "Store external content with url into Logseq repo"
   [url title]
   (p/let [time (date/get-current-time)
           title (some-> (or title (path/basename url))
-                        js/decodeURIComponent
+                        gp-util/safe-decode-uri-component
                         util/node-path.name
                         ;; make the title more user friendly
                         gp-util/page-name-sanity)
@@ -120,7 +120,7 @@
                     (gp-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
-                    (contains? (set/union (config/doc-formats) config/media-formats)
+                    (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
                     (embed-asset-file url format)
 
@@ -148,7 +148,7 @@
 
                       :else
                       (if (mobile-util/native-ios?)
-                        (js/decodeURIComponent v)
+                        (gp-util/safe-decode-uri-component v)
                         v))])))
 
 (defn handle-result [result]

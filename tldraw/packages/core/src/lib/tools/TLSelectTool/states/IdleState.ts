@@ -19,13 +19,10 @@ export class IdleState<
     }
   }
 
-  onExit = () => {
-    this.app.setHoveredShape(undefined)
-  }
+  onExit = () => {}
 
   onPointerEnter: TLEvents<S>['pointer'] = info => {
     if (info.order) return
-
     switch (info.type) {
       case TLTargetType.Shape: {
         this.app.setHoveredShape(info.shape.id)
@@ -35,6 +32,10 @@ export class IdleState<
         if (!(info.handle === 'background' || info.handle === 'center')) {
           this.tool.transition('hoveringSelectionHandle', info)
         }
+        break
+      }
+      case TLTargetType.Canvas: {
+        this.app.setHoveredShape(undefined)
         break
       }
     }
@@ -125,8 +126,6 @@ export class IdleState<
     if (this.app.selectedShapesArray.length !== 1) return
     const selectedShape = this.app.selectedShapesArray[0]
     if (!selectedShape.canEdit) return
-
-    if (!PointUtils.pointInBounds(this.app.inputs.currentPoint, selectedShape.bounds)) return
 
     switch (info.type) {
       case TLTargetType.Shape: {

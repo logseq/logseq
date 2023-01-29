@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.0.10",
+  "version": "0.0.14",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -12,7 +12,8 @@
     "dev:core": "npm run build:core -- --mode development --watch",
     "build": "tsc && rm dist/*.js && npm run build:user",
     "lint": "prettier --check \"src/**/*.{ts, js}\"",
-    "fix": "prettier --write \"src/**/*.{ts, js}\""
+    "fix": "prettier --write \"src/**/*.{ts, js}\"",
+    "build:docs": "typedoc --plugin typedoc-plugin-lsp-docs src/LSPlugin.user.ts && typedoc --json docs/out.json ./src/LSPlugin.user.ts"
   },
   "dependencies": {
     "csstype": "3.1.0",
@@ -25,12 +26,18 @@
     "snake-case": "3.0.4"
   },
   "devDependencies": {
+    "@babel/core": "^7.20.2",
+    "@babel/preset-env": "^7.20.2",
     "@types/debug": "^4.1.5",
     "@types/dompurify": "2.3.3",
     "@types/lodash-es": "4.17.6",
+    "babel-loader": "^9.1.0",
     "prettier": "^2.6.2",
     "prettier-config-standard": "^5.0.0",
+    "terser-webpack-plugin": "^5.3.6",
     "ts-loader": "9.3.0",
+    "typedoc": "^0.23.17",
+    "typedoc-plugin-lsp-docs": "^0.0.1",
     "typescript": "4.7.3",
     "webpack": "5.73.0",
     "webpack-bundle-analyzer": "4.5.0",

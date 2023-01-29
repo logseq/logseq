@@ -55,6 +55,7 @@ base.beforeAll(async () => {
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
+  await context.tracing.startChunk();
 
   // NOTE: The following ensures App first start with the correct path.
   const info = await electronApp.evaluate(async ({ app }) => {
@@ -70,6 +71,16 @@ base.beforeAll(async () => {
   console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
+
+  // inject testing flags
+  await page.evaluate(
+    () => {
+      Object.assign(window, {
+        __E2E_TESTING__: true,
+      })
+    },
+  )
+
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
@@ -108,17 +119,19 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
+    /*
+    const locator = page.locator('.notification-close-button').first()
+    while (await locator.isVisible()) {
+      locator.click() // ignore error
+    }
+    */
+    await expect(page.locator('.notification-close-button')).not.toBeVisible()
+
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
       await page.click('button.toggle-right-sidebar', {delay: 100})
     }
   }
-})
-
-base.afterAll(async () => {
-  // if (electronApp) {
-  //  await electronApp.close()
-  //}
 })
 
 // hijack electron app into the test context
@@ -185,8 +198,14 @@ export const test = base.extend<LogseqFixtures>({
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
       },
       escapeEditing: async (): Promise<void> => {
-        await page.keyboard.press('Escape')
-        await page.keyboard.press('Escape')
+        const blockEdit = page.locator('.ls-block textarea >> nth=0')
+        while (await blockEdit.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
+        const blockSelect = page.locator('.ls-block.selected')
+        while (await blockSelect.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
@@ -257,3 +276,27 @@ export const test = base.extend<LogseqFixtures>({
     await use(graphDir);
   },
 });
+
+
+let getTracingFilePath = function(): string {
+  return `e2e-dump/trace-${Date.now()}.zip.dump`
+}
+
+
+test.afterAll(async () => {
+  await context.tracing.stopChunk({ path: getTracingFilePath() });
+})
+
+
+/**
+ * Trace all tests in a file
+ */
+export let traceAll = function(){
+  test.beforeAll(async () => {
+    await context.tracing.startChunk();
+  })
+  
+  test.afterAll(async () => {
+    await context.tracing.stopChunk({ path: getTracingFilePath() });
+  })
+}

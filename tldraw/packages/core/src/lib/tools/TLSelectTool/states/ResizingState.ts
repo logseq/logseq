@@ -112,10 +112,6 @@ export class ResizingState<
     this.app.history.resume()
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const {
       inputs: { altKey, shiftKey, ctrlKey, originPoint, currentPoint },

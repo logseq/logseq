@@ -2,7 +2,7 @@
 import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
-import { action, computed } from 'mobx'
+import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 
 export interface IFrameShapeProps extends TLBoxShapeProps {
@@ -69,7 +69,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
                 height="100%"
                 src={`${this.props.url}`}
                 frameBorder="0"
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
               />
             </div>
           )}

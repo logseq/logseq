@@ -16,9 +16,13 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(goog-define REVISION "unknown")
+(defonce revison REVISION)
+
 (reset! state/publishing? publishing?)
 
-(def test? false)
+(goog-define TEST false)
+(def test? TEST)
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
@@ -27,34 +31,46 @@
       (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
-      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s"))
+      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
+      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/"))
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
-      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
+      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")
+      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")))
 
-;; feature flags
+;; Feature flags
+;; =============
 
 (goog-define ENABLE-PLUGINS true)
-(defonce enable-plugins? ENABLE-PLUGINS)
+(defonce feature-plugin-system-on? ENABLE-PLUGINS)
 
-(swap! state/state assoc :plugin/enabled enable-plugins?)
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
+;; User level configuration for whether plugins are enabled
+(defonce lsp-enabled?
+         (and (util/electron?)
+              (not (false? feature-plugin-system-on?))
+              (state/lsp-enabled?-or-theme)))
+
+(defn plugin-config-enabled?
+  []
+  (and lsp-enabled? (global-config-enabled?)))
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
+
+;; ============
 
 (def app-name "logseq")
 (def website
   (if dev?
     "http://localhost:3000"
     (util/format "https://%s.com" app-name)))
-
-(def api
-  (if dev?
-    "http://localhost:3000/api/v1/"
-    (str website "/api/v1/")))
 
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
@@ -76,18 +92,46 @@
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn doc-formats
-  []
+(def doc-formats
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+(def image-formats
+  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+
+(def audio-formats
+  #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+
+(def video-formats
+  #{:mp4 :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
-(def html-render-formats
-  #{:adoc :asciidoc})
+(defn extname-of-supported?
+  ([input] (extname-of-supported?
+            input
+            [image-formats doc-formats audio-formats
+             video-formats markup-formats
+             (gp-config/text-formats)]))
+  ([input formats]
+   (when-let [input (some->
+                     (cond-> input
+                       (and (string? input)
+                            (not (string/blank? input)))
+                       (string/replace-first "." ""))
+                     (util/safe-lower-case)
+                     (keyword))]
+     (some
+      (fn [s]
+        (contains? s input))
+      formats))))
 
 (def mobile?
+  "Triggering condition: Mobile phones
+   *** Warning!!! ***
+   For UX logic only! Don't use for FS logic
+   iPad / Android Pad doesn't trigger!
+
+   Same as config/mobile?"
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
@@ -260,14 +304,7 @@
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def metadata-file "metadata.edn")
-(def pages-metadata-file "pages-metadata.edn")
-
 (def config-default-content (rc/inline "config.edn"))
-
-;; Desktop only as other platforms requires better understanding of their
-;; multi-graph workflows and optimal place for a "global" dir
-(def global-config-enabled? util/electron?)
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
@@ -323,7 +360,7 @@
                  "Local"))
          (->> (string/split repo-dir "Documents/")
               last
-              js/decodeURIComponent
+              gp-util/safe-decode-uri-component
               (str "/" (string/capitalize app-name) "/")))
     (get-repo-dir repo-dir)))
 
@@ -334,7 +371,7 @@
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
-;; FIXME: There is another get-file-path at src/main/frontend/fs/capacitor_fs.cljs
+;; FIXME: There is another normalize-file-protocol-path at src/main/frontend/fs/capacitor_fs.cljs
 (defn get-file-path
   "Normalization happens here"
   [repo-url relative-path]
@@ -352,7 +389,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (str dir relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -384,20 +421,6 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-metadata-path
-  ([]
-   (get-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" metadata-file)))))
-
-(defn get-pages-metadata-path
-  ([]
-   (get-pages-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" pages-metadata-file)))))
 
 (defn get-custom-css-path
   ([]

@@ -14,8 +14,9 @@
             [promesa.core :as p]
             [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.encrypt :as encrypt]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -53,8 +54,15 @@
   (protocol/mkdir-recur! (get-fs dir) dir))
 
 (defn readdir
-  [dir]
-  (protocol/readdir (get-fs dir) dir))
+  [dir & {:keys [path-only?]}]
+  (p/let [result (protocol/readdir (get-fs dir) dir)
+          result (bean/->clj result)]
+    (let [result (if (and path-only? (map? (first result)))
+                   (map :uri result)
+                   result)]
+      (if (and (map? (first result)) (:uri (first result)))
+        (map #(update % :uri gp-util/path-normalize) result)
+        (map gp-util/path-normalize result)))))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -72,30 +80,27 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (let [fs-record (get-fs dir)]
-      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
-              content (if-not md-or-org? content (encrypt/encrypt content))]
-        (->
-         (p/let [opts (assoc opts
-                             :error-handler
-                             (fn [error]
-                               (state/pub-event! [:instrument {:type :write-file/failed
-                                                               :payload {:fs (type fs-record)
-                                                                         :user-agent (when js/navigator js/navigator.userAgent)
-                                                                         :path path
-                                                                         :content-length (count content)
-                                                                         :error-str (str error)
-                                                                         :error error}}])))
-                 _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-           (when (= bfs-record fs-record)
-             (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-         (p/catch (fn [error]
-                    (log/error :file/write-failed {:dir dir
-                                                   :path path
-                                                   :error error})
-                    ;; Disable this temporarily
-                    ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                    )))))))
+    (let [path (gp-util/path-normalize path)
+          fs-record (get-fs dir)]
+      (->
+       (p/let [opts (assoc opts
+                           :error-handler
+                           (fn [error]
+                             (state/pub-event! [:capture-error {:error error
+                                                                :payload {:type :write-file/failed
+                                                                          :fs (type fs-record)
+                                                                          :user-agent (when js/navigator js/navigator.userAgent)
+                                                                          :content-length (count content)}}])))
+               _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+         (when (= bfs-record fs-record)
+           (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+       (p/catch (fn [error]
+                  (log/error :file/write-failed {:dir dir
+                                                 :path path
+                                                 :error error})
+                  ;; Disable this temporarily
+                  ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                  ))))))
 
 (defn read-file
   ([dir path]
@@ -109,18 +114,19 @@
 
 (defn rename!
   [repo old-path new-path]
-  (cond
+  (let [new-path (gp-util/path-normalize new-path)]
+    (cond
                                         ; See https://github.com/isomorphic-git/lightning-fs/issues/41
-    (= old-path new-path)
-    (p/resolved nil)
+     (= old-path new-path)
+     (p/resolved nil)
 
-    :else
-    (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/native-platform?))
-                  %
-                  (str (config/get-repo-dir repo) "/" %))
-               [old-path new-path])]
-      (protocol/rename! (get-fs old-path) repo old-path new-path))))
+     :else
+     (let [[old-path new-path]
+           (map #(if (or (util/electron?) (mobile-util/native-platform?))
+                   %
+                   (str (config/get-repo-dir repo) "/" %))
+             [old-path new-path])]
+       (protocol/rename! (get-fs old-path) repo old-path new-path)))))
 
 (defn copy!
   [repo old-path new-path]
@@ -153,9 +159,9 @@
     nfs-record))
 
 (defn open-dir
-  [ok-handler]
+  [dir ok-handler]
   (let [record (get-record)]
-    (p/let [result (protocol/open-dir record ok-handler)]
+    (p/let [result (protocol/open-dir record dir ok-handler)]
       (if (or (util/electron?)
               (mobile-util/native-platform?))
         (let [[dir & paths] (bean/->clj result)]
@@ -215,6 +221,27 @@
    (fn [stat] (not (nil? stat)))
    (fn [_e] false)))
 
+(defn file-or-href-exists?
+  "It not only accept path, but also href (url encoded path)"
+  [dir href]
+  (p/let [exist? (file-exists? dir href)
+          decoded-href   (gp-util/safe-decode-uri-component href)
+          decoded-exist? (when (not= decoded-href href)
+                           (file-exists? dir decoded-href))]
+    (or exist? decoded-exist?)))
+
 (defn dir-exists?
   [dir]
   (file-exists? dir ""))
+
+(defn backup-db-file!
+  [repo path db-content disk-content]
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
+
+    (mobile-util/native-platform?)
+    (capacitor-fs/backup-file repo :backup-dir path db-content)
+
+    ;; TODO: nfs
+    ))

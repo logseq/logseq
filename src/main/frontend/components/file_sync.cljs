@@ -14,9 +14,9 @@
             [frontend.fs.sync :as fs-sync]
             [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -24,13 +24,13 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.storage :as storage]
-            [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [logseq.graph-parser.util :as gp-util]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -79,7 +79,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (gp-util/safe-decode-uri-component graph-name)]]]
       [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))
@@ -133,9 +133,11 @@
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
                 (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                  (async/<! (fs-sync/sync-start))
+                  (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
-                  ;; update existing repo
+                  ;; update both local && remote graphs
+                  (state/add-remote-graph! {:GraphUUID GraphUUID
+                                            :GraphName graph-name})
                   (state/set-repos! (map (fn [r]
                                            (if (= (:url r) repo)
                                              (assoc r
@@ -191,9 +193,10 @@
 (rum/defc sync-now
   []
   (ui/button "Sync now"
-             :class "block cursor-pointer"
-             :small? true
-             :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)))
+    :class "block cursor-pointer"
+    :small? true
+    :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)
+    :style {:color "#ffffff"}))
 
 (def *last-calculated-time (atom nil))
 
@@ -261,10 +264,13 @@
          (storage/set :ui/file-sync-active-file-list? list-active?)))
      [list-active?])
 
-    [:div.cp__file-sync-indicator-progress-pane
-     {:ref *el-ref
-      :class (when (and syncing? progressing?) "is-progress-active")}
-     (let [idle-&-no-active? (and idle? no-active-files?)]
+    (let [idle-&-no-active? (and idle? no-active-files?)
+          waiting? (not (or (not online?)
+                            idle-&-no-active?
+                            syncing?))]
+      [:div.cp__file-sync-indicator-progress-pane
+       {:ref *el-ref
+        :class (when (and syncing? progressing?) "is-progress-active")}
        [:div.a
         [:div.al
          [:strong
@@ -282,30 +288,31 @@
             :else "Waiting..."
             )]]
         [:div.ar
-         (when queuing? (sync-now))]])
+         (when queuing? (sync-now))]]
 
-     [:div.b.dark:text-gray-200
-      [:div.bl
-       [:span.flex.items-center
-        (if no-active-files?
-          [:span.opacity-100.pr-1 "Successfully processed"]
-          [:span.opacity-60.pr-1 "Processed"])]
+       (when-not waiting?
+         [:div.b.dark:text-gray-200
+          [:div.bl
+           [:span.flex.items-center
+            (if no-active-files?
+              [:span.opacity-100.pr-1 "Successfully processed"]
+              [:span.opacity-60.pr-1 "Processed"])]
 
-       (first tip-b&p)]
+           (first tip-b&p)]
 
-      [:div.br
-       [:small.opacity-50
-        (when syncing?
-          (calc-time-left))]]]
+          [:div.br
+           [:small.opacity-50
+            (when syncing?
+              (calc-time-left))]]])
 
-     [:div.c
-      (second tip-b&p)
-      (when (or history-files? (not no-active-files?))
-        [:span.inline-flex.ml-1.active:opacity-50
-         {:on-click #(set-list-active? (not list-active?))}
-         (if list-active?
-           (ui/icon "chevron-up" {:style {:font-size 24}})
-           (ui/icon "chevron-left" {:style {:font-size 24}}))])]]))
+       [:div.c
+        (second tip-b&p)
+        (when (or history-files? (not no-active-files?))
+          [:span.inline-flex.ml-1.active:opacity-50
+           {:on-click #(set-list-active? (not list-active?))}
+           (if list-active?
+             (ui/icon "chevron-up" {:style {:font-size 24}})
+             (ui/icon "chevron-left" {:style {:font-size 24}}))])]])))
 
 (defn- sort-files
   [files]
@@ -323,7 +330,7 @@
   [_state]
   (let [_                       (state/sub :auth/id-token)
         online?                 (state/sub :network/online?)
-        enabled-progress-panel? (util/electron?)
+        enabled-progress-panel? true
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/sub-current-file-sync-graph-uuid)
@@ -367,21 +374,22 @@
                                            (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
                                            ;; current graph belong to other user, do nothing
-                                           (and (first @graphs-txid)
-                                                (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                                 (first @graphs-txid))))
+                                           (let [user-uuid (async/<! (user-handler/<user-uuid))
+                                                 user-uuid (when-not (instance? ExceptionInfo user-uuid) user-uuid)]
+                                             (and (first @graphs-txid)
+                                                  user-uuid
+                                                  (not (fs-sync/check-graph-belong-to-current-user
+                                                        user-uuid
+                                                        (first @graphs-txid)))))
                                            nil
 
-                                           (and synced-file-graph?
-                                                (second @graphs-txid)
+                                           (and (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
-                                           (do
-                                             (prn "sync start")
-                                             (fs-sync/sync-start))
+                                           (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                           synced-file-graph?  ; <check-remote-graph-exists -> false
+                                           (second @graphs-txid) ; <check-remote-graph-exists -> false
                                            (do (state/set-repos!
                                                 (map (fn [r]
                                                        (if (= (:url r) current-repo)
@@ -405,7 +413,6 @@
                  (str "status-of-" (and (keyword? status) (name status)))])}
        (when (and (not config/publishing?)
                   (user-handler/logged-in?))
-
          (ui/dropdown-with-links
           ;; trigger
           (fn [{:keys [toggle-fn]}]
@@ -424,29 +431,24 @@
                (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           ;; links
-          (cond-> []
+          (cond-> (vec
+                   (when-not (and no-active-files? idle?)
+                     (cond
+                       need-password?
+                       [{:title   [:div.file-item.flex.items-center.leading-none.pt-3
+                                   {:style {:margin-left -8}}
+                                   (ui/icon "lock" {:size 20}) [:span.pl-1.font-semibold "Password is required"]]
+                         :options {:on-click fs-sync/sync-need-password!}}]
+
+                       ;; head of upcoming sync
+                       (not no-active-files?)
+                       [{:title   [:div.file-item.is-first ""]
+                         :options {:class "is-first-placeholder"}}])))
             synced-file-graph?
             (concat
-             (if (and no-active-files? idle?)
-               [(when-not (util/electron?)
-                  {:item     [:div.flex.justify-center.w-full.py-2
-                              [:span.opacity-60 "Everything is synced!"]]
-                   :as-link? false})]
-
-               (cond
-                 need-password?
-                 [{:title   [:div.file-item
-                             (ui/icon "lock") "Password is required"]
-                   :options {:on-click fs-sync/sync-need-password!}}]
-
-                 ;; head of upcoming sync
-                 (not no-active-files?)
-                 [{:title   [:div.file-item.is-first ""]
-                   :options {:class "is-first-placeholder"}}]))
-
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "downloading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -465,13 +467,17 @@
                                 path (fs-sync/relative-path e)]
                             {:title [:div.file-item
                                      {:key (str "queue-" path)}
-                                     (js/decodeURIComponent path)]
+                                     (try
+                                       (gp-util/safe-decode-uri-component path)
+                                       (catch :default _
+                                         (prn "Wrong path: " path)
+                                         path))]
                              :key   (str "queue-" path)
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -485,35 +491,32 @@
 
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
-                              (let [path        (:path f)
-                                    ext         (string/lower-case (util/get-file-ext path))
-                                    _supported? (gp-config/mldoc-support? ext)
-                                    full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
-                                    page-name   (db/get-file-page full-path)]
-                                {:title [:div.files-history.cursor-pointer
-                                         {:key      i :class (when (= i 0) "is-first")
-                                          :on-click (fn []
-                                                      (if page-name
-                                                        (rfe/push-state :page {:name page-name})
-                                                        (rfe/push-state :file {:path full-path})))}
-                                         [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                         [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
+                              (when-let [path (:path f)]
+                                (let [full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
+                                      page-name   (db/get-file-page full-path)]
+                                  {:title [:div.files-history.cursor-pointer
+                                           {:key      i :class (when (= i 0) "is-first")
+                                            :on-click (fn []
+                                                        (if page-name
+                                                          (rfe/push-state :page {:name page-name})
+                                                          (rfe/push-state :file {:path full-path})))}
+                                           [:span.file-sync-item (gp-util/safe-decode-uri-component (:path f))]
+                                           [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]})))
                             (take 10 history-files)))))
 
           ;; options
           {:outer-header
            [:<>
-            (when (util/electron?)
-              (indicator-progress-pane
-               sync-state sync-progress
-               {:idle?            idle?
-                :syncing?         syncing?
-                :need-password?   need-password?
-                :full-sync?       full-syncing?
-                :online?          online?
-                :queuing?         queuing?
-                :no-active-files? no-active-files?
-                :history-files?   (seq history-files)}))
+            (indicator-progress-pane
+             sync-state sync-progress
+             {:idle?            idle?
+              :syncing?         syncing?
+              :need-password?   need-password?
+              :full-sync?       full-syncing?
+              :online?          online?
+              :queuing?         queuing?
+              :no-active-files? no-active-files?
+              :history-files?   (seq history-files)})
 
             (when (and
                    (not enabled-progress-panel?)
@@ -617,10 +620,10 @@
               (ui/humanity-time-ago
                (or (:CreateTime version)
                    (:create-time version)) nil)]
-             [:small.opacity-50.translate-y-1
+             [:small.opacity-50.translate-y-1.flex.items-center.space-x-1
               (if local?
-                [:<> (ui/icon "git-commit") " local"]
-                [:<> (ui/icon "cloud") " remote"])]]])))]))
+                [:<> (ui/icon "git-commit") [:span "local"]]
+                [:<> (ui/icon "cloud") [:span "remote"]])]]])))]))
 
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
@@ -769,7 +772,7 @@
     [:br]
     "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
     [:br]
-    "charitable OpenCollective sponsors. We can notify you once it becomes available for you."]
+    "charitable OpenCollective sponsors and backers. We can notify you once it becomes available for you."]
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])

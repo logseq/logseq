@@ -3,12 +3,13 @@ import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { Arrowhead } from './ArrowHead'
 import { getStraightArrowHeadPoints } from './arrowHelpers'
+import type { SizeLevel } from '../'
 
 interface ShapeStyles {
   stroke: string
   strokeWidth: number
   strokeType: 'line' | 'dashed'
-  fill: string
+  fill?: string
 }
 
 interface ArrowSvgProps {
@@ -17,6 +18,16 @@ interface ArrowSvgProps {
   end: number[]
   decorationStart: Decoration | undefined
   decorationEnd: Decoration | undefined
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 10,
+  sm: 16,
+  md: 20,
+  lg: 32,
+  xl: 48,
+  xxl: 60,
 }
 
 export const Arrow = React.memo(function StraightArrow({
@@ -25,15 +36,16 @@ export const Arrow = React.memo(function StraightArrow({
   end,
   decorationStart,
   decorationEnd,
+  scaleLevel,
 }: ArrowSvgProps) {
   const arrowDist = Vec.dist(start, end)
   if (arrowDist < 2) return null
   const { strokeWidth } = style
-  const sw = 1 + strokeWidth * 1.618
+  const sw = 1 + (strokeWidth * levelToScale[scaleLevel ?? 'md']) / 10
   // Path between start and end points
   const path = 'M' + Vec.toFixed(start) + 'L' + Vec.toFixed(end)
   // Arrowheads
-  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 16)
+  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * levelToScale[scaleLevel ?? 'md'])
   const startArrowHead = decorationStart
     ? getStraightArrowHeadPoints(start, end, arrowHeadLength)
     : null

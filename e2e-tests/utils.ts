@@ -2,7 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
-import pathlib from 'path'
+import * as pathlib from 'path'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -65,9 +65,10 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
 
 export async function searchAndJumpToPage(page: Page, pageTitle: string) {
   await page.click('#search-button')
-  await page.fill('[placeholder="Search or create page"]', pageTitle)
+  await page.type('[placeholder="Search or create page"]', pageTitle)
   await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
-  await page.click(`[data-page-ref="${pageTitle}"]`)
+  page.click(`[data-page-ref="${pageTitle}"]`)
+  await page.waitForNavigation()
   return pageTitle;
 }
 
@@ -115,6 +116,7 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   return page.locator('textarea >> nth=0')
 }
 
+// Deprecated by block.enterNext
 export async function newBlock(page: Page): Promise<Locator> {
   let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
   await lastBlock(page)
@@ -188,7 +190,6 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
       { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible', timeout: 5000 })
 
     expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
   }
@@ -212,7 +213,9 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   // close it first so it doesn't cover up the UI
   let locator = page.locator('.notification-close-button').first()
   while (await locator?.isVisible()) {
-    await locator.click()
+    try { // don't fail if unable to click (likely disappeared already)
+      await locator.click()
+    } catch (error) {}
     await page.waitForTimeout(250)
 
     expect(locator.isVisible()).resolves.toBe(false)

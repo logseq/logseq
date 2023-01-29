@@ -19,10 +19,6 @@ export class PointingShapeBehindBoundsState<
     this.info = info
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const { currentPoint, originPoint } = this.app.inputs
     if (Vec.dist(currentPoint, originPoint) > 5) {
@@ -35,6 +31,7 @@ export class PointingShapeBehindBoundsState<
       selectedIds,
       inputs: { shiftKey },
     } = this.app
+    // unlike PointingShapeState, always select the shape behind the group
     if (shiftKey) {
       this.app.setSelectedShapes([...Array.from(selectedIds.values()), this.info.shape.id])
     } else {

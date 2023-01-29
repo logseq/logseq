@@ -12,12 +12,15 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [clojure.data :as data]
@@ -33,6 +36,9 @@
 ;; :inactive key is for commands that are not active for a given platform or feature condition
 ;; Avoid using single letter shortcuts to allow chords that start with those characters
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
+  ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
+  ;; So this setting item does not cover all cases.
+  ;; See-also: frontend.components.datetime/time-repeater
   {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
 
@@ -56,6 +62,9 @@
 
    :pdf/close                    {:binding "alt+x"
                                   :fn      #(state/set-state! :pdf/current nil)}
+
+   :pdf/find                     {:binding "alt+f"
+                                  :fn      pdf-utils/open-finder}
 
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
@@ -235,6 +244,9 @@
    :editor/select-all-blocks       {:binding "mod+shift+a"
                                     :fn      editor-handler/select-all-blocks!}
 
+   :editor/select-parent           {:binding "mod+a"
+                                    :fn      editor-handler/select-parent}
+
    :editor/zoom-in                 {:binding (if mac? "mod+." "alt+right")
                                     :fn      editor-handler/zoom-in!}
 
@@ -251,7 +263,7 @@
 
    :go/search                      {:binding "mod+k"
                                     :fn      #(do
-                                                (editor-handler/escape-editing)
+                                                (editor-handler/escape-editing false)
                                                 (route-handler/go-to-search! :global))}
 
    :go/electron-find-in-page       {:binding "mod+f"
@@ -281,6 +293,9 @@
    :sidebar/open-today-page        {:binding (if mac? "mod+shift+j" "alt+shift+j")
                                     :fn      page-handler/open-today-in-sidebar}
 
+   :sidebar/close-top              {:binding "c t"
+                                    :fn      #(state/sidebar-remove-block! 0)}
+
    :sidebar/clear                  {:binding "mod+c mod+c"
                                     :fn      #(do
                                                 (state/clear-sidebar-blocks!)
@@ -292,7 +307,11 @@
    :command-palette/toggle         {:binding "mod+shift+p"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
-                                                (state/toggle! :ui/command-palette-open?))}
+                                                (state/pub-event! [:modal/command-palette]))}
+
+   :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
+                                          (state/get-current-repo))
+                                    :binding false}
 
    :graph/open                     {:fn      #(do
                                                 (editor-handler/escape-editing)
@@ -312,7 +331,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -397,9 +416,12 @@
                                      :fn      plugin-handler/show-themes-modal!}
 
    :ui/goto-plugins                 {:binding "t p"
-                                     :inactive (not plugin-handler/lsp-enabled?)
+                                     :inactive (not config/lsp-enabled?)
                                      :fn      plugin-handler/goto-plugins-dashboard!}
 
+   :ui/install-plugins-from-file    {:binding false
+                                     :inactive (not (config/plugin-config-enabled?))
+                                     :fn       plugin-config-handler/open-replace-plugins-modal}
 
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
@@ -407,7 +429,7 @@
    :ui/toggle-cards                 {:binding "t c"
                                      :fn      ui-handler/toggle-cards!}
 
-   :git/commit                      {:binding "c"
+   :git/commit                      {:binding "mod+g c"
                                      :fn      commit/show-commit-modal!}})
 
 (let [keyboard-shortcuts
@@ -434,7 +456,8 @@
     :shortcut.handler/pdf
     (-> (build-category-map [:pdf/previous-page
                              :pdf/next-page
-                             :pdf/close])
+                             :pdf/close
+                             :pdf/find])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -482,8 +505,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:command/run
-                          :command-palette/toggle
+     (build-category-map [
+                          :graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -501,6 +524,7 @@
                           :editor/open-edit
                           :editor/select-block-up
                           :editor/select-block-down
+                          :editor/select-parent
                           :editor/delete-selection
                           :editor/expand-block-children
                           :editor/collapse-block-children
@@ -530,7 +554,9 @@
                           :go/forward
                           :search/re-index
                           :sidebar/open-today-page
-                          :sidebar/clear])
+                          :sidebar/clear
+                          :command/run
+                          :command-palette/toggle])
      (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
@@ -564,9 +590,12 @@
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
+                          :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
-                          :git/commit])
+                          :git/commit
+                          :sidebar/close-top
+                          ])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
@@ -579,6 +608,7 @@
     :editor/indent
     :editor/outdent
     :editor/select-all-blocks
+    :editor/select-parent
     :go/search
     :go/search-in-page
     :go/electron-find-in-page
@@ -656,6 +686,7 @@
    :shortcut.category/block-selection
    [:editor/open-edit
     :editor/select-all-blocks
+    :editor/select-parent
     :editor/select-block-up
     :editor/select-block-down
     :editor/delete-selection]
@@ -677,14 +708,17 @@
    [:pdf/previous-page
     :pdf/next-page
     :pdf/close
+    :pdf/find
     :command/toggle-favorite
     :command/run
     :command-palette/toggle
+    :graph/export-as-html
     :graph/open
     :graph/remove
     :graph/add
     :graph/save
     :graph/re-index
+    :sidebar/close-top
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index

@@ -1,9 +1,10 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
+  {:dev/always true}
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
@@ -14,14 +15,14 @@
             [logseq.api]
             [frontend.fs.sync :as sync]
             [frontend.config :as config]
-            [frontend.util :as util]))
+            [malli.dev.cljs :as md]))
 
 (defn set-router!
   []
   (rfe/start!
    (rf/router routes/routes nil)
    (fn [route]
-     (route/set-route-match! route)
+     (route-handler/set-route-match! route)
      (plugin-handler/hook-plugin-app
       :route-changed (select-keys route [:template :path :parameters])))
 
@@ -44,13 +45,15 @@
      "))
 
 (defn start []
+  (when config/dev?
+    (md/start!))
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
     (display-welcome-message)
     (persist-var/load-vars)
-    (when (and config/dev? (util/electron?))
-      (js/setTimeout #(sync/sync-start) 1000))))
+    (when config/dev?
+      (js/setTimeout #(sync/<sync-start) 1000))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
@@ -58,18 +61,13 @@
   ;; so it is available even in :advanced release builds
 
   (plugin-handler/setup!
-   #(handler/start! start))
-
-  ;; popup to notify user, could be toggled in settings
-  ;; (handler/request-notifications-if-not-asked)
-
-  ;; (handler/run-notify-worker!)
-)
+   #(handler/start! start)))
 
 (defn stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (when (and config/dev? (util/electron?))
-    (sync/<sync-stop))
+  (when config/dev?
+    (sync/<sync-stop)
+    (md/stop!))
   (js/console.log "stop"))

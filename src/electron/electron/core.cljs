@@ -2,9 +2,12 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent get-graph-name]]
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+             :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
+            [electron.server :as server]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -19,11 +22,12 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as js-utils]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
+(defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
@@ -47,21 +51,25 @@
    url - the input URL"
   [win url]
   (logger/info "open-url" {:url url})
-
-  (let [parsed-url (js/URL. url)
-        url-protocol (.-protocol parsed-url)]
-    (when (= (str LSP_SCHEME ":") url-protocol)
+  ;; https://github.com/electron-userland/electron-builder/issues/1552
+  ;; At macOS platform this is captured at 'open-url' event, we set it with deeplinkingUrl = url! (See // Protocol handler for osx)
+  ;; At win32 platform this is saved at process.argv together with other arguments. To get only the provided url, deeplinkingUrl = argv.slice(1). (See // Protocol handler for win32)
+  (when-let [parsed-url (try (js/URL. url)
+                             (catch :default e
+                               (logger/info "upon opening non-url" {:error e})))]
+    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
 
   (.registerFileProtocol
-   protocol "assets"
+   protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
-           path (string/replace url "assets://" "")
-           path (js/decodeURI path)]
+           url (decode-protected-assets-schema-path url)
+           path (js/decodeURI url)
+           path (string/replace path "assets://" "")]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
@@ -74,25 +82,24 @@
                       [STATIC_URL js/__dirname])
 
            path' (.-pathname url')
-           path' (js/decodeURIComponent path')
+           path' (utils/safe-decode-uri-component path')
            path' (.join path ROOT path')]
 
        (callback #js {:path path'}))))
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
-     (.unregisterProtocol protocol "assets")))
+     (.unregisterProtocol protocol FILE_ASSETS_SCHEME)))
 
 (defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
-          asset-filenames (js->clj asset-filenames)
+          asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
     (when root-dir
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")
-            export-or-custom-css-path (if (fs/existsSync export-css-path) export-css-path custom-css-path)]
+            index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
@@ -116,8 +123,10 @@
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
-                export-css (. fs readFile export-or-custom-css-path)
-                _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
+                export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
+                custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
@@ -132,8 +141,12 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js" "age-encryption.js"]))]
-          (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
+                              ["main.js" "code-editor.js" "excalidraw.js"]))]
+
+          (send-to-renderer
+           :notification
+           {:type "success"
+            :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))))
 
 (defn setup-app-manager!
   [^js win]
@@ -208,7 +221,7 @@
                                             (p/let [graph-name (get-graph-name (state/get-graph-path))
                                                     _ (handler/broadcast-persist-graph! graph-name)]
                                               (handler/open-new-window!)))
-                                   :accelerator (if mac? 
+                                   :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
                                                   "Shift+CommandOrControl+N")}
@@ -261,7 +274,12 @@
         protocol (bean/->js [{:scheme     LSP_SCHEME
                               :privileges privileges}
                              {:scheme     FILE_LSP_SCHEME
-                              :privileges privileges}]))
+                              :privileges privileges}
+                             {:scheme     FILE_ASSETS_SCHEME
+                              :privileges {:standard        false
+                                           :secure          false
+                                           :bypassCSP       false
+                                           :supportFetchAPI false}}]))
 
       (set-app-menu!)
       (setup-deeplink!)
@@ -286,9 +304,9 @@
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
-               (restore-user-fetch-agent)
+               (utils/<restore-proxy-settings)
 
-               (utils/disableXFrameOptions win)
+               (js-utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
 
@@ -301,10 +319,11 @@
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 t3 (handler/set-ipc-handler! win)
+                                t4 (server/setup! win)
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
                                         (and f (f)))))))
 
                ;; setup effects

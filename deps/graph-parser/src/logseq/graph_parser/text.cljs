@@ -10,9 +10,15 @@
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn get-file-basename
+  "Returns the basename of a file path. e.g. /a/b/c.md -> c.md"
   [path]
   (when-not (string/blank? path)
-    ;; Same as util/node-path.name
+    (.-base (path/parse (string/replace path "+" "/")))))
+
+(defn get-file-rootname
+  "Returns the rootname of a file path. e.g. /a/b/c.md -> c"
+  [path]
+  (when-not (string/blank? path)
     (.-name (path/parse (string/replace path "+" "/")))))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
@@ -28,7 +34,7 @@
        (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
              (string/trim label))
            (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (some-> (get-file-basename path)
+             (some-> (get-file-rootname path)
                      (string/replace "." "/")))
            (-> (re-matches page-ref-re-0 s)
                second))))
@@ -71,15 +77,12 @@
        (remove-level-space-aux! text block-pattern space? trim-left?)))))
 
 (defn namespace-page?
-  [p]
-  (and (string? p)
-       (string/includes? p "/")
-       (not (string/starts-with? p "../"))
-       (not (string/starts-with? p "./"))
-       (not (gp-util/url? p))))
-
-(defonce non-parsing-properties
-  (atom #{"background-color" "background_color"}))
+  [page-name]
+  (and (string? page-name)
+       (string/includes? page-name "/")
+       (not (string/starts-with? page-name "../"))
+       (not (string/starts-with? page-name "./"))
+       (not (gp-util/url? page-name))))
 
 (defn parse-non-string-property-value
   "Return parsed non-string property value or nil if none is found"
@@ -151,38 +154,37 @@
                     (map second))]
     (set (mapcat sep-by-comma plains))))
 
-(defn parse-property
-  "Property value parsing that takes into account built-in properties, and user config"
-  [k v mldoc-references-ast config-state]
+(defn- parse-property-refs [k v mldoc-references-ast config-state]
   (let [refs (extract-refs-from-mldoc-ast mldoc-references-ast)
-        property-separated-by-commas? (separated-by-commas? config-state k)
-        refs' (if property-separated-by-commas?
-                (->> (extract-refs-by-commas v (get config-state :format :markdown))
-                     (set/union refs))
-                refs)
-        k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
-        v (string/trim (str v))
-        non-string-property (parse-non-string-property-value v)]
+        property-separated-by-commas? (separated-by-commas? config-state k)]
+    (if property-separated-by-commas?
+      (->> (extract-refs-by-commas v (get config-state :format :markdown))
+           (set/union refs))
+      refs)))
+
+(defn parse-property
+  "Property value parsing that takes into account built-in properties, format
+  and user config"
+  [k v mldoc-references-ast config-state]
+  (let [v' (string/trim (str v))]
     (cond
       (contains? (set/union
-                  #{"filters" "macro"}
-                  (get config-state :ignored-page-references-keywords)) k)
-      v
+                  (set (map name (gp-property/unparsed-built-in-properties)))
+                  (get config-state :ignored-page-references-keywords))
+                 (name k))
+      v'
 
-      (@non-parsing-properties k)
-      v
-
-      (string/blank? v)
+      (string/blank? v')
       nil
 
-      (and (string? v) (gp-util/wrapped-by-quotes? v))
-      v
+      (gp-util/wrapped-by-quotes? v')
+      v'
 
-      (seq refs')
-      refs'
-
-      (some? non-string-property)
-      non-string-property
-
+      ;; parse property value as needed
       :else
-      v)))
+      (let [refs (parse-property-refs k v' mldoc-references-ast config-state)]
+        (if (seq refs)
+          refs
+          (if-some [new-val (parse-non-string-property-value v')]
+            new-val
+            v'))))))
