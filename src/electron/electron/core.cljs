@@ -244,14 +244,14 @@
                                                (.send web-contents "invokeEditorHandler" "redo")))
                                     :accelerator "Shift+CommandOrControl+Z"}
                                    {:type "separator"}
-                                   {:role "cut"}
-                                   {:role "copy"}
+                                   {:role "cut"}  ;; FIXME not work as expected
+                                   {:role "copy"} ;; FIXME not work as expected
                                    {:role "paste"}]
 
                                   (if mac?
                                     [{:role "pasteAndMatchStyle"}
                                      {:role "delete"}
-                                     {:role "selectAll"}
+                                     {:role "selectAll"} ;; FIXME not work as expected
                                      {:type "separator"}
                                      {:label "Speech"
                                       :submenu [{:role "startSpeaking"},
