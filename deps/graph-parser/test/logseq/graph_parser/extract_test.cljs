@@ -13,6 +13,9 @@
         (throw (js/Error. ":block/parent && :block/left conflicts")))
       (mapv :block/content blocks))))
 
+(defn- extract-title [file text]
+  (-> (extract/extract file text {}) :pages first :block/properties :title))
+
 (deftest extract-blocks-for-headings
   []
   (is (= ["a" "b" "c"]
@@ -40,6 +43,28 @@
     - h
   - i
 - j"))))
+
+(deftest parse-page-title
+  []
+  (is (= nil
+         (extract-title "foo.org" "")))
+  (is (= "Howdy"
+         (extract-title "foo.org" "#+title: Howdy")))
+  (is (= "Howdy"
+         (extract-title "foo.org" "#+TITLE: Howdy")))
+  (is (= "Howdy"
+         (extract-title "foo.org" "#+TiTlE: Howdy")))
+  (is (= "diagram/abcdef"
+         (extract-title "foo.org" ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+TITLE: diagram/abcdef")))
+  (is (= "diagram/abcdef"
+         (extract-title "foo.org" ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+title: diagram/abcdef")))
+)
 
 (deftest extract-blocks-with-property-pages-config
   []
