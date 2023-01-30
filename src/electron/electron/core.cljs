@@ -249,7 +249,8 @@
                                     :click (fn []
                                              (let [browser-window ^js/BrowserWindow @*win
                                                    web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "copy")))}
+                                               (.send web-contents "invokeEditorHandler" "copy")))
+                                    :accelerator "CommandOrControl+C"}
                                    {:role "paste"}]
 
                                   (if mac?
