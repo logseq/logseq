@@ -17,7 +17,6 @@
   (-> (extract/extract file text {}) :pages first :block/properties :title))
 
 (deftest extract-blocks-for-headings
-  []
   (is (= ["a" "b" "c"]
          (extract
           "- a
@@ -45,7 +44,6 @@
 - j"))))
 
 (deftest parse-page-title
-  []
   (is (= nil
          (extract-title "foo.org" "")))
   (is (= "Howdy"
@@ -67,7 +65,6 @@
 )
 
 (deftest extract-blocks-with-property-pages-config
-  []
   (are [extract-args expected-refs]
        (= expected-refs
           (->> (apply extract/extract extract-args)
@@ -82,7 +79,6 @@
        #{"bar" "bing"}))
 
 (deftest test-regression-1902
-  []
   (is (= ["line1" "line2" "line3" "line4"]
          (extract
           "- line1
@@ -103,7 +99,6 @@
       :block/properties {:title "my whiteboard foo"}})})
 
 (deftest test-extract-whiteboard-edn
-  []
   (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
         page (first pages)]
     (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
