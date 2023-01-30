@@ -188,8 +188,10 @@
                      (fn [action]
                        (println "invokeEditorHandler with action:" action)
                        (case action
-                         "undo" (history/undo!)
-                         "redo" (history/redo!)))))
+                         "undo" (history/undo! nil)
+                         "redo" (history/redo! nil)
+                         "copy" (editor-handler/shortcut-copy nil)
+                         "cut" (editor-handler/shortcut-cut nil)))))
 
 (defn listen!
   []

@@ -244,8 +244,16 @@
                                                (.send web-contents "invokeEditorHandler" "redo")))
                                     :accelerator "Shift+CommandOrControl+Z"}
                                    {:type "separator"}
-                                   {:role "cut"}  ;; FIXME not work as expected
-                                   {:role "copy"} ;; FIXME not work as expected
+                                   {:label "Cut"
+                                    :click (fn []
+                                             (let [browser-window ^js/BrowserWindow @*win
+                                                   web-contents (.-webContents browser-window)]
+                                               (.send web-contents "invokeEditorHandler" "cut")))}
+                                   {:label "Copy"
+                                    :click (fn []
+                                             (let [browser-window ^js/BrowserWindow @*win
+                                                   web-contents (.-webContents browser-window)]
+                                               (.send web-contents "invokeEditorHandler" "copy")))}
                                    {:role "paste"}]
 
                                   (if mac?
