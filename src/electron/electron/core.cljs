@@ -228,7 +228,36 @@
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}
-                       {:role "editMenu"}
+                       {:role "editMenu"
+                        :submenu [{:label "Undo"
+                                   :click (fn []
+                                            (let [browser-window ^js/BrowserWindow @*win
+                                                  web-contents (.-webContents browser-window)]
+                                              (.send web-contents "invokeEditorHandler" "undo")))
+                                   :accelerator "CommandOrControl+Z"}
+                                  {:label "Redo"
+                                   :click (fn []
+                                            (let [browser-window ^js/BrowserWindow @*win
+                                                  web-contents (.-webContents browser-window)]
+                                              (.send web-contents "invokeEditorHandler" "redo")))
+                                   :accelerator "Shift+CommandOrControl+Z"}
+                                  {:type "separator"}
+                                  {:role "cut"} ;; FIXME not working as expected
+                                  {:role "copy"} ;; FIXME not working as expected
+                                  {:role "paste"}
+                                  {:role "pasteAndMatchStyle"}
+                                  {:role "delete"}
+                                  {:role "selectAll"} ;; FIXME not working as expected
+                                  {:type "separator"}
+                                  {:label "Substitutions"
+                                   :submenu [{:role "showSubstitutions"}
+                                             {:type "separator"}
+                                             {:role "toggleSmartQuotes"}
+                                             {:role "toggleSmartDashes"}
+                                             {:role "toggleTextReplacement"}]}
+                                  {:label "Speech"
+                                   :submenu [{:role "startSpeaking"}
+                                             {:role "stopSpeaking"}]}]}
                        {:role "viewMenu"}
                        {:role "windowMenu"})
         ;; Windows has no about role
