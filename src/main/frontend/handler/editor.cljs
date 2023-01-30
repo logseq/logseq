@@ -887,9 +887,8 @@
 
 (defn set-block-timestamp!
   [block-id key value]
-  (let [key (string/lower-case key)
+  (let [key (string/lower-case (str key))
         block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/lower-case (str key))
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
@@ -902,6 +901,20 @@
                      (string/ends-with? input-id (str block-id)))
               (state/set-edit-content! input-id new-content)
               (save-block-if-changed! block new-content))))))))
+
+(defn set-editing-block-timestamp!
+  "Almost the same as set-block-timestamp! except for:
+   - it doesn't save the block
+   - it extracts current content from current input"
+  [key value]
+  (let [key (string/lower-case (str key))
+        value (str value)
+        content (state/get-edit-content)
+        new-content (-> (text-util/remove-timestamp content key)
+                        (text-util/add-timestamp key value))]
+    (when (not= content new-content)
+      (let [input-id (state/get-edit-input-id)]
+        (state/set-edit-content! input-id new-content)))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
@@ -3065,7 +3078,8 @@
 (defn shortcut-up-down [direction]
   (fn [e]
     (when (and (not (auto-complete?))
-               (not (slide-focused?)))
+               (not (slide-focused?))
+               (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
         (state/editing?)
@@ -3122,7 +3136,8 @@
 
 (defn shortcut-left-right [direction]
   (fn [e]
-    (when-not (auto-complete?)
+    (when (and (not (auto-complete?))
+               (not (state/get-timestamp-block)))
       (cond
         (state/editing?)
         (do

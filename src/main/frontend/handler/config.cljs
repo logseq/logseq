@@ -5,24 +5,18 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.config :as config]
             [frontend.db :as db]
-            [borkdude.rewrite-edn :as rewrite]
-            [lambdaisland.glogi :as log]))
+            [borkdude.rewrite-edn :as rewrite]))
 
 (defn parse-repo-config
   "Parse repo configuration file content"
   [content]
-  (try
-    (rewrite/parse-string content)
-    (catch :default e
-      (log/error :parse/config-failed e)
-      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
-      (rewrite/parse-string config/config-default-content))))
+  (rewrite/parse-string content))
 
 (defn- repo-config-set-key-value
   [path k v]
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file path)]
-      (repo-config-handler/read-repo-config repo content)
+      (repo-config-handler/read-repo-config content)
       (let [result (parse-repo-config content)
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)
