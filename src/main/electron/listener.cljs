@@ -191,7 +191,8 @@
                          "undo" (history/undo! nil)
                          "redo" (history/redo! nil)
                          "copy" (editor-handler/shortcut-copy nil)
-                         "cut" (editor-handler/shortcut-cut nil)))))
+                         "cut" (editor-handler/shortcut-cut nil) ;; FIXME this handler relies on arg Event
+                         ))))
 
 (defn listen!
   []

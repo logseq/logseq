@@ -244,11 +244,7 @@
                                                (.send web-contents "invokeEditorHandler" "redo")))
                                     :accelerator "Shift+CommandOrControl+Z"}
                                    {:type "separator"}
-                                   {:label "Cut"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "cut")))}
+                                   {:role "cut"}
                                    {:label "Copy"
                                     :click (fn []
                                              (let [browser-window ^js/BrowserWindow @*win
