@@ -4,6 +4,8 @@
    [rum.core :as rum]
    [frontend.ui :as ui]
    [frontend.state :as state]
+   [frontend.search :as search]
+   [cljs-bean.core :as bean]
    [promesa.core :as p]
    [camel-snake-kebab.core :as csk]
    [frontend.util :as util]
@@ -35,6 +37,13 @@
          (string/replace content matched (resolve-asset-url matched)) content))
      content matches)
     content))
+
+(defn settle-parent-key
+  [{:keys [key] :as node}]
+  (cond-> node
+    (and (string? key)
+         (string/includes? key "/"))
+    (assoc :parent (subs key 0 (string/last-index-of key "/")))))
 
 (defn load-glide-assets!
   []
@@ -162,21 +171,47 @@
     [:small.opacity-30 (str "Resources from " (get-handbooks-endpoint "/"))]]])
 
 (rum/defc search-bar
-  [active-pane]
-  (let [*input-ref (rum/use-ref nil)]
+  [pane-state nav! handbooks-nodes search-state set-search-state!]
+  (let [*input-ref (rum/use-ref nil)
+        [q, set-q!] (rum/use-state "")
+        [results, set-results!] (rum/use-state nil)]
 
     (rum/use-effect!
      #(some-> (rum/deref *input-ref)
               (.focus))
-     [active-pane])
+     [pane-state])
 
-    [:div.search.relative
-     [:span.icon.absolute.opacity-90
-      {:style {:top 6 :left 7}}
-      (ui/icon "search" {:size 12})]
-     [:input {:placeholder "Search"
-              :auto-focus  true
-              :ref         *input-ref}]]))
+    (rum/use-effect!
+     (fn []
+       (let [q       (util/trim-safe q)
+             active? (not (string/blank? (util/trim-safe q)))]
+         (set-search-state!
+          (merge search-state {:active? active?}))
+         (if (and (not (empty? handbooks-nodes)) active?)
+           (-> handbooks-nodes
+               (dissoc "__root")
+               (vals)
+               (search/fuzzy-search q :limit 30 :extract-fn :title)
+               (set-results!))
+           (set-results! nil))))
+     [q])
+
+    [:div.search
+     [:div.input-wrap.relative
+      [:span.icon.absolute.opacity-90
+       {:style {:top 6 :left 7}}
+       (ui/icon "search" {:size 12})]
+      [:input {:placeholder   "Search"
+               :auto-focus    true
+               :default-value q
+               :on-change     #(set-q! (util/evalue %))
+               :ref           *input-ref}]]
+
+     (when (:active? search-state)
+       [:div.search-results-wrap
+        [:div.results-wrap
+         (for [topic results]
+           (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)))]])]))
 
 (rum/defc related-topics
   []
@@ -205,6 +240,9 @@
 
         [dev-watch?, set-dev-watch?]
         (rum/use-state (storage/get :handbooks-dev-watch?))
+
+        [search-state, set-search-state!]
+        (rum/use-state {:active? false})
 
         reset-handbooks!     #(set-handbooks-state! {:status nil :data nil :error nil})
         update-handbooks!    #(set-handbooks-state! (fn [v] (merge v %)))
@@ -260,10 +298,13 @@
        (when handbooks-data
          (set-handbooks-nodes!
           (->> (tree-seq map? :children handbooks-data)
-               (reduce #(assoc %1 (or (:key %2) "__root") %2) {})))))
+               (reduce #(assoc %1 (or (:key %2) "__root") (settle-parent-key %2)) {})))
+         ;; TODO: remove debug
+         (set! (.-handbook-nodes js/window) (bean/->js handbooks-nodes))))
      [handbooks-data])
 
     [:div.cp__handbooks-content
+     {:class (util/classnames [{:search-active (:active? search-state)}])}
      [:div.pane-wrap
       [:div.hd.flex.justify-between.select-none.draggable-handle
 
@@ -298,7 +339,8 @@
         [:<>
          ;; search bar
          (when (or dashboard? (= :topics active-pane))
-           (search-bar active-pane))
+           (search-bar active-pane0 nav-to-pane!
+                       handbooks-nodes search-state set-search-state!))
 
          ;; entry pane
          (when pane-render
