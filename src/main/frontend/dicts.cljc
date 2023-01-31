@@ -4914,6 +4914,7 @@
         :settings-page/disable-sentry "Kullanım verilerini ve tanılamayı Logseq'e gönderin"
         :settings-page/disable-sentry-desc "Logseq asla yerel graf veritabanınızı toplamayacak veya verilerinizi satmayacaktır."
         :settings-page/preferred-outdenting "Mantıksal girinti"
+        :settings-page/show-full-blocks "Blok referansındaki tüm satırları göster"
         :settings-page/custom-date-format "Tercih edilen tarih biçimi"
         :settings-page/custom-date-format-warning "Yeniden dizin oluşturma gerekli! Mevcut günlük referansları bozulabilir!"
         :settings-page/preferred-file-format "Tercih edilen dosya biçimi"
