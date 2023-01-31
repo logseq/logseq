@@ -50,10 +50,12 @@
                       (let [^js dset (.-dataset el)
                             dx       (.-dx e)
                             dy       (.-dy e)
-                            dx'      (util/safe-parse-float (.-dx dset))
-                            dy'      (util/safe-parse-float (.-dy dset))
-                            x        (+ dx (if dx' dx' 0))
-                            y        (+ dy (if dy' dy' 0))]
+                            dx'      (.-dx dset)
+                            dy'      (.-dy dset)
+                            dx'      (and dx' (util/safe-parse-float dx'))
+                            dy'      (and dy' (util/safe-parse-float dy'))
+                            x        (+ dx (or dx' 0))
+                            y        (+ dy (or dy' 0))]
 
                         ;; update container position
                         (set! (.. el -style -transform) (str "translate(" x "px, " y "px)"))
