@@ -12,3 +12,16 @@
        "4"         false
        "foo bar"   false
        "`property" false))
+
+(deftest extract-file-extension? 
+  (are [x y]
+       (= (gp-util/path->file-ext x) y)
+    "foo.bar" "bar"
+    "foo"     nil
+    "foo.bar.baz" "baz"
+    "../assets/audio.mp3" "mp3"
+    "/root/Documents/audio.mp3" "mp3"
+    "C:\\Users\\foo\\Documents\\audio.mp3" "mp3"
+    "/root/Documents/audio" nil
+    "/root/Documents/audio." nil
+    "special/characters/aäääöüß.7z" "7z"))
