@@ -10,7 +10,6 @@
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [electron.ipc :as ipc]
-            [goog.functions :refer [debounce]]
             [dommy.core :as dom]))
 
 (defn add-search-to-recent!
@@ -87,7 +86,9 @@
                           (str " " (subs q 1)))))
         (ipc/ipc "find-in-page" q option)))))
 
-(defonce debounced-search (debounce electron-find-in-page! 500))
+(let [cancelable-debounce-search (util/cancelable-debounce electron-find-in-page! 500)]
+  (defonce debounced-search (first cancelable-debounce-search))
+  (defonce stop-debounced-search! (second cancelable-debounce-search)))
 
 (defn loop-find-in-page!
   [backward?]

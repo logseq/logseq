@@ -178,8 +178,9 @@
      [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
      (references-count page-name nil {:hover? true})]]
-   [:div.p-4.h-64.flex.justify-center
-    (tldraw-preview page-name)]])
+   (ui/lazy-visible
+    (fn [] [:div.p-4.h-64.flex.justify-center
+            (tldraw-preview page-name)]))])
 
 (rum/defc dashboard-create-card
   []
