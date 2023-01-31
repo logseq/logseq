@@ -506,6 +506,7 @@ body[data-page=import] {
 
   &.cp__sidebar-help-btn {
     background-color: rgba(0, 0, 0, .4);
+    z-index: 9;
 
     > .inner {
       opacity: 1;
