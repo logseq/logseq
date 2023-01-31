@@ -17,6 +17,7 @@
             [frontend.components.macro :as macro]
             [frontend.components.plugins :as plugins]
             [frontend.components.query-table :as query-table]
+            [frontend.components.query.builder :as query-builder]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -3170,6 +3171,7 @@
                                                       (trigger-custom-query! state))}))]]
           (fn []
             [:div
+             (query-builder/builder)
              (when (and current-block (not view-f) (nil? table-view?))
                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                 (when-not page-list?

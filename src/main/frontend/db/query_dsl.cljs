@@ -35,12 +35,9 @@
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags
-;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
 ;; (sort-by created-at asc)
-
-;; (between -7d +7d)
 
 ;; Time helpers
 ;; ============
