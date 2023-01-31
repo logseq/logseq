@@ -144,13 +144,16 @@
   }
 
   &-popup {
-    @apply fixed bottom-[60px] right-[26px] rounded-lg overflow-hidden
+    @apply absolute rounded-lg overflow-hidden
     z-[9] shadow-lg flex justify-center flex-col;
 
     background-color: var(--ls-quaternary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
+    touch-action: none;
     height: 720px;
     width: 450px;
+    left: -415px;
+    top: -680px;
   }
 }
 

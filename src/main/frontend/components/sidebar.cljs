@@ -700,13 +700,17 @@
 
 (rum/defc handbook-button < rum/reactive
   []
-  (when-not (state/sub :ui/sidebar-open?)
-    [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
-     [:div.inner
-      {:title    (t :help-shortcut-title)
-       :on-click (fn []
-                   (handbooks/toggle-handbooks))}
-      "📙"]]))
+  (let [handbooks-open? (state/sub :ui/handbooks-open?)]
+    (when-not (state/sub :ui/sidebar-open?)
+      [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
+       [:div.inner
+        {:title    (t :help-shortcut-title)
+         :on-click (fn []
+                     (handbooks/toggle-handbooks))}
+        "📙"]
+
+       (when handbooks-open?
+         (handbooks/handbooks-popup))])))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -735,7 +739,6 @@
         sidebar-open?  (state/sub :ui/sidebar-open?)
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
-        handbooks-open? (state/sub :ui/handbooks-open?)
         wide-mode? (state/sub :ui/wide-mode?)
         develop-mode? (state/sub :ui/developer-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
@@ -827,8 +830,6 @@
        (and (not config/mobile?)
             (not config/publishing?))
         [:<>
-         (when handbooks-open?
-           (handbooks/handbooks-popup))
-         (when (and develop-mode? (false? handbooks-open?))
+         (when develop-mode?
            (handbook-button))
          (help-button)])])))
