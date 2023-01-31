@@ -1972,6 +1972,7 @@
             (let [next-state
                   (let [{public-key :publicKey private-key :secretKey}
                         (<! (<key-gen rsapi))
+                        _ (assert (and public-key private-key) (str :public-key public-key :private-key private-key))
                         encrypted-private-key (<! (<encrypt-content private-key pwd))
                         _ (assert (string? encrypted-private-key)
                                   {:encrypted-private-key encrypted-private-key
