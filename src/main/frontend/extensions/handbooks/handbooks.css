@@ -47,8 +47,13 @@
       @apply text-sm p-2.5 rounded-lg cursor-pointer
       mb-2 active:opacity-90;
 
-      background-color: var(--ls-primary-background-color);
+      background-color: var(--ls-secondary-background-color);
       border: 1px solid var(--ls-border-color);
+      transition: background-color .3s;
+
+      &:hover {
+        background-color: var(--ls-primary-background-color);
+      }
 
       > .l {
         @apply w-[64px] h-[48px] bg-yellow-50 rounded overflow-hidden;
