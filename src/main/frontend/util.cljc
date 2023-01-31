@@ -308,7 +308,6 @@
       Use `cancel-fn` to cancel pending callback if there is"
      [f interval]
      (let [debouncer (Debouncer. f interval)]
-       (js/console.log debouncer)
        [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
         (fn [] (.stop debouncer))])))
 
