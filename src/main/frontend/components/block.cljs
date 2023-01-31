@@ -272,8 +272,7 @@
                    (reset! *resizing-image? false)
                    state)}
   [state config title src metadata full_text local?]
-  (let [size (get state ::size)
-        image-src (string/replace src #"^assets://" "")]
+  (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
       (if-not (mobile-util/native-ios?)
@@ -302,10 +301,11 @@
        [:img.rounded-sm.relative
         (merge
          {:loading "lazy"
-          :src     image-src
+          :src     src
           :title   title}
          metadata)]
        [:.asset-overlay]
+       (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar {:aria-hidden "true"}
           ;; the image path bar
           (when (util/electron?)
@@ -361,7 +361,7 @@
              :on-mouse-down util/stop
              :on-click open-lightbox}
 
-            (ui/icon "maximize")]]]]))))
+            (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
   [:audio {:src src
