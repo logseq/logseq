@@ -41,17 +41,6 @@ adds rules that users often use"
                                               :in $ ?start ?end
                                               :where (between ?b ?start ?end)]})))
 
-         ; (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
-         ;                                    :where [?b :block/content "parent"]])
-         ;                      ffirst
-         ;                      :block/uuid)]
-         ;   (map :block/content
-         ;        (custom-query {:inputs [:current-block]
-         ;                       :query '[:find (pull ?b [*])
-         ;                                :in $ ?current-block
-         ;                                :where [?b :block/parent ?current-block]]}
-         ;                      {:current-block-uuid block-uuid})))))
-
 (defn- block-with-content [block-content]
   (-> (db-utils/q '[:find (pull ?b [:block/uuid])
                     :in $ ?content
@@ -60,12 +49,10 @@ adds rules that users often use"
       ffirst))
 
 (defn- blocks-on-journal-page-from-block-with-content [page-input block-content]
-  (prn :blocks-on-journal-page-from-block-with-content page-input)
-  (prn :blocks-on-journal-page-from-block-with-content block-content)
-  (map :block/content (custom-query {:inputs [page-input] 
+  (map :block/content (custom-query {:inputs [page-input]
                                      :query '[:find (pull ?b [*])
                                               :in $ ?page
-                                              :where [?b :block/page ?e] 
+                                              :where [?b :block/page ?e]
                                                      [?e :block/name ?page]]}
                                     {:current-block-uuid (get (block-with-content block-content) :block/uuid)})))
 
@@ -217,7 +204,7 @@ created-at:: %s"
   (is (= ["today" "tonight"] (blocks-created-between-inputs :start-of-today-ms :end-of-today-ms))
       ":start-of-today-ms and :end-of-today-ms resolve to correct datetime range")
 
-  (is (= ["+1d" "-1d" "today" "tonight"] (blocks-created-between-inputs :1d-before-ms :5d-after-ms)) 
+  (is (= ["+1d" "-1d" "today" "tonight"] (blocks-created-between-inputs :1d-before-ms :5d-after-ms))
       ":Xd-before-ms and :Xd-after-ms resolve to correct datetime range")
 
   (is (= ["today" "tonight"] (blocks-created-between-inputs :today-start :today-end))
@@ -251,10 +238,10 @@ created-at:: %s"
       ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range")
 
   (is (= [] (blocks-created-between-inputs :-0d-abcd :+1d-23.45))
-      ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully")) 
-        
+      ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully"))
 
-(deftest resolve-input-for-relative-date-queries 
+
+(deftest resolve-input-for-relative-date-queries
   (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}
                     {:file/content "- -1m" :file/path "journals/2022_12_01.md"}
                     {:file/content "- -1w" :file/path "journals/2022_12_25.md"}
@@ -268,10 +255,10 @@ created-at:: %s"
   (with-redefs [t/today (constantly (t/date-time 2023 1 1))]
     (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-365d :today))
         ":-365d and today resolve to correct journal range")
-    
+
     (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-1y :today))
         ":-1y and today resolve to correct journal range")
-    
+
     (is (= ["now" "-1d" "-1w" "-1m"] (blocks-journaled-between-inputs :-1m :today))
         ":-1m and today resolve to correct journal range")
 
@@ -283,10 +270,10 @@ created-at:: %s"
 
     (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+365d))
         ":+365d and today resolve to correct journal range")
-    
+
     (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1y))
         ":+1y and today resolve to correct journal range")
-    
+
     (is (= ["+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1m))
         ":+1m and today resolve to correct journal range")
 
@@ -299,7 +286,7 @@ created-at:: %s"
     (is (= ["+1d" "now"] (blocks-journaled-between-inputs :today :today/+1d))
         ":today/+1d and today resolve to correct journal range")))
 
-(deftest resolve-input-for-query-page 
+(deftest resolve-input-for-query-page
   (load-test-files [{:file/content "- -1d" :file/path "journals/2022_12_31.md"}
                     {:file/content "- now" :file/path "journals/2023_01_01.md"}
                     {:file/content "- +1d" :file/path "journals/2023_01_02.md"}])
@@ -316,4 +303,3 @@ created-at:: %s"
 
     (is (= ["+1d"] (blocks-on-journal-page-from-block-with-content :query-page "+1d"))
         ":query-page resolves to the parent page when called from another page")))
-
