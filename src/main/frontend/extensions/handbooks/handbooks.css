@@ -126,6 +126,10 @@
           @apply flex flex-col justify-around;
         }
       }
+
+      iframe {
+        margin: 0;
+      }
     }
 
     .glide {
