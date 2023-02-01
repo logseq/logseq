@@ -11,6 +11,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.url :as url-util]
+            [frontend.util.page :as page-util]
             [frontend.handler.shell :as shell]
             [frontend.mobile.util :as mobile-util]
             [electron.ipc :as ipc]
@@ -72,7 +73,7 @@
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
-          file-path (when (util/electron?) (page-handler/get-page-file-path))
+          file-path (when (util/electron?) (page-util/get-page-file-path page-name))
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)

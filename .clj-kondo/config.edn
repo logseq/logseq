@@ -83,6 +83,7 @@
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
+             frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var
              frontend.util.text text-util
