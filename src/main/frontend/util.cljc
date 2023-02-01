@@ -30,6 +30,7 @@
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [medley.core :as medley]
             [frontend.pubsub :as pubsub]))
+  #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -296,6 +297,19 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
+#?(:cljs 
+   (defn cancelable-debounce
+     "Create a stateful debounce function with specified interval
+   
+      Returns [fire-fn, cancel-fn]
+   
+      Use `fire-fn` to call the function(debounced)
+   
+      Use `cancel-fn` to cancel pending callback if there is"
+     [f interval]
+     (let [debouncer (Debouncer. f interval)]
+       [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
+        (fn [] (.stop debouncer))])))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))

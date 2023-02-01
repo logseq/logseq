@@ -1756,14 +1756,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn whiteboard-active-but-not-editing-portal?
+(defn editing-whiteboard-portal?
   []
-  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
 
 (defn block-component-editing?
   []
-  (or (:block/component-editing-mode? @state)
-      (whiteboard-active-but-not-editing-portal?)))
+  (and (:block/component-editing-mode? @state)
+       (not (editing-whiteboard-portal?))))
 
 (defn set-block-component-editing-mode!
   [value]

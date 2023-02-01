@@ -31,10 +31,14 @@
 ;; almost everywhere else they are not which could cause needless conflicts
 ;; with other config keys
 
-;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
-;; :inactive key is for commands that are not active for a given platform or feature condition
-;; Avoid using single letter shortcuts to allow chords that start with those characters
+;; To add a new entry to this map, first add it here and then a description for
+;; it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; A shortcut is a map with the following keys:
+;;  * :binding - A string representing a keybinding. Avoid using single letter
+;;    shortcuts to allow chords that start with those characters
+;;  * :fn - Fn or a qualified keyword that represents a fn
+;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
+;;    e.g. a given platform or feature condition
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
   ;; So this setting item does not cover all cases.
@@ -331,7 +335,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -423,6 +427,9 @@
                                      :inactive (not (config/plugin-config-enabled?))
                                      :fn       plugin-config-handler/open-replace-plugins-modal}
 
+   :ui/clear-all-notifications      {:binding false
+                                     :fn      :frontend.handler.notification/clear-all!}
+
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
 
@@ -430,7 +437,23 @@
                                      :fn      ui-handler/toggle-cards!}
 
    :git/commit                      {:binding "mod+g c"
-                                     :fn      commit/show-commit-modal!}})
+                                     :fn      commit/show-commit-modal!}
+
+   :dev/show-block-data            {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn :frontend.handler.common.developer/show-block-data}
+
+   :dev/show-block-ast             {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn :frontend.handler.common.developer/show-block-ast}
+
+   :dev/show-page-data             {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn :frontend.handler.common.developer/show-page-data}
+
+   :dev/show-page-ast              {:binding false
+                                    :inactive (not (state/developer-mode?))
+                                    :fn :frontend.handler.common.developer/show-page-ast}})
 
 (let [keyboard-shortcuts
       {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
@@ -439,11 +462,27 @@
           (str "Keys for keyboard shortcuts must be the same "
                (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
 
+(defn- resolve-fn
+  "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
+  marked as ^:export for advanced mode"
+  [keyword-fn]
+  (fn []
+    (if-let [resolved-fn (some-> (find-ns-obj (namespace keyword-fn))
+                                 (aget (munge (name keyword-fn))))]
+      (resolved-fn)
+      (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
+
 (defn build-category-map [ks]
   (->> (select-keys all-default-keyboard-shortcuts ks)
        (remove (comp :inactive val))
+       ;; Convert keyword fns to real fns
+       (map (fn [[k v]]
+              [k (if (keyword? (:fn v))
+                   (assoc v :fn (resolve-fn (:fn v)))
+                   v)]))
        (into {})))
 
+;; This is the only var that should be publicly expose :fn functionality
 (defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker
@@ -593,9 +632,13 @@
                           :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
+                          :ui/clear-all-notifications
                           :git/commit
                           :sidebar/close-top
-                          ])
+                          :dev/show-block-data
+                          :dev/show-block-ast
+                          :dev/show-page-data
+                          :dev/show-page-ast])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
@@ -736,7 +779,12 @@
     :date-picker/prev-week
     :date-picker/next-week
     :date-picker/complete
-    :git/commit]})
+    :git/commit
+    :dev/show-block-data
+    :dev/show-block-ast
+    :dev/show-page-data
+    :dev/show-page-ast
+    :ui/clear-all-notifications]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
