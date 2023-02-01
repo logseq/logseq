@@ -8,6 +8,7 @@
    [cljs-bean.core :as bean]
    [promesa.core :as p]
    [camel-snake-kebab.core :as csk]
+   [medley.core :as m]
    [frontend.util :as util]
    [frontend.storage :as storage]
    [clojure.edn :as edn]))
@@ -60,10 +61,11 @@
    child])
 
 (rum/defc topic-card
-  [{:keys [key title description cover] :as topic} nav-fn!]
+  [{:keys [key title description cover] :as topic} nav-fn! opts]
   [:div.topic-card.flex
-   {:key      key
-    :on-click nav-fn!}
+   (merge
+    {:key      key
+     :on-click nav-fn!} opts)
    (when cover
      [:div.l.flex.items-center
       [:img {:src (resolve-asset-url cover)}]])
@@ -80,7 +82,7 @@
       (when-let [category (get handbook-nodes category-key)]
         (for [topic (:children category)]
           (rum/with-key
-           (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state))
+           (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state) nil)
            (:key topic)))))]])
 
 (rum/defc pane-topic-detail
@@ -148,7 +150,7 @@
                                  (->> (util/safe-lower-case topic-key)
                                       (csk/->snake_case_string)
                                       (get handbooks-nodes)))]
-             (topic-card topic #(nav-to-pane! [:topic-detail topic "Helps"] [:dashboard]))))]])
+             (topic-card topic #(nav-to-pane! [:topic-detail topic "Helps"] [:dashboard]) nil)))]])
 
      [:h2 "Help categories"]
      [:div.categories-list
@@ -175,6 +177,13 @@
   (let [*input-ref (rum/use-ref nil)
         [q, set-q!] (rum/use-state "")
         [results, set-results!] (rum/use-state nil)
+        [selected, set-selected!] (rum/use-state 0)
+        select-fn! #(when-let [ldx (and (seq results) (dec (count results)))]
+                      (set-selected!
+                       (case %
+                         :up (if (zero? selected) ldx (max (dec selected) 0))
+                         :down (if (= selected ldx) 0 (min (inc selected) ldx))
+                         :dune)))
 
         q          (util/trim-safe q)
         active?    (not (string/blank? (util/trim-safe q)))
@@ -196,7 +205,9 @@
            (-> (or pane-nodes (vals (dissoc handbooks-nodes "__root")))
                (search/fuzzy-search q :limit 30 :extract-fn :title)
                (set-results!))
-           (set-results! nil))))
+           (set-results! nil))
+
+         (set-selected! 0)))
      [q])
 
     [:div.search
@@ -216,9 +227,23 @@
                                    (state/toggle! :ui/handbooks-open?)
                                    (reset-q!))
 
-                                 ;; UP/DOWN
-                                 (38 40)
-                                 (util/stop %)
+                                 ;; Up
+                                 38
+                                 (do
+                                   (util/stop %)
+                                   (select-fn! :up))
+
+                                 ;; Down
+                                 40
+                                 (do
+                                   (util/stop %)
+                                   (select-fn! :down))
+
+                                 ;; Enter
+                                 13
+                                 (when-let [topic (and active? (nth results selected))]
+                                   (util/stop %)
+                                   (nav! [:topic-detail topic (:title topic)] pane-state))
 
                                  :dune)
                :ref           *input-ref}]
@@ -232,9 +257,10 @@
      (when (:active? search-state)
        [:div.search-results-wrap
         [:div.results-wrap
-         (for [topic results]
+         (for [[idx topic] (m/indexed results)]
            (rum/with-key
-            (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state))
+            (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
+                        {:class (util/classnames [{:active (= selected idx)}])})
             (:key topic)))]])]))
 
 (rum/defc related-topics
