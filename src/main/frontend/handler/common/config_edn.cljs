@@ -1,11 +1,11 @@
 (ns frontend.handler.common.config-edn
   "Common fns related to config.edn - global and repo"
-  (:require [malli.error :as me]
-            [malli.core :as m]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as string :refer [includes?]]
+            [frontend.handler.notification :as notification]
             [goog.string :as gstring]
-            [clojure.string :as string]
-            [clojure.edn :as edn]
-            [frontend.handler.notification :as notification]))
+            [malli.core :as m]
+            [malli.error :as me]))
 
 (defn- humanize-more
   "Make error maps from me/humanize more readable for users. Doesn't try to handle
@@ -42,13 +42,20 @@ nested keys or positional errors e.g. tuples"
   [path file-body schema]
   (let [parsed-body (try
                       (edn/read-string file-body)
-                      (catch :default _ ::failed-to-read))]
+                      (catch :default x [::failed-to-read (ex-message x)]))]
     (cond
       (nil? parsed-body)
       true
-
-      (= ::failed-to-read parsed-body)
+      (and (= ::failed-to-read (first parsed-body)) (includes? (second parsed-body) "duplicate key"))
       (do
+        (notification/show! (gstring/format "The file '%s' has duplicate keys. The key '%s' is assigned multiple times."
+                                            path, (subs (second parsed-body) 36))
+                            :error)
+        false)
+
+      (= ::failed-to-read (first parsed-body))
+      (do
+
         (notification/show! (gstring/format "Failed to read file '%s'. Make sure your config is wrapped
 in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
                                             path)
