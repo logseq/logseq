@@ -178,7 +178,7 @@ html[data-theme="light"] {
   .cp__handbooks-popup {
     background-color: var(--ls-primary-background-color);
 
-    .search {
+    .input-wrap {
       background-color: #f1f1f1;
 
       &:focus-within {
