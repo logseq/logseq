@@ -174,18 +174,20 @@
   [pane-state nav! handbooks-nodes search-state set-search-state!]
   (let [*input-ref (rum/use-ref nil)
         [q, set-q!] (rum/use-state "")
-        [results, set-results!] (rum/use-state nil)]
+        [results, set-results!] (rum/use-state nil)
+
+        q          (util/trim-safe q)
+        active?    (not (string/blank? (util/trim-safe q)))
+        reset-q!   #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
+        focus-q!   #(some-> (rum/deref *input-ref) (.focus))]
 
     (rum/use-effect!
-     #(some-> (rum/deref *input-ref)
-              (.focus))
+     #(focus-q!)
      [pane-state])
 
     (rum/use-effect!
      (fn []
-       (let [q          (util/trim-safe q)
-             active?    (not (string/blank? (util/trim-safe q)))
-             pane-nodes (:children (second pane-state))]
+       (let [pane-nodes (:children (second pane-state))]
 
          (set-search-state!
           (merge search-state {:active? active?}))
@@ -202,11 +204,20 @@
       [:span.icon.absolute.opacity-90
        {:style {:top 6 :left 7}}
        (ui/icon "search" {:size 12})]
+
       [:input {:placeholder   "Search"
                :auto-focus    true
                :default-value q
                :on-change     #(set-q! (util/evalue %))
-               :ref           *input-ref}]]
+               :on-key-up     #(when (= 27 (.-keyCode %))
+                                 (reset-q!))
+               :ref           *input-ref}]
+
+      (when active?
+        [:span.icon.absolute.opacity-50.hover:opacity-80.select-none
+         {:style    {:right 6 :top 7}
+          :on-click #(do (reset-q!) (focus-q!))}
+         (ui/icon "x" {:size 12})])]
 
      (when (:active? search-state)
        [:div.search-results-wrap
