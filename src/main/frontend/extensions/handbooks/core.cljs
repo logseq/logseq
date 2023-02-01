@@ -183,14 +183,15 @@
 
     (rum/use-effect!
      (fn []
-       (let [q       (util/trim-safe q)
-             active? (not (string/blank? (util/trim-safe q)))]
+       (let [q          (util/trim-safe q)
+             active?    (not (string/blank? (util/trim-safe q)))
+             pane-nodes (:children (second pane-state))]
+
          (set-search-state!
           (merge search-state {:active? active?}))
+
          (if (and (not (empty? handbooks-nodes)) active?)
-           (-> handbooks-nodes
-               (dissoc "__root")
-               (vals)
+           (-> (or pane-nodes (vals (dissoc handbooks-nodes "__root")))
                (search/fuzzy-search q :limit 30 :extract-fn :title)
                (set-results!))
            (set-results! nil))))
@@ -211,7 +212,9 @@
        [:div.search-results-wrap
         [:div.results-wrap
          (for [topic results]
-           (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)))]])]))
+           (rum/with-key
+            (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state))
+            (:key topic)))]])]))
 
 (rum/defc related-topics
   []
