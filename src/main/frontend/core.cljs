@@ -68,6 +68,5 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
-    (sync/<sync-stop)
-    (md/stop!))
+    (sync/<sync-stop))
   (js/console.log "stop"))
