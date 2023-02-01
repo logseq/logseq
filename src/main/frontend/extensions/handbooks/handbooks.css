@@ -60,7 +60,7 @@
       border: 1px solid var(--ls-border-color);
       transition: background-color .3s;
 
-      &:hover {
+      &:hover, &.active {
         background-color: var(--ls-primary-background-color);
       }
 
