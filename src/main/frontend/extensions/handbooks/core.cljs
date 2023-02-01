@@ -209,8 +209,18 @@
                :auto-focus    true
                :default-value q
                :on-change     #(set-q! (util/evalue %))
-               :on-key-up     #(when (= 27 (.-keyCode %))
-                                 (reset-q!))
+               :on-key-down   #(case (.-keyCode %)
+                                 ;; ESC
+                                 27
+                                 (if-not active?
+                                   (state/toggle! :ui/handbooks-open?)
+                                   (reset-q!))
+
+                                 ;; UP/DOWN
+                                 (38 40)
+                                 (util/stop %)
+
+                                 :dune)
                :ref           *input-ref}]
 
       (when active?
