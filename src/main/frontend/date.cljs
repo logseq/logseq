@@ -213,8 +213,8 @@
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))
 
-  (tf/show-formatters)
+  (tf/show-formatters))
 
   ;; :date 2020-05-31
   ;; :rfc822 Sun, 31 May 2020 03:00:57 Z
-)
+

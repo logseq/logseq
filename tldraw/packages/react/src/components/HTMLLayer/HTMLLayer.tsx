@@ -1,4 +1,3 @@
-import { autorun } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { useRendererContext } from '../../hooks'
@@ -11,21 +10,15 @@ export const HTMLLayer = observer(function HTMLLayer({ children }: HTMLLayerProp
   const rLayer = React.useRef<HTMLDivElement>(null)
 
   const { viewport } = useRendererContext()
+  const layer = rLayer.current
 
-  React.useEffect(
-    () =>
-      autorun(() => {
-        const layer = rLayer.current
-        if (!layer) return
+  const { zoom, point } = viewport.camera
 
-        const { zoom, point } = viewport.camera
-        layer.style.setProperty(
-          'transform',
-          `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
-        )
-      }),
-    []
-  )
+  React.useEffect(() => {
+    if (!layer) return
+
+    layer.style.transform = `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
+  }, [zoom, point, layer])
 
   return (
     <div ref={rLayer} className="tl-absolute tl-layer">
