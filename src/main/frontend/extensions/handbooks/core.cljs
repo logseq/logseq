@@ -11,6 +11,7 @@
    [medley.core :as m]
    [frontend.util :as util]
    [frontend.storage :as storage]
+   [frontend.extensions.video.youtube :as youtube]
    [clojure.edn :as edn]))
 
 (defn get-handbooks-endpoint
@@ -85,6 +86,17 @@
            (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state) nil)
            (:key topic)))))]])
 
+(rum/defc media-render
+  [src]
+  (let [src        (util/trim-safe src)
+        youtube-id (and (string/includes? src "youtube.com/watch?v=")
+                        (subs src (+ 2 (string/last-index-of src "v="))))]
+    (cond
+      (string? youtube-id)
+      (youtube/youtube-video youtube-id)
+
+      :else [:img {:src src}])))
+
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state _nav!]
 
@@ -120,7 +132,7 @@
                    [:div.glide__slides
                     (for [demo demos]
                       [:div.item.glide__slide
-                       [:img {:src (resolve-asset-url demo)}]])]]
+                       (media-render (resolve-asset-url demo))])]]
 
                   [:div.glide__bullets {:data-glide-el "controls[nav]"}
                    (map-indexed
@@ -130,7 +142,7 @@
                     demos)]]
 
                  [:div.flex.demos
-                  [:img {:src (resolve-asset-url (first demos))}]])))
+                  (media-render (resolve-asset-url (first demos)))])))
 
            [:div.content-wrap
             (when-let [content (:content topic)]
