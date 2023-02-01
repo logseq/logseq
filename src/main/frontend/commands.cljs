@@ -655,12 +655,13 @@
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
        (contains? #{:scheduled :deadline} type)
-       (when-let [value (gobj/get (state/get-input) "value")]
-         (string/blank? value)))
+       (string/blank? (gobj/get (state/get-input) "value")))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
-    (state/set-editor-action! :datepicker)))
+    (do
+      (state/set-timestamp-block! nil)
+      (state/set-editor-action! :datepicker))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]

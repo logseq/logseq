@@ -24,7 +24,6 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
@@ -262,7 +261,7 @@
   (state/set-parsing-state! {:graph-loading? true})
   (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (repo-config-handler/read-repo-config repo-url content))
+                     (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
@@ -302,7 +301,7 @@
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
-                                   (gp-util/remove-nils))
+                                   (remove nil?))
               options {:delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
                        :re-render? true}]

@@ -330,6 +330,25 @@
                   (remove built-in-pages)
                   set)))))
 
+  (testing "from cased org title"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set default-db/built-in-pages-names)]
+      (graph-parser/parse-file conn
+                               "foo.org"
+                               ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+tItLe: Well parsed!"
+                               {})
+      (is (= #{"Well parsed!"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/original-name first))
+                  (remove built-in-pages)
+                  set)))))
+
   (testing "for file and web uris"
     (let [conn (ldb/start-conn)
           built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]

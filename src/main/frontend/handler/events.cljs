@@ -376,7 +376,8 @@
   (when (config/local-db? repo)
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
-      (when-not dir-exists?
+      (when (and (not dir-exists?)
+                 (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
@@ -603,18 +604,6 @@
     (notification/show!
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
      :warning false (.-id o))))
-
-(defmethod handle :backup/broken-config [[_ repo content]]
-  (when (and repo content)
-    (let [path (config/get-repo-config-path)
-          broken-path (string/replace path "/config.edn" "/broken-config.edn")]
-      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
-              _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
-        (notification/show!
-         [:p.content
-          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
-         :warning
-         false)))))
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)

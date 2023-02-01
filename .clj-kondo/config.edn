@@ -22,7 +22,9 @@
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
-                             frontend.util/node-path.name]}
+                             frontend.util/node-path.name
+                             ;; frontend.pubsub/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubsub]}
 
   :consistent-alias
   {:aliases {cljs.reader reader
@@ -56,6 +58,7 @@
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
+             frontend.handler.common.developer dev-common-handler
              frontend.handler.config config-handler
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
