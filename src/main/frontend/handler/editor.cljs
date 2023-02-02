@@ -3568,7 +3568,7 @@
 (defn set-heading!
   [block-id format heading]
   (remove-heading! block-id format)
-  (if (or (true? heading) (not (= format :markdown)))
+  (if (or (true? heading) (not= format :markdown))
     (do
       (save-current-block!)
       (set-block-property! block-id "heading" heading))
