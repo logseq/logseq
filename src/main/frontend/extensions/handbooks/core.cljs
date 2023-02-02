@@ -377,8 +377,7 @@
 
        [:h1.text-lg.flex.items-center
         (if dashboard?
-          [:span (str "Helps" (when handbooks-data
-                                (str " (" (:version handbooks-data) ")")))]
+          [:span "Helps"]
           [:span.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev

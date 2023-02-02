@@ -65,7 +65,7 @@
       }
 
       > .l {
-        @apply w-[64px] h-[48px] bg-yellow-50 rounded overflow-hidden;
+        @apply w-[64px] h-[48px] bg-transparent rounded overflow-hidden;
       }
 
       > .r {
