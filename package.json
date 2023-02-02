@@ -114,7 +114,7 @@
         "graphology": "0.20.0",
         "highlight.js": "10.4.1",
         "ignore": "5.1.8",
-        "jszip": "3.7.0",
+        "jszip": "3.8.0",
         "mldoc": "^1.5.1",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
