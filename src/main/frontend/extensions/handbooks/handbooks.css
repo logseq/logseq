@@ -115,7 +115,11 @@
         }
 
         &.glide {
-          @apply mt-[58px];
+          @apply mt-[56px] mb-[10px];
+        }
+
+        .glide__slide {
+          @apply overflow-hidden rounded;
         }
       }
 
@@ -160,6 +164,36 @@
         &:not(.pane-topic-detail) {
           display: none;
         }
+      }
+    }
+
+    .markdown-body {
+      @apply pt-4;
+
+      -webkit-font-smoothing: initial;
+
+      h1 {
+        @apply py-1 text-2xl font-bold;
+      }
+
+      h2 {
+        @apply py-1 text-xl font-bold;
+      }
+
+      h3, h4 {
+        @apply py-1 text-lg font-semibold;
+      }
+
+      h5 {
+        @apply py-0.5 font-semibold;
+      }
+
+      h6 {
+        @apply py-0.5 text-sm font-semibold;
+      }
+
+      blockquote {
+        margin: 0;
       }
     }
   }
