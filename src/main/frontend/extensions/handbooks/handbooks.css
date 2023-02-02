@@ -110,7 +110,7 @@
       }
 
       > .demos {
-        img {
+        img, video {
           @apply w-full;
         }
 
