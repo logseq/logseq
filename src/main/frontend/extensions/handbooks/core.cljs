@@ -93,7 +93,7 @@
                         (subs src (+ 2 (string/last-index-of src "v="))))]
     (cond
       (string? youtube-id)
-      (youtube/youtube-video youtube-id)
+      (youtube/youtube-video youtube-id {:width "100%" :height 230})
 
       :else [:img {:src src}])))
 
@@ -123,7 +123,7 @@
            ;; TODO: demo lists
            (when-let [demos (:demos topic)]
              (let [demos (cond-> demos
-                           (string? demos) [demos])]
+                           (string? demos) (list))]
                (if (> (count demos) 1)
                  [:div.flex.demos.glide
                   {:id (rum/deref *id-ref)}
@@ -141,7 +141,7 @@
                        (inc idx)])
                     demos)]]
 
-                 [:div.flex.demos
+                 [:div.flex.demos.pt-1
                   (media-render (resolve-asset-url (first demos)))])))
 
            [:div.content-wrap

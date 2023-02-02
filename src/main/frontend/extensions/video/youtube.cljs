@@ -51,10 +51,10 @@
        (<! (load-youtube-api))
        (register-player state))
      state)}
-  [state id]
-  (let [width  (min (- (util/get-width) 96)
-                    560)
-        height (int (* width (/ 315 560)))]
+  [_state id {:keys [width height] :as _opts}]
+  (let [width  (or width (min (- (util/get-width) 96)
+                              560))
+        height (or height (int (* width (/ 315 560))))]
     [:iframe
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
