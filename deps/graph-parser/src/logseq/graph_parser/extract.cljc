@@ -102,7 +102,7 @@
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
-  [properties invalid-properties file page page-name {:keys [date-formatter db from-page]}]
+  [properties invalid-properties properties-text-values file page page-name {:keys [date-formatter db from-page]}]
   (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
@@ -120,7 +120,8 @@
       page-m
 
       (seq valid-properties)
-      (assoc :block/properties valid-properties)
+      (assoc :block/properties valid-properties
+             :block/properties-text-values (select-keys properties-text-values (keys valid-properties)))
 
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
@@ -154,12 +155,14 @@
                                        :block/page [:block/name page-name]
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
-                   blocks)
-          [properties invalid-properties] (if (:block/pre-block? (first blocks))
-                                            [(:block/properties (first blocks))
-                                             (:block/invalid-properties (first blocks))]
-                                            [properties []])
-          page-map (build-page-map properties invalid-properties file page page-name (assoc options' :from-page page))
+                      blocks)
+          [properties invalid-properties properties-text-values]
+          (if (:block/pre-block? (first blocks))
+            [(:block/properties (first blocks))
+             (:block/invalid-properties (first blocks))
+             (:block/properties-text-values (first blocks))]
+            [properties [] {}])
+          page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
           namespace-pages (let [page (:block/original-name page-map)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)

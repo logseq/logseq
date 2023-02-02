@@ -4,6 +4,7 @@
             [frontend.ui :as ui]
             [frontend.context.i18n :refer [t]]
             [frontend.components.svg :as svg]
+            [frontend.components.widgets :as widgets]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -96,11 +97,7 @@
                  [:small "Open existing directory or Create a new one"]])]]]
            [:div.px-5
             (ui/admonition :warning
-                           [:p "It seems that your browser doesn't support the "
-                            [:a {:href   "https://web.dev/file-system-access/"
-                                 :target "_blank"}
-                             "new native filesystem API"]
-                            [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])]))]
+                           (widgets/native-fs-api-alert))]))]
       [:section.b.flex.items-center.flex-col
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]

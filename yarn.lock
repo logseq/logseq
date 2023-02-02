@@ -487,10 +487,10 @@
     "@jridgewell/resolve-uri" "^3.0.3"
     "@jridgewell/sourcemap-codec" "^1.4.10"
 
-"@logseq/capacitor-file-sync@0.0.19":
-  version "0.0.19"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.19.tgz#361b4c4e19f395eb159e9d44aa5f6ef9334becd2"
-  integrity sha512-qM9jtFKqUJ1fNDCycoKKu5xjqKoMN48R6GChwagOtWSFpi/LtOQ7RtzkGDSzpAs3O4/iXCcRNmUjffMel+n9JA==
+"@logseq/capacitor-file-sync@0.0.20":
+  version "0.0.20"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.20.tgz#97447acf74d817c348fef989143163673773b46b"
+  integrity sha512-sKGIFNnJh/HjhSOPNS3KmlfuTIayjn5V762NKHpP3wSTY1C1IJWjinm0eqVoSnb9zn0ZDovcd96y7bSRMjzGOQ==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
