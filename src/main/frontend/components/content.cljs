@@ -1,6 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
@@ -14,6 +13,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -168,8 +168,8 @@
             :icon "h-auto"
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (if (= format :markdown) 
-                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+            :title (if (= format :markdown)
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format))
                      (t :auto-heading))
             :disabled (= format :markdown)
             :on-click (fn [_e]
@@ -212,7 +212,7 @@
           (t :content/copy-block-emebed)
           nil)
 
-          ;; TODO Logseq protocol mobile support
+         ;; TODO Logseq protocol mobile support
          (when (util/electron?)
            (ui/menu-link
             {:key      "Copy block URL"
@@ -294,17 +294,17 @@
            (ui/menu-link
             {:key      "(Dev) Show block data"
              :on-click (fn []
-                         (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                           (println block-data)
-                           (notification/show!
-                            [:div
-                             [:pre.code block-data]
-                             [:br]
-                             (ui/button "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard block-data))]
-                            :success
-                            false)))}
+                         (dev-common-handler/show-entity-data [:block/uuid block-id]))}
             "(Dev) Show block data"
+            nil))
+
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key      "(Dev) Show block AST"
+             :on-click (fn []
+                         (let [block (db/pull [:block/uuid block-id])]
+                           (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
+            "(Dev) Show block AST"
             nil))])))
 
 (rum/defc block-ref-custom-context-menu-content

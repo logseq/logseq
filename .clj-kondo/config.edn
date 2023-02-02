@@ -58,6 +58,7 @@
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
+             frontend.handler.common.developer dev-common-handler
              frontend.handler.config config-handler
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
