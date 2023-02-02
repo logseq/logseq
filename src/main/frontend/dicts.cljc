@@ -1662,7 +1662,7 @@
            :settings-page/git-desc "用于页面的版本管理，可以单击顶部右侧菜单来查看页面的历史记录"
            :settings-page/git-confirm "更新 Git 设置后，需要重启应用"
            :settings-page/git-switcher-label "开启 Git 自动 commit"
-           :settings-page/git-commit-delay "Git 自动 commit 间隔"
+           :settings-page/git-commit-delay "Git 自动 commit 间隔秒数"
            :settings-page/preferred-outdenting "逻辑缩进"
            :settings-page/show-brackets "显示括号 [[]]"
            :settings-page/spell-checker "单词拼写检查"
