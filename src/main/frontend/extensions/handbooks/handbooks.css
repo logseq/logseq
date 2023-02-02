@@ -49,7 +49,7 @@
     }
 
     .ft {
-      @apply px-4;
+      @apply px-4 pb-2;
     }
 
     .topic-card, .link-card {
