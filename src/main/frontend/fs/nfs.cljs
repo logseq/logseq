@@ -230,6 +230,8 @@
   (get-files [_this path-or-handle ok-handler]
     (utils/getFiles path-or-handle true ok-handler))
 
-  ;; TODO:
   (watch-dir! [_this _dir _options]
+    nil)
+
+  (unwatch-dir! [_this _dir]
     nil))

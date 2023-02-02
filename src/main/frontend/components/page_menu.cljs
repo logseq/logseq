@@ -1,12 +1,12 @@
 (ns frontend.components.page-menu
-  (:require [cljs.pprint :as pprint]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -113,7 +113,7 @@
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when (and (not (mobile-util/native-platform?)) 
+          (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
@@ -163,16 +163,14 @@
           (when developer-mode?
             {:title   "(Dev) Show page data"
              :options {:on-click (fn []
-                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                     (println page-data)
-                                     (notification/show!
-                                      [:div
-                                       [:pre.code page-data]
-                                       [:br]
-                                       (ui/button
-                                        "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard page-data))]
-                                      :success
-                                      false)))}})]
+                                   (dev-common-handler/show-entity-data (:db/id page)))}})
+
+          (when developer-mode?
+            {:title   "(Dev) Show page AST"
+             :options {:on-click (fn []
+                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
+                                     (dev-common-handler/show-content-ast
+                                      (get-in page [:block/file :file/content])
+                                      (:block/format page))))}})]
          (flatten)
          (remove nil?))))))
