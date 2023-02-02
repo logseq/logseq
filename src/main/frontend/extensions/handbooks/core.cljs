@@ -5,6 +5,7 @@
    [frontend.ui :as ui]
    [frontend.state :as state]
    [frontend.search :as search]
+   [frontend.config :as config]
    [cljs-bean.core :as bean]
    [promesa.core :as p]
    [camel-snake-kebab.core :as csk]
@@ -89,11 +90,15 @@
 (rum/defc media-render
   [src]
   (let [src        (util/trim-safe src)
+        extname    (some-> src (util/full-path-extname) (subs 1))
         youtube-id (and (string/includes? src "youtube.com/watch?v=")
                         (subs src (+ 2 (string/last-index-of src "v="))))]
     (cond
+      (and extname (contains? config/video-formats (keyword extname)))
+      [:video {:src src :controls true}]
+
       (string? youtube-id)
-      (youtube/youtube-video youtube-id {:width "100%" :height 230})
+      (youtube/youtube-video youtube-id {:width "100%" :height 235})
 
       :else [:img {:src src}])))
 
