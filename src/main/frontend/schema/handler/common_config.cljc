@@ -13,15 +13,20 @@
     [:default-templates [:map-of
                          [:enum :journals]
                          :string]]
+    [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
     [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
+    [:feature/enable-whiteboards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
+    [:scheduled/future-days :int]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
+    [:custom-js-url :string]
+    [:arweave/gateway :string]
     [:export/bullet-indentation
      [:enum :eight-spaces :four-spaces :two-spaces :tab]]
     [:publishing/all-pages-public? :boolean]
@@ -83,4 +88,5 @@
                              [:redirect-page? {:optional true} :boolean]]]
     [:file-sync/ignore-files [:vector :string]]
     [:dwim/settings [:map-of :keyword :boolean]]
-    [:file/name-format [:enum :legacy :triple-lowbar]]]))
+    [:file/name-format [:enum :legacy :triple-lowbar]]
+    [:journal/file-name-format :string]]))

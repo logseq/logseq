@@ -177,7 +177,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
 
   validateProps = (props: Partial<TweetShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.min(Math.max(props.size[0], 1), 550)
+      props.size[0] = Math.min(Math.max(props.size[0], 300), 550)
       props.size[1] = Math.max(props.size[1], 1)
     }
     return withClampedStyles(this, props)

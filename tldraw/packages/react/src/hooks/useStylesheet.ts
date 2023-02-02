@@ -79,7 +79,6 @@ const defaultTheme: TLTheme = {
 
 const tlcss = css`
   .tl-container {
-    --tl-cursor: inherit;
     --tl-zoom: 1;
     --tl-scale: calc(1 / var(--tl-zoom));
     --tl-padding: 64px;
@@ -116,7 +115,7 @@ const tlcss = css`
     touch-action: none;
     overscroll-behavior: none;
     background-color: var(--tl-background);
-    cursor: var(--tl-cursor) !important;
+    cursor: inherit;
     box-sizing: border-box;
     color: var(--tl-foreground);
     -webkit-user-select: none;

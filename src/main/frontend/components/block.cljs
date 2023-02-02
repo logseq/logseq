@@ -712,9 +712,15 @@
 (rum/defc asset-reference
   [config title path]
   (let [repo (state/get-current-repo)
-        real-path-url (if (util/absolute-path? path)
-                    path
-                    (assets-handler/resolve-asset-real-path-url repo path))
+        real-path-url (cond
+                        (gp-util/url? path)
+                        path
+
+                        (util/absolute-path? path)
+                        path
+
+                        :else
+                        (assets-handler/resolve-asset-real-path-url repo path))
         ext-name (util/get-file-ext path)
         title-or-path (cond
                         (string? title)
@@ -949,7 +955,7 @@
 (defn- render-macro
   [config name arguments macro-content format]
   [:div.macro {:data-macro-name name}
-   
+
    (if macro-content
      (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
                     (map first))
