@@ -660,7 +660,8 @@
                          (concat (drop-last prev) [from (last prev)] next)
                          (concat prev [from] next))
                        (remove nil?)
-                       (distinct))]
+                       distinct
+                       vec)]
         (config-handler/set-config! :favorites favorites)))))
 
 (defn has-more-journals?
