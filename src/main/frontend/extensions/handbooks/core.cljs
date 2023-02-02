@@ -424,7 +424,10 @@
        ;; footer
        [:div.ft
         [:p [:span.text-xs.opacity-40 "Join community for more help!"]]
-        (when (= :topic-detail active-pane)
-          [:<>
-           [:h2.uppercase.opacity-60 "Related"]
-           (related-topics)])])]))
+
+        ;; TODO: how to get related topics?
+        ;(when (= :topic-detail active-pane)
+        ;  [:<>
+        ;   [:h2.uppercase.opacity-60 "Related"]
+        ;   (related-topics)])
+        ])]))
