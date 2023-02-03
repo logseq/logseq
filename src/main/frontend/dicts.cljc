@@ -1498,7 +1498,7 @@
            :help/block-reference "块引用"
            :help/key-commands "关键命令"
            :help/working-with-lists " (与列表相关)"
-           :help/select-nfs-browser "请选择支持 nfs 的浏览器来使用 Logseq 本地文件夹功能, 如最新的 Chrome 浏览器."
+           :help/select-nfs-browser "请选择支持 nfs 的浏览器来使用 Logseq 本地文件夹功能, 如最新的 Chrome 浏览器。"
            :text/image "图片"
            :asset/confirm-delete "确定要删除{1}吗？"
            :asset/physical-delete "同时删除本地文件（目前不可撤销）"
