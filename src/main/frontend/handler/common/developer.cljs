@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
+            [frontend.util.page :as page-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 ;; Fns used between menus and commands
@@ -42,25 +43,21 @@
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
     (show-entity-data [:block/uuid block-uuid])
-    (notification/show! "No block found" :error)))
+    (notification/show! "No block found" :warning)))
 
 (defn ^:export show-block-ast []
   (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
     (show-content-ast content format)
-    (notification/show! "No block found" :error)))
+    (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []
-  ;; Use editor state to locate most recent page.
-  ;; Consider replacing with navigation history if it's more useful
-  (if-let [page-id (get-in (first (state/get-editor-args))
-                           [:block :block/page :db/id])]
+  (if-let [page-id (page-util/get-current-page-id)]
     (show-entity-data page-id)
-    (notification/show! "No page found" :error)))
+    (notification/show! "No page found" :warning)))
 
 (defn ^:export show-page-ast []
   (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                           (get-in (first (state/get-editor-args))
-                                   [:block :block/page :db/id]))]
+                           (page-util/get-current-page-id))]
     (if (get-in page-data [:block/file :file/content])
       (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
-      (notification/show! "No page found" :error))))
+      (notification/show! "No page found" :warning))))
