@@ -31,6 +31,7 @@
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
+            [frontend.util.page :as page-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
@@ -59,15 +60,6 @@
                  (gp-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
     (gp-util/safe-subs s 0 200)))
-
-(defn get-page-file-path
-  ([] (get-page-file-path (or (state/get-current-page)
-                              (state/get-current-whiteboard))))
-  ([page-name]
-   (when page-name
-     (let [page-name (util/page-name-sanity-lc page-name)]
-       (when-let [page (db/entity [:block/name page-name])]
-         (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   ;; Don't wrap `\"` anymore, as tiitle property is not effected by `,` now
@@ -668,7 +660,8 @@
                          (concat (drop-last prev) [from (last prev)] next)
                          (concat prev [from] next))
                        (remove nil?)
-                       (distinct))]
+                       distinct
+                       vec)]
         (config-handler/set-config! :favorites favorites)))))
 
 (defn has-more-journals?
@@ -870,13 +863,16 @@
      :page)))
 
 (defn open-file-in-default-app []
-  (when-let [file-path (and (util/electron?) (get-page-file-path))]
-    (js/window.apis.openPath file-path)))
+  (if-let [file-path (and (util/electron?) (page-util/get-page-file-path))]
+    (js/window.apis.openPath file-path)
+    (notification/show! "No file found" :warning)))
 
 (defn copy-current-file []
-  (when-let [file-path (and (util/electron?) (get-page-file-path))]
-    (util/copy-to-clipboard! file-path)))
+  (if-let [file-path (and (util/electron?) (page-util/get-page-file-path))]
+    (util/copy-to-clipboard! file-path)
+    (notification/show! "No file found" :warning)))
 
 (defn open-file-in-directory []
-  (when-let [file-path (and (util/electron?) (get-page-file-path))]
-    (js/window.apis.showItemInFolder file-path)))
+  (if-let [file-path (and (util/electron?) (page-util/get-page-file-path))]
+    (js/window.apis.showItemInFolder file-path)
+    (notification/show! "No file found" :warning)))
