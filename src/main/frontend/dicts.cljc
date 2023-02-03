@@ -1040,8 +1040,10 @@
 
         :tips/all-done "Alles klaar"
 
-        :tutorial/dummy-notes "dummy-notes-en.md"
-        :tutorial/text "tutorial-en.md"
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                 :default "dummy-notes-en.md")
+        :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                          :default "tutorial-en.md")
 
         :updater/new-version-install "Een nieuwe versie is gedownload."
         :updater/quit-and-install "Herstart om te installeren"
@@ -1496,7 +1498,7 @@
            :help/block-reference "块引用"
            :help/key-commands "关键命令"
            :help/working-with-lists " (与列表相关)"
-           :help/select-nfs-browser "请选择支持 nfs 的浏览器来使用 Logseq 本地文件夹功能, 如最新的 Chrome 浏览器."
+           :help/select-nfs-browser "请选择支持 nfs 的浏览器来使用 Logseq 本地文件夹功能, 如最新的 Chrome 浏览器。"
            :text/image "图片"
            :asset/confirm-delete "确定要删除{1}吗？"
            :asset/physical-delete "同时删除本地文件（目前不可撤销）"
@@ -1541,8 +1543,10 @@
            :settings-page/enable-flashcards "记忆卡片"
            :settings-page/enable-shortcut-tooltip "启用快捷键提示"
            :settings-page/export-theme "导出主题"
-           :tutorial/dummy-notes "练习笔记.md"
-           :tutorial/text "指南.md（英文）"
+           :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                    :default "dummy-notes-en.md")
+           :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                             :default "tutorial-en.md")
            :right-side-bar/help "帮助"
            :right-side-bar/switch-theme "主题模式"
            :right-side-bar/theme "{1}主题"
@@ -3180,8 +3184,10 @@
 
            :page/copy-page-url "Copiar URL da página"
            :plugin/not-installed "Não instalado"
-           :tutorial/dummy-notes "dummy-notes-en.md"
-           :tutorial/text "tutorial-en.md"
+           :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                    :default "dummy-notes-en.md")
+           :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                             :default "tutorial-en.md")
            :settings-page/edit-export-css "Editar export.css"
            :settings-page/enable-flashcards "Flashcards"
            :settings-page/export-theme "Exportar Tema"
@@ -3288,8 +3294,10 @@
            :whiteboard/link-whiteboard-or-block "Vincular quadro branco/página/bloco"}
 
    :pt-PT {:accessibility/skip-to-main-content "Ir para o conteúdo principal"
-           :tutorial/text "tutorial-en.md"
-           :tutorial/dummy-notes "dummy-notes-en.md"
+           :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                             :default "tutorial-en.md")
+           :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                    :default "dummy-notes-en.md")
            :on-boarding/closed-feature "{1} fechado/a"
            :on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
