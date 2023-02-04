@@ -9,7 +9,7 @@
   Note: use the following commands from *ios/App* directory to fix **ffi_c.bundle** related issue for M1 MacBook [^1].  
   (Working directory: `ios/App`)
   ```shell
-  sudo arch -x86_64 gem install ffi
+  arch -x86_64 sudo gem install ffi
   arch -x86_64 pod install
   ```
  
