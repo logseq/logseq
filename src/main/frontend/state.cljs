@@ -1163,6 +1163,14 @@ Similar to re-frame subscriptions"
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
     (set-theme-mode! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
+    (storage/set :ui/system-theme? true))
+  (when (mobile-util/native-android?) (.requestDarkMode mobile-util/dark-mode-watcher)))
+
+(defn sync-system-theme-android!
+  [^js event]
+  (let [system-dark? (.-darkmode event)]
+    (set-theme-mode! (if system-dark? "dark" "light"))
+    (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
 (defn use-theme-mode!
@@ -1198,7 +1206,8 @@ Similar to re-frame subscriptions"
                (mobile-util/native-platform?))
       (if (= mode "light")
         (util/set-theme-light)
-        (util/set-theme-dark)))))
+        (util/set-theme-dark))))
+  (when (mobile-util/native-android?) (.requestDarkMode mobile-util/dark-mode-watcher)))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]

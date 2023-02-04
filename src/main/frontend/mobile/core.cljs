@@ -2,8 +2,8 @@
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [promesa.core :as p]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
@@ -11,8 +11,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [promesa.core :as p]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -123,6 +123,10 @@
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
                   (state/pub-event! [:mobile-file-watcher/changed event])))
+
+  (.addListener mobile-util/dark-mode-watcher "darkmodechanged"
+                (fn [^js event]
+                  (state/pub-event! [:mobile/dark-mode-changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]

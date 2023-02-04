@@ -633,6 +633,11 @@
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
 
+(defmethod handle :mobile/dark-mode-changed [[_ ^js event]]
+  (let [system-theme? (state/sub :ui/system-theme?)]
+    (when system-theme?
+      (state/sync-system-theme-android! event))))
+
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
 
