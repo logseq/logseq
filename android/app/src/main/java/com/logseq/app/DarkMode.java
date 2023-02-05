@@ -38,7 +38,7 @@ public class DarkMode extends Plugin {
     }
 
     @PluginMethod()
-    public void requestDarkMode(PluginCall call) {
+    public void syncDarkMode(PluginCall call) {
         onDarkModeChange();
     }
 
