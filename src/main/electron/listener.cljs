@@ -157,55 +157,7 @@
 
   (js/window.apis.on "quickCapture"
                      (fn [args]
-                       (let [{:keys [url title content page append]} (bean/->clj args)
-                             insert-today? (get-in (state/get-config)
-                                                   [:quick-capture-options :insert-today?]
-                                                   false)
-                             redirect-page? (get-in (state/get-config)
-                                                    [:quick-capture-options :redirect-page?]
-                                                    false)
-                             today-page (when (state/enable-journals?)
-                                          (string/lower-case (date/today)))
-                             page (if (or (= page "TODAY")
-                                          (and (string/blank? page) insert-today?))
-                                    today-page
-                                    (or (not-empty page)
-                                        (state/get-current-page)
-                                        today-page))
-                             page (or page "quick capture") ;; default to quick capture page, if journals are not enabled
-                             format (db/get-page-format page)
-                             time (date/get-current-time)
-                             text (or (and content (not-empty (string/trim content))) "")
-                             link (if (string/includes? url "www.youtube.com/watch")
-                                    (str title " {{video " url "}}")
-                                    (if (not-empty title)
-                                      (config/link-format format title url)
-                                      url))
-                             template (get-in (state/get-config)
-                                              [:quick-capture-templates :text]
-                                              "**{time}** [[quick capture]]: {text} {url}")
-                             content (-> template
-                                         (string/replace "{time}" time)
-                                         (string/replace "{url}" link)
-                                         (string/replace "{text}" text))
-                             edit-content (state/get-edit-content)
-                             edit-content-blank? (string/blank? edit-content)
-                             edit-content-include-capture? (and (not-empty edit-content)
-                                                                (string/includes? edit-content "[[quick capture]]"))]
-                         (if (and (state/editing?) (not append) (not edit-content-include-capture?))
-                           (if edit-content-blank?
-                             (editor-handler/insert content)
-                             (editor-handler/insert (str "\n" content)))
-
-                           (do
-                             (editor-handler/escape-editing)
-                             (when (not= page (state/get-current-page))
-                               (page-handler/create! page {:redirect? redirect-page?}))
-                             ;; Or else this will clear the newly inserted content
-                             (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
-                                                                                            :edit-block? true
-                                                                                            :replace-empty-target? true})
-                                            100))))))
+                       (state/pub-event! [:editor/quick-capture args])))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
