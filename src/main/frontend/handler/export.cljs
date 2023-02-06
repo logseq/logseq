@@ -730,6 +730,15 @@
      (mapv raw-text lines)
      [(indent level 2) (raw-text "```") (newline* 1)])))
 
+(defn- block-quote
+  [block-coll]
+  (let [level (dec (or (:current-level *state*) 1))]
+    (concat (mapcat (fn [block]
+                      (concat [(indent level 2) (raw-text ">") space]
+                              (block-ast-without-pos->simple-ast block))) block-coll)
+            [(newline* 2)])))
+
+
 (defn- inline-link
   [{full-text :full_text}]
   [(raw-text full-text)])
@@ -836,29 +845,32 @@
   [(raw-text "  \n")])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
-(m/=> block-ast->simple-ast [:=> [:cat :sequential] [:sequential simple-ast-malli-schema]])
+(m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
-  (let [[[ast-type ast-content] _pos] block]
-    (case ast-type
-      "Paragraph"
-      (concat (mapcat inline-ast->simple-ast ast-content) [(newline* 1)])
-      "Paragraph_line"
-      (assert false "Paragraph_line is mldoc internal ast")
-      "Paragraph_Sep"
-      [(newline* ast-content)]
-      "Heading"
-      (block-heading ast-content)
-      "List"
-      (block-list ast-content)
-      ("Directive" "Results")
-      nil
-      "Example"
-      (block-example ast-content)
-      "Src"
-      (block-src ast-content)
-
-      (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet")))))
+  (remove
+   nil?
+   (let [[[ast-type ast-content] _pos] block]
+     (case ast-type
+       "Paragraph"
+       (concat (mapcat inline-ast->simple-ast ast-content) [(newline* 1)])
+       "Paragraph_line"
+       (assert false "Paragraph_line is mldoc internal ast")
+       "Paragraph_Sep"
+       [(newline* ast-content)]
+       "Heading"
+       (block-heading ast-content)
+       "List"
+       (block-list ast-content)
+       ("Directive" "Results")
+       nil
+       "Example"
+       (block-example ast-content)
+       "Src"
+       (block-src ast-content)
+       "Quote"
+       (block-quote ast-content)
+       (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet"))))))
 
 (defn- block-ast-without-pos->simple-ast
   [block]
@@ -946,8 +958,13 @@
 
           :newline
           (case last-ast-type
-            (:space :newline :indent) ;; drop last-ast
+            (:space :indent) ;; drop last-ast
             (recur r simple-ast false false other-ast-coll)
+            :newline
+            (let [last-newline-count (:line-count last-ast)
+                  current-newline-count (:line-count simple-ast)
+                  kept-ast (if (> last-newline-count current-newline-count) last-ast simple-ast)]
+              (recur r kept-ast false false other-ast-coll))
             :raw-text
             (if last-raw-text-newline-suffix?
               (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
