@@ -690,27 +690,25 @@
 
 (rum/defc help-button < rum/reactive
   []
-  (when-not (state/sub :ui/sidebar-open?)
-    [:div.cp__sidebar-help-btn
-     [:div.inner
-      {:title    (t :help-shortcut-title)
-       :on-click (fn []
-                   (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
-      "?"]]))
+  [:div.cp__sidebar-help-btn
+   [:div.inner
+    {:title    (t :help-shortcut-title)
+     :on-click (fn []
+                 (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
+    "?"]])
 
 (rum/defc handbook-button < rum/reactive
   []
   (let [handbooks-open? (state/sub :ui/handbooks-open?)]
-    (when-not (state/sub :ui/sidebar-open?)
-      [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
-       [:div.inner
-        {:title    (t :help-shortcut-title)
-         :on-click (fn []
-                     (handbooks/toggle-handbooks))}
-        "📙"]
+    [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
+     [:div.inner
+      {:title    (t :help-shortcut-title)
+       :on-click (fn []
+                   (handbooks/toggle-handbooks))}
+      "📙"]
 
-       (when handbooks-open?
-         (handbooks/handbooks-popup))])))
+     (when handbooks-open?
+       (handbooks/handbooks-popup))]))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
