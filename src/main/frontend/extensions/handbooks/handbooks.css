@@ -120,7 +120,7 @@
         }
 
         .glide__slide {
-          @apply overflow-hidden rounded;
+          background-color: var(--ls-secondary-border-color);
         }
       }
 
