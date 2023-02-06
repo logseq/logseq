@@ -27,7 +27,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]
-            [frontend.handler.notification :as notification])
+            [frontend.handler.notification :as notification]
+            [malli.core :as m])
   (:import
    [goog.string StringBuffer]))
 
@@ -355,6 +356,7 @@
 
 (defn export-blocks-as-markdown
   [repo root-block-uuids indent-style remove-options]
+  (def xxxx [repo root-block-uuids indent-style remove-options])
   (export-blocks-as-aux repo root-block-uuids
                         #(fp/exportMarkdown f/mldoc-record %1
                                             (f/get-default-config
@@ -582,3 +584,443 @@
         (.setAttribute anchor "href" data-str)
         (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
         (.click anchor)))))
+;;; ================================================================
+;;; ast transform utils
+(defn- priority->string
+  [priority]
+  (str "[#" priority "]"))
+
+(defn- hashtag-value->string
+  [inline-coll]
+  (reduce str
+          (mapv
+           (fn [inline]
+             (let [[ast-type ast-content] inline]
+               (case ast-type
+                 "Nested_link"
+                 (:content ast-content)
+                 "Link"
+                 (:full_text ast-content)
+                 "Plain"
+                 ast-content)))
+           inline-coll)))
+
+(defn- repetition-to-string
+  [[[kind] [duration] n]]
+  (let [kind (case kind
+               "Dotted" "."
+               "Plus" "+"
+               "DoublePlus" "++")]
+    (str kind n (string/lower-case (str (first duration))))))
+
+(defn timestamp-to-string
+  [{:keys [date time repetition wday active]}]
+  (let [{:keys [year month day]} date
+        {:keys [hour min]} time
+        [open close] (if active ["<" ">"] ["[" "]"])
+        repetition (if repetition
+                     (str " " (repetition-to-string repetition))
+                     "")
+        hour (when hour (util/zero-pad hour))
+        min  (when min (util/zero-pad min))
+        time (cond
+               (and hour min)
+               (util/format " %s:%s" hour min)
+               hour
+               (util/format " %s" hour)
+               :else
+               "")]
+    (util/format "%s%s-%s-%s %s%s%s%s"
+                 open
+                 (str year)
+                 (util/zero-pad month)
+                 (util/zero-pad day)
+                 wday
+                 time
+                 repetition
+                 close)))
+
+;;; ast -> simple text ast
+(def simple-ast-malli-schema
+  [:or
+   [:map {:closed true}
+    [:type [:= :raw-text]]
+    [:content :string]]
+   [:map {:closed true}
+    [:type [:= :space]]]
+   [:map {:closed true}
+    [:type [:= :newline]]
+    [:line-count :int]]
+   [:map {:closed true}
+    [:type [:= :indent]]
+    [:level :int]
+    [:extra-space-count :int]]])
+
+(defn- raw-text [content]
+  {:type :raw-text :content content})
+(def ^:private space {:type :space})
+(defn- newline* [line-count]
+  {:type :newline :line-count line-count})
+(defn- indent [level extra-space-count]
+  {:type :indent :level level :extra-space-count extra-space-count})
+
+(def ^:private ^:dynamic *state* {})
+
+(declare inline-ast->simple-ast block-ast->simple-ast block-ast-without-pos->simple-ast)
+(defn- block-heading
+  [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
+  (let [priority* (and priority (raw-text (priority->string priority)))
+        heading* [(indent (dec level) 0) (raw-text "-")]
+        size* (and size [space (raw-text (reduce str (repeat size "#")))])
+        marker* (and marker (raw-text marker))]
+    (set! *state* (assoc *state* :current-level level))
+    (remove nil? (concat heading* size*
+                         [space marker* space priority* space]
+                         (mapcat inline-ast->simple-ast title)
+                         [(newline* 1)]))))
+
+(declare block-list)
+(defn- block-list-item
+  [{:keys [content items number _name checkbox]}]
+  (let [content* (mapcat block-ast-without-pos->simple-ast content)
+        number* (raw-text
+                 (if number
+                   (str number ". ")
+                   "* "))
+        checkbox* (raw-text
+                   (if (some? checkbox)
+                     (if (boolean checkbox)
+                       "[X]" "[ ]")
+                     ""))
+        current-level (or (:current-level *state*) 1)
+        indent (when (> current-level 1)
+                 (indent (dec current-level) 0))
+        items* (block-list items)]
+    (concat [indent number* checkbox* space]
+            content*
+            [(newline* 1)]
+            items*
+            [(newline* 1)])))
+
+(defn- block-list
+  [l]
+  (binding [*state* (update *state* :current-level inc)]
+    (concat (mapcat block-list-item l)
+            (when (pos? (count l))
+              [(newline* 2)]))))
+
+(defn- block-example
+  [l]
+  (let [level (dec (or (:current-level *state*) 1))]
+    (mapcat
+     (fn [line]
+       [(indent level 2)
+        (raw-text "    ")
+        (raw-text line)
+        (newline* 1)])
+     l)))
+
+(defn- block-src
+  [{:keys [lines language]}]
+  (let [level (dec (or (:current-level *state*) 1))]
+    (concat
+     [(indent level 2) (raw-text "```")]
+     (when language [space (raw-text language)])
+     [(newline* 1)]
+     (mapv raw-text lines)
+     [(indent level 2) (raw-text "```") (newline* 1)])))
+
+(defn- inline-link
+  [{full-text :full_text}]
+  [(raw-text full-text)])
+
+(defn- inline-nested-link
+  [{content :content}]
+  [(raw-text content)])
+
+(defn- inline-subscript
+  [inline-coll]
+  (concat [(raw-text "_{")]
+          (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
+          [(raw-text "}")]))
+
+(defn- inline-superscript
+  [inline-coll]
+  (concat [(raw-text "^{")]
+          (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
+          [(raw-text "}")]))
+
+(defn- inline-footnote-reference
+  [{name :name}]
+  [(raw-text (str "[" name "]"))])
+
+(defn- inline-cookie
+  [ast-content]
+  [(raw-text
+    (case (first ast-content)
+      "Absolute"
+      (let [[_ current total] ast-content]
+        (str "[" current "/" total "]"))
+      "Percent"
+      (str "[" (second ast-content) "%]")))])
+
+(defn- inline-latex-fragment
+  [ast-content]
+  (let [[type content] ast-content
+        wrapper (case type
+                  "Inline" "$"
+                  "Displayed" "$$")]
+    [space (raw-text (str wrapper content wrapper)) space]))
+
+(defn- inline-macro
+  [{:keys [name arguments]}]
+  (->
+   (if (= name "cloze")
+     (string/join "," arguments)
+     (let [l (cond-> ["{{" name]
+               (pos? (count arguments)) (conj "(" (string/join "," arguments) ")")
+               true (conj "}}"))]
+       (string/join l)))
+   raw-text
+   vector))
+
+(defn- inline-entity
+  [{unicode :unicode}]
+  [(raw-text unicode)])
+
+(defn- inline-timestamp
+  [ast-content]
+  (let [[type timestamp-content] ast-content]
+    (-> (case type
+          "Scheduled" ["SCHEDULED: " (timestamp-to-string timestamp-content)]
+          "Deadline" ["DEADLINE: " (timestamp-to-string timestamp-content)]
+          "Date" [(timestamp-to-string timestamp-content)]
+          "Closed" ["CLOSED: " (timestamp-to-string timestamp-content)]
+          "Clock" ["CLOCK: " (timestamp-to-string (second timestamp-content))]
+          "Range" (let [{:keys [start stop]} timestamp-content]
+                    [(str (timestamp-to-string start) "--" (timestamp-to-string stop))]))
+        string/join
+        raw-text
+        vector)))
+
+(defn- inline-email
+  [{:keys [local_part domain]}]
+  [(raw-text (str "<" local_part "@" domain ">"))])
+
+(defn- emphasis-wrap-with
+  [inline-coll em-symbol]
+  (binding [*state* (assoc *state* :outside-em-symbol (first em-symbol))]
+    (concat [(raw-text em-symbol)]
+            (mapcat inline-ast->simple-ast inline-coll)
+            [(raw-text em-symbol)])))
+
+(defn- inline-emphasis
+  [emphasis]
+  (let [[type inline-coll] emphasis
+        outside-em-symbol (:outside-em-symbol *state*)]
+    (case type
+      "Bold"
+      (emphasis-wrap-with inline-coll (if (= outside-em-symbol "*") "__" "**"))
+      "Italic"
+      (emphasis-wrap-with inline-coll (if (= outside-em-symbol "*") "_" "*"))
+      "Underline"
+      (binding [*state* (assoc *state* :outside-em-symbol outside-em-symbol)]
+        (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll))
+      "Strike_through"
+      (emphasis-wrap-with inline-coll "~~")
+      "Highlight"
+      (emphasis-wrap-with inline-coll "^^"))))
+
+(defn- inline-break-line
+  []
+  [(raw-text "  \n")])
+
+;; {:malli/schema ...} only works on public vars, so use m/=> here
+(m/=> block-ast->simple-ast [:=> [:cat :sequential] [:sequential simple-ast-malli-schema]])
+(defn- block-ast->simple-ast
+  [block]
+  (let [[[ast-type ast-content] _pos] block]
+    (case ast-type
+      "Paragraph"
+      (concat (mapcat inline-ast->simple-ast ast-content) [(newline* 1)])
+      "Paragraph_line"
+      (assert false "Paragraph_line is mldoc internal ast")
+      "Paragraph_Sep"
+      [(newline* ast-content)]
+      "Heading"
+      (block-heading ast-content)
+      "List"
+      (block-list ast-content)
+      ("Directive" "Results")
+      nil
+      "Example"
+      (block-example ast-content)
+      "Src"
+      (block-src ast-content)
+
+      (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet")))))
+
+(defn- block-ast-without-pos->simple-ast
+  [block]
+  (block-ast->simple-ast [block {:fake-pos 0}]))
+
+(defn- inline-ast->simple-ast
+  [inline]
+  (let [[ast-type ast-content] inline]
+    (case ast-type
+      "Emphasis"
+      (inline-emphasis ast-content)
+      ("Break_Line" "Hard_Break_Line")
+      (inline-break-line)
+      "Verbatim"
+      [(raw-text ast-content)]
+      "Code"
+      (mapv raw-text ["`" ast-content "`"])
+      "Tag"
+      [(raw-text (str "#" (hashtag-value->string ast-content)))]
+      "Spaces"                          ; what's this ast-type for ?
+      nil
+      "Plain"
+      [(raw-text ast-content)]
+      "Link"
+      (inline-link ast-content)
+      "Nested_link"
+      (inline-nested-link ast-content)
+      "Target"
+      [(raw-text (str "<<" ast-content ">>"))]
+      "Subscript"
+      (inline-subscript ast-content)
+      "Superscript"
+      (inline-superscript ast-content)
+      "Footnote_Reference"
+      (inline-footnote-reference ast-content)
+      "Cookie"
+      (inline-cookie ast-content)
+      "Latex_Fragment"
+      (inline-latex-fragment ast-content)
+      "Macro"
+      (inline-macro ast-content)
+      "Entity"
+      (inline-entity ast-content)
+      "Timestamp"
+      (inline-timestamp ast-content)
+      "Radio_Target"
+      [(raw-text (str "<<<" ast-content ">>>"))]
+      "Email"
+      (inline-email ast-content)
+      "Inline_Hiccup"
+      [(raw-text ast-content)]
+      "Inline_Html"
+      [(raw-text ast-content)]
+      ("Export_Snippet" "Inline_Source_Block")
+      nil
+      (assert false (str :inline-ast->simple-ast " " ast-type " not implemented yet")))))
+
+
+(defmulti simple-ast->string :type)
+(defmethod simple-ast->string :raw-text [{:keys [content]}] content)
+(defmethod simple-ast->string :space [_] " ")
+(defmethod simple-ast->string :newline [{:keys [line-count]}] (reduce str (repeat line-count "\n")))
+(defmethod simple-ast->string :indent [{:keys [level extra-space-count]}]
+  (reduce str (concat (repeat level "\t") (repeat extra-space-count " "))))
+
+(defn- merge-adjacent-spaces&newlines
+  [simple-ast-coll]
+  (loop [r                             (transient [])
+         last-ast                      nil
+         last-raw-text-space-suffix?   false
+         last-raw-text-newline-suffix? false
+         [simple-ast & other-ast-coll] simple-ast-coll]
+    (if (nil? simple-ast)
+      (persistent! (if last-ast (conj! r last-ast) r))
+      (let [tp            (:type simple-ast)
+            last-ast-type (:type last-ast)]
+        (case tp
+          :space
+          (if (or (contains? #{:space :newline :indent} last-ast-type)
+                  last-raw-text-space-suffix?
+                  last-raw-text-newline-suffix?)
+            ;; drop this :space
+            (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+
+          :newline
+          (case last-ast-type
+            (:space :newline :indent) ;; drop last-ast
+            (recur r simple-ast false false other-ast-coll)
+            :raw-text
+            (if last-raw-text-newline-suffix?
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+            ;; no-last-ast
+            (recur r simple-ast false false other-ast-coll))
+
+          :indent
+          (case last-ast-type
+            (:space :indent)            ; drop last-ast
+            (recur r simple-ast false false other-ast-coll)
+            :newline
+            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll)
+            :raw-text
+            (if last-raw-text-space-suffix?
+              ;; drop this :indent
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+            ;; no-last-ast
+            (recur r simple-ast false false other-ast-coll))
+
+          :raw-text
+          (let [content         (:content simple-ast)
+                empty-content?  (empty? content)
+                first-ch        (first content)
+                last-ch         (let [num (count content)]
+                                  (when (pos? num)
+                                    (nth content (dec num))))
+                newline-prefix? (some-> first-ch #{"\r" "\n"} boolean)
+                newline-suffix? (some-> last-ch #{"\n"} boolean)
+                space-prefix?   (some-> first-ch #{" "} boolean)
+                space-suffix?   (some-> last-ch #{" "} boolean)]
+            (cond
+              empty-content?            ;drop this raw-text
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              newline-prefix?
+              (case last-ast-type
+                (:space :indent :newline) ;drop last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
+                :raw-text
+                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
+                ;; no-last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
+              space-prefix?
+              (case last-ast-type
+                (:space :indent)        ;drop last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
+                (:newline :raw-text)
+                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
+                ;; no-last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
+              :else
+              (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll))))))))
+
+(defn- simple-asts->string
+  [simple-ast-coll]
+  (string/join (mapv simple-ast->string (merge-adjacent-spaces&newlines simple-ast-coll))))
+
+
+;;; ================================================================
+
+(defn- root-block-uuids->content
+  [repo root-block-uuids]
+  (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
+    (string/join "\n" (mapv string/trim-newline contents))))
+
+(defn export-blocks-as-markdown-v2
+  [repo root-block-uuids indent-style remove-options]
+  {:pre [(seq root-block-uuids)]}
+  (let [content (root-block-uuids->content repo root-block-uuids)
+        first-block (db/entity [:block/uuid (first root-block-uuids)])
+        format (or (:block/format first-block) (state/get-preferred-format))]
+    (def xxx (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+
+    )
+  )
