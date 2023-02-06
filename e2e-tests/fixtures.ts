@@ -25,12 +25,22 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
   const text = msg.text()
   logs += text + '\n'
-  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
+
+  // expect() will remember all arguments in memory,
+  // and the memory usage will grow *exponentially* in the number of output line.
+  // So we call expect() iff interesting pattern has already be found to avoid OOM.
+  const expectNotMatchWithCheck = (pattern: RegExp) => {
+    if (text.match(pattern)) {
+      expect(text, logs).not.toMatch(pattern)
+    }
+  }
+
+  expectNotMatchWithCheck(/^(Failed to|Uncaught)/)
 
   // youtube video
   // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
   if (!text.match(/^Error with Permissions-Policy header:/)) {
-    expect(text, logs).not.toMatch(/^Error/)
+    expectNotMatchWithCheck(/^Error/)
   }
 
   // NOTE: React warnings will be logged as error.
