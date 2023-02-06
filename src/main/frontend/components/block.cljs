@@ -364,7 +364,8 @@
             (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
-  [:audio {:src src
+  ;; Change protocol to allow media fragment uris to play
+  [:audio {:src (string/replace-first src gp-config/asset-protocol "file://")
            :controls true
            :on-touch-start #(util/stop %)}])
 

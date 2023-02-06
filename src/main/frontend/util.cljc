@@ -297,14 +297,14 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
-#?(:cljs 
+#?(:cljs
    (defn cancelable-debounce
      "Create a stateful debounce function with specified interval
-   
+
       Returns [fire-fn, cancel-fn]
-   
+
       Use `fire-fn` to call the function(debounced)
-   
+
       Use `cancel-fn` to cancel pending callback if there is"
      [f interval]
      (let [debouncer (Debouncer. f interval)]
@@ -1359,10 +1359,7 @@
        (< (.-offsetWidth js/document.documentElement) size))
 
      (defn sm-breakpoint?
-       [] (breakpoint? 640))
-
-     (defn md-breakpoint?
-       [] (breakpoint? 768))))
+       [] (breakpoint? 640))))
 
 #?(:cljs
    (defn event-is-composing?
