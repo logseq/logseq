@@ -492,7 +492,7 @@ html[data-theme='dark'] {
   }
 
   &-btn {
-    @apply fixed bottom-4 right-8;
+    @apply fixed bottom-4 right-8 z-10;
 
     > .inner {
       @apply font-bold
