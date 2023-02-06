@@ -232,9 +232,24 @@ Currently the codebase is not formatted/indented consistently. We loosely follow
 
 ## Development Tools
 
-There are some babashka tasks under `nbb:` which are useful for inspecting
-database changes in realtime. See [these
-docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
+### Babashka tasks
+
+There are a number of bb tasks under `dev:` for developers. There are also some
+tasks under `nbb:` which are useful for inspecting database changes in realtime.
+See [these docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for
+more info.
+
+### Dev Commands
+
+In the app, you can enable Dev commands under `Settings > Advanced > Developer
+mode`. Then search for commands starting with `(Dev)`. Commands include
+inspectors for block/page data and AST.
+
+### Desktop Developer Tools
+
+Since the desktop app is built with Electron, a full set of Chromium developer
+tools is available under the menu `View > Toggle Developer Tools`. Handy tools
+include a JS console and HTML inspector.
 
 ## FAQ
 

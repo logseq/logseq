@@ -61,6 +61,7 @@
 
 (deftest formalize-conversion-tests
   (let [conv-informal #(:target (#'conversion-handler/calc-current-name :triple-lowbar % nil))]
+    (is (= "Hello.js, navigator___userAgent" (conv-informal "Hello.js, navigator/userAgent")))
     (is (= "sdaf ___dsakl" (conv-informal "sdaf %2Fdsakl")))
     (is (= "sdaf ___dsakl" (conv-informal "sdaf /dsakl")))
     (is (= nil (conv-informal "sdaf .dsakl")))))
@@ -100,8 +101,18 @@
                         :changed-title "aa?#/bbb/ccc"}))
 
 (deftest rename-tests-l2t
+  ;; Test cases for rename from legacy to triple-lowbar
+  ;; The title property matters - removing it will change the result. Ask users not to remove it.
   ;; z: new title structure; x: old ver title; y: title property (if available)
   (are [x y z] (= z (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar x y))
+    "报错 SyntaxError: Unexpected token '.'" "报错 SyntaxError: Unexpected token '.'" {:status :informal,
+                                                                                   :target "报错 SyntaxError%3A Unexpected token '.'",
+                                                                                   :old-title "报错 SyntaxError: Unexpected token '.'",
+                                                                                   :changed-title "报错 SyntaxError: Unexpected token '.'"}
+    "报错 SyntaxError: Unexpected token '.'" nil {:status :breaking,
+                                                :target "报错 SyntaxError%3A Unexpected token '___'",
+                                                :old-title "报错 SyntaxError: Unexpected token '/'",
+                                                :changed-title "报错 SyntaxError: Unexpected token '.'"}
     "aaBBcc"      "aabbcc"        nil
     "aaa.bbb.ccc" "aaa/bbb/ccc"   {:status :informal,
                                    :target "aaa___bbb___ccc",
