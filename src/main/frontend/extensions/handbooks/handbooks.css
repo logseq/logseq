@@ -62,6 +62,7 @@
 
       &:hover, &.active {
         background-color: var(--ls-primary-background-color);
+        border-color: var(--ls-secondary-border-color);
       }
 
       > .l {
@@ -221,6 +222,13 @@ html[data-theme="light"] {
 
       &:focus-within {
         background-color: transparent;
+      }
+    }
+
+    .topic-card, .link-card {
+      &:hover, &.active {
+        background-color: var(--ls-tertiary-background-color);
+        border-color: var(--ls-secondary-border-color);
       }
     }
   }
