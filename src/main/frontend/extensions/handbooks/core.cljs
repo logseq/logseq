@@ -261,13 +261,17 @@
 
     (rum/use-effect!
      (fn []
-       (let [pane-nodes (:children (second pane-state))]
+       (let [pane-nodes (:children (second pane-state))
+             pane-nodes (and (seq pane-nodes)
+                             (mapcat #(conj (:children %) %) pane-nodes))]
 
          (set-search-state!
           (merge search-state {:active? active?}))
 
          (if (and (not (empty? handbooks-nodes)) active?)
-           (-> (or pane-nodes (vals (dissoc handbooks-nodes "__root")))
+           (-> (or pane-nodes
+                   ;; global
+                   (vals (dissoc handbooks-nodes "__root")))
                (search/fuzzy-search q :limit 30 :extract-fn :title)
                (set-results!))
            (set-results! nil))
