@@ -14,7 +14,8 @@
             [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.modules.outliner.tree :as tree]
+            [clojure.string :as string]))
 
 (rum/defc page-block-selector
   [*find]
@@ -36,26 +37,58 @@
    [:a {:on-click on-click}
     text]])
 
-(rum/defc filters
+(rum/defc adder
   [*find *tree]
   [:div.query-builder-filters.flex.flex-row.items-center
    (ui/icon "circle-plus" {:style {:font-size 20}})
-   [:div.ml-1
-    (if (= @*find :block)
-      [:div.grid.grid-cols-4.gap-1
-       (filter-item "Page reference" #(reset! *tree '(page-ref)))
-       (filter-item "Property" #(reset! *tree '(property)))]
-      [:div
-       (filter-item "Property" #(reset! *tree '(property)))])]])
+   ;; [:div.ml-1
+   ;;  (if (= @*find :block)
+   ;;    [:div.grid.grid-cols-4.gap-1
+   ;;     (filter-item "Page reference" #(reset! *tree '(page-ref)))
+   ;;     (filter-item "Property" #(reset! *tree '(property)))]
+   ;;    [:div
+   ;;     (filter-item "Property" #(reset! *tree '(property)))])]
+   ])
+
+(declare clauses-group)
 
 (rum/defc clause
-  [*tree position clause]
-  )
+  [*tree *find position clause]
+  [:div.query-builder-clause.p-1
+   (let [kind (keyword (first clause))]
+     (if (#{:and :or :not} kind)
+       (clauses-group *tree *find kind (rest clause))
+
+       (case kind
+         :page-ref
+         [:div
+          [:span.mr-1 "Page reference:"]
+          [:span (str (second clause))]]
+
+         ;; :property
+         (str clause))))])
+
+(rum/defc clauses-group
+  [*tree *find kind clauses]
+  [:div.flex.flex-row.border.p-1
+   [:div.text-xs.font-bold.uppercase.toned-down.mr-2
+    (name kind)]
+
+   [:div.flex.flex-col
+    [:div
+     (map-indexed (fn [i item]
+                    (clause *tree *find i item))
+                  clauses)]
+    (adder *find *tree)]])
 
 ;; '(and (page-ref foo) (property key value))
 (rum/defc clause-tree
-  [*tree]
-  (map @*tree))
+  [*tree *find]
+  (let [kind (#{:and :or :not} (keyword (string/lower-case (str (first @*tree)))))
+        [kind' clauses] (if kind
+                          [kind (rest @*tree)]
+                          [:and [@*tree]])]
+    (clauses-group *tree *find kind' clauses)))
 
 (rum/defc query
   [*tree]
@@ -68,11 +101,17 @@
   (rum/local '() ::tree)
   [state]
   (let [*find (::find state)
-        *tree (::tree state)]
+        *tree (::tree state)
+
+        ;; debug
+        *tree (atom '(and (page-ref foo)
+                          (property key value)
+                          (or (page-ref bar)
+                              (page-ref baz))))
+        ]
     [:div.query-builder.mt-2.ml-2
      (page-block-selector *find)
-     (filters *find *tree)
      [:hr]
-     (clause-tree *tree)
+     (clause-tree *tree *find)
      [:hr]
      (query *tree)]))
