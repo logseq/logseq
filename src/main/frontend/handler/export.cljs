@@ -28,7 +28,8 @@
             [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]
             [frontend.handler.notification :as notification]
-            [malli.core :as m])
+            [malli.core :as m]
+            [cljs.core.match :refer [match]])
   (:import
    [goog.string StringBuffer]))
 
@@ -153,7 +154,6 @@
           (get-file-contents repo {:init-level 1
                                    :heading-to-list? true})))
 
-
 (defn- get-embed-pages-from-ast [ast]
   (let [result (transient #{})]
     (doseq [item ast]
@@ -169,9 +169,9 @@
                         (let [arguments (:arguments (second i))
                               page-ref (first arguments)
                               page-name (-> page-ref
-                                          (subs 2)
-                                          (#(subs % 0 (- (count %) 2)))
-                                          (string/lower-case))]
+                                            (subs 2)
+                                            (#(subs % 0 (- (count %) 2)))
+                                            (string/lower-case))]
                           (conj! result page-name)
                           i)
                         :else
@@ -323,16 +323,16 @@
   (->> files
        (mapv (fn [{:keys [path content names format]}]
                (when (first names)
-                   (let [path
-                         (string/replace
-                          (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
-                     [path (fp/exportOPML f/mldoc-record content
-                                          (f/get-default-config format)
-                                          (first names)
-                                          (js/JSON.stringify
-                                           (clj->js (get-export-references
-                                                     repo
-                                                     (get-page-page&block-refs repo (first names) #{} #{} #{})))))]))))))
+                 (let [path
+                       (string/replace
+                        (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
+                   [path (fp/exportOPML f/mldoc-record content
+                                        (f/get-default-config format)
+                                        (first names)
+                                        (js/JSON.stringify
+                                         (clj->js (get-export-references
+                                                   repo
+                                                   (get-page-page&block-refs repo (first names) #{} #{} #{})))))]))))))
 
 (defn export-blocks-as-aux
   [repo root-block-uuids auxf]
@@ -386,18 +386,16 @@
                                               [?e2 :block/original-name ?n2]] db path)
                                 :format (gp-util/get-format path)})))))
 
-
 (defn- export-file-on-mobile [data path]
   (p/catch
-      (.writeFile Filesystem (clj->js {:path path
-                                       :data data
-                                       :encoding (.-UTF8 Encoding)
-                                       :recursive true}))
-      (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
+   (.writeFile Filesystem (clj->js {:path path
+                                    :data data
+                                    :encoding (.-UTF8 Encoding)
+                                    :recursive true}))
+   (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
     (fn [error]
-        (notification/show! "Export failed!" :error)
-        (log/error :export-file-failed error))))
-
+      (notification/show! "Export failed!" :error)
+      (log/error :export-file-failed error))))
 
 (defn export-repo-as-markdown!
   [repo]
@@ -420,10 +418,10 @@
       (let [files (export-files-as-opml repo files)
             zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-               (when-let [anchor (gdom/getElement "export-as-opml")]
-                 (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-                 (.setAttribute anchor "download" (.-name zipfile))
-                 (.click anchor)))))))
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)
@@ -508,12 +506,12 @@
                             js/encodeURIComponent
                             (str "data:text/edn;charset=utf-8,"))
           filename (file-name repo :edn)]
-     (if (mobile-util/native-platform?)
-       (export-file-on-mobile edn-str filename)
-       (when-let [anchor (gdom/getElement "download-as-edn-v2")]
-         (.setAttribute anchor "href" data-str)
-         (.setAttribute anchor "download" filename)
-         (.click anchor))))))
+      (if (mobile-util/native-platform?)
+        (export-file-on-mobile edn-str filename)
+        (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+          (.setAttribute anchor "href" data-str)
+          (.setAttribute anchor "download" filename)
+          (.click anchor))))))
 
 (defn- nested-update-id
   [vec-tree]
@@ -640,6 +638,13 @@
                  repetition
                  close)))
 
+(defn- add-fake-pos
+  [block-ast-without-pos]
+  (vector block-ast-without-pos {:fake-pos 0}))
+
+(defn- remove-pos
+  [[block-ast-without-pos]]
+  block-ast-without-pos)
 ;;; ast -> simple text ast
 (def simple-ast-malli-schema
   [:or
@@ -737,7 +742,6 @@
                       (concat [(indent level 2) (raw-text ">") space]
                               (block-ast-without-pos->simple-ast block))) block-coll)
             [(newline* 2)])))
-
 
 (defn- inline-link
   [{full-text :full_text}]
@@ -862,7 +866,7 @@
        (block-heading ast-content)
        "List"
        (block-list ast-content)
-       ("Directive" "Results")
+       ("Directive" "Results" "Property_Drawer")
        nil
        "Example"
        (block-example ast-content)
@@ -870,11 +874,12 @@
        (block-src ast-content)
        "Quote"
        (block-quote ast-content)
+
        (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet"))))))
 
 (defn- block-ast-without-pos->simple-ast
   [block]
-  (block-ast->simple-ast [block {:fake-pos 0}]))
+  (block-ast->simple-ast (add-fake-pos block)))
 
 (defn- inline-ast->simple-ast
   [inline]
@@ -928,6 +933,76 @@
       nil
       (assert false (str :inline-ast->simple-ast " " ast-type " not implemented yet")))))
 
+(defn- block-uuid->ast
+  [block-uuid]
+  (let [block (into {} (db/get-block-by-uuid block-uuid))
+        content (outliner-file/tree->file-content [block] {:init-level 1})
+        format (or (:format block) (state/get-preferred-format))
+        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
+
+    ast))
+
+;;; replace ((block-uuid))
+(defn- replace-block-reference-in-heading
+  [{:keys [title] :as ast-content}]
+  (let [inline-coll  title
+        inline-coll* (mapcat
+                      #(match [%]
+                              [["Link" {:url ["Block_ref" block-uuid]}]]
+                              (let [[[[_ {title-inline-coll :title}]]] (block-uuid->ast (uuid block-uuid))]
+                                title-inline-coll)
+
+                              :else [%])
+                      inline-coll)]
+    (assoc ast-content :title inline-coll*)))
+
+(defn- replace-block-reference-in-paragraph
+  [inline-coll]
+  (mapcat
+   #(match [%]
+      [["Link" {:url ["Block_ref" block-uuid]}]]
+      (let [[[[_ {title-inline-coll :title}]]] (block-uuid->ast (uuid block-uuid))]
+        title-inline-coll)
+      :else [%])
+   inline-coll))
+
+(declare replace-block-references)
+(defn- replace-block-reference-in-list
+  [list-items]
+  (mapv
+   (fn [{block-ast-coll :content :as item}]
+     (assoc item :content (mapv (comp remove-pos replace-block-references) (mapv add-fake-pos block-ast-coll))))
+   list-items))
+
+(defn- replace-block-reference-in-quote
+  [block-ast-coll]
+  (mapv (comp remove-pos replace-block-references) (mapv add-fake-pos block-ast-coll)))
+
+(defn- replace-block-references
+  [block-ast]
+  (let [[[ast-type ast-content] _pos] block-ast]
+    (case ast-type
+      "Heading"
+      (add-fake-pos [ast-type (replace-block-reference-in-heading ast-content)])
+
+      "Paragraph"
+      (add-fake-pos [ast-type (replace-block-reference-in-paragraph ast-content)])
+
+      "List"
+      (add-fake-pos [ast-type (replace-block-reference-in-list ast-content)])
+
+      "Quote"
+      (add-fake-pos [ast-type (replace-block-reference-in-quote ast-content)])
+
+      ;; else
+      block-ast)))
+
+;;; replace {{embed ((block-uuid))}}
+;; (defn- replace-block-embeds
+;;   [block-ast]
+;;   (let [[[ast-type ast-content] _pos] block-ast]
+
+;;     ))
 
 (defmulti simple-ast->string :type)
 (defmethod simple-ast->string :raw-text [{:keys [content]}] content)
@@ -1023,7 +1098,6 @@
   [simple-ast-coll]
   (string/join (mapv simple-ast->string (merge-adjacent-spaces&newlines simple-ast-coll))))
 
-
 ;;; ================================================================
 
 (defn- root-block-uuids->content
@@ -1037,7 +1111,4 @@
   (let [content (root-block-uuids->content repo root-block-uuids)
         first-block (db/entity [:block/uuid (first root-block-uuids)])
         format (or (:block/format first-block) (state/get-preferred-format))]
-    (def xxx (gp-mldoc/->edn content (gp-mldoc/default-config format)))
-
-    )
-  )
+    (def xxx (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
