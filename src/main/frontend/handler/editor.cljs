@@ -311,7 +311,7 @@
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
-        properties (if (and (= format :markdown) 
+        properties (if (and (= format :markdown)
                             (number? (:heading properties)))
                      (dissoc properties :heading)
                      properties)
@@ -1810,6 +1810,10 @@
                  (state/set-editor-op! nil)))
              500))))
 
+(defn- start-of-new-word?
+  [input pos]
+  (contains? #{" " "\t"} (get (.-value input) (- pos 2))))
+
 (defn handle-last-input []
   (let [input           (state/get-input)
         pos             (cursor/pos input)
@@ -1822,8 +1826,10 @@
     (cond
       ;; By default, "/" is also used as namespace separator in Logseq.
       (and (= last-input-char (state/get-editor-command-trigger))
-           (not (contains? #{:page-search-hashtag} (state/sub :editor/action))))
+           #_(not (contains? #{:page-search-hashtag} (state/sub :editor/action)))
+           (or (= 1 pos) (start-of-new-word? input pos)))
       (do
+        (prn :NEW-WORD? (or (= 1 pos) (start-of-new-word? input pos)))
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
         (state/set-editor-show-commands!))
@@ -1856,7 +1862,7 @@
       ;; Open "Search page or New page" auto-complete
       (and (= last-input-char commands/hashtag)
            ;; Only trigger at beginning of line or before whitespace
-           (or (= 1 pos) (contains? #{" " "\t"} (get (.-value input) (- pos 2)))))
+           (or (= 1 pos) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
