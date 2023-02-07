@@ -98,6 +98,24 @@
     (is (= nil (state/get-editor-action))
         "Don't autocomplete properties if typing in a block where properties already exist"))
 
+  (testing "Command autocompletion"
+    (handle-last-input-handler {:value "/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search if only / has been typed")
+
+    (handle-last-input-handler {:value "some words /"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of new word")
+
+    (handle-last-input-handler {:value "https://"})
+    (is (= nil (state/get-editor-action))
+        "No command search in middle of a word")
+
+    (handle-last-input-handler {:value "#blah/"})
+    (is (= nil (state/get-editor-action))
+        "No command search after a tag search to allow for namespace completion")
+    )
+
   (testing "Tag autocompletion"
     (handle-last-input-handler {:value "#"
                                 :cursor-pos 1})
