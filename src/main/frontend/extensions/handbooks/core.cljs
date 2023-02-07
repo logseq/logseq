@@ -103,7 +103,7 @@
       :else [:img {:src src}])))
 
 (rum/defc pane-topic-detail
-  [handbook-nodes pane-state _nav!]
+  [handbook-nodes pane-state nav!]
 
   (let [[deps-pending?, set-deps-pending?] (rum/use-state false)
         *id-ref (rum/use-ref (str "glide--" (js/Date.now)))]
@@ -121,38 +121,61 @@
 
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
-        (when-not deps-pending?
-          [:div.pane.pane-topic-detail
-           [:h1.text-2xl.pb-3.font-semibold (:title topic)]
+        (let [chapters         (:children topic)
+              has-chapters?    (seq chapters)
+              topic            (cond-> topic
+                                 has-chapters? (do (first chapters)))
+              parent           (get handbook-nodes (:parent (settle-parent-key topic)))
+              chapters         (or chapters (:children parent))
+              parent-key       (:key parent)
+              parent-category? (not (string/includes? parent-key "/"))]
 
-           ;; TODO: demo lists
-           (when-let [demos (:demos topic)]
-             (let [demos (cond-> demos
-                           (string? demos) (list))]
-               (if (> (count demos) 1)
-                 [:div.flex.demos.glide
-                  {:id (rum/deref *id-ref)}
+          (when-not deps-pending?
+            [:div.pane.pane-topic-detail
+             [:h1.text-2xl.pb-3.font-semibold (:title topic)]
 
-                  [:div.glide__track {:data-glide-el "track"}
-                   [:div.glide__slides
-                    (for [demo demos]
-                      [:div.item.glide__slide
-                       (media-render (resolve-asset-url demo))])]]
+             [:pre
+              (str "Parent: " parent-key)]
 
-                  [:div.glide__bullets {:data-glide-el "controls[nav]"}
-                   (map-indexed
-                    (fn [idx]
-                      [:button.glide__bullet {:data-glide-dir (str "=" idx)}
-                       (inc idx)])
-                    demos)]]
+             ;; chapters list
+             (when (and (not parent-category?) (seq chapters))
+               [:div.chapters-list.py-2
+                [:select.w-full
+                 {:on-change (fn [^js e]
+                               (when-let [chapter (get handbook-nodes (util/evalue e))]
+                                 (nav! [:topic-detail chapter (:title parent)] pane-state))
+                               )}
+                 (for [c chapters]
+                   [:option {:value (:key c)} (:title c)])]])
 
-                 [:div.flex.demos.pt-1
-                  (media-render (resolve-asset-url (first demos)))])))
+             ;; demos gallery
+             (when-let [demos (:demos topic)]
+               (let [demos (cond-> demos
+                             (string? demos) (list))]
+                 (if (> (count demos) 1)
+                   [:div.flex.demos.glide
+                    {:id (rum/deref *id-ref)}
 
-           [:div.content-wrap
-            (when-let [content (:content topic)]
-              [:div.content.markdown-body
-               {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}}])]])))))
+                    [:div.glide__track {:data-glide-el "track"}
+                     [:div.glide__slides
+                      (for [demo demos]
+                        [:div.item.glide__slide
+                         (media-render (resolve-asset-url demo))])]]
+
+                    [:div.glide__bullets {:data-glide-el "controls[nav]"}
+                     (map-indexed
+                      (fn [idx]
+                        [:button.glide__bullet {:data-glide-dir (str "=" idx)}
+                         (inc idx)])
+                      demos)]]
+
+                   [:div.flex.demos.pt-1
+                    (media-render (resolve-asset-url (first demos)))])))
+
+             [:div.content-wrap
+              (when-let [content (:content topic)]
+                [:div.content.markdown-body
+                 {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}}])]]))))))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
