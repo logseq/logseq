@@ -413,6 +413,9 @@
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/copy-current-file}
 
+   :editor/copy-page-url            {:binding false
+                                     :fn      page-handler/copy-page-url}
+
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
@@ -626,6 +629,7 @@
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
+                          :editor/copy-page-url
                           :editor/new-whiteboard
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
@@ -769,6 +773,7 @@
     :editor/insert-youtube-timestamp
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
+    :editor/copy-page-url
     :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next

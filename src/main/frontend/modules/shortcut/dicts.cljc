@@ -122,6 +122,7 @@
    :editor/open-file-in-default-app "Open file in default app"
    :editor/open-file-in-directory   "Open file in parent directory"
    :editor/copy-current-file        "Copy current file"
+   :editor/copy-page-url           "Copy page url"
    :ui/toggle-wide-mode             "Toggle wide mode"
    :ui/select-theme-color           "Select available theme colors"
    :ui/goto-plugins                 "Go to plugins dashboard"

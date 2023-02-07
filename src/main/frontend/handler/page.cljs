@@ -9,41 +9,42 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
-            [frontend.db.conn :as conn]
+            [frontend.format.block :as block]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
-            [frontend.handler.config :as config-handler]
-            [frontend.handler.recent :as recent-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [frontend.util.page :as page-util]
+            [frontend.util.property :as property]
+            [frontend.util.url :as url-util]
+            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.db.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.format.block :as block]
-            [goog.functions :refer [debounce]]))
+            [promesa.core :as p]))
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -877,3 +878,14 @@
   (if-let [file-path (and (util/electron?) (page-util/get-page-file-path))]
     (js/window.apis.showItemInFolder file-path)
     (notification/show! "No file found" :warning)))
+
+(defn copy-page-url [] 
+ (when-let [page-name (or
+                        (state/get-current-page)
+                        (state/get-current-whiteboard))]
+(let [page-name (util/page-name-sanity-lc page-name)
+          repo (state/sub :git/current-repo)
+          page (db/entity repo [:block/name page-name])
+          page-original-name (:block/original-name page)]
+  (util/copy-to-clipboard!
+   (url-util/get-logseq-graph-page-url nil repo page-original-name)))))
