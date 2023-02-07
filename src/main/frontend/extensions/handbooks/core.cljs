@@ -102,6 +102,34 @@
 
       :else [:img {:src src}])))
 
+(rum/defc chapter-select
+  [topic children on-select]
+  (let [[open?, set-open?] (rum/use-state false)]
+    (rum/use-effect!
+     (fn []
+       (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
+         (let [h #(when-not (some->> (.-target %)
+                                     (.contains (js/document.querySelector ".chapters-select")))
+                    (set-open? false))]
+           (.addEventListener el "click" h)
+           #(.removeEventListener el "click" h))))
+     [])
+
+    [:div.chapters-select.w-full
+     [:a.select-trigger
+      {:on-click #(set-open? (not open?))}
+      [:small "Current chapter"]
+      [:strong (:title topic)]
+      (if open?
+        (ui/icon "chevron-down")
+        (ui/icon "chevron-left"))
+
+      (when open?
+        [:ul
+         (for [c children]
+           (when (not= (:key c) (:key topic))
+             [:li {:on-click #(on-select (:key c))} (:title c)]))])]]))
+
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state nav!]
 
@@ -128,25 +156,22 @@
               parent           (get handbook-nodes (:parent (settle-parent-key topic)))
               chapters         (or chapters (:children parent))
               parent-key       (:key parent)
-              parent-category? (not (string/includes? parent-key "/"))]
+              parent-category? (not (string/includes? parent-key "/"))
+              show-chapters?   (and (not parent-category?) (seq chapters))]
 
           (when-not deps-pending?
             [:div.pane.pane-topic-detail
-             [:h1.text-2xl.pb-3.font-semibold (:title topic)]
-
-             [:pre
-              (str "Parent: " parent-key)]
+             (when-not show-chapters?
+               [:h1.text-2xl.pb-3.font-semibold (:title topic)])
 
              ;; chapters list
-             (when (and (not parent-category?) (seq chapters))
-               [:div.chapters-list.py-2
-                [:select.w-full
-                 {:on-change (fn [^js e]
-                               (when-let [chapter (get handbook-nodes (util/evalue e))]
-                                 (nav! [:topic-detail chapter (:title parent)] pane-state))
-                               )}
-                 (for [c chapters]
-                   [:option {:value (:key c)} (:title c)])]])
+             (when show-chapters?
+               [:div.chapters-wrap.py-2
+                (chapter-select
+                 topic chapters
+                 (fn [k]
+                   (when-let [chapter (get handbook-nodes k)]
+                     (nav! [:topic-detail chapter (:title parent)] pane-state))))])
 
              ;; demos gallery
              (when-let [demos (:demos topic)]

@@ -197,6 +197,56 @@
         margin: 0;
       }
     }
+
+    .chapters {
+      &-wrap {
+
+      }
+
+      &-select {
+        .select-trigger {
+          @apply relative flex flex-col rounded py-2 px-3 leading-5 select-none;
+
+          color: var(--ls-primary-text-color);
+          background-color: var(--ls-secondary-background-color);
+
+          small {
+            @apply text-[11px] opacity-50 pl-0.5;
+          }
+
+          strong {
+            @apply text-sm dark:text-gray-100;
+          }
+
+          .ui__icon {
+            @apply absolute right-2 top-5 opacity-70;
+          }
+
+          &:active {
+            .ui__icon, strong {
+              @apply opacity-80;
+            }
+          }
+
+          ul {
+            @apply absolute top-14 left-0 w-full list-none m-0 rounded py-2;
+
+            background-color: var(--ls-secondary-background-color);
+            transform: translateY(-5px);
+            max-height: 300px;
+            overflow: auto;
+
+            li {
+              @apply list-none px-3 py-1 transition-colors;
+
+              &:hover {
+                background-color: var(--ls-tertiary-background-color);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   &-popup {
@@ -236,6 +286,12 @@ html[data-theme="light"] {
   .cp__handbooks-content {
     .hd {
       background-color: var(--ls-primary-background-color);
+    }
+
+    .chapters-select {
+      .select-trigger {
+        background-color: var(--ls-tertiary-background-color);
+      }
     }
   }
 }
