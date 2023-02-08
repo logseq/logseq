@@ -1,8 +1,8 @@
 (ns frontend.components.handbooks
-  (:require [shadow.lazy :as lazy]
-            [rum.core :as rum]
+  (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.modules.layout.core :as layout]
+            ;[shadow.lazy :as lazy]
             [frontend.extensions.handbooks.core :as handbooks]))
 
 #_:clj-kondo/ignore

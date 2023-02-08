@@ -9,7 +9,7 @@
    [cljs-bean.core :as bean]
    [promesa.core :as p]
    [camel-snake-kebab.core :as csk]
-   [medley.core :as m]
+   [medley.core :as medley]
    [frontend.util :as util]
    [frontend.storage :as storage]
    [frontend.extensions.video.youtube :as youtube]
@@ -63,7 +63,7 @@
    child])
 
 (rum/defc topic-card
-  [{:keys [key title description cover] :as topic} nav-fn! opts]
+  [{:keys [key title description cover] :as _topic} nav-fn! opts]
   [:div.topic-card.flex
    (merge
     {:key      key
@@ -151,8 +151,7 @@
       (when-let [topic (get handbook-nodes topic-key)]
         (let [chapters         (:children topic)
               has-chapters?    (seq chapters)
-              topic            (cond-> topic
-                                 has-chapters? (do (first chapters)))
+              topic            (if has-chapters? (first chapters) topic)
               parent           (get handbook-nodes (:parent (settle-parent-key topic)))
               chapters         (or chapters (:children parent))
               parent-key       (:key parent)
@@ -189,7 +188,7 @@
 
                     [:div.glide__bullets {:data-glide-el "controls[nav]"}
                      (map-indexed
-                      (fn [idx]
+                      (fn [idx _]
                         [:button.glide__bullet {:data-glide-dir (str "=" idx)}
                          (inc idx)])
                       demos)]]
@@ -268,7 +267,7 @@
          (set-search-state!
           (merge search-state {:active? active?}))
 
-         (if (and (not (empty? handbooks-nodes)) active?)
+         (if (and (seq handbooks-nodes) active?)
            (-> (or pane-nodes
                    ;; global
                    (vals (dissoc handbooks-nodes "__root")))
@@ -326,16 +325,16 @@
      (when (:active? search-state)
        [:div.search-results-wrap
         [:div.results-wrap
-         (for [[idx topic] (m/indexed results)]
+         (for [[idx topic] (medley/indexed results)]
            (rum/with-key
             (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
                         {:class (util/classnames [{:active (= selected idx)}])})
             (:key topic)))]])]))
 
-(rum/defc related-topics
-  []
-  [:div.related-topics
-   (link-card {} [:strong.text-md "How to do something?"])])
+;(rum/defc related-topics
+;  []
+;  [:div.related-topics
+;   (link-card {} [:strong.text-md "How to do something?"])])
 
 (def panes-mapping
   {:dashboard    [pane-dashboard]
@@ -383,7 +382,7 @@
                                (set-active-pane0! [:dashboard])
                                (set-history-state! '()))
 
-        handbooks-loaded?    (and (not (empty? (:data handbooks-state)))
+        handbooks-loaded?    (and (seq (:data handbooks-state))
                                   (= :completed (:status handbooks-state)))
         handbooks-data       (:data handbooks-state)
         nav-to-pane!         (fn [pane-state prev-state]
