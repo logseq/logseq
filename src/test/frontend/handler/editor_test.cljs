@@ -2,7 +2,6 @@
   (:require [frontend.handler.editor :as editor]
             [clojure.test :refer [deftest is testing are]]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.util.cursor :as cursor]))
 
 (deftest extract-nearest-link-from-text-test
@@ -79,7 +78,6 @@
   (let [pos (or cursor-pos (count value))
         input #js {:value value}]
     (with-redefs [editor/get-matched-commands (constantly commands)
-                  util/get-selected-text (constantly nil)
                   cursor/pos (constantly pos)]
       ((editor/keyup-handler nil input nil)
        #js {:key (subs value (dec (count value)))}

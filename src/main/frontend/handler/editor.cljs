@@ -2812,7 +2812,68 @@
         :else
         nil))))
 
-(defn ^:large-vars/cleanup-todo keyup-handler
+(defn- default-case-for-keyup-handler
+  [input current-pos k code is-processed? c]
+  (let [last-key-code (state/get-last-key-code)
+        blank-selected? (string/blank? (util/get-selected-text))
+        non-enter-processed? (and is-processed? ;; #3251
+                                  (not= code keycode/enter-code))  ;; #3459
+        editor-action (state/get-editor-action)]
+    (when (and (not editor-action) (not non-enter-processed?))
+      (cond
+        ;; When you type text inside square brackets
+        (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
+             (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
+        (let [orig-pos (cursor/get-caret-pos input)
+              value (gobj/get input "value")
+              square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
+              pos (+ square-pos 2)
+              _ (state/set-editor-last-pos! pos)
+              pos (assoc orig-pos :pos pos)
+              command-step (if (= \# (util/nth-safe value (dec square-pos)))
+                             :editor/search-page-hashtag
+                             :editor/search-page)]
+          (commands/handle-step [command-step])
+          (state/set-editor-action-data! {:pos pos}))
+
+        ;; Handle non-ascii square brackets
+        (and blank-selected?
+             (contains? keycode/left-square-brackets-keys k)
+             (= (:key last-key-code) k)
+             (> current-pos 0)
+             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+        (do
+          (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
+                                                                                 :backward-pos 2}])
+          (commands/handle-step [:editor/search-page])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
+
+        ;; Handle non-ascii parentheses
+        (and blank-selected?
+             (contains? keycode/left-paren-keys k)
+             (= (:key last-key-code) k)
+             (> current-pos 0)
+             (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
+        (do
+          (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
+                                                                                :backward-pos 2}])
+          (commands/handle-step [:editor/search-block :reference])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
+
+        ;; Handle non-ascii angle brackets
+        (and (= "〈" c)
+             (= "《" (util/nth-safe (gobj/get input "value") (dec (dec current-pos))))
+             (> current-pos 0))
+        (do
+          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                       :backward-pos 0}])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+          (state/set-editor-show-block-commands!))
+
+        :else
+        nil))))
+
+(defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
@@ -2841,12 +2902,8 @@
                (if (mobile-util/native-android?)
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
-               (util/event-is-composing? e true)]) ;; #3440
-            last-key-code (state/get-last-key-code)
-            blank-selected? (string/blank? (util/get-selected-text))
-            non-enter-processed? (and is-processed? ;; #3251
-                                      (not= code keycode/enter-code))  ;; #3459
-            editor-action (state/get-editor-action)]
+                ;; #3440
+               (util/event-is-composing? e true)])]
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
@@ -2859,7 +2916,7 @@
                 (state/clear-editor-action!))))
 
           ;; When you type search text after < (and when you release shift after typing <)
-          (and (= :block-commands editor-action) (not= key-code 188)) ; not <
+          (and (= :block-commands (state/get-editor-action)) (not= key-code 188)) ; not <
           (let [matched-block-commands (get-matched-block-commands input)
                 format (:format (get-state))]
             (if (seq matched-block-commands)
@@ -2888,59 +2945,7 @@
           (state/clear-editor-action!)
 
           :else
-          (when (and (not editor-action) (not non-enter-processed?))
-            (cond
-              ;; When you type text inside square brackets
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
-                   (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
-              (let [orig-pos (cursor/get-caret-pos input)
-                    value (gobj/get input "value")
-                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
-                    pos (+ square-pos 2)
-                    _ (state/set-editor-last-pos! pos)
-                    pos (assoc orig-pos :pos pos)
-                    command-step (if (= \# (util/nth-safe value (dec square-pos)))
-                                   :editor/search-page-hashtag
-                                   :editor/search-page)]
-                (commands/handle-step [command-step])
-                (state/set-editor-action-data! {:pos pos}))
-
-              ;; Handle non-ascii square brackets
-              (and blank-selected?
-                   (contains? keycode/left-square-brackets-keys k)
-                   (= (:key last-key-code) k)
-                   (> current-pos 0)
-                   (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-              (do
-                (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-page])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-              ;; Handle non-ascii parentheses
-              (and blank-selected?
-                   (contains? keycode/left-paren-keys k)
-                   (= (:key last-key-code) k)
-                   (> current-pos 0)
-                   (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
-              (do
-                (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-block :reference])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-              ;; Handle non-ascii angle brackets
-              (and (= "〈" c)
-                   (= "《" (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-              (do
-                (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                             :backward-pos 0}])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-                (state/set-editor-show-block-commands!))
-
-              :else
-              nil)))
+          (default-case-for-keyup-handler input current-pos k code is-processed? c))
 
         (close-autocomplete-if-outside input)
 
