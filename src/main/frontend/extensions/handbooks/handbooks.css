@@ -116,7 +116,7 @@
         }
 
         &.glide {
-          @apply mt-[56px] mb-[10px];
+          @apply mb-[10px];
         }
 
         .glide__slide {
@@ -139,10 +139,8 @@
 
     .glide {
       &__bullets {
-        bottom: unset;
-        top: -45px;
-        left: -5px;
-        transform: none !important;
+        @apply w-full bottom-0 left-0 transform-none
+        flex items-center justify-end pb-2 pr-1;
       }
 
       &__bullet {
@@ -205,7 +203,7 @@
 
       &-select {
         .select-trigger {
-          @apply relative flex flex-col rounded py-2 px-3 leading-5 select-none;
+          @apply relative flex flex-col rounded py-2 px-3 leading-5 select-none z-10;
 
           color: var(--ls-primary-text-color);
           background-color: var(--ls-secondary-background-color);
