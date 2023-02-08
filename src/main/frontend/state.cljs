@@ -572,7 +572,8 @@ Similar to re-frame subscriptions"
 (defn enable-fold-button-right?
   []
   (let [_ (sub :ui/viewport)]
-    (util/md-breakpoint?)))
+    (and (util/mobile?)
+         (util/sm-breakpoint?))))
 
 (defn enable-journals?
   ([]

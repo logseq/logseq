@@ -310,8 +310,11 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
-        properties (-> (:block/properties block)
-                       (dissoc :heading))
+        properties (:block/properties block)
+        properties (if (and (= format :markdown) 
+                            (number? (:heading properties)))
+                     (dissoc properties :heading)
+                     properties)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
@@ -3553,18 +3556,6 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
-(defn set-heading!
-  [block-id format heading]
-  (if (= format :markdown)
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          heading (if (true? heading) 2 heading)
-          content' (commands/set-markdown-heading (:block/content block) heading)]
-      (save-block! repo block-id content'))
-    (do
-      (save-current-block!)
-      (set-block-property! block-id "heading" heading))))
-
 (defn remove-heading!
   [block-id format]
   (remove-block-property! block-id "heading")
@@ -3572,6 +3563,18 @@
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])
           content' (commands/clear-markdown-heading (:block/content block))]
+      (save-block! repo block-id content'))))
+
+(defn set-heading!
+  [block-id format heading]
+  (remove-heading! block-id format)
+  (if (or (true? heading) (not= format :markdown))
+    (do
+      (save-current-block!)
+      (set-block-property! block-id "heading" heading))
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))))
 
 (defn block->data-transfer!
