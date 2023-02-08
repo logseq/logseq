@@ -232,7 +232,7 @@
   [:div.pane.pane-settings
    [:div.item
     [:p.flex.items-center.space-x-3.mb-0
-     [:strong "Development watch"]
+     [:strong "Writing mode (preview in time)"]
      (ui/toggle dev-watch? #(set-dev-watch? (not dev-watch?)) true)]
     [:small.opacity-30 (str "Resources from " (get-handbooks-endpoint "/"))]]])
 
