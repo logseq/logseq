@@ -2,6 +2,7 @@
   (:require [frontend.handler.editor :as editor]
             [clojure.test :refer [deftest is testing are]]
             [frontend.state :as state]
+            [frontend.util :as util]
             [frontend.util.cursor :as cursor]))
 
 (deftest extract-nearest-link-from-text-test
@@ -66,8 +67,50 @@
     "TODO" "## TODO content" "## DOING content"
     "DONE" "DONE content" "content"))
 
+(defn- keyup-handler
+  "Spied version of editor/keyup-handler"
+  [{:keys [value cursor-pos action commands]
+    ;; Default to some commands matching which matches default behavior for most
+    ;; completion scenarios
+    :or {commands [:fake-command]}}]
+  ;; Reset editor action in order to test result
+  (state/set-editor-action! action)
+  ;; Default cursor pos to end of line
+  (let [pos (or cursor-pos (count value))
+        input #js {:value value}]
+    (with-redefs [editor/get-matched-commands (constantly commands)
+                  util/get-selected-text (constantly nil)
+                  cursor/pos (constantly pos)]
+      ((editor/keyup-handler nil input nil)
+       #js {:key (subs value (dec (count value)))}
+       nil))))
+
+(deftest ^:focus keyup-handler-test
+  (testing "Command completion"
+    (keyup-handler {:value "/b"
+                    :action :commands
+                    :commands [:fake-command]})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if there is a matching command")
+
+    (keyup-handler {:value "/zz"
+                    :action :commands
+                    :commands []})
+    (is (= nil (state/get-editor-action))
+        "Completion closed if there no matching commands")
+
+    (keyup-handler {:value "/ " :action :commands})
+    (is (= nil (state/get-editor-action))
+        "Completion closed after a space follows /")
+
+    (keyup-handler {:value "/block " :action :commands})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if space is part of the search term for /"))
+  ;; Reset state
+  (state/set-editor-action! nil))
+
 (defn- handle-last-input-handler
-  "Spied version of editor/keydown-not-matched-handler"
+  "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos]}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! nil)

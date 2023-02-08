@@ -1824,12 +1824,11 @@
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
-      ;; By default, "/" is also used as namespace separator in Logseq.
       (and (= last-input-char (state/get-editor-command-trigger))
-           #_(not (contains? #{:page-search-hashtag} (state/sub :editor/action)))
+           ;; By default, "/" is also used as namespace separator in Logseq.
+           (not (contains? #{:page-search-hashtag} (state/sub :editor/action)))
            (or (= 1 pos) (start-of-new-word? input pos)))
       (do
-        (prn :NEW-WORD? (or (= 1 pos) (start-of-new-word? input pos)))
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
         (state/set-editor-show-commands!))
@@ -2843,7 +2842,6 @@
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
                (util/event-is-composing? e true)]) ;; #3440
-            format (:format (get-state))
             last-key-code (state/get-last-key-code)
             blank-selected? (string/blank? (util/get-selected-text))
             non-enter-processed? (and is-processed? ;; #3251
@@ -2852,14 +2850,18 @@
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
-          (let [matched-commands (get-matched-commands input)]
-            (if (seq matched-commands)
-              (reset! commands/*matched-commands matched-commands)
-              (state/clear-editor-action!)))
+          (if (= (state/get-editor-command-trigger) (second (re-find #"(\S+)\s+$" value)))
+            (state/clear-editor-action!)
+            (let [matched-commands (get-matched-commands input)]
+              (prn :KEYUP {:k k :input input :value (gobj/get input "value")})
+              (if (seq matched-commands)
+                (reset! commands/*matched-commands matched-commands)
+                (state/clear-editor-action!))))
 
           ;; When you type search text after < (and when you release shift after typing <)
           (and (= :block-commands editor-action) (not= key-code 188)) ; not <
-          (let [matched-block-commands (get-matched-block-commands input)]
+          (let [matched-block-commands (get-matched-block-commands input)
+                format (:format (get-state))]
             (if (seq matched-block-commands)
               (cond
                 (= key-code 9)          ;tab
@@ -2876,7 +2878,7 @@
               (state/clear-editor-action!)))
 
           ;; When you type two spaces after a command character (may always just be handled by the above instead?)
-          (and (contains? #{:commands :block-commands} (state/get-editor-action))
+          (and (contains? #{:block-commands} (state/get-editor-action))
                (= c (util/nth-safe value (dec (dec current-pos))) " "))
           (state/clear-editor-action!)
 
