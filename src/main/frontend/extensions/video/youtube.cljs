@@ -28,17 +28,17 @@
 
 (defn register-player [state]
   (try
-    (let [id (first (:rum/args state))
-         node (rum/dom-node state)]
-     (when node
-       (let [player (js/window.YT.Player.
-                     node
-                     (clj->js
-                      {:events
-                       {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
-         (state/update-state! [:youtube/players]
-                              (fn [players]
-                                (assoc players id player))))))
+    (let [id   (first (:rum/args state))
+          node (rum/dom-node state)]
+      (when node
+        (let [player (js/window.YT.Player.
+                      node
+                      (clj->js
+                       {:events
+                        {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
+          (state/update-state! [:youtube/players]
+                               (fn [players]
+                                 (assoc players id player))))))
     (catch :default _e
       nil)))
 
@@ -51,14 +51,14 @@
        (<! (load-youtube-api))
        (register-player state))
      state)}
-  [_state id {:keys [width height] :as _opts}]
+  [state id {:keys [width height] :as _opts}]
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
         height (or height (int (* width (/ 315 560))))]
     [:iframe
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
-      :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
       :frame-border      "0"
       :src               (str "https://www.youtube.com/embed/" id "?enablejsapi=1")
       :height            height
@@ -119,9 +119,9 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
 
 
 (defn parse-timestamp [timestamp]
-  (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"
-        reg-number #"^\d+$"
-        timestamp (str timestamp)
+  (let [reg           #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"
+        reg-number    #"^\d+$"
+        timestamp     (str timestamp)
         total-seconds (-> (re-matches reg-number timestamp)
                           util/safe-parse-int)
         [_ hours minutes seconds] (re-matches reg timestamp)
@@ -137,17 +137,17 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
       nil)))
 
 (comment
-  ;; hh:mm:ss
-  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
-  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
+ ;; hh:mm:ss
+ (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
+ (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "30:23")   ;; => ["30:23" nil "30" "23"]
 
-  (parse-timestamp "01:23") ;; => 83
+ (parse-timestamp "01:23")                                  ;; => 83
 
-  (parse-timestamp "01:01:23") ;; => 3683
+ (parse-timestamp "01:01:23")                               ;; => 3683
 
-  ;; seconds->display
-  ;; https://stackoverflow.com/questions/1322732/convert-seconds-to-hh-mm-ss-with-javascript
-  (seconds->display 129600) ;; => "36:00:00"
-  (seconds->display 13545) ;; => "03:45:45"
-  (seconds->display 18) ;; => "00:18"
-  )
+ ;; seconds->display
+ ;; https://stackoverflow.com/questions/1322732/convert-seconds-to-hh-mm-ss-with-javascript
+ (seconds->display 129600)                                  ;; => "36:00:00"
+ (seconds->display 13545)                                   ;; => "03:45:45"
+ (seconds->display 18)                                      ;; => "00:18"
+ )
