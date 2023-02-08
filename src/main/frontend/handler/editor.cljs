@@ -1825,9 +1825,7 @@
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
       (and (= last-input-char (state/get-editor-command-trigger))
-           ;; By default, "/" is also used as namespace separator in Logseq.
-           (not (contains? #{:page-search-hashtag} (state/sub :editor/action)))
-           (or (= 1 pos) (start-of-new-word? input pos)))
+           (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
@@ -1860,8 +1858,8 @@
 
       ;; Open "Search page or New page" auto-complete
       (and (= last-input-char commands/hashtag)
-           ;; Only trigger at beginning of line or before whitespace
-           (or (= 1 pos) (start-of-new-word? input pos)))
+           ;; Only trigger at beginning of a line or before whitespace
+           (or (re-find #"(?m)^#" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -2910,7 +2908,6 @@
           (if (= (state/get-editor-command-trigger) (second (re-find #"(\S+)\s+$" value)))
             (state/clear-editor-action!)
             (let [matched-commands (get-matched-commands input)]
-              (prn :KEYUP {:k k :input input :value (gobj/get input "value")})
               (if (seq matched-commands)
                 (reset! commands/*matched-commands matched-commands)
                 (state/clear-editor-action!))))

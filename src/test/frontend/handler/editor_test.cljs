@@ -83,7 +83,7 @@
        #js {:key (subs value (dec (count value)))}
        nil))))
 
-(deftest ^:focus keyup-handler-test
+(deftest keyup-handler-test
   (testing "Command completion"
     (keyup-handler {:value "/b"
                     :action :commands
@@ -148,14 +148,17 @@
     (is (= :commands (state/get-editor-action))
         "Command search on start of new word")
 
+    (handle-last-input-handler {:value "a line\n/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of a new line")
+
     (handle-last-input-handler {:value "https://"})
     (is (= nil (state/get-editor-action))
         "No command search in middle of a word")
 
     (handle-last-input-handler {:value "#blah/"})
     (is (= nil (state/get-editor-action))
-        "No command search after a tag search to allow for namespace completion")
-    )
+        "No command search after a tag search to allow for namespace completion"))
 
   (testing "Tag autocompletion"
     (handle-last-input-handler {:value "#"
