@@ -342,7 +342,7 @@
    :topic-detail [pane-topic-detail]
    :settings     [pane-settings]})
 
-(rum/defc content
+(rum/defc ^:large-vars/data-var content
   []
   (let [[active-pane0, set-active-pane0!]
         (rum/use-state [:dashboard nil "Helps"])
