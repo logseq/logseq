@@ -37,10 +37,23 @@
    [:a {:on-click on-click}
     text]])
 
-(rum/defc adder
-  [*find *tree]
+(rum/defc actions
+  [*find *tree pos {:keys [group?]}]
   [:div.query-builder-filters.flex.flex-row.items-center
-   (ui/icon "circle-plus" {:style {:font-size 20}})
+   (when group?
+     [:a {:title "Add clause"
+          :on-click (fn [])}
+      (ui/icon "circle-plus" {:style {:font-size 20}})])
+
+   [:a.ml-2 {:title "Wrap by (and/or/not)"
+             :on-click (fn [])}
+    (ui/icon "parentheses" {:style {:font-size 20}})]
+
+   [:a.ml-2 {:title "Remove this clause"
+             :on-click (fn [])}
+    (ui/icon "x" {:style {:font-size 20}})]
+
+
    ;; [:div.ml-1
    ;;  (if (= @*find :block)
    ;;    [:div.grid.grid-cols-4.gap-1
@@ -53,23 +66,26 @@
 (declare clauses-group)
 
 (rum/defc clause
-  [*tree *find position clause]
+  [*tree *find pos clause]
   [:div.query-builder-clause.p-1
    (let [kind (keyword (first clause))]
      (if (#{:and :or :not} kind)
-       (clauses-group *tree *find kind (rest clause))
+       (clauses-group *tree *find pos kind (rest clause))
 
-       (case kind
-         :page-ref
-         [:div
-          [:span.mr-1 "Page reference:"]
-          [:span (str (second clause))]]
+       [:div.flex.flex-row.items-center
+        (case kind
+          :page-ref
+          [:div
+           [:span.mr-1 "Page reference:"]
+           [:span (str (second clause))]]
 
-         ;; :property
-         (str clause))))])
+          ;; :property
+          (str clause))
+
+        (actions *find *tree pos {:group? false})]))])
 
 (rum/defc clauses-group
-  [*tree *find kind clauses]
+  [*tree *find pos kind clauses]
   [:div.flex.flex-row.border.p-1
    [:div.text-xs.font-bold.uppercase.toned-down.mr-2
     (name kind)]
@@ -77,9 +93,9 @@
    [:div.flex.flex-col
     [:div
      (map-indexed (fn [i item]
-                    (clause *tree *find i item))
+                    (clause *tree *find (conj pos i) item))
                   clauses)]
-    (adder *find *tree)]])
+    (actions *find *tree pos {:group? true})]])
 
 ;; '(and (page-ref foo) (property key value))
 (rum/defc clause-tree
@@ -88,7 +104,7 @@
         [kind' clauses] (if kind
                           [kind (rest @*tree)]
                           [:and [@*tree]])]
-    (clauses-group *tree *find kind' clauses)))
+    (clauses-group *tree *find [0] kind' clauses)))
 
 (rum/defc query
   [*tree]
