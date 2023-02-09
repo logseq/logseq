@@ -177,7 +177,7 @@
 
 (defn get-enabled-plugins-if-setting-schema
   []
-  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true true))]
+  (when-let [plugins (seq (state/get-enabled?-installed-plugins false true true true))]
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
