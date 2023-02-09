@@ -21,7 +21,7 @@
             [promesa.core :as p]))
 
 (defn- handle-received-text [args]
-  ;; {:title :type :url}
+  ;; :title :type :url
   (state/pub-event! [:editor/quick-capture args]))
 
 (defn- embed-asset-file [url format]
