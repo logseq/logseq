@@ -49,7 +49,8 @@
            (when-not active-hl
              (.on (.-eventBus viewer) (name :restore-last-page)
                   (fn [last-page]
-                    (set! (.-currentPageNumber viewer) (util/safe-parse-int last-page)))))))))
+                    (when last-page
+                      (set! (.-currentPageNumber viewer) (util/safe-parse-int last-page))))))))))
    [viewer])
   nil)
 
@@ -793,7 +794,8 @@
        (p/catch
         (p/let [data (pdf-assets/load-hls-data$ pdf-current)
                 {:keys [highlights extra]} data]
-          (set-initial-page! (or (util/safe-parse-int (:page extra)) 1))
+          (set-initial-page! (or (when-let [page (:page extra)]
+                                   (util/safe-parse-int page)) 1))
           (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
 
         ;; error
