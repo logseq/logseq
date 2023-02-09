@@ -78,13 +78,15 @@
   (let [pos (or cursor-pos (count value))
         input #js {:value value}]
     (with-redefs [editor/get-matched-commands (constantly commands)
+                  ;; Ignore as none of its behaviors are tested
+                  editor/default-case-for-keyup-handler (constantly nil)
                   cursor/pos (constantly pos)]
       ((editor/keyup-handler nil input nil)
        #js {:key (subs value (dec (count value)))}
        nil))))
 
 (deftest keyup-handler-test
-  (testing "Command completion"
+  (testing "Command autocompletion"
     (keyup-handler {:value "/b"
                     :action :commands
                     :commands [:fake-command]})
@@ -104,6 +106,17 @@
     (keyup-handler {:value "/block " :action :commands})
     (is (= :commands (state/get-editor-action))
         "Completion stays open if space is part of the search term for /"))
+
+  (testing "Tag autocompletion"
+    (keyup-handler {:value "foo #b" :action :page-search-hashtag})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open for one tag")
+
+    (keyup-handler {:value "text # #bar"
+                    :action :page-search-hashtag
+                    :cursor-pos 6})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open when typing tag before another tag"))
   ;; Reset state
   (state/set-editor-action! nil))
 
