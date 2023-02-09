@@ -1772,7 +1772,9 @@
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
              (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
              (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
-             (not (wrapped-by? input "#" "")))
+             ;; wrapped-by? doesn't detect multiple beginnings when ending with "" so
+             ;; use subs to correctly detect current hashtag
+             (not (text-util/wrapped-by? (subs (.-value input) 0 (cursor/pos input)) (cursor/pos input) commands/hashtag "")))
     (state/clear-editor-action!)))
 
 (defn resize-image!
