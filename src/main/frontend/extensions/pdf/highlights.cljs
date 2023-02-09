@@ -811,7 +811,9 @@
         (fn [^js e]
           (js/console.error "[load hls error]" e)
 
-          (let [msg (str "Error: load initial highlights failed! \n" e)]
+          (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
+                                      (:hls-file pdf-current))
+                         e)]
             (notification/show! msg :error)
             (set-hls-state! {:loaded true :error e}))))
 
