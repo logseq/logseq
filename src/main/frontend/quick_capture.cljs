@@ -11,18 +11,31 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]))
 
-
-(defn- extract-highlight
-  "Extract highlighted text and url from mobile browser intent share"
-  [url]
-  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
-    (if (not-empty highlight)
-      [highlight link]
-      [nil url])))
-
 (defn- is-tweet-link
   [url]
-  (re-matches #"^https://twitter\.com/.*?/status/.*?$" url))
+  (when (not-empty url)
+    (re-matches #"^https://twitter\.com/.*?/status/.*?$" url)))
+
+(defn- is-link
+  [url]
+  (when (not-empty url)
+    (re-matches #"^[a-zA-Z0-9]+://.*$" url)))
+
+(defn- extract-highlight
+  "Extract highlighted text and url from mobile browser intent share.
+   - url can be prefixed with the highlighted text.
+   - url can be highlighted text only in some cases."
+  [url]
+  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
+    (cond
+      (not-empty highlight)
+      [highlight link]
+
+      (is-link url)
+      [nil url]
+
+      :else
+      [url nil])))
 
 (defn quick-capture [args]
   (let [{:keys [url title content page append]} (bean/->clj args)
@@ -48,6 +61,9 @@
         time (date/get-current-time)
         text (or (and content (not-empty (string/trim content))) "")
         link (cond
+               (string/blank? url)
+               title
+
                (boolean (text-util/get-matched-video url))
                (str title " {{video " url "}}")
 
