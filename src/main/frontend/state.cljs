@@ -2113,3 +2113,7 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn clear-user-info!
+  []
+  (storage/remove :user-groups))
