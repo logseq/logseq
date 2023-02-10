@@ -186,6 +186,7 @@
 
 (defn logout []
   (clear-tokens)
+  (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
 
 (defn <ensure-id&access-token

@@ -13,16 +13,53 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]
-            [logseq.graph-parser.util :as gp-util]
             [frontend.util.fs :as fs-util]
+            [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
+(defn- is-link
+  [url]
+  (when (not-empty url)
+    (re-matches #"^[a-zA-Z0-9]+://.*$" url)))
+
+(defn- extract-highlight
+  "Extract highlighted text and url from mobile browser intent share.
+   - url can be prefixed with the highlighted text.
+   - url can be highlighted text only in some cases."
+  [url]
+  (let [[_ link] (re-find #"\s+([a-zA-Z0-9]+://[\S]*)$" url)
+        highlight (when (not-empty link)
+                    (let [quoted (string/replace url link "")
+                          quoted (gstring/trimRight quoted)]
+                      (gstring/stripQuotes quoted "\"")))]
+    (cond
+      (not-empty highlight)
+      [highlight link]
+
+      (is-link url)
+      [nil url]
+
+      :else
+      [url nil])))
+
+(defn- transform-args
+  [args]
+  (let [{:keys [url]} args]
+    (if (is-link url)
+      args
+      (let [[highlight url'] (extract-highlight url)]
+        (assoc args :url url' :content highlight)))))
+
 (defn- handle-received-text [args]
-  ;; {:title :type :url}
-  (state/pub-event! [:editor/quick-capture args]))
+  ;; Keys: :title :type :url
+  ;; :content is added if there's highlighted text
+  (let [args (transform-args args)]
+    (state/pub-event! [:editor/quick-capture args])))
+
 
 (defn- embed-asset-file [url format]
   (p/let [basename (path/basename url)
