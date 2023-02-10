@@ -68,8 +68,10 @@
         template (get-in (state/get-config)
                          [:quick-capture-templates :text]
                          "**{time}** [[quick capture]]: {text} {url}")
+        date-ref-name (date/today)
         content (-> template
                     (string/replace "{time}" time)
+                    (string/replace "{date}" date-ref-name)
                     (string/replace "{url}" link)
                     (string/replace "{text}" text))
         edit-content (state/get-edit-content)
