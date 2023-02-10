@@ -387,16 +387,16 @@
 
     (rum/use-effect!
      (fn []
-       (when-let [^js el-viewer (and viewer (js/document.querySelector "#pdf-layout-container"))]
-         (let [handler (fn [^js e]
-                         (when-let [^js target (.-target e)]
-                           (when (and
-                                  (not= "Outline" (.-title target))
-                                  (not (.contains (rum/deref *el-container) target)))
-                             (set-visible! false)
-                             (set-outline-visible!))))]
-           (.addEventListener el-viewer "click" handler)
-           #(.removeEventListener el-viewer "click" handler))))
+       (when-let [^js doc (and viewer js/document.body)]
+         (let [cb (fn [^js e]
+                    (when-let [^js target (.-target e)]
+                      (when (and
+                             (not= "Outline" (.-title target))
+                             (not (.contains (rum/deref *el-container) target)))
+                        (set-visible! false)
+                        (set-outline-visible!))))]
+           (.addEventListener doc "click" cb)
+           #(.removeEventListener doc "click" cb))))
      [viewer *el-container])
 
     [:div.extensions__pdf-outline-wrap.hls-popup-overlay
