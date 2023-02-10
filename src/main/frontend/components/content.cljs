@@ -400,7 +400,7 @@
   [:div {:id id}
    (if hiccup
      hiccup
-     [:div.cursor "Click to edit"])])
+     [:div.cursor (t "Click to edit")])])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
@@ -422,7 +422,7 @@
          {:id id
           :on-click on-click}
          (if (string/blank? content)
-           [:div.cursor "Click to edit"]
+           [:div.cursor (t "Click to edit")]
            content)]))))
 
 (defn- set-draw-iframe-style!
