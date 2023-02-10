@@ -18,9 +18,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn dd [& args]
-  (apply js/console.debug (cons (str :debug-pdf) args)))
-
 (def *highlight-last-color (atom :yellow))
 
 (defn reset-current-pdf!
@@ -172,7 +169,7 @@
     (rum/use-effect!
      (fn []
        (if (and @*highlight-mode? new?)
-         ;; TODO: wait for selection cleared ...
+         ;; wait for selection cleared ...
          (js/setTimeout #(action-fn! @*highlight-last-color true) 300)
          (let [^js el (rum/deref *el)
                {:keys [x y]} (util/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
@@ -616,11 +613,6 @@
                                                   vw-pos       {:bounding bounding :rects sel-rects :page page}
                                                   sc-pos       (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
 
-                                              ;; TODO: debug
-                                              ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
-                                              ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
-                                              ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
-
                                               {:id         nil
                                                :page       page
                                                :position   sc-pos
@@ -857,7 +849,7 @@
     (rum/use-effect!
      (fn []
        (when-let [error (:error loader-state)]
-         (dd "[ERROR loader]" (:error loader-state))
+         (js/console.error "[PDF loader]" (:error loader-state))
          (case (.-name error)
            "MissingPDFException"
            (do
