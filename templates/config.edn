@@ -300,6 +300,7 @@
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
+ ;; - {date}: capture date using current date format, use `[[{date}]]` to get a page reference
  ;; - {text}: text that users selected before sharing.
  ;; - {url}: url or assets path for media files stored in Logseq.
  ;; You can also reorder them, or even only use one or two of them in the template.
@@ -309,7 +310,7 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options
- ;; :quick-capture-options {:insert-today? false :redirect-page? false}
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page nil}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.

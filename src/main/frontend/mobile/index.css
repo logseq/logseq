@@ -76,18 +76,18 @@
 
   button {
     @apply flex items-center py-2 px-2;
+  }
 
-    .submenu {
-      z-index: 100;
-      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-      background-color: var(--ls-secondary-background-color);
-      overflow-x: overlay;
-      overflow-y: hidden;
-      height: 40px;
-    }
+  .submenu {
+    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+    overflow-x: overlay;
+    overflow-y: hidden;
+    height: 40px;
+    display: none;
 
-    .show-submenu {
-      display: block;
+    &.show-submenu {
+      display: flex;
     }
   }
 

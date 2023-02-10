@@ -572,7 +572,8 @@ Similar to re-frame subscriptions"
 (defn enable-fold-button-right?
   []
   (let [_ (sub :ui/viewport)]
-    (util/md-breakpoint?)))
+    (and (util/mobile?)
+         (util/sm-breakpoint?))))
 
 (defn enable-journals?
   ([]
@@ -595,7 +596,7 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    ((resolve 'frontend.handler.user/alpha-or-beta-user?)) ;; using resolve to avoid circular dependency
+    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
 (defn export-heading-to-list?
@@ -2112,3 +2113,7 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn clear-user-info!
+  []
+  (storage/remove :user-groups))

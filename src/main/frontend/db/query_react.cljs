@@ -97,15 +97,14 @@
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
     (let [query (resolve-query query)
-          current-block-uuid (:current-block-uuid query-opts)
           repo (or repo (state/get-current-repo))
           db (conn/get-db repo)
-          resolved-inputs (mapv #(resolve-input db % {:current-block-uuid current-block-uuid})
-                                inputs)
+          resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
+          resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
           inputs (cond-> resolved-inputs
                          rules
                          (conj rules))
-          k [:custom (or (:query-string query') query')]]
+          k [:custom (or (:query-string query') query') inputs]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
