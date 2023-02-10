@@ -20,9 +20,41 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
+(defn- is-link
+  [url]
+  (when (not-empty url)
+    (re-matches #"^[a-zA-Z0-9]+://.*$" url)))
+
+(defn- extract-highlight
+  "Extract highlighted text and url from mobile browser intent share.
+   - url can be prefixed with the highlighted text.
+   - url can be highlighted text only in some cases."
+  [url]
+  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
+    (cond
+      (not-empty highlight)
+      [highlight link]
+
+      (is-link url)
+      [nil url]
+
+      :else
+      [url nil])))
+
+(defn- transform-args
+  [args]
+  (let [{:keys [url]} args]
+    (if (is-link url)
+      args
+      (let [[highlight url'] (extract-highlight url)]
+        (assoc args :url url' :content highlight)))))
+
 (defn- handle-received-text [args]
-  ;; :title :type :url
-  (state/pub-event! [:editor/quick-capture args]))
+  ;; Keys: :title :type :url
+  ;; :content is added if there's highlighted text
+  (let [args (transform-args args)]
+    (state/pub-event! [:editor/quick-capture args])))
+
 
 (defn- embed-asset-file [url format]
   (p/let [basename (path/basename url)
