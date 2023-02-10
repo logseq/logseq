@@ -55,12 +55,12 @@
           _ (when-not (aget js/window "Glide")
               (util/js-load$ (str util/JS_ROOT "/glide/glide.min.js")))]))
 
-(rum/defc link-card
-  [opts child]
-
-  [:div.link-card
-   opts
-   child])
+;(rum/defc link-card
+;  [opts child]
+;
+;  [:div.link-card
+;   opts
+;   child])
 
 (rum/defc topic-card
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
