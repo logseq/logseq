@@ -11,18 +11,10 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]))
 
-
-(defn- extract-highlight
-  "Extract highlighted text and url from mobile browser intent share"
-  [url]
-  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
-    (if (not-empty highlight)
-      [highlight link]
-      [nil url])))
-
 (defn- is-tweet-link
   [url]
-  (re-matches #"^https://twitter\.com/.*?/status/.*?$" url))
+  (when (not-empty url)
+    (re-matches #"^https://twitter\.com/.*?/status/.*?$" url)))
 
 (defn quick-capture [args]
   (let [{:keys [url title content page append]} (bean/->clj args)
@@ -32,22 +24,36 @@
         redirect-page? (get-in (state/get-config)
                                [:quick-capture-options :redirect-page?]
                                false)
-        today-page (when (state/enable-journals?)
-                     (string/lower-case (date/today)))
-        page (if (or (= page "TODAY")
-                     (and (string/blank? page) insert-today?))
+        today-page (string/lower-case (date/today))
+        current-page (state/get-current-page) ;; empty when in journals page
+        default-page (get-in (state/get-config)
+                             [:quick-capture-options :default-page])
+        page (cond
+               (and (state/enable-journals?)
+                    (or (= page "TODAY")
+                        (and (string/blank? page) insert-today?)))
                today-page
-               (or (not-empty page)
-                   (state/get-current-page)
-                   today-page))
-        [content url] (if (string/blank? content)
-                        (extract-highlight url)
-                        [content url])
-        page (or page "quick capture") ;; default to "quick capture" page, if journals are not enabled
+
+               (not-empty page)
+               page
+
+               (not-empty default-page)
+               default-page
+
+               (not-empty current-page)
+               current-page
+
+               :else
+               (if (state/enable-journals?) ;; default to "quick capture" page if journals are not enabled
+                 today-page
+                 "quick capture"))
         format (db/get-page-format page)
         time (date/get-current-time)
         text (or (and content (not-empty (string/trim content))) "")
         link (cond
+               (string/blank? url)
+               title
+
                (boolean (text-util/get-matched-video url))
                (str title " {{video " url "}}")
 
@@ -62,8 +68,10 @@
         template (get-in (state/get-config)
                          [:quick-capture-templates :text]
                          "**{time}** [[quick capture]]: {text} {url}")
+        date-ref-name (date/today)
         content (-> template
                     (string/replace "{time}" time)
+                    (string/replace "{date}" date-ref-name)
                     (string/replace "{url}" link)
                     (string/replace "{text}" text))
         edit-content (state/get-edit-content)
