@@ -937,9 +937,16 @@
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
         content (outliner-file/tree->file-content [block] {:init-level 1})
-        format (or (:format block) (state/get-preferred-format))
+        format :markdown
         ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
+    ;; TODO: nested block-references
+    ast))
 
+(defn- block-uuid->ast-with-children
+  [block-uuid]
+  (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
+        format :markdown
+        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
     ast))
 
 ;;; replace ((block-uuid))
@@ -998,18 +1005,78 @@
       block-ast)))
 
 ;;; replace {{embed ((block-uuid))}}
-;; (defn- replace-block-embeds
-;;   [block-ast]
-;;   (let [[[ast-type ast-content] _pos] block-ast]
 
-;;     ))
+(defn- replace-block-embeds-in-heading
+  [{inline-coll :title origin-level :level :as ast-content}]
+  (prn :ast-content ast-content)
+  (if (empty? inline-coll)
+    ;; it's just a empty Heading, return itself
+    [(add-fake-pos ["Heading" ast-content])]
+    (loop [[inline & other-inlines] inline-coll
+           heading-exist? false
+           current-paragraph-inlines []
+           r (transient [])]
+      (if-not inline
+        (->
+         (if (seq current-paragraph-inlines)
+           (->> (if heading-exist?
+                  ["Paragraph" current-paragraph-inlines]
+                  ["Heading" (assoc ast-content :title current-paragraph-inlines)])
+                add-fake-pos
+                (conj! r))
+           r)
+         persistent!)
+        (match [inline]
+          [["Macro" {:name "embed" :arguments [block-uuid*]}]]
+          (let [r (if (seq current-paragraph-inlines)
+                    ;; push Paragraph first
+                    (conj! r ["Paragraph" current-paragraph-inlines])
+                    r)
+                block-uuid (subs block-uuid* 2 (- (count block-uuid*) 2))
+                ast-coll (block-uuid->ast-with-children (uuid block-uuid))
+                ;; update :level in Heading
+                ast-coll* (mapv
+                           (fn [[[ast-type ast-content] _pos]]
+                             (add-fake-pos
+                              (if (= ast-type "Heading")
+                                [ast-type (update ast-content :level #(+ (dec %) origin-level))]
+                                [ast-type ast-content])))
+                           ast-coll)
+                r* (reduce conj! r ast-coll*)]
+            (recur other-inlines true [] r*))
+          :else
+          (let [current-paragraph-inlines*
+                (if (empty? current-paragraph-inlines)
+                  (conj current-paragraph-inlines ["Plain" (reduce str
+                                                                   (concat
+                                                                    (repeat (dec origin-level) "\t")
+                                                                    ["  "]))])
+                  current-paragraph-inlines)]
+            (recur other-inlines heading-exist? (conj current-paragraph-inlines* inline) r)))))))
 
-(defmulti simple-ast->string :type)
-(defmethod simple-ast->string :raw-text [{:keys [content]}] content)
-(defmethod simple-ast->string :space [_] " ")
-(defmethod simple-ast->string :newline [{:keys [line-count]}] (reduce str (repeat line-count "\n")))
-(defmethod simple-ast->string :indent [{:keys [level extra-space-count]}]
-  (reduce str (concat (repeat level "\t") (repeat extra-space-count " "))))
+;; (defn- replace-block-embeds-in-paragraph
+;;   [inline-coll]
+;;   ()
+;;   )
+
+(defn- replace-block-embeds
+  [block-ast]
+  (let [[[ast-type ast-content] _pos] block-ast]
+    (case ast-type
+      "Heading"
+      (replace-block-embeds-in-heading ast-content)
+      ;; else
+      [block-ast])))
+
+(defn- simple-ast->string
+  [simple-ast]
+  {:pre [(m/validate simple-ast-malli-schema simple-ast)]}
+  (case (:type simple-ast)
+    :raw-text (:content simple-ast)
+    :space " "
+    :newline (reduce str (repeat (:line-count simple-ast) "\n"))
+    :indent (reduce str (concat (repeat (:level simple-ast) "\t")
+                                (repeat (:extra-space-count simple-ast) " ")))))
 
 (defn- merge-adjacent-spaces&newlines
   [simple-ast-coll]
