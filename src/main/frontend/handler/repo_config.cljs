@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.notification :as notification]
             [frontend.fs :as fs]
             [promesa.core :as p]
             [clojure.edn :as edn]
@@ -19,7 +20,12 @@
 (defn read-repo-config
   "Converts file content to edn"
   [content]
-  (edn/read-string content))
+  (try
+    (edn/read-string content)
+    (catch :default e
+      (notification/show! "The file 'logseq/config.edn' is invalid. Please reload the app to in order to see the error and fix it." :error)
+      ;; Rethrow so we know how long this is an issue and to prevent downstream errors
+      (throw e))))
 
 (defn set-repo-config-state!
   "Sets repo config state using given file content"
