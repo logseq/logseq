@@ -16,27 +16,6 @@
   (when (not-empty url)
     (re-matches #"^https://twitter\.com/.*?/status/.*?$" url)))
 
-(defn- is-link
-  [url]
-  (when (not-empty url)
-    (re-matches #"^[a-zA-Z0-9]+://.*$" url)))
-
-(defn- extract-highlight
-  "Extract highlighted text and url from mobile browser intent share.
-   - url can be prefixed with the highlighted text.
-   - url can be highlighted text only in some cases."
-  [url]
-  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
-    (cond
-      (not-empty highlight)
-      [highlight link]
-
-      (is-link url)
-      [nil url]
-
-      :else
-      [url nil])))
-
 (defn quick-capture [args]
   (let [{:keys [url title content page append]} (bean/->clj args)
         insert-today? (get-in (state/get-config)
@@ -45,18 +24,29 @@
         redirect-page? (get-in (state/get-config)
                                [:quick-capture-options :redirect-page?]
                                false)
-        today-page (when (state/enable-journals?)
-                     (string/lower-case (date/today)))
-        page (if (or (= page "TODAY")
-                     (and (string/blank? page) insert-today?))
+        today-page (string/lower-case (date/today))
+        current-page (state/get-current-page) ;; empty when in journals page
+        default-page (get-in (state/get-config)
+                             [:quick-capture-options :default-page])
+        page (cond
+               (and (state/enable-journals?)
+                    (or (= page "TODAY")
+                        (and (string/blank? page) insert-today?)))
                today-page
-               (or (not-empty page)
-                   (state/get-current-page)
-                   today-page))
-        [content url] (if (string/blank? content)
-                        (extract-highlight url)
-                        [content url])
-        page (or page "quick capture") ;; default to "quick capture" page, if journals are not enabled
+
+               (not-empty page)
+               page
+
+               (not-empty default-page)
+               default-page
+
+               (not-empty current-page)
+               current-page
+
+               :else
+               (if (state/enable-journals?) ;; default to "quick capture" page if journals are not enabled
+                 today-page
+                 "quick capture"))
         format (db/get-page-format page)
         time (date/get-current-time)
         text (or (and content (not-empty (string/trim content))) "")
