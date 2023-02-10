@@ -13,10 +13,11 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]
-            [logseq.graph-parser.util :as gp-util]
             [frontend.util.fs :as fs-util]
+            [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
@@ -30,7 +31,11 @@
    - url can be prefixed with the highlighted text.
    - url can be highlighted text only in some cases."
   [url]
-  (let [[_ highlight link] (re-matches #"(?s)\"(.*)\"\s+([a-z0-9]+://.*)$" url)]
+  (let [[_ link] (re-find #"\s+([a-zA-Z0-9]+://[\S]*)$" url)
+        highlight (when (not-empty link)
+                    (let [quoted (string/replace url link "")
+                          quoted (gstring/trimRight quoted)]
+                      (gstring/stripQuotes quoted "\"")))]
     (cond
       (not-empty highlight)
       [highlight link]
