@@ -315,9 +315,15 @@
          (satisfies? ICard card)]}
   (let [block (.-block card)
         props (get-block-card-properties block)
-        last-interval (or (util/safe-parse-float (get props card-last-interval-property)) 0)
-        repeats (or (util/safe-parse-int (get props card-repeats-property)) 0)
-        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)
+        last-interval (or
+                       (when-let [v (get props card-last-interval-property)]
+                         (util/safe-parse-float v))
+                       0)
+        repeats (or (when-let [v (get props card-repeats-property)]
+                      (util/safe-parse-int v))
+                    0)
+        last-ef (or (when-let [v (get props card-last-easiness-factor-property)]
+                      (util/safe-parse-float v)) 2.5)
         [next-interval next-repeats next-ef of-matrix*]
         (next-interval last-interval repeats last-ef score @of-matrix)
         next-interval* (if (< next-interval 0) 0 next-interval)
