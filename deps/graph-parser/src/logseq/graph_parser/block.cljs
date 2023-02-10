@@ -248,7 +248,7 @@
                               (assoc :repeated? true))))))]
     (apply merge m)))
 
-(defn convert-page-if-journal
+(defn- convert-page-if-journal-impl
   "Convert journal file name to user' custom date format"
   [original-page-name date-formatter]
   (when original-page-name
@@ -258,6 +258,8 @@
        (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
          [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
+
+(def convert-page-if-journal (memoize convert-page-if-journal-impl))
 
 ;; TODO: refactor
 (defn page-name->map
