@@ -146,22 +146,39 @@
                         repo path content (merge opts
                                                  (when (some? verbose) {:verbose verbose}))))
                      (db/set-file-content! repo path content opts))]
-        (p/let [_ (when-not from-disk?
-                    (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
-          (when re-render-root? (ui-handler/re-render-root!))
+        (-> (p/let [_ (when-not from-disk?
+                        (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
+              (when re-render-root? (ui-handler/re-render-root!))
 
-          (cond
-            (= path (config/get-custom-css-path repo))
-            (ui-handler/add-style-if-exists!)
+              (cond
+                (= path (config/get-custom-css-path repo))
+                (ui-handler/add-style-if-exists!)
 
-            (= path (config/get-repo-config-path repo))
-            (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-              (state/pub-event! [:shortcut/refresh]))
+                (= path (config/get-repo-config-path repo))
+                (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                  (state/pub-event! [:shortcut/refresh]))
 
-            (and (config/global-config-enabled?)
-                 (= path (global-config-handler/global-config-path)))
-            (p/let [_ (global-config-handler/restore-global-config!)]
-              (state/pub-event! [:shortcut/refresh]))))
+                (and (config/global-config-enabled?)
+                     (= path (global-config-handler/global-config-path)))
+                (p/let [_ (global-config-handler/restore-global-config!)]
+                  (state/pub-event! [:shortcut/refresh]))))
+            (p/catch
+                (fn [error]
+                  (when (and (config/global-config-enabled?)
+                             ;; Global-config not started correctly but don't
+                             ;; know root cause yet
+                             ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
+                             (global-config-handler/global-config-dir-exists?)
+                             (= path (global-config-handler/global-config-path)))
+                    (state/pub-event! [:notification/show
+                                       {:content (str "Failed to write to file " path)
+                                        :status :error}]))
+
+                  (println "Write file failed, path: " path ", content: " content)
+                  (log/error :write/failed error)
+                  (state/pub-event! [:capture-error
+                                     {:error error
+                                      :payload {:type :write-file/failed-for-alter-file}}]))))
         result))))
 
 (defn set-file-content!
