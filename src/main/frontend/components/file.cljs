@@ -70,11 +70,10 @@
    (files-all)
    ])
 
-(rum/defcs file < rum/reactive
+(rum/defcs file-inner < rum/reactive
   {:will-mount (fn [state]
                  (let [*content (atom nil)
-                       path (get-path state)
-                       format (gp-util/get-format path)]
+                       [path format] (:rum/args state)]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file
                                       (config/get-repo-dir (state/get-current-repo)) path)]
@@ -86,10 +85,8 @@
    :will-unmount (fn [state]
                    (state/clear-file-component!)
                    state)}
-  [state]
-  (let [path (get-path state)
-        format (gp-util/get-format path)
-        original-name (db/get-file-page path)
+  [state path format]
+  (let [original-name (db/get-file-page path)
         random-id (str (d/squuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
@@ -139,3 +136,9 @@
 
        :else
        [:div (t :file/format-not-supported (name format))])]))
+
+(rum/defcs file
+  [state]
+  (let [path (get-path state)
+        format (gp-util/get-format path)]
+    (rum/with-key (file-inner path format) path)))
