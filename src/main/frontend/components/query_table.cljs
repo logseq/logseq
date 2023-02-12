@@ -42,9 +42,9 @@
 (defn- locale-compare
   "Use locale specific comparison for strings and general comparison for others."
   [x y]
-  (if (and (string? x) (string? y))
-    (.localeCompare x y (state/sub :preferred-language))
-    (< x y)))
+    (if (and (number? x) (number? y))
+      (< x y)
+      (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
 (defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date?]}]
   (if (some? sort-by-column)
@@ -170,7 +170,9 @@
                               [:string (when-let [updated-at (:block/updated-at item)]
                                          (date/int->local-time-2 updated-at))]
 
-                              [:string (get-in item [:block/properties column])])]
+                              [:string (or (get-in item [:block/properties-text-values column])
+                                           ;; Fallback to property relationships for page blocks
+                                           (get-in item [:block/properties column]))])]
                   [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
                                           :on-mouse-move (fn [] (reset! select? true))
                                           :on-mouse-up (fn []

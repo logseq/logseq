@@ -7,7 +7,11 @@
             [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
-
+(defn colons-org 
+  "Property delimiter for org mode"
+  [property]
+  (str ":" property ":"))
+ 
 (defn ->block-content
   "Creates a block content string from properties map"
   [properties]

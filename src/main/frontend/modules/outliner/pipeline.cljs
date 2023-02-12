@@ -11,7 +11,7 @@
 (defn updated-page-hook
   [tx-report page]
   (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
-    (file/sync-to-file page)))
+    (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
@@ -82,10 +82,14 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (doseq [p (seq pages)]
-          (updated-page-hook tx-report p))
+        (when-not (:delete-files? tx-meta)
+          (doseq [p (seq pages)]
+            (updated-page-hook tx-report p)))
 
-        (when (and state/lsp-enabled? (seq blocks) (not importing?))
+        (when (and state/lsp-enabled?
+                   (seq blocks)
+                   (not importing?)
+                   (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :tx-data (:tx-data tx-report)

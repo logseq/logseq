@@ -56,3 +56,5 @@ android/app/src/main/assets/capacitor.config.json
 deps/publish/out/
 *.sublime-*
 /public/static
+.yarn/
+.yarnrc.yml

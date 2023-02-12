@@ -28,7 +28,8 @@
   (.normalize s "NFC"))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
+  "remove pairs of key-value that has nil value from a (possibly nested) map or
+  coll of maps."
   [nm]
   (walk/postwalk
    (fn [el]
@@ -36,6 +37,16 @@
        (into {} (remove (comp nil? second)) el)
        el))
    nm))
+
+(defn remove-nils-non-nested
+  "remove pairs of key-value that has nil value from a map (nested not supported)."
+  [nm]
+  (into {} (remove (comp nil? second)) nm))
+
+(defn fast-remove-nils
+  "remove pairs of key-value that has nil value from a coll of maps."
+  [nm]
+  (keep (fn [m] (if (map? m) (remove-nils-non-nested m) m)) nm))
 
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
@@ -157,16 +168,20 @@
            (map string/capitalize)
            (string/join " ")))
 
+
 (defn distinct-by
-  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
+  "Copy from medley"
+  [f coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[x :as xs] seen]
+                   (when-let [s (seq xs)]
+                     (let [fx (f x)]
+                       (if (contains? seen fx)
+                         (recur (rest s) seen)
+                         (cons x (step (rest s) (conj seen fx)))))))
+                 xs seen)))]
+    (step (seq coll) #{})))
 
 (defn normalize-format
   [format]
@@ -193,12 +208,12 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (last (split-last "." path-or-file-name)))
+  (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
 
 (defn get-format
   [file]
   (when file
-    (normalize-format (keyword (string/lower-case (path->file-ext file))))))
+    (normalize-format (keyword (some-> (path->file-ext file) string/lower-case)))))
 
 (defn get-file-ext
   "Copy of frontend.util/get-file-ext. Too basic to couple to main app"

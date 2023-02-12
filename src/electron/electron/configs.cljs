@@ -5,6 +5,7 @@
     ["electron" :refer [^js app] :as electron]
     [cljs.reader :as reader]))
 
+;; FIXME: move configs.edn to where it should be
 (defonce dot-root (.join path (.getPath app "home") ".logseq"))
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join path cfg-root "configs.edn"))
@@ -16,8 +17,7 @@
     (let [body (.toString (.readFileSync fs cfg-path))]
       (if (seq body) (reader/read-string body) {}))
     (catch :default e
-      (js/console.error :cfg-error e)
-      {})))
+      (js/console.error :cfg-error e))))
 
 (defn- write-cfg!
   [cfg]
@@ -28,9 +28,9 @@
 
 (defn set-item!
   [k v]
-  (let [cfg (ensure-cfg)
-        cfg (assoc cfg k v)]
-    (write-cfg! cfg)))
+  (when-let [cfg (ensure-cfg)]
+    (some->> (assoc cfg k v)
+             (write-cfg!))))
 
 (defn get-item
   [k]

@@ -20,6 +20,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]))
 
 ;; lazy loading
@@ -299,15 +300,17 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page-format
   [page-name]
-  (or
-   (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
-     (or
-      (:block/format page)
-      (when-let [file (:block/file page)]
-        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-          (gp-util/get-format path)))))
-   (state/get-preferred-format)
-   :markdown))
+  {:post [(keyword? %)]}
+  (keyword
+   (or
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
+      (or
+       (:block/format page)
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+           (gp-util/get-format path)))))
+    (state/get-preferred-format)
+    :markdown)))
 
 (defn page-alias-set
   [repo-url page]
@@ -887,19 +890,28 @@ independent of format as format specific heading characters are stripped"
           (db-utils/pull-many repo
                               '[:db/id :block/name :block/original-name]
                               ids))))))
-
+(defn get-block-children-ids-in-db
+  [db block-uuid]
+  (when-let [eid (:db/id (db-utils/entity db [:block/uuid block-uuid]))]
+    (let [seen   (volatile! [])]
+      (loop [steps          100      ;check result every 100 steps
+             eids-to-expand [eid]]
+        (when (seq eids-to-expand)
+          (let [eids-to-expand*
+                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
+                uuids-to-add (remove nil? (map #(:block/uuid (db-utils/entity db %)) eids-to-expand*))]
+            (when (and (zero? steps)
+                       (seq (set/intersection (set @seen) (set uuids-to-add))))
+              (throw (ex-info "bad outliner data, need to re-index to fix"
+                              {:seen @seen :eids-to-expand eids-to-expand})))
+            (vswap! seen (partial apply conj) uuids-to-add)
+            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
+      @seen)))
 
 (defn get-block-children-ids
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (when-let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
-      (let [get-children-ids (fn get-children-ids [eid]
-                               (mapcat
-                                (fn [datom]
-                                  (let [id (first datom)]
-                                    (cons (:block/uuid (db-utils/entity db id)) (get-children-ids id))))
-                                (d/datoms db :avet :block/parent eid)))]
-        (get-children-ids eid)))))
+  ([repo block-uuid]
+   (when-let [db (conn/get-db repo)]
+     (get-block-children-ids-in-db db block-uuid))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
@@ -1037,7 +1049,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-journals-length
   []
-  (let [today (db-utils/date->int (js/Date.))]
+  (let [today (db-util/date->int (js/Date.))]
     (d/q '[:find (count ?page) .
            :in $ ?today
            :where
@@ -1054,7 +1066,7 @@ independent of format as format specific heading characters are stripped"
    (when (conn/get-db repo-url)
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-utils/date->int (js/Date.))]
+           today (db-util/date->int (js/Date.))]
        (->>
         (react/q repo-url [:frontend.db.react/journals] {:use-cache? false}
                  '[:find [(pull ?page [*]) ...]
@@ -1230,9 +1242,11 @@ independent of format as format specific heading characters are stripped"
              :query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
-                               blocks (map (fn [e] {:block/parent (:block/parent e)
-                                                    :block/left (:block/left e)
-                                                    :block/page (:block/page e)}) entities)]
+                               blocks (map (fn [e]
+                                             {:block/parent (:block/parent e)
+                                              :block/left (:block/left e)
+                                              :block/page (:block/page e)
+                                              :block/collapsed? (:block/collapsed? e)}) entities)]
                            {:entities entities
                             :blocks blocks}))}
             nil)

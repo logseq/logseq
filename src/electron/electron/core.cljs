@@ -2,11 +2,12 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
              :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
+            [electron.server :as server]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -50,10 +51,13 @@
    url - the input URL"
   [win url]
   (logger/info "open-url" {:url url})
-
-  (let [parsed-url (js/URL. url)
-        url-protocol (.-protocol parsed-url)]
-    (when (= (str LSP_SCHEME ":") url-protocol)
+  ;; https://github.com/electron-userland/electron-builder/issues/1552
+  ;; At macOS platform this is captured at 'open-url' event, we set it with deeplinkingUrl = url! (See // Protocol handler for osx)
+  ;; At win32 platform this is saved at process.argv together with other arguments. To get only the provided url, deeplinkingUrl = argv.slice(1). (See // Protocol handler for win32)
+  (when-let [parsed-url (try (js/URL. url)
+                             (catch :default e
+                               (logger/info "upon opening non-url" {:error e})))]
+    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
 (defn setup-interceptor! [^js app]
@@ -300,7 +304,7 @@
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
-               (restore-user-fetch-agent)
+               (utils/<restore-proxy-settings)
 
                (js-utils/disableXFrameOptions win)
 
@@ -315,10 +319,11 @@
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 t3 (handler/set-ipc-handler! win)
+                                t4 (server/setup! win)
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
                                         (and f (f)))))))
 
                ;; setup effects

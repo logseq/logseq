@@ -2,13 +2,10 @@
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
   (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
@@ -16,13 +13,13 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
             [frontend.state :as state]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [promesa.core :as p]))
 
 
 (defn persist-dbs!
@@ -156,62 +153,35 @@
 
   (js/window.apis.on "quickCapture"
                      (fn [args]
-                       (let [{:keys [url title content page append]} (bean/->clj args)
-                             insert-today? (get-in (state/get-config)
-                                                   [:quick-capture-options :insert-today?]
-                                                   false)
-                             redirect-page? (get-in (state/get-config)
-                                                    [:quick-capture-options :redirect-page?]
-                                                    false)
-                             today-page (when (state/enable-journals?)
-                                          (string/lower-case (date/today)))
-                             page (if (or (= page "TODAY")
-                                          (and (string/blank? page) insert-today?))
-                                    today-page
-                                    (or (not-empty page)
-                                        (state/get-current-page)
-                                        today-page))
-                             page (or page "quick capture") ;; default to quick capture page, if journals are not enabled
-                             format (db/get-page-format page)
-                             time (date/get-current-time)
-                             text (or (and content (not-empty (string/trim content))) "")
-                             link (if (string/includes? url "www.youtube.com/watch")
-                                    (str title " {{video " url "}}")
-                                    (if (not-empty title)
-                                      (config/link-format format title url)
-                                      url))
-                             template (get-in (state/get-config)
-                                              [:quick-capture-templates :text]
-                                              "**{time}** [[quick capture]]: {text} {url}")
-                             content (-> template
-                                         (string/replace "{time}" time)
-                                         (string/replace "{url}" link)
-                                         (string/replace "{text}" text))
-                             edit-content (state/get-edit-content)
-                             edit-content-blank? (string/blank? edit-content)
-                             edit-content-include-capture? (and (not-empty edit-content)
-                                                                (string/includes? edit-content "[[quick capture]]"))]
-                         (if (and (state/editing?) (not append) (not edit-content-include-capture?))
-                           (if edit-content-blank?
-                             (editor-handler/insert content)
-                             (editor-handler/insert (str "\n" content)))
-
-                           (do
-                             (editor-handler/escape-editing)
-                             (when (not= page (state/get-current-page))
-                               (page-handler/create! page {:redirect? redirect-page?}))
-                             ;; Or else this will clear the newly inserted content
-                             (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
-                                                                                            :edit-block? true
-                                                                                            :replace-empty-target? true})
-                                            100))))))
+                       (state/pub-event! [:editor/quick-capture args])))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
                      (fn [repo]
-                       (ui-handler/open-new-window! repo))))
+                       (ui-handler/open-new-window! repo)))
 
+  (js/window.apis.on "invokeLogseqAPI"
+                     (fn [^js data]
+                       (let [sync-id (.-syncId data)
+                             method  (.-method data)
+                             args    (.-args data)
+                             ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)]
+
+                         (try
+                           (println "invokeLogseqAPI:" method)
+                           (let [^js apis (aget js/window.logseq "api")]
+                             (when-not (aget apis method)
+                               (throw (js/Error. (str "MethodNotExist: " method))))
+                             (-> (p/promise (apply js-invoke apis method args))
+                                 (p/then #(ret-fn! %))
+                                 (p/catch #(ret-fn! {:error %}))))
+                           (catch js/Error e
+                             (ret-fn! {:error (.-message e)}))))))
+
+  (js/window.apis.on "syncAPIServerState"
+                     (fn [^js data]
+                       (state/set-state! :electron/server (bean/->clj data)))))
 
 (defn listen!
   []

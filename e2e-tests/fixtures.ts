@@ -25,12 +25,22 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
   const text = msg.text()
   logs += text + '\n'
-  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
+
+  // expect() will remember all arguments in memory,
+  // and the memory usage will grow *exponentially* in the number of output line.
+  // So we call expect() iff interesting pattern has already be found to avoid OOM.
+  const expectNotMatchWithCheck = (pattern: RegExp) => {
+    if (text.match(pattern)) {
+      expect(text, logs).not.toMatch(pattern)
+    }
+  }
+
+  expectNotMatchWithCheck(/^(Failed to|Uncaught)/)
 
   // youtube video
   // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
   if (!text.match(/^Error with Permissions-Policy header:/)) {
-    expect(text, logs).not.toMatch(/^Error/)
+    expectNotMatchWithCheck(/^Error/)
   }
 
   // NOTE: React warnings will be logged as error.
@@ -55,6 +65,7 @@ base.beforeAll(async () => {
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
+  await context.tracing.startChunk();
 
   // NOTE: The following ensures App first start with the correct path.
   const info = await electronApp.evaluate(async ({ app }) => {
@@ -131,14 +142,6 @@ base.beforeEach(async () => {
       await page.click('button.toggle-right-sidebar', {delay: 100})
     }
   }
-})
-
-base.afterAll(async () => {
-  // if (electronApp) {
-  //  await electronApp.close()
-  //}
-  // use .dump as extension to avoid unfolded when zip by github
-  await context.tracing.stop({ path: `e2e-dump/trace-${Date.now()}.zip.dump` });
 })
 
 // hijack electron app into the test context
@@ -283,3 +286,27 @@ export const test = base.extend<LogseqFixtures>({
     await use(graphDir);
   },
 });
+
+
+let getTracingFilePath = function(): string {
+  return `e2e-dump/trace-${Date.now()}.zip.dump`
+}
+
+
+test.afterAll(async () => {
+  await context.tracing.stopChunk({ path: getTracingFilePath() });
+})
+
+
+/**
+ * Trace all tests in a file
+ */
+export let traceAll = function(){
+  test.beforeAll(async () => {
+    await context.tracing.startChunk();
+  })
+  
+  test.afterAll(async () => {
+    await context.tracing.stopChunk({ path: getTracingFilePath() });
+  })
+}

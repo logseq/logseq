@@ -177,8 +177,10 @@ export class TLApp<
       {
         keys: ['del', 'backspace'],
         fn: () => {
-          this.api.deleteShapes()
-          this.selectedTool.transition('idle')
+          if (!this.editingShape) {
+            this.api.deleteShapes()
+            this.selectedTool.transition('idle')
+          }
         },
       },
       {
@@ -318,7 +320,7 @@ export class TLApp<
   /* --------------------- Shapes --------------------- */
 
   getShapeById = <T extends S>(id: string, pageId = this.currentPage.id): T | undefined => {
-    const shape = this.getPageById(pageId)?.shapes.find(shape => shape.id === id) as T
+    const shape = this.getPageById(pageId)?.shapesById[id] as T
     return shape
   }
 
@@ -1032,7 +1034,8 @@ export class TLApp<
     }
 
     // Switch to select on right click to enable contextMenu state
-    if (e.button === 2) {
+    if (e.button === 2 && !this.editingShape) {
+      e.preventDefault()
       this.transition('select')
       return
     }

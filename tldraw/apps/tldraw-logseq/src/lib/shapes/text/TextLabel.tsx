@@ -10,6 +10,7 @@ export interface TextLabelProps {
   text: string
   color: string
   fontStyle: string
+  fontSize: number
   fontWeight: number
   onBlur?: () => void
   onChange: (text: string) => void
@@ -25,6 +26,7 @@ export const TextLabel = React.memo(function TextLabel({
   text,
   color,
   fontStyle,
+  fontSize,
   fontWeight,
   offsetX = 0,
   offsetY = 0,
@@ -129,13 +131,13 @@ export const TextLabel = React.memo(function TextLabel({
     if (!elm) return
     const size = getTextLabelSize(
       text,
-      { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+      { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
       4
     )
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
-  }, [text, fontWeight, offsetY, offsetX, scale])
+  }, [text, fontWeight, fontSize, offsetY, offsetX, scale])
 
   return (
     <div className="tl-text-label-wrapper">
@@ -145,6 +147,7 @@ export const TextLabel = React.memo(function TextLabel({
         style={{
           font,
           fontStyle,
+          fontSize,
           fontWeight,
           color,
           pointerEvents: pointerEvents ? 'all' : 'none',
@@ -158,6 +161,7 @@ export const TextLabel = React.memo(function TextLabel({
               font,
               color,
               fontStyle,
+              fontSize,
               fontWeight,
             }}
             className="tl-text-label-textarea"

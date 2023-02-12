@@ -32,7 +32,7 @@
                                        (str "/" % "/")
                                        (str % "/"))) ignores)
        (some #(string/ends-with? path %)
-             [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
+             [".DS_Store" "logseq/graphs-txid.edn"])
       ;; hidden directory or file
        (let [relpath (path/relative dir path)]
          (or (re-find #"/\.[^.]+" relpath)

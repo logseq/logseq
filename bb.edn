@@ -1,7 +1,7 @@
 {:paths ["scripts/src" "src/main"]
  :deps
  {metosin/malli
-  {:mvn/version "0.9.1"}
+  {:mvn/version "0.10.0"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
@@ -63,11 +63,17 @@
   dev:validate-plugins-edn
   logseq.tasks.malli/validate-plugins-edn
 
-  dev:validate-config-edn
-  logseq.tasks.malli/validate-config-edn
+  dev:validate-repo-config-edn
+  logseq.tasks.malli/validate-repo-config-edn
+
+  dev:validate-global-config-edn
+  logseq.tasks.malli/validate-global-config-edn
 
   dev:lint
   logseq.tasks.dev/lint
+
+  dev:gen-malli-kondo-config
+  logseq.tasks.dev/gen-malli-kondo-config
 
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main

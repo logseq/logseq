@@ -99,24 +99,32 @@
 
 (defn- update-position!
   [node obj]
-  (.updatePosition node #js {:x (.-x obj)
-                             :y (.-y obj)}))
+  (when node
+    (try
+      (.updatePosition node #js {:x (.-x obj)
+                                 :y (.-y obj)})
+      (catch :default e
+        (js/console.error e)))))
 
 (defn- tick!
   [pixi _graph nodes-js links-js]
   (fn []
-    (let [nodes-objects (.getNodesObjects pixi)
-          edges-objects (.getEdgesObjects pixi)]
-      (doseq [node nodes-js]
-        (when-let [node-object (.get nodes-objects (.-id node))]
-          (update-position! node-object node)))
-      (doseq [edge links-js]
-        (when-let [edge-object (.get edges-objects (str (.-index edge)))]
-          (.updatePosition edge-object
-                           #js {:x (.-x (.-source edge))
-                                :y (.-y (.-source edge))}
-                           #js {:x (.-x (.-target edge))
-                                :y (.-y (.-target edge))}))))))
+    (try
+      (let [nodes-objects (.getNodesObjects pixi)
+            edges-objects (.getEdgesObjects pixi)]
+        (doseq [node nodes-js]
+          (when-let [node-object (.get nodes-objects (.-id node))]
+            (update-position! node-object node)))
+        (doseq [edge links-js]
+          (when-let [edge-object (.get edges-objects (str (.-index edge)))]
+            (.updatePosition edge-object
+                             #js {:x (.-x (.-source edge))
+                                  :y (.-y (.-source edge))}
+                             #js {:x (.-x (.-target edge))
+                                  :y (.-y (.-target edge))}))))
+      (catch :default e
+        (js/console.error e)
+        nil))))
 
 (defn- set-up-listeners!
   [pixi-graph]

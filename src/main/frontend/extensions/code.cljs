@@ -226,6 +226,18 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
+
+        (.addEventListener element "keydown" (fn [e]
+                                               (let [key-code (.-code e)
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
+                                                 (when meta-or-ctrl-pressed?
+                                                   ;; prevent default behavior of browser
+                                                   ;; Cmd + [ => Go back in browser, outdent in CodeMirror
+                                                   ;; Cmd + ] => Go forward in browser, indent in CodeMirror
+                                                   (case key-code
+                                                     "BracketLeft" (util/stop e)
+                                                     "BracketRight" (util/stop e)
+                                                     nil)))))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (util/stop e)
@@ -260,13 +272,11 @@
                 state)
    :did-update (fn [state]
                  (reset! (:code-options state) (last (:rum/args state)))
-                 (->> state
-                      :rum/args
-                      last
-                      :lines
-                      butlast
-                      (string/join "")
-                      (.setValue @(:editor-atom state)))
+                 (when-not (:file? (first (:rum/args state)))
+                   (let [code (nth (:rum/args state) 3)
+                         editor @(:editor-atom state)]
+                     (when (not= (.getValue editor) code)
+                       (.setValue editor code))))
                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code

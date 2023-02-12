@@ -122,7 +122,7 @@ Options available:
                          new?
                          ;; TODO: use file system timestamp?
                          (assoc :file/created-at (date-time-util/time-ms)))])
-        tx' (gp-util/remove-nils tx)
+        tx' (gp-util/fast-remove-nils tx)
         result (if skip-db-transact?
                  tx'
                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]

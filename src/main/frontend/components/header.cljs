@@ -3,6 +3,7 @@
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
+            [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -85,6 +86,7 @@
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
+         "labels=from:in-app&"
          "platform="
          (js/encodeURIComponent platform))))
 
@@ -135,9 +137,7 @@
 
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :help/bug)]]
-        :options {:href bug-report-url
-                  :title "Fire a bug report on Github"
-                  :target "_blank"}
+        :options {:href (rfe/href :bug-report)}
         :icon (ui/icon "bug")}
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
@@ -236,7 +236,10 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})])))]]
+              (ui/icon "search" {:size ui/icon-size})])))
+
+       (when (state/feature-http-server-enabled?)
+        (server/server-indicator (state/sub :electron/server)))]]
 
      [:div.r.flex.drag-region
       (when (and current-repo

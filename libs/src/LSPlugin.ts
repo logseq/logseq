@@ -102,6 +102,10 @@ export type IUserHook<E = any, R = IUserOffHook> = (
 export type IUserSlotHook<E = any> = (
   callback: (e: IHookEvent & UISlotIdentity & E) => void
 ) => void
+export type IUserConditionSlotHook<C = any, E = any> = (
+  condition: C,
+  callback: (e: IHookEvent & UISlotIdentity & E) => void
+) => void
 
 export type EntityID = number
 export type BlockUUID = string
@@ -313,7 +317,7 @@ export interface IPluginSearchServiceHooks {
 
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<BlockEntity> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
@@ -366,10 +370,32 @@ export interface IAppProxy {
     action: SimpleCommandCallback
   ) => void
 
+  /**
+   * Supported all registered palette commands
+   * @param type
+   * @param args
+   */
   invokeExternalCommand: (
     type: ExternalCommandType,
     ...args: Array<any>
   ) => Promise<void>
+
+  /**
+   * Call external plugin command provided by models or registerd commands
+   * @added 0.0.13
+   * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
+   * @param args
+   */
+  invokeExternalPlugin: (
+    type: string,
+    ...args: Array<any>
+  ) => Promise<unknown>
+
+  /**
+   * @added 0.0.13
+   * @param pid
+   */
+  getExternalPlugin: (pid: string) => Promise<{} | null>
 
   /**
    * Get state from app store
@@ -455,7 +481,13 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
-  onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+
+  /**
+   * provide ui slot to specific block with UUID
+   *
+   * @added 0.0.13
+   */
+  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, Omit<BlockEntity, 'children' | 'page'>>
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
@@ -486,7 +518,7 @@ export interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
-  _installPluginHook: (pid: string, hook: string) => void
+  _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 
@@ -636,7 +668,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
-   * 
+   *
    * `keepUUID` will allow you to set a custom UUID for blocks by setting their properties.id
    */
   insertBatchBlock: (
@@ -721,6 +753,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
   selectBlock: (srcBlock: BlockIdentity) => Promise<void>
+
+  saveFocusedCodeEditorContent: () => Promise<void>
 
   upsertBlockProperty: (
     block: BlockIdentity,

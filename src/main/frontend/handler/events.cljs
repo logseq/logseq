@@ -4,17 +4,24 @@
   one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
+            ["@sentry/react" :as Sentry]
+            [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.commands :as commands]
+            [frontend.components.command-palette :as command-palette]
+            [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
+            [frontend.components.encryption :as encryption]
+            [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -27,44 +34,41 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
+            [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
-            [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
+            [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
+            [frontend.quick-capture :as quick-capture]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.components.file-sync :as file-sync]
-            [frontend.components.encryption :as encryption]
-            [frontend.components.conversion :as conversion-component]
-            [frontend.components.whiteboard :as whiteboard]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
-            [cljs-bean.core :as bean]
-            ["@sentry/react" :as Sentry]
-            [frontend.modules.instrumentation.sentry :as sentry-event]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -373,7 +377,8 @@
   (when (config/local-db? repo)
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
-      (when-not dir-exists?
+      (when (and (not dir-exists?)
+                 (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
@@ -462,6 +467,8 @@
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px")))
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
@@ -482,6 +489,8 @@
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.removeProperty (.-style html) "--ls-native-kb-height"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
@@ -597,18 +606,6 @@
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
      :warning false (.-id o))))
 
-(defmethod handle :backup/broken-config [[_ repo content]]
-  (when (and repo content)
-    (let [path (config/get-repo-config-path)
-          broken-path (string/replace path "/config.edn" "/broken-config.edn")]
-      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
-              _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
-        (notification/show!
-         [:p.content
-          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
-         :warning
-         false)))))
-
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
@@ -702,6 +699,12 @@
                          :repo repo-url)
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
+
+(defmethod handle :modal/command-palette [_]
+  (state/set-modal!
+   #(command-palette/command-palette {:commands (cp/get-commands)})
+   {:fullscreen? false
+    :close-btn?  false}))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
@@ -913,6 +916,13 @@
                                 [:p (.-message error)]]))))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
+
+(defmethod handle :run/cli-command [[_ command content]]
+  (when (and command (not (string/blank? content)))
+    (shell-handler/run-cli-command-wrapper! command content)))
+
+(defmethod handle :editor/quick-capture [[_ args]]
+  (quick-capture/quick-capture args))
 
 (defn run!
   []

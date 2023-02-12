@@ -165,9 +165,9 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={true}
               />
             ))}
-          {hoveredShapes.map(s => (
-            <Indicator key={'hovered_indicator_' + s.id} shape={s} />
-          ))}
+          {hoveredShapes.map(
+            s => s !== editingShape && <Indicator key={'hovered_indicator_' + s.id} shape={s} />
+          )}
           {singleSelectedShape && components.BacklinksCount && (
             <BacklinksCountContainer
               hidden={false}
@@ -224,15 +224,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   rotation={selectionRotation}
                 />
               )}
-              {selectedShapes && components.ContextBar && (
-                <ContextBarContainer
-                  key={'context' + selectedShapes.map(shape => shape.id).join('')}
-                  shapes={selectedShapes}
-                  hidden={!showContextBar}
-                  bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
-                  rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}
-                />
-              )}
             </>
           )}
         </HTMLLayer>
@@ -246,6 +237,22 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
 
         <div id="tl-dev-tools-canvas-anchor" />
       </div>
+      <HTMLLayer>
+        {selectedShapes && selectionBounds && (
+          <>
+            {selectedShapes && components.ContextBar && (
+              <ContextBarContainer
+                key={'context' + selectedShapes.map(shape => shape.id).join('')}
+                shapes={selectedShapes}
+                hidden={!showContextBar}
+                bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
+                rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}
+              />
+            )}
+          </>
+        )}
+      </HTMLLayer>
+
       {children}
     </div>
   )

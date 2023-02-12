@@ -3,30 +3,43 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.search :as search-handler :refer [debounced-search]]
+            [frontend.handler.search :as search-handler :refer [debounced-search, stop-debounced-search!]]
+            [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.mixins :as mixins]
             [clojure.string :as string]))
 
 (rum/defc search-input
   [q matches]
-  [:div.flex.w-48.relative
-   [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
-    {:auto-focus true
-     :placeholder "Find in page"
-     :aria-label "Find in page"
-     :value q
-     :on-change (fn [e]
-                  (let [value (util/evalue e)]
-                    (state/set-state! [:ui/find-in-page :q] value)
-                    (debounced-search)))}]
-   (when-not (string/blank? q)
-     (when-let [total (:matches matches)]
-      [:div.text-sm.absolute.top-2.right-0.py-2.px-4
-       (:activeMatchOrdinal matches 0)
-       "/"
-       total]))
-   [:div#search-in-page-placeholder.absolute.top-2.left-0.p-2.sm:text-sm]])
+  (let [*composing? (rum/use-ref false)
+        on-change-fn (fn [e]
+                       (let [value (util/evalue e)
+                             e-type (gobj/getValueByKeys e "type")]
+                         (state/set-state! [:ui/find-in-page :q] value)
+                         (cond (= e-type "compositionstart")
+                               (do (rum/set-ref! *composing? true)
+                                   (stop-debounced-search!))
+
+                               (= e-type "compositionend")
+                               (rum/set-ref! *composing? false))
+                         (when-not (rum/deref *composing?)
+                           (debounced-search))))]
+    [:div.flex.w-48.relative
+     [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
+      {:auto-focus true
+       :placeholder "Find in page"
+       :aria-label "Find in page"
+       :value q
+       :on-composition-start on-change-fn
+       :on-composition-end on-change-fn
+       :on-change on-change-fn}]
+     (when-not (string/blank? q)
+       (when-let [total (:matches matches)]
+         [:div.text-sm.absolute.top-2.right-0.py-2.px-4
+          (:activeMatchOrdinal matches 0)
+          "/"
+          total]))
+     [:div#search-in-page-placeholder.absolute.top-2.left-0.p-2.sm:text-sm]]))
 
 (rum/defc search-inner < rum/static
   (mixins/event-mixin

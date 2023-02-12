@@ -4,7 +4,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-util]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -294,7 +294,7 @@
     ;; Allow user to modify or extend, should specify how to extend.
 
     (state/get-commands)
-    (state/get-plugins-commands))
+    (state/get-plugins-slash-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
@@ -655,12 +655,13 @@
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
        (contains? #{:scheduled :deadline} type)
-       (when-let [value (gobj/get (state/get-input) "value")]
-         (string/blank? value)))
+       (string/blank? (gobj/get (state/get-input) "value")))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
-    (state/set-editor-action! :datepicker)))
+    (do
+      (state/set-timestamp-block! nil)
+      (state/set-editor-action! :datepicker))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
@@ -676,6 +677,6 @@
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
+  (let [format (and block-id (:block/format (db-utils/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

@@ -1,6 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
@@ -14,7 +13,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -35,6 +34,12 @@
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
     "Cut"
+    nil)
+   (ui/menu-link
+    {:key      "delete"
+     :on-click #(do (editor-handler/delete-selection %)
+                    (state/hide-custom-context-menu!))}
+    "Delete"
     nil)
    (ui/menu-link
     {:key "copy"
@@ -130,7 +135,8 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [format (:block/format block)]
+      (let [format (:block/format block)
+            heading (-> block :block/properties :heading)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
@@ -151,6 +157,7 @@
            (for [i (range 1 7)]
              (ui/button
               ""
+              :disabled (= heading i)
               :icon (str "h-" i)
               :title (t :heading i)
               :class "to-heading-button"
@@ -161,12 +168,10 @@
            (ui/button
             ""
             :icon "h-auto"
+            :disabled (= heading true)
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (if (= format :markdown) 
-                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
-                     (t :auto-heading))
-            :disabled (= format :markdown)
+            :title (t :auto-heading)
             :on-click (fn [_e]
                         (editor-handler/set-heading! block-id format true))
             :intent "link"
@@ -174,6 +179,7 @@
            (ui/button
             ""
             :icon "heading-off"
+            :disabled (not heading)
             :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
@@ -188,7 +194,7 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          "Open in sidebar"
+          (t :content/open-in-sidebar)
           ["⇧" "click"])
 
          [:hr.menu-separator]
@@ -197,17 +203,17 @@
           {:key      "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
-          "Copy block ref"
+          (t :content/copy-block-ref)
           nil)
 
          (ui/menu-link
           {:key      "Copy block embed"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          "Copy block embed"
+          (t :content/copy-block-emebed)
           nil)
 
-          ;; TODO Logseq protocol mobile support
+         ;; TODO Logseq protocol mobile support
          (when (util/electron?)
            (ui/menu-link
             {:key      "Copy block URL"
@@ -231,6 +237,12 @@
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
           "Cut"
+          nil)
+
+         (ui/menu-link
+          {:key      "delete"
+           :on-click #(editor-handler/delete-block-aux! block true)}
+          "Delete"
           nil)
 
          [:hr.menu-separator]
@@ -283,17 +295,17 @@
            (ui/menu-link
             {:key      "(Dev) Show block data"
              :on-click (fn []
-                         (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                           (println block-data)
-                           (notification/show!
-                            [:div
-                             [:pre.code block-data]
-                             [:br]
-                             (ui/button "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard block-data))]
-                            :success
-                            false)))}
+                         (dev-common-handler/show-entity-data [:block/uuid block-id]))}
             "(Dev) Show block data"
+            nil))
+
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key      "(Dev) Show block AST"
+             :on-click (fn []
+                         (let [block (db/pull [:block/uuid block-id])]
+                           (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
+            "(Dev) Show block AST"
             nil))])))
 
 (rum/defc block-ref-custom-context-menu-content
@@ -354,38 +366,36 @@
                             block-id (d/attr target "blockid")
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
-                        ;; TODO: Find a better way to handle this on whiteboards
-                        (when-not (whiteboard-handler/inside-portal? target)
-                          (cond
-                            page
-                            (do
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (page-title-custom-context-menu-content page))
-                              (state/set-state! :page-title/context nil))
-
-                            block-ref
-                            (do
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (block-ref-custom-context-menu-content block block-ref))
-                              (state/set-state! :block-ref/context nil))
-
-                            (and (state/selection?) (not (d/has-class? target "bullet")))
+                        (cond
+                          page
+                          (do
                             (common-handler/show-custom-context-menu!
                              e
-                             (custom-context-menu-content))
+                             (page-title-custom-context-menu-content page))
+                            (state/set-state! :page-title/context nil))
 
-                            (and block-id (parse-uuid block-id))
-                            (let [block (.closest target ".ls-block")]
-                              (when block
-                                (util/select-highlight! [block]))
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (block-context-menu-content target (uuid block-id))))
+                          block-ref
+                          (do
+                            (common-handler/show-custom-context-menu!
+                             e
+                             (block-ref-custom-context-menu-content block block-ref))
+                            (state/set-state! :block-ref/context nil))
 
-                            :else
-                            nil)))))))
+                          (and (state/selection?) (not (d/has-class? target "bullet")))
+                          (common-handler/show-custom-context-menu!
+                           e
+                           (custom-context-menu-content))
+
+                          (and block-id (parse-uuid block-id))
+                          (let [block (.closest target ".ls-block")]
+                            (when block
+                              (util/select-highlight! [block]))
+                            (common-handler/show-custom-context-menu!
+                             e
+                             (block-context-menu-content target (uuid block-id))))
+
+                          :else
+                          nil))))))
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
