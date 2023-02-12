@@ -161,7 +161,7 @@
         line (.-line cur)
         pos (.-ch cur)]
     (concat (mapcat #(.getLineTokens cm %) (range line))
-            (filter #(<= (.-start %) pos) (.getLineTokens cm line)))))
+            (filter #(<= (.-end %) pos) (.getLineTokens cm line)))))
 
 
 (defn- tokens->doc-state
@@ -238,7 +238,6 @@
   (let [tokens (all-tokens-by-cursur cm)
         {:keys [current-config-path state-stack]} (tokens->doc-state tokens)
         doc-state (first state-stack)]
-
     [current-config-path doc-state]))
 
 (defn- malli-type->completion-postfix
