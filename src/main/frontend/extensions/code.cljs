@@ -383,7 +383,7 @@
                (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
                (text->cm-mode original-mode :name))
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
-        config-edit? (= "edn" mode)
+        config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
         textarea (gdom/getElement id)
         default-cm-options {:theme (str "solarized " theme)
                             :autoCloseBrackets true
