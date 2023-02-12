@@ -645,6 +645,21 @@
 (defn- remove-pos
   [[block-ast-without-pos]]
   block-ast-without-pos)
+
+(defn- update-level-in-block-ast-coll
+  [block-ast-coll origin-level]
+  (mapv
+   (fn [[[ast-type ast-content] _pos]]
+     (add-fake-pos
+      (if (= ast-type "Heading")
+        [ast-type (update ast-content :level #(+ (dec %) origin-level))]
+        [ast-type ast-content])))
+   block-ast-coll))
+
+(defn- plain-indent-inline-ast
+  [level & {:keys [spaces] :or {spaces "  "}}]
+  ["Plain" (str (reduce str (repeat (dec level) "\t")) spaces)])
+
 ;;; ast -> simple text ast
 (def simple-ast-malli-schema
   [:or
@@ -669,8 +684,18 @@
 (defn- indent [level extra-space-count]
   {:type :indent :level level :extra-space-count extra-space-count})
 
-(def ^:private ^:dynamic *state* {})
+(def ^:private ^:dynamic *state*
+  {;; current level of Heading (use when `block-ast->simple-ast`)
+   :current-level 1
+   ;; emphasis symbol (use when `block-ast->simple-ast`)
+   :outside-em-symbol nil
+   ;; (use when `block-ast->simple-ast`)
+   :indent-after-break-line? false
+   ;; this submap is used when replace block-reference, block-embed, page-embed
+   :replace-ref-embed
+   {:current-level 1}})
 
+;;; block-ast->simple-ast
 (declare inline-ast->simple-ast block-ast->simple-ast block-ast-without-pos->simple-ast)
 (defn- block-heading
   [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
@@ -697,7 +722,7 @@
                      (if (boolean checkbox)
                        "[X]" "[ ]")
                      ""))
-        current-level (or (:current-level *state*) 1)
+        current-level (get *state* :current-level 1)
         indent (when (> current-level 1)
                  (indent (dec current-level) 0))
         items* (block-list items)]
@@ -716,7 +741,7 @@
 
 (defn- block-example
   [l]
-  (let [level (dec (or (:current-level *state*) 1))]
+  (let [level (dec (get *state* :current-level 1))]
     (mapcat
      (fn [line]
        [(indent level 2)
@@ -727,7 +752,7 @@
 
 (defn- block-src
   [{:keys [lines language]}]
-  (let [level (dec (or (:current-level *state*) 1))]
+  (let [level (dec (get *state* :current-level 1))]
     (concat
      [(indent level 2) (raw-text "```")]
      (when language [space (raw-text language)])
@@ -737,11 +762,15 @@
 
 (defn- block-quote
   [block-coll]
-  (let [level (dec (or (:current-level *state*) 1))]
-    (concat (mapcat (fn [block]
-                      (concat [(indent level 2) (raw-text ">") space]
-                              (block-ast-without-pos->simple-ast block))) block-coll)
-            [(newline* 2)])))
+  (let [level (dec (get *state* :current-level 1))]
+    (binding [*state* (assoc *state* :indent-after-break-line? true)]
+      (concat (mapcat (fn [block]
+                        (let [block-simple-ast (block-ast-without-pos->simple-ast block)]
+                          (when (seq block-simple-ast)
+                            (concat [(indent level 2) (raw-text ">") space]
+                                    block-simple-ast))))
+                      block-coll)
+              [(newline* 2)]))))
 
 (defn- inline-link
   [{full-text :full_text}]
@@ -846,7 +875,11 @@
 
 (defn- inline-break-line
   []
-  [(raw-text "  \n")])
+  [(raw-text "  \n")
+   (when (:indent-after-break-line? *state*)
+     (let [current-level (get *state* :current-level 1)]
+       (when (> current-level 1)
+         (indent (dec current-level) 4))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
 (m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
@@ -974,16 +1007,20 @@
    inline-coll))
 
 (declare replace-block-references)
+(def ^:private replace-block-references-xf
+  (comp (map add-fake-pos)
+        (map (comp remove-pos replace-block-references))))
+
 (defn- replace-block-reference-in-list
   [list-items]
   (mapv
    (fn [{block-ast-coll :content :as item}]
-     (assoc item :content (mapv (comp remove-pos replace-block-references) (mapv add-fake-pos block-ast-coll))))
+     (assoc item :content (sequence replace-block-references-xf block-ast-coll)))
    list-items))
 
 (defn- replace-block-reference-in-quote
   [block-ast-coll]
-  (mapv (comp remove-pos replace-block-references) (mapv add-fake-pos block-ast-coll)))
+  (sequence replace-block-references-xf block-ast-coll))
 
 (defn- replace-block-references
   [block-ast]
@@ -1008,7 +1045,7 @@
 
 (defn- replace-block-embeds-in-heading
   [{inline-coll :title origin-level :level :as ast-content}]
-  (prn :ast-content ast-content)
+  (set! *state* (assoc-in *state* [:replace-ref-embed :current-level] origin-level))
   (if (empty? inline-coll)
     ;; it's just a empty Heading, return itself
     [(add-fake-pos ["Heading" ast-content])]
@@ -1017,47 +1054,91 @@
            current-paragraph-inlines []
            r (transient [])]
       (if-not inline
-        (->
+        (persistent!
          (if (seq current-paragraph-inlines)
            (->> (if heading-exist?
                   ["Paragraph" current-paragraph-inlines]
                   ["Heading" (assoc ast-content :title current-paragraph-inlines)])
                 add-fake-pos
                 (conj! r))
-           r)
-         persistent!)
+           r))
         (match [inline]
           [["Macro" {:name "embed" :arguments [block-uuid*]}]]
           (let [r (if (seq current-paragraph-inlines)
-                    ;; push Paragraph first
-                    (conj! r ["Paragraph" current-paragraph-inlines])
+                         ;; push Paragraph first
+                    (conj! r (add-fake-pos ["Paragraph" current-paragraph-inlines]))
                     r)
                 block-uuid (subs block-uuid* 2 (- (count block-uuid*) 2))
-                ast-coll (block-uuid->ast-with-children (uuid block-uuid))
-                ;; update :level in Heading
-                ast-coll* (mapv
-                           (fn [[[ast-type ast-content] _pos]]
-                             (add-fake-pos
-                              (if (= ast-type "Heading")
-                                [ast-type (update ast-content :level #(+ (dec %) origin-level))]
-                                [ast-type ast-content])))
-                           ast-coll)
-                r* (reduce conj! r ast-coll*)]
+                ast-coll (update-level-in-block-ast-coll
+                          (block-uuid->ast-with-children (uuid block-uuid))
+                          origin-level)
+                r* (reduce conj! r ast-coll)]
             (recur other-inlines true [] r*))
           :else
           (let [current-paragraph-inlines*
-                (if (empty? current-paragraph-inlines)
-                  (conj current-paragraph-inlines ["Plain" (reduce str
-                                                                   (concat
-                                                                    (repeat (dec origin-level) "\t")
-                                                                    ["  "]))])
+                (if (and (empty? current-paragraph-inlines)
+                         heading-exist?)
+                  (conj current-paragraph-inlines (plain-indent-inline-ast origin-level))
                   current-paragraph-inlines)]
             (recur other-inlines heading-exist? (conj current-paragraph-inlines* inline) r)))))))
 
-;; (defn- replace-block-embeds-in-paragraph
-;;   [inline-coll]
-;;   ()
-;;   )
+(defn- replace-block-embeds-in-paragraph
+  [inline-coll]
+  (let [current-level (get-in *state* [:replace-ref-embed :current-level])]
+    (loop [[inline & other-inlines] inline-coll
+           current-paragraph-inlines []
+           just-after-embed? false
+           blocks (transient [])]
+      (if-not inline
+        (persistent!
+         (if (seq current-paragraph-inlines)
+           (->> ["Paragraph" current-paragraph-inlines]
+                add-fake-pos
+                (conj! blocks))
+           blocks))
+        (match [inline]
+          [["Macro" {:name "embed" :arguments [block-uuid*]}]]
+          (let [block-uuid (subs block-uuid* 2 (- (count block-uuid*) 2))
+                ast-coll (update-level-in-block-ast-coll
+                          (block-uuid->ast-with-children (uuid block-uuid))
+                          current-level)
+                blocks (if (seq current-paragraph-inlines)
+                         (conj! blocks (add-fake-pos ["Paragraph" current-paragraph-inlines]))
+                         blocks)
+                blocks (reduce conj! blocks ast-coll)]
+            (recur other-inlines [] true blocks))
+          :else
+          (let [current-paragraph-inlines*
+                (if just-after-embed?
+                  (conj current-paragraph-inlines (plain-indent-inline-ast current-level))
+                  current-paragraph-inlines)]
+            (recur other-inlines (conj current-paragraph-inlines* inline) false blocks)))))))
+
+(declare replace-block-embeds)
+
+(def ^:private replace-block-embeds-xf
+  (comp (map add-fake-pos)
+        (mapcat replace-block-embeds)
+        (map remove-pos)))
+
+(defn- replace-block-embeds-in-list
+  [list-items]
+  (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
+    (->> (mapv
+          (fn [{block-ast-coll :content :as item}]
+            (assoc item :content (sequence replace-block-embeds-xf block-ast-coll)))
+          list-items)
+         (vector "List")
+         add-fake-pos
+         vector)))
+
+(defn- replace-block-embeds-in-quote
+  [block-ast-coll]
+  (->> block-ast-coll
+       (sequence replace-block-embeds-xf)
+       (vector "Quote")
+       add-fake-pos
+       vector))
 
 (defn- replace-block-embeds
   [block-ast]
@@ -1065,6 +1146,12 @@
     (case ast-type
       "Heading"
       (replace-block-embeds-in-heading ast-content)
+      "Paragraph"
+      (replace-block-embeds-in-paragraph ast-content)
+      "List"
+      (replace-block-embeds-in-list ast-content)
+      "Quote"
+      (replace-block-embeds-in-quote ast-content)
       ;; else
       [block-ast])))
 
@@ -1163,7 +1250,17 @@
 
 (defn- simple-asts->string
   [simple-ast-coll]
-  (string/join (mapv simple-ast->string (merge-adjacent-spaces&newlines simple-ast-coll))))
+  (->> simple-ast-coll
+       merge-adjacent-spaces&newlines
+       merge-adjacent-spaces&newlines
+       (mapv simple-ast->string)
+       string/join))
+
+(comment
+  (def x (apply export-blocks-as-markdown-v2 xxxx))
+  (println (simple-asts->string
+            (mapcat block-ast->simple-ast
+                    (mapcat replace-block-embeds (mapv replace-block-references x))))))
 
 ;;; ================================================================
 
