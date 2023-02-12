@@ -966,6 +966,8 @@
       nil
       (assert false (str :inline-ast->simple-ast " " ast-type " not implemented yet")))))
 
+;;; block-uuid/page-name -> ast
+
 (defn- block-uuid->ast
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
@@ -978,6 +980,13 @@
 (defn- block-uuid->ast-with-children
   [block-uuid]
   (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
+        format :markdown
+        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
+    ast))
+
+(defn- page-name->ast
+  [page-name]
+  (let [content (get-page-content (state/get-current-repo) page-name)
         format :markdown
         ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
     ast))
@@ -1041,9 +1050,33 @@
       ;; else
       block-ast)))
 
-;;; replace {{embed ((block-uuid))}}
+;;; replace {{embed ((block-uuid))}} {{embed [[page]]}}
 
-(defn- replace-block-embeds-in-heading
+(defn- replace-block-embeds-helper
+  [current-paragraph-inlines block-uuid blocks-tcoll level]
+  (let [block-uuid* (subs block-uuid 2 (- (count block-uuid) 2))
+        ast-coll (update-level-in-block-ast-coll
+                  (block-uuid->ast-with-children (uuid block-uuid*))
+                  level)]
+    (cond-> blocks-tcoll
+      (seq current-paragraph-inlines)
+      (conj! (add-fake-pos ["Paragraph" current-paragraph-inlines]))
+      true
+      (#(reduce conj! % ast-coll)))))
+
+(defn- replace-page-embeds-helper
+  [current-paragraph-inlines page-name blocks-tcoll level]
+  (let [page-name* (subs page-name 2 (- (count page-name) 2))
+        ast-coll (update-level-in-block-ast-coll
+                  (page-name->ast page-name*)
+                  level)]
+    (cond-> blocks-tcoll
+      (seq current-paragraph-inlines)
+      (conj! (add-fake-pos ["Paragraph" current-paragraph-inlines]))
+      true
+      (#(reduce conj! % ast-coll)))))
+
+(defn- replace-block&page-embeds-in-heading
   [{inline-coll :title origin-level :level :as ast-content}]
   (set! *state* (assoc-in *state* [:replace-ref-embed :current-level] origin-level))
   (if (empty? inline-coll)
@@ -1063,17 +1096,21 @@
                 (conj! r))
            r))
         (match [inline]
-          [["Macro" {:name "embed" :arguments [block-uuid*]}]]
-          (let [r (if (seq current-paragraph-inlines)
-                         ;; push Paragraph first
-                    (conj! r (add-fake-pos ["Paragraph" current-paragraph-inlines]))
-                    r)
-                block-uuid (subs block-uuid* 2 (- (count block-uuid*) 2))
-                ast-coll (update-level-in-block-ast-coll
-                          (block-uuid->ast-with-children (uuid block-uuid))
-                          origin-level)
-                r* (reduce conj! r ast-coll)]
-            (recur other-inlines true [] r*))
+          [["Macro" {:name "embed" :arguments [block-uuid-or-page-name]}]]
+          (cond
+            (and (string/starts-with? block-uuid-or-page-name "((")
+                 (string/ends-with? block-uuid-or-page-name "))"))
+            (recur other-inlines true []
+                   (replace-block-embeds-helper
+                    current-paragraph-inlines block-uuid-or-page-name r origin-level))
+            (and (string/starts-with? block-uuid-or-page-name "[[")
+                 (string/ends-with? block-uuid-or-page-name "]]"))
+            (recur other-inlines true []
+                   (replace-page-embeds-helper
+                    current-paragraph-inlines block-uuid-or-page-name r origin-level))
+            :else ;; not ((block-uuid)) or [[page-name]], just keep the original ast
+            (recur other-inlines heading-exist? (conj current-paragraph-inlines inline) r))
+
           :else
           (let [current-paragraph-inlines*
                 (if (and (empty? current-paragraph-inlines)
@@ -1082,7 +1119,7 @@
                   current-paragraph-inlines)]
             (recur other-inlines heading-exist? (conj current-paragraph-inlines* inline) r)))))))
 
-(defn- replace-block-embeds-in-paragraph
+(defn- replace-block&page-embeds-in-paragraph
   [inline-coll]
   (let [current-level (get-in *state* [:replace-ref-embed :current-level])]
     (loop [[inline & other-inlines] inline-coll
@@ -1097,16 +1134,21 @@
                 (conj! blocks))
            blocks))
         (match [inline]
-          [["Macro" {:name "embed" :arguments [block-uuid*]}]]
-          (let [block-uuid (subs block-uuid* 2 (- (count block-uuid*) 2))
-                ast-coll (update-level-in-block-ast-coll
-                          (block-uuid->ast-with-children (uuid block-uuid))
-                          current-level)
-                blocks (if (seq current-paragraph-inlines)
-                         (conj! blocks (add-fake-pos ["Paragraph" current-paragraph-inlines]))
-                         blocks)
-                blocks (reduce conj! blocks ast-coll)]
-            (recur other-inlines [] true blocks))
+          [["Macro" {:name "embed" :arguments [block-uuid-or-page-name]}]]
+          (cond
+            (and (string/starts-with? block-uuid-or-page-name "((")
+                 (string/ends-with? block-uuid-or-page-name "))"))
+            (recur other-inlines [] true
+                   (replace-block-embeds-helper
+                    current-paragraph-inlines block-uuid-or-page-name blocks current-level))
+            (and (string/starts-with? block-uuid-or-page-name "[[")
+                 (string/ends-with? block-uuid-or-page-name "]]"))
+            (recur other-inlines [] true
+                   (replace-page-embeds-helper
+                    current-paragraph-inlines block-uuid-or-page-name blocks current-level))
+            :else ;; not ((block-uuid)) or [[page-name]], just keep the original ast
+            (recur other-inlines (conj current-paragraph-inlines inline) false blocks))
+
           :else
           (let [current-paragraph-inlines*
                 (if just-after-embed?
@@ -1114,44 +1156,44 @@
                   current-paragraph-inlines)]
             (recur other-inlines (conj current-paragraph-inlines* inline) false blocks)))))))
 
-(declare replace-block-embeds)
+(declare replace-block&page-embeds)
 
-(def ^:private replace-block-embeds-xf
+(def ^:private replace-block&page-embeds-xf
   (comp (map add-fake-pos)
-        (mapcat replace-block-embeds)
+        (mapcat replace-block&page-embeds)
         (map remove-pos)))
 
-(defn- replace-block-embeds-in-list
+(defn- replace-block&page-embeds-in-list
   [list-items]
   (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
     (->> (mapv
           (fn [{block-ast-coll :content :as item}]
-            (assoc item :content (sequence replace-block-embeds-xf block-ast-coll)))
+            (assoc item :content (sequence replace-block&page-embeds-xf block-ast-coll)))
           list-items)
          (vector "List")
          add-fake-pos
          vector)))
 
-(defn- replace-block-embeds-in-quote
+(defn- replace-block&page-embeds-in-quote
   [block-ast-coll]
   (->> block-ast-coll
-       (sequence replace-block-embeds-xf)
+       (sequence replace-block&page-embeds-xf)
        (vector "Quote")
        add-fake-pos
        vector))
 
-(defn- replace-block-embeds
+(defn- replace-block&page-embeds
   [block-ast]
   (let [[[ast-type ast-content] _pos] block-ast]
     (case ast-type
       "Heading"
-      (replace-block-embeds-in-heading ast-content)
+      (replace-block&page-embeds-in-heading ast-content)
       "Paragraph"
-      (replace-block-embeds-in-paragraph ast-content)
+      (replace-block&page-embeds-in-paragraph ast-content)
       "List"
-      (replace-block-embeds-in-list ast-content)
+      (replace-block&page-embeds-in-list ast-content)
       "Quote"
-      (replace-block-embeds-in-quote ast-content)
+      (replace-block&page-embeds-in-quote ast-content)
       ;; else
       [block-ast])))
 
@@ -1260,7 +1302,7 @@
   (def x (apply export-blocks-as-markdown-v2 xxxx))
   (println (simple-asts->string
             (mapcat block-ast->simple-ast
-                    (mapcat replace-block-embeds (mapv replace-block-references x))))))
+                    (mapcat replace-block&page-embeds (mapv replace-block-references x))))))
 
 ;;; ================================================================
 
