@@ -290,7 +290,10 @@
                                  ;; `(.-ch cur)` is the cursor position, not the end of token. When completion is at the middle of a token, this is wrong
                                  to (Pos. (.-line cur) (.-end token))
                                  add-postfix-after? (<= (.-end token) (.-ch cur))
+                                 doc (.getValue cm)
                                  list (->> (keys @result)
+                                           (remove (fn [text]
+                                                     (re-find (re-pattern (str "[^;]*" text "\\s")) doc)))
                                            sort
                                            (map (fn [text]
                                                   (let [type (get @result text)]
