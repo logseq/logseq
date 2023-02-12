@@ -24,6 +24,13 @@ yarn watch
 
 Then open the browser <http://localhost:3001>.
 
+### REPL setup
+
+#### VSCode + Calva
+
+``cmd + shift + p`` -> ``Calva: Connect to a running nREPL server`` -> ``logseq`` -> ``shadow-cljs``->``:app`` ->``localhost:8701``
+
+
 ### Production Build
 
 ```bash
