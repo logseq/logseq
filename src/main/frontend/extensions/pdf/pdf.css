@@ -56,7 +56,7 @@ input::-webkit-inner-spin-button {
     position: relative;
   }
 
-&-header {
+  &-header {
     display: flex;
     justify-content: flex-end;
     position: absolute;
@@ -1014,5 +1014,23 @@ body.is-pdf-active {
   &.selected {
     background-color: rgb(206 255 162);
     border: 2px dashed #ff3434;
+  }
+}
+
+.hl-flash {
+  animation-name: hl-flash;
+  animation-duration: 0.3s;
+  animation-timing-function: ease;
+  animation-iteration-count: 2;
+  animation-direction: alternate;
+  animation-play-state: running;
+}
+
+@keyframes hl-flash {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

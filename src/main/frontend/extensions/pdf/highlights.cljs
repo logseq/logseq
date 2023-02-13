@@ -236,7 +236,8 @@
             (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
-     {:on-click        open-ctx-menu!
+     {:id              (str "hl_" id)
+      :on-click        open-ctx-menu!
       :on-context-menu open-ctx-menu!}
 
      (map-indexed
@@ -349,7 +350,8 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:ref             *el
+         {:id              id
+          :ref             *el
           :style           vw-bounding
           :data-color      color
           :draggable       "true"
