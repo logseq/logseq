@@ -88,12 +88,6 @@
          (catch :default _e
            false))))
 
-(defn link?
-  "Check whether s is a link (including page/block refs)."
-  [s]
-  (or (url? s)
-      (re-matches #"^(\[\[|\(\().*(\]\]|\)\))$" (string/trim s))))
-
 (defn json->clj
   [json-string]
   (-> json-string

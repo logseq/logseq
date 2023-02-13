@@ -131,7 +131,7 @@
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
-           selection-link? (and selection (gp-util/link? selection))
+           selection-link? (and selection (gp-mldoc/mldoc-link? format selection))
            [content forward-pos] (cond
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
