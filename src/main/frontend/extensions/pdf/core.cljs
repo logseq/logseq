@@ -842,12 +842,13 @@
     ;; load document
     (rum/use-effect!
      (fn []
-       (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
-             opts     {:url           url
-                       :ownerDocument js/document
-                       :cMapUrl       "./cmaps/"
-                       ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
-                       :cMapPacked    true}]
+       (let [^js loader-el  (rum/deref *doc-ref)
+             get-doc$       (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
+             opts           {:url           url
+                             :ownerDocument (.-ownerDocument loader-el)
+                             :cMapUrl       "./cmaps/"
+                             ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
+                             :cMapPacked    true}]
 
          (set-loader-state! {:status :loading})
 

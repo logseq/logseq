@@ -1,5 +1,6 @@
 (ns frontend.extensions.pdf.windows
-  (:require [frontend.state :as state]
+  (:require [clojure.string :as string]
+            [frontend.state :as state]
             [rum.core :as rum]))
 
 (def *active-win (atom nil))
@@ -19,6 +20,24 @@
     (if (.-$inSystemWindow viewer)
       (.closest (.-container viewer) "body")
       js/document.body)))
+
+;(defn check-in-new-window?
+;  [^js el]
+;  (when-let [^js html (and el (.-documentElement (.-ownerDocument el)))]
+;    (.contains (.-classList html) "is-system-window")))
+
+;(defn get-base-root
+;  [^js el]
+;  (when-let [^js doc (and el (.-ownerDocument el))]
+;    (when-let [base-uri (.-baseURI doc)]
+;      (try
+;        (let [^js url   (js/URL. base-uri)
+;              hash-str  (.-hash url)
+;              base-root (string/replace base-uri hash-str "")
+;              base-root (subs base-root 0 (string/last-index-of base-root "/"))]
+;          base-root)
+;        (catch js/Error e
+;          (js/console.error e))))))
 
 (defn resolve-classes!
   [^js doc]
