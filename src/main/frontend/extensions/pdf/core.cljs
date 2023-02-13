@@ -1,4 +1,4 @@
-(ns frontend.extensions.pdf.highlights
+(ns frontend.extensions.pdf.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
@@ -7,6 +7,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
+            [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
             [frontend.config :as config]
             [frontend.modules.shortcut.core :as shortcut]
@@ -18,7 +19,12 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(declare pdf-container)
+
 (def *highlight-last-color (atom :yellow))
+
+(defn open-external-win! [pdf-current]
+  (pdf-windows/open-pdf-in-new-window! pdf-container pdf-current))
 
 (defn reset-current-pdf!
   []
@@ -61,13 +67,14 @@
 (rum/defc pdf-resizer
   "Watches for changes in the pdf container's width and adjusts the viewer."
   [^js viewer]
-  (let [el-ref (rum/use-ref nil)
+  (let [el-ref   (rum/use-ref nil)
         adjust-main-size!
-               (util/debounce
-                200 (fn [width]
-                      (let [root-el js/document.documentElement]
-                        (.setProperty (.-style root-el) "--ph-view-container-width" width)
-                        (pdf-utils/adjust-viewer-size! viewer))))]
+                 (util/debounce
+                  200 (fn [width]
+                        (let [root-el js/document.documentElement]
+                          (.setProperty (.-style root-el) "--ph-view-container-width" width)
+                          (pdf-utils/adjust-viewer-size! viewer))))
+        group-id (.-$groupIdentity viewer)]
 
     ;; draggable handler
     (rum/use-effect!
@@ -82,7 +89,7 @@
                    (let [width     js/document.documentElement.clientWidth
                          offset    (.-left (.-rect e))
                          el-ratio  (.toFixed (/ offset width) 6)
-                         target-el (js/document.getElementById "pdf-layout-container")]
+                         target-el (js/document.getElementById (str "pdf-layout-container_" group-id))]
                      (when target-el
                        (let [width (str (min (max (* el-ratio 100) 20) 80) "vw")]
                          (.setProperty (.-style target-el) "width" width)
@@ -552,7 +559,7 @@
      (fn []
        (let [fn-selection-ok
              (fn [^js/MouseEvent e]
-               (let [^js/Selection selection (js/document.getSelection)
+               (let [^js/Selection selection (.getSelection doc)
                      ^js/Range sel-range     (.getRangeAt selection 0)]
 
                  (cond
@@ -572,12 +579,12 @@
                (let [*dirty   (volatile! false)
                      fn-dirty #(vreset! *dirty true)]
 
-                 (js/document.addEventListener "selectionchange" fn-dirty)
-                 (js/document.addEventListener "mouseup"
-                                               (fn [^js e]
-                                                 (and @*dirty (fn-selection-ok e))
-                                                 (js/document.removeEventListener "selectionchange" fn-dirty))
-                                               #js {:once true})))
+                 (.addEventListener doc "selectionchange" fn-dirty)
+                 (.addEventListener doc "mouseup"
+                                    (fn [^js e]
+                                      (and @*dirty (fn-selection-ok e))
+                                      (.removeEventListener doc "selectionchange" fn-dirty))
+                                    #js {:once true})))
 
              fn-resize
              (partial pdf-utils/adjust-viewer-size! viewer)]
@@ -685,7 +692,7 @@
        })]))
 
 (rum/defc pdf-viewer
-  [_url ^js pdf-document {:keys [initial-hls initial-page initial-error]} ops]
+  [_url ^js pdf-document {:keys [identity initial-hls initial-page initial-error]} ops]
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
@@ -709,6 +716,8 @@
                                     :annotationMode    2
                                     :removePageBorders true})]
 
+         (set! (.-$groupIdentity viewer) identity)
+         (set! (.-$inSystemWindow viewer) (boolean (.closest el ".is-system-window")))
          (. link-service setDocument pdf-document)
          (. link-service setViewer viewer)
 
@@ -778,10 +787,10 @@
 
        (when (and page-ready? viewer)
          [(rum/with-key (pdf-resizer viewer) "pdf-resizer")
-          (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")])])))
+          (rum/with-key (pdf-toolbar viewer {:on-external-win #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
 (rum/defc ^:large-vars/data-var pdf-loader
-  [{:keys [url hls-file] :as pdf-current}]
+  [{:keys [url hls-file identity] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
@@ -895,7 +904,8 @@
           (when-let [pdf-document (and (:loaded hls-state) (:pdf-document loader-state))]
             [(rum/with-key (pdf-viewer
                             url pdf-document
-                            {:initial-hls   initial-hls
+                            {:identity      identity
+                             :initial-hls   initial-hls
                              :initial-page  initial-page
                              :initial-error initial-error}
                             {:set-dirty-hls! set-dirty-hls!
@@ -921,7 +931,8 @@
        #(set-ready! false))
      [identity])
 
-    [:div#pdf-layout-container.extensions__pdf-container
+    [:div.extensions__pdf-container
+     {:id (str "pdf-layout-container_" identity)}
      (when (and prepared identity ready)
        (pdf-loader pdf-current))]))
 
@@ -942,13 +953,15 @@
 (rum/defcs playground
   < rum/static rum/reactive
     (shortcut/mixin :shortcut.handler/pdf)
-  []
-  (let [pdf-current (state/sub :pdf/current)]
+  [_]
+  (let [pdf-current (state/sub :pdf/current)
+        system-win? (state/sub :pdf/system-win?)]
     [:div.extensions__pdf-playground
 
-     (playground-effects (not (nil? pdf-current)))
+     (playground-effects (and (not system-win?)
+                              (not (nil? pdf-current))))
 
-     (when pdf-current
+     (when (and (not system-win?) pdf-current)
        (js/ReactDOM.createPortal
         (pdf-container pdf-current)
         (js/document.querySelector "#app-single-container")))]))
