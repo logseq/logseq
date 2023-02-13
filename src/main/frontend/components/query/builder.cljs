@@ -51,87 +51,93 @@
                              options))))
 
 (rum/defcs picker <
-  (rum/local nil ::mode)
-  [state *find *tree loc]
-  (prn {:loc loc})
+  (rum/local nil ::mode)                ; pick mode
+  [state *find *tree *show-picker? loc]
   (let [*mode (::mode state)
-        repo (state/get-current-repo)
+                repo (state/get-current-repo)
         filters (if (= @*find :block)
                   query-builder/block-filters
                   query-builder/page-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? (set query-builder/operators) (keyword %))]
+    (prn {:loc loc
+          :mode @*mode})
     [:div.query-builder-picker.mt-8
-     (when-not @*mode
+     (if @*mode
+       (when-not (operator? @*mode)
+         [:div.ml-2.mt-2
+          (case @*mode
+            "namespace"
+            (let [items (sort (db-model/get-all-namespace-parents repo))]
+              (select items
+                (fn [value]
+                  (prn "chosen " value))))
+
+            "tags"
+            (let [items (->> (db-model/get-all-tagged-pages repo)
+                             (map second)
+                             sort)]
+              (select items
+                (fn [value]
+                  (prn "chosen " value))))
+
+            "property"
+            (let [properties (search/get-all-properties)]
+              (select properties
+                (fn [value]
+                  (prn "chosen " value))))
+
+            "sample"
+            (select (range 1 101)
+              (fn [value]
+                (prn "chosen " value)))
+
+            "task"
+            (select db-default/built-in-markers
+              (fn [value]
+                (prn "chosen " value)))
+
+            "priority"
+            (select db-default/built-in-priorities
+              (fn [value]
+                (prn "chosen " value)))
+
+            "page"
+            (let [pages (sort (db-model/get-all-page-original-names repo))]
+              (select pages
+                (fn [value]
+                  (prn "chosen " value))))
+
+            "page-ref"
+            (let [pages (sort (db-model/get-all-page-original-names repo))]
+              (select pages
+                (fn [value]
+                  (prn "chosen " value))))
+
+            "full-text-search"
+            "todo" ; string input
+
+            "between"
+            "todo" ; start - date picker, end(optional) - date picker
+
+            nil)])
        (select
          (map name filters-and-ops)
          (fn [value]
-           (when (operator? value)
-             ;; TODO
-             (prn "operator")
-             )
-           (reset! *mode value))
-         {:input-default-placeholder "Add operator/filter"}))
-     (when-not (operator? @*mode)
-       [:div.ml-2.mt-2
-        (case @*mode
-          "all-tags"
-          "todo" ; insert (all-page-tags) into query
+           (cond
+             (= value "all-tags")
+             (do
+               (swap! *tree #(query-builder/append-element % loc [:all-page-tags]))
+               (reset! *show-picker? false))
 
-          "namespace"
-          (let [items (sort (db-model/get-all-namespace-parents repo))]
-            (select items
-              (fn [value]
-                (prn "chosen " value))))
+             (operator? value)
+             (do
+               (swap! *tree #(query-builder/append-element % loc [(keyword value)]))
+               (reset! *show-picker? false))
 
-          "tags"
-          (let [items (->> (db-model/get-all-tagged-pages repo)
-                           (map second)
-                           sort)]
-            (select items
-              (fn [value]
-                (prn "chosen " value))))
-
-          "property"
-          (let [properties (search/get-all-properties)]
-            (select properties
-             (fn [value]
-               (prn "chosen " value))))
-
-          "sample"
-          (select (range 1 101)
-             (fn [value]
-               (prn "chosen " value)))
-
-          "task"
-          (select db-default/built-in-markers
-            (fn [value]
-              (prn "chosen " value)))
-
-          "priority"
-          (select db-default/built-in-priorities
-            (fn [value]
-              (prn "chosen " value)))
-
-          "page"
-          (let [pages (sort (db-model/get-all-page-original-names repo))]
-            (select pages
-             (fn [value]
-               (prn "chosen " value))))
-
-          "full-text-search"
-          "todo" ; string input
-
-          "between"
-          "todo" ; start - date picker, end(optional) - date picker
-
-          "page-ref"
-          (let [pages (sort (db-model/get-all-page-original-names repo))]
-            (select pages
-              (fn [value]
-                (prn "chosen " value))))
-
-          nil)])]))
+             :else
+             (reset! *mode value)))
+         {:input-default-placeholder "Add operator/filter"}))]))
 
 (rum/defcs actions < (rum/local false ::show-picker?)
   [state *find *tree loc {:keys [group?]}]
@@ -144,16 +150,21 @@
               :on-click #(reset! *show-picker? true)}
           (ui/icon "circle-plus" {:style {:font-size 20}})]])
 
-      [:a.ml-2 {:title "Wrap by (and/or/not)"
-                :on-click (fn [])}
-       (ui/icon "parentheses" {:style {:font-size 20}})]
+      [:div.flex.flex-row.items-center
+       (for [op query-builder/operators]
+         [:a.ml-2 {:title (str "Wrapped by " (name op) " operator")
+                   :on-click (fn []
+                               (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))}
+          (str "(" (name op) ")")])]
 
       [:a.ml-2 {:title "Remove this clause"
-                :on-click (fn [])}
+                :on-click (fn []
+                            (swap! *tree (fn [q]
+                                           (query-builder/remove-element q loc))))}
        (ui/icon "x" {:style {:font-size 20}})]]
 
      (when @*show-picker?
-       (picker *find *tree loc))]))
+       (picker *find *tree *show-picker? loc))]))
 
 (declare clauses-group)
 
@@ -163,7 +174,7 @@
     [:div.query-builder-clause.p-1
      (let [kind (keyword (first clause))]
        (if (#{:and :or :not} kind)
-         (clauses-group *tree *find loc kind (rest clause))
+         (clauses-group *tree *find (conj loc 0) kind (rest clause))
 
          [:div.flex.flex-row.items-center
           (case kind
@@ -188,25 +199,26 @@
    [:div.flex.flex-col
     [:div
      (map-indexed (fn [i item]
-                    (clause *tree *find (conj loc i) item))
+                    (clause *tree *find (update loc (dec (count loc)) inc) item))
                   clauses)]
     (rum/with-key (actions *find *tree loc {:group? true})
       (str loc))]])
 
 ;; '(and (page-ref foo) (property key value))
-(rum/defc clause-tree
+(rum/defc clause-tree < rum/reactive
   [*tree *find]
-  (let [kind (#{:and :or :not} (keyword (string/lower-case (str (first @*tree)))))
+  (let [tree (rum/react *tree)
+        kind ((set query-builder/operators) (first tree))
         [kind' clauses] (if kind
-                          [kind (rest @*tree)]
-                          [:and [@*tree]])]
+                          [kind (rest tree)]
+                          [:and [@tree]])]
     (clauses-group *tree *find [0] kind' clauses)))
 
-(rum/defc query
+(rum/defc query < rum/reactive
   [*tree]
   [:div
    "Query: "
-   (str @*tree)])
+   (str (query-builder/->dsl (rum/react *tree)))])
 
 (rum/defcs builder <
   (rum/local :block ::find)
@@ -217,14 +229,14 @@
 
         ;; debug
         *tree (atom
-               []
+               [:and]
                ;; '(and (page-ref foo)
                ;;            (property key value)
                ;;            (or (page-ref bar)
                ;;                (page-ref baz)))
                )
         ]
-    (defonce debug-tree *tree)
+    (def debug-tree *tree)
     [:div.query-builder.mt-2.ml-2
      (page-block-selector *find)
      [:hr]

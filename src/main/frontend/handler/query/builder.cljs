@@ -41,6 +41,12 @@
     :else
     [x]))
 
+(defn append-element
+  [q loc x]
+  {:pre [(vector? loc) (some? x)]}
+  (let [loc' (update loc (dec (count loc)) inc)]
+    (add-element q loc' x)))
+
 (defn remove-element
   [q loc]
   {:pre [(vector? loc) (seq loc)]}
