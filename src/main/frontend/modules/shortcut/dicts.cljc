@@ -1429,9 +1429,9 @@
              :command.date-picker/next-day         "Tarih seçici: Sonraki günü seç"
              :command.date-picker/prev-week        "Tarih seçici: Önceki haftayı seç"
              :command.date-picker/next-week        "Tarih seçici: Sonraki haftayı seç"
-             :command.pdf/previous-page            "Geçerli pdf belgesinin önceki sayfası"
-             :command.pdf/next-page                "Geçerli pdf belgesinin sonraki sayfası"
-             :command.pdf/close                    "Geçerli pdf görüntüleyiciyi kapat"
+             :command.pdf/previous-page            "Pdf: Geçerli pdf belgesinin önceki sayfası"
+             :command.pdf/next-page                "Pdf: Geçerli pdf belgesinin sonraki sayfası"
+             :command.pdf/close                    "Pdf: Geçerli pdf görüntüleyiciyi kapat"
              :command.pdf/find                     "Pdf: Geçerli pdf belgesinde aranacak metin"
              :command.auto-complete/complete       "Otomatik tamamlama: Seçili öğeyi seç"
              :command.auto-complete/prev           "Otomatik tamamlama: Önceki öğeyi seç"
@@ -1544,8 +1544,13 @@
              :command.ui/install-plugins-from-file    "Eklentileri plugins.edn dosyasından yükleyin"
              :command.editor/toggle-open-blocks       "Açık blokları kapat/aç (tüm blokları daralt veya genişlet)"
              :command.ui/toggle-cards                 "Kartları aç/kapat"
-             :command.git/commit                      "Git commit mesajı"
-             :command.editor/select-parent            "Ebeveyn bloğunu seçin"}
+             :command.ui/clear-all-notifications      "Tüm bildirimleri temizle"
+             :command.git/commit                      "Mesajlı git commit oluştur"
+             :command.editor/select-parent            "Üst bloğu seçin"
+             :command.dev/show-block-data             "(Dev) Blok verilerini göster"
+             :command.dev/show-block-ast              "(Dev) Blok AST'ını göster"
+             :command.dev/show-page-data              "(Dev) Sayfa verilerini göster"
+             :command.dev/show-page-ast               "(Dev) Sayfa AST'ını göster"}
 
    :ko      {:shortcut.category/formatting             "포맷"
              :shortcut.category/basics                "기본 동작"
