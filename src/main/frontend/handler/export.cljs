@@ -714,11 +714,17 @@
       ("spaces" "no-indent") (indent level 0)
       (assert false (str "unknown indent-style: " indent-style)))))
 
-(declare inline-ast->simple-ast block-ast->simple-ast block-ast-without-pos->simple-ast)
+(declare inline-ast->simple-ast
+         block-ast->simple-ast
+         block-ast-without-pos->simple-ast)
+
 (defn- block-heading
   [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
-  (let [priority* (and priority (raw-text (priority->string priority)))
-        heading* [(indent (dec level) 0) (raw-text "-")]
+  (let [indent-style (get-in *state* [:export-options :indent-style])
+        priority* (and priority (raw-text (priority->string priority)))
+        heading* (if (= indent-style "dashes")
+                   [(indent (dec level) 0) (raw-text "-")]
+                   [(indent (dec level) 0)])
         size* (and size [space (raw-text (reduce str (repeat size "#")))])
         marker* (and marker (raw-text marker))]
     (set! *state* (assoc *state* :current-level level))
@@ -762,7 +768,7 @@
   (let [level (dec (get *state* :current-level 1))]
     (mapcat
      (fn [line]
-       [(indent level 2)
+       [(indent-with-2-spaces level)
         (raw-text "    ")
         (raw-text line)
         (newline* 1)])
@@ -772,11 +778,11 @@
   [{:keys [lines language]}]
   (let [level (dec (get *state* :current-level 1))]
     (concat
-     [(indent level 2) (raw-text "```")]
+     [(indent-with-2-spaces level) (raw-text "```")]
      (when language [space (raw-text language)])
      [(newline* 1)]
      (mapv raw-text lines)
-     [(indent level 2) (raw-text "```") (newline* 1)])))
+     [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
 
 (defn- block-quote
   [block-coll]
@@ -785,7 +791,7 @@
       (concat (mapcat (fn [block]
                         (let [block-simple-ast (block-ast-without-pos->simple-ast block)]
                           (when (seq block-simple-ast)
-                            (concat [(indent level 2) (raw-text ">") space]
+                            (concat [(indent-with-2-spaces level) (raw-text ">") space]
                                     block-simple-ast))))
                       block-coll)
               [(newline* 2)]))))
@@ -798,11 +804,11 @@
 (defn- block-latex-env
   [[name options content]]
   (let [level (dec (get *state* :current-level 1))]
-    [(indent level 2) (raw-text "\\begin{" name "}" options)
+    [(indent-with-2-spaces level) (raw-text "\\begin{" name "}" options)
      (newline* 1)
-     (indent level 2) (raw-text content)
+     (indent-with-2-spaces level) (raw-text content)
      (newline* 1)
-     (indent level 2) (raw-text "\\end{" name "}")
+     (indent-with-2-spaces level) (raw-text "\\end{" name "}")
      (newline* 1)]))
 
 (defn- block-displayed-math
@@ -815,7 +821,7 @@
     (concat
      [(raw-text ":" name ":")
       (newline* 1)]
-     (mapcat (fn [line] [(indent level 2) (raw-text line)]) lines)
+     (mapcat (fn [line] [(indent-with-2-spaces level) (raw-text line)]) lines)
      [(newline* 1) (raw-text ":END:") (newline* 1)])))
 
 (defn- block-footnote-defnition
@@ -842,7 +848,7 @@
            (fn [group]
              (mapcat
               (fn [row]
-                (concat [(indent level 2)]
+                (concat [(indent-with-2-spaces level)]
                         (mapcat
                          (fn [col]
                            (concat [(raw-text "|") space]
@@ -852,27 +858,27 @@
                         [(raw-text "|") (newline* 1)]))
               group))
            groups)]
-      (concat [(newline* 1) (indent level 2)]
+      (concat [(newline* 1) (indent-with-2-spaces level)]
               header-line
-              [(newline* 1) (indent level 2) sep-line (newline* 1)]
+              [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)]
               group-lines))))
 
 (defn- block-comment
   [s]
   (let [level (dec (get *state* :current-level 1))]
-    [(indent level 2) (raw-text "<!---") (newline* 1)
-     (indent level 2) (raw-text s) (newline* 1)
-     (indent level 2) (raw-text "-->") (newline* 1)]))
+    [(indent-with-2-spaces level) (raw-text "<!---") (newline* 1)
+     (indent-with-2-spaces level) (raw-text s) (newline* 1)
+     (indent-with-2-spaces level) (raw-text "-->") (newline* 1)]))
 
 (defn- block-raw-html
   [s]
   (let [level (dec (get *state* :current-level 1))]
-    [(indent level 2) (raw-text s) (newline* 1)]))
+    [(indent-with-2-spaces level) (raw-text s) (newline* 1)]))
 
 (defn- block-hiccup
   [s]
   (let [level (dec (get *state* :current-level 1))]
-    [(indent level 2) (raw-text s) space]))
+    [(indent-with-2-spaces level) (raw-text s) space]))
 
 (defn- inline-link
   [{full-text :full_text}]
@@ -983,7 +989,7 @@
    (when (:indent-after-break-line? *state*)
      (let [current-level (get *state* :current-level 1)]
        (when (> current-level 1)
-         (indent (dec current-level) 4))))])
+         (indent-with-2-spaces (dec current-level)))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
 (m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
