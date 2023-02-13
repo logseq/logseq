@@ -29,7 +29,8 @@
             [promesa.core :as p]
             [frontend.handler.notification :as notification]
             [malli.core :as m]
-            [cljs.core.match :refer [match]])
+            [cljs.core.match :refer [match]]
+            [malli.util :as mu])
   (:import
    [goog.string StringBuffer]))
 
@@ -662,19 +663,20 @@
 
 ;;; ast -> simple text ast
 (def simple-ast-malli-schema
-  [:or
-   [:map {:closed true}
-    [:type [:= :raw-text]]
-    [:content :string]]
-   [:map {:closed true}
-    [:type [:= :space]]]
-   [:map {:closed true}
-    [:type [:= :newline]]
-    [:line-count :int]]
-   [:map {:closed true}
-    [:type [:= :indent]]
-    [:level :int]
-    [:extra-space-count :int]]])
+  (mu/closed-schema
+   [:or
+    [:map
+     [:type [:= :raw-text]]
+     [:content :string]]
+    [:map
+     [:type [:= :space]]]
+    [:map
+     [:type [:= :newline]]
+     [:line-count :int]]
+    [:map
+     [:type [:= :indent]]
+     [:level :int]
+     [:extra-space-count :int]]]))
 
 (defn- raw-text [content]
   {:type :raw-text :content content})
@@ -693,7 +695,8 @@
    :indent-after-break-line? false
    ;; this submap is used when replace block-reference, block-embed, page-embed
    :replace-ref-embed
-   {:current-level 1}})
+   {:current-level 1
+    :block&page-embed-replaced? false}})
 
 ;;; block-ast->simple-ast
 (declare inline-ast->simple-ast block-ast->simple-ast block-ast-without-pos->simple-ast)
@@ -858,7 +861,7 @@
 
 (defn- inline-emphasis
   [emphasis]
-  (let [[type inline-coll] emphasis
+  (let [[[type] inline-coll] emphasis
         outside-em-symbol (:outside-em-symbol *state*)]
     (case type
       "Bold"
@@ -871,7 +874,9 @@
       "Strike_through"
       (emphasis-wrap-with inline-coll "~~")
       "Highlight"
-      (emphasis-wrap-with inline-coll "^^"))))
+      (emphasis-wrap-with inline-coll "^^")
+      ;; else
+      (assert false (str :inline-emphasis " " emphasis " is invalid")))))
 
 (defn- inline-break-line
   []
@@ -972,37 +977,35 @@
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
         content (outliner-file/tree->file-content [block] {:init-level 1})
-        format :markdown
-        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
-    ;; TODO: nested block-references
-    ast))
+        format :markdown]
+    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
   (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
-        format :markdown
-        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
-    ast))
+        format :markdown]
+    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
 
 (defn- page-name->ast
   [page-name]
   (let [content (get-page-content (state/get-current-repo) page-name)
-        format :markdown
-        ast (gp-mldoc/->edn content (gp-mldoc/default-config format))]
-    ast))
+        format :markdown]
+    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
 
 ;;; replace ((block-uuid))
 (defn- replace-block-reference-in-heading
   [{:keys [title] :as ast-content}]
   (let [inline-coll  title
-        inline-coll* (mapcat
-                      #(match [%]
-                              [["Link" {:url ["Block_ref" block-uuid]}]]
-                              (let [[[[_ {title-inline-coll :title}]]] (block-uuid->ast (uuid block-uuid))]
-                                title-inline-coll)
+        inline-coll*
+        (mapcat
+         #(match [%]
+            [["Link" {:url ["Block_ref" block-uuid]}]]
+            (let [[[[_ {title-inline-coll :title}]]]
+                  (block-uuid->ast (uuid block-uuid))]
+              title-inline-coll)
 
-                              :else [%])
-                      inline-coll)]
+            :else [%])
+         inline-coll)]
     (assoc ast-content :title inline-coll*)))
 
 (defn- replace-block-reference-in-paragraph
@@ -1010,7 +1013,8 @@
   (mapcat
    #(match [%]
       [["Link" {:url ["Block_ref" block-uuid]}]]
-      (let [[[[_ {title-inline-coll :title}]]] (block-uuid->ast (uuid block-uuid))]
+      (let [[[[_ {title-inline-coll :title}]]]
+            (block-uuid->ast (uuid block-uuid))]
         title-inline-coll)
       :else [%])
    inline-coll))
@@ -1100,16 +1104,18 @@
           (cond
             (and (string/starts-with? block-uuid-or-page-name "((")
                  (string/ends-with? block-uuid-or-page-name "))"))
-            (recur other-inlines true []
-                   (replace-block-embeds-helper
-                    current-paragraph-inlines block-uuid-or-page-name r origin-level))
+            (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
+                (recur other-inlines true []
+                       (replace-block-embeds-helper
+                        current-paragraph-inlines block-uuid-or-page-name r origin-level)))
             (and (string/starts-with? block-uuid-or-page-name "[[")
                  (string/ends-with? block-uuid-or-page-name "]]"))
-            (recur other-inlines true []
-                   (replace-page-embeds-helper
-                    current-paragraph-inlines block-uuid-or-page-name r origin-level))
-            :else ;; not ((block-uuid)) or [[page-name]], just keep the original ast
-            (recur other-inlines heading-exist? (conj current-paragraph-inlines inline) r))
+            (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
+                (recur other-inlines true []
+                       (replace-page-embeds-helper
+                        current-paragraph-inlines block-uuid-or-page-name r origin-level)))
+            :else ;; not ((block-uuid)) or [[page-name]], just drop the original ast
+            (recur other-inlines heading-exist? current-paragraph-inlines r))
 
           :else
           (let [current-paragraph-inlines*
@@ -1138,16 +1144,18 @@
           (cond
             (and (string/starts-with? block-uuid-or-page-name "((")
                  (string/ends-with? block-uuid-or-page-name "))"))
-            (recur other-inlines [] true
-                   (replace-block-embeds-helper
-                    current-paragraph-inlines block-uuid-or-page-name blocks current-level))
+            (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
+                (recur other-inlines [] true
+                       (replace-block-embeds-helper
+                        current-paragraph-inlines block-uuid-or-page-name blocks current-level)))
             (and (string/starts-with? block-uuid-or-page-name "[[")
                  (string/ends-with? block-uuid-or-page-name "]]"))
-            (recur other-inlines [] true
-                   (replace-page-embeds-helper
-                    current-paragraph-inlines block-uuid-or-page-name blocks current-level))
-            :else ;; not ((block-uuid)) or [[page-name]], just keep the original ast
-            (recur other-inlines (conj current-paragraph-inlines inline) false blocks))
+            (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] true))
+                (recur other-inlines [] true
+                       (replace-page-embeds-helper
+                        current-paragraph-inlines block-uuid-or-page-name blocks current-level)))
+            :else ;; not ((block-uuid)) or [[page-name]], just drop the original ast
+            (recur other-inlines current-paragraph-inlines false blocks))
 
           :else
           (let [current-paragraph-inlines*
@@ -1196,6 +1204,48 @@
       (replace-block&page-embeds-in-quote ast-content)
       ;; else
       [block-ast])))
+
+(defn- replace-block&page-reference&embed
+  "block-ast-coll ->
+  block-ast-coll-to-replace-references ->
+  if :block-ref-replaced? then block-ast-coll-to-replace-embeds else result-block-ast-tcoll
+  -----
+  block-ast-coll-to-replace-embeds ->
+  if :block&page-embed-replaced? then block-ast-coll-to-replace-references else result-block-ast-tcoll
+  -----
+  block-ast-coll-to-replace-references -> block-ast-coll-to-replace-embeds"
+  [block-ast-coll]
+  (loop [block-ast-coll block-ast-coll
+         result-block-ast-tcoll (transient [])
+         block-ast-coll-to-replace-references []
+         block-ast-coll-to-replace-embeds []]
+    (cond
+      (seq block-ast-coll-to-replace-embeds)
+      (let [[block-ast-to-replace-embed & other-block-asts-to-replace-embed]
+            block-ast-coll-to-replace-embeds
+            block-ast-coll-replaced (replace-block&page-embeds block-ast-to-replace-embed)]
+        (if (get-in *state* [:replace-ref-embed :block&page-embed-replaced?])
+          (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] false))
+              (recur block-ast-coll result-block-ast-tcoll
+                     (reduce conj block-ast-coll-to-replace-references block-ast-coll-replaced)
+                     (vec other-block-asts-to-replace-embed)))
+          (recur block-ast-coll (reduce conj! result-block-ast-tcoll block-ast-coll-replaced)
+                 (vec block-ast-coll-to-replace-references) (vec other-block-asts-to-replace-embed))))
+      (seq block-ast-coll-to-replace-references)
+      (let [[block-ast-to-replace-ref & other-block-asts-to-replace-ref]
+            block-ast-coll-to-replace-references
+            block-ast-replaced (replace-block-references block-ast-to-replace-ref)]
+        (recur block-ast-coll result-block-ast-tcoll (vec other-block-asts-to-replace-ref)
+               (conj block-ast-coll-to-replace-embeds block-ast-replaced)))
+      :else
+      (let [[block-ast & other-block-ast] block-ast-coll]
+        (if-not block-ast
+          (persistent! result-block-ast-tcoll)
+          (recur other-block-ast result-block-ast-tcoll
+                 (conj block-ast-coll-to-replace-references block-ast)
+                 (vec block-ast-coll-to-replace-embeds)))))))
+
+
 
 (defn- simple-ast->string
   [simple-ast]
@@ -1300,9 +1350,11 @@
 
 (comment
   (def x (apply export-blocks-as-markdown-v2 xxxx))
-  (println (simple-asts->string
-            (mapcat block-ast->simple-ast
-                    (mapcat replace-block&page-embeds (mapv replace-block-references x))))))
+  (time (let [replaced (time (replace-block&page-reference&embed x))
+              simple-asts (binding [*state* *state*]
+                            (time (doall (mapcat block-ast->simple-ast replaced))))]
+          (binding [*state* *state*]
+            (println (time (simple-asts->string simple-asts)))))))
 
 ;;; ================================================================
 
