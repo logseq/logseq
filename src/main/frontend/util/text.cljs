@@ -14,10 +14,11 @@
 
 (defn get-matched-video
   [url]
-  (or (re-find youtube-regex url)
-      (re-find loom-regex url)
-      (re-find vimeo-regex url)
-      (re-find bilibili-regex url)))
+  (when (not-empty url)
+    (or (re-find youtube-regex url)
+        (re-find loom-regex url)
+        (re-find vimeo-regex url)
+        (re-find bilibili-regex url))))
 
 (defn build-data-value
   [col]
