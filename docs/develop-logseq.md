@@ -1,7 +1,8 @@
 # Develop Logseq
+
 ## Requirements
 
-- [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
+- [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
 - [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
 
 ## Clone project
@@ -32,13 +33,21 @@ yarn release
 
 The released files will be at `static/` directory.
 
+### Docker Compose
+
+Use docker compose to build and run logseq in Docker, accessible via browser at `http://localhost:8080`.
+
+```
+docker compose up -d
+```
+
 ## Desktop app development
 
 ### Development
 
 1. Install npm packages for building the desktop app
 
-``` bash
+```bash
 yarn install
 ```
 
@@ -56,7 +65,7 @@ Alternatively, run `bb dev:electron-start` to do this step with one command. To
 download bb, see https://github.com/babashka/babashka#installation.
 
 3. (Optional) Update dependencies if `resources/package.json` has changed since
-the last time you used dev Logseq.
+   the last time you used dev Logseq.
 
 ```bash
 # pull new changes
