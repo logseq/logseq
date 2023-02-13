@@ -99,16 +99,16 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 4. The PR has [test(s)](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#testing) for features or enhancements. Tests for bug fixes are also appreciated as they help prevent regressions.
 
 5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one of the following prefixes:
-  - `chore` - Misc changes that aren't dev, feat or fix
-  - `dev` - Developer related changes
-  - `enhance` - Enhancements i.e. changes to existing features
-  - `feat` or `feature` - New features
-  - `fix` - Bug fixes
-  - `test` - Test only changes
+   * `chore` - Misc changes that aren't dev, feat or fix
+   * `dev` - Developer related changes
+   * `enhance` - Enhancements i.e. changes to existing features
+   * `feat` or `feature` - New features
+   * `fix` - Bug fixes
+   * `test` - Test only changes
 
 6. The PR avoids the following changes that are not helpful to the core team:
-  - Unrelated refactoring or heavy refactoring
-  - Code or doc formatting changes including whitespace changes
+   * Unrelated refactoring or heavy refactoring
+   * Code or doc formatting changes including whitespace changes
 
 ### PR Additional Links
 
