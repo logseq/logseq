@@ -325,12 +325,13 @@
   "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
-  (apply merge-with
+  (->> configs
+       (filter map?)
+       (apply merge-with
          (fn merge-config [current new]
            (if (and (map? current) (map? new))
              (merge current new)
-             new))
-         configs))
+             new)))))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching

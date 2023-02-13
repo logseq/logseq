@@ -164,3 +164,13 @@
   (when (string? link)
     (some-> (first (inline->edn link (default-config format)))
             ast-link?)))
+
+(defn mldoc-link?
+  "Check whether s is a link (including page/block refs)."
+  [format s]
+  (let [result (inline->edn s (default-config format))]
+    (and
+     (= 1 (count result))
+     (let [result' (first result)]
+       (or (contains? #{"Nested_link"} (first result'))
+           (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
