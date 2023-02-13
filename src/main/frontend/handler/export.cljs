@@ -700,7 +700,7 @@
    :export-options
    { ;; dashes, spaces, no-indent
     :indent-style "dashes"
-    :trim-brackets? false
+    :remove-page-ref-brackets? false
     :remove-emphasis? false}})
 
 ;;; block-ast->simple-ast
@@ -749,7 +749,7 @@
         current-level (get *state* :current-level 1)
         indent (when (> current-level 1)
                  (indent (dec current-level) 0))
-        items* (block-list items)]
+        items* (block-list items :in-list? true)]
     (concat [indent number* checkbox* space]
             content*
             [(newline* 1)]
@@ -757,10 +757,11 @@
             [(newline* 1)])))
 
 (defn- block-list
-  [l]
+  [l & {:keys [in-list?]}]
   (binding [*state* (update *state* :current-level inc)]
     (concat (mapcat block-list-item l)
-            (when (pos? (count l))
+            (when (and (pos? (count l))
+                       (not in-list?))
               [(newline* 2)]))))
 
 (defn- block-example
@@ -1148,21 +1149,22 @@
       :else [%])
    inline-coll))
 
-(declare replace-block-references)
-(def ^:private replace-block-references-xf
-  (comp (map add-fake-pos)
-        (map (comp remove-pos replace-block-references))))
+
+(declare replace-block-references
+         replace-block-references-xf)
 
 (defn- replace-block-reference-in-list
   [list-items]
   (mapv
-   (fn [{block-ast-coll :content :as item}]
-     (assoc item :content (sequence replace-block-references-xf block-ast-coll)))
+   (fn [{block-ast-coll :content sub-items :items :as item}]
+     (assoc item
+            :content (doall (sequence replace-block-references-xf block-ast-coll))
+            :items (replace-block-reference-in-list sub-items)))
    list-items))
 
 (defn- replace-block-reference-in-quote
   [block-ast-coll]
-  (sequence replace-block-references-xf block-ast-coll))
+  (doall (sequence replace-block-references-xf block-ast-coll)))
 
 (defn- replace-block-references
   [block-ast]
@@ -1180,8 +1182,16 @@
       "Quote"
       (add-fake-pos [ast-type (replace-block-reference-in-quote ast-content)])
 
+      "Table"
+      ;; TODO
+      block-ast
       ;; else
       block-ast)))
+
+(def ^:private replace-block-references-xf
+  (comp (map add-fake-pos)
+        (map (comp remove-pos replace-block-references))))
+
 
 (defn- replace-block-references-until-stable
   [block-ast]
@@ -1303,28 +1313,31 @@
                   current-paragraph-inlines)]
             (recur other-inlines (conj current-paragraph-inlines* inline) false blocks)))))))
 
-(declare replace-block&page-embeds)
+(declare replace-block&page-embeds
+         replace-block&page-embeds-xf)
 
-(def ^:private replace-block&page-embeds-xf
-  (comp (map add-fake-pos)
-        (mapcat replace-block&page-embeds)
-        (map remove-pos)))
+(defn- replace-block&page-embeds-in-list-helper
+  [list-items]
+  (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
+    (mapv
+     (fn [{block-ast-coll :content sub-items :items :as item}]
+       (assoc item
+              :content (doall (sequence replace-block&page-embeds-xf block-ast-coll))
+              :items (replace-block&page-embeds-in-list-helper sub-items)))
+     list-items)))
 
 (defn- replace-block&page-embeds-in-list
   [list-items]
-  (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
-    (->> (mapv
-          (fn [{block-ast-coll :content :as item}]
-            (assoc item :content (sequence replace-block&page-embeds-xf block-ast-coll)))
-          list-items)
-         (vector "List")
-         add-fake-pos
-         vector)))
+  (->> (replace-block&page-embeds-in-list-helper list-items)
+       (vector "List")
+       add-fake-pos
+       vector))
 
 (defn- replace-block&page-embeds-in-quote
   [block-ast-coll]
   (->> block-ast-coll
        (sequence replace-block&page-embeds-xf)
+       doall
        (vector "Quote")
        add-fake-pos
        vector))
@@ -1341,8 +1354,16 @@
       (replace-block&page-embeds-in-list ast-content)
       "Quote"
       (replace-block&page-embeds-in-quote ast-content)
+      "Table"
+      ;; TODO
+      [block-ast]
       ;; else
       [block-ast])))
+
+(def ^:private replace-block&page-embeds-xf
+  (comp (map add-fake-pos)
+        (mapcat replace-block&page-embeds)
+        (map remove-pos)))
 
 (defn- replace-block&page-reference&embed
   "add meta :embed-depth to the embed replaced block-ast,
@@ -1352,11 +1373,6 @@
          result-block-ast-tcoll (transient [])
          block-ast-coll-to-replace-references []
          block-ast-coll-to-replace-embeds []]
-    ;; (println :block-ast-coll (count block-ast-coll)
-    ;;          :block-ast-coll-to-replace-references (count block-ast-coll-to-replace-references)
-    ;;          :block-ast-coll-to-replace-embeds (count block-ast-coll-to-replace-embeds)
-    ;;          :block-ast-coll-to-replace-embeds-depth (mapv meta block-ast-coll-to-replace-embeds))
-
     (cond
       (seq block-ast-coll-to-replace-references)
       (let [[block-ast-to-replace-ref & other-block-asts-to-replace-ref]
@@ -1370,7 +1386,7 @@
           (recur block-ast-coll (conj! result-block-ast-tcoll block-ast-replaced)
                  (vec other-block-asts-to-replace-ref) block-ast-coll-to-replace-embeds)
           (recur block-ast-coll result-block-ast-tcoll (vec other-block-asts-to-replace-ref)
-               (conj block-ast-coll-to-replace-embeds block-ast-replaced))))
+                 (conj block-ast-coll-to-replace-embeds block-ast-replaced))))
 
       (seq block-ast-coll-to-replace-embeds)
       (let [[block-ast-to-replace-embed & other-block-asts-to-replace-embed]
@@ -1395,7 +1411,8 @@
                  (vec block-ast-coll-to-replace-embeds)))))))
 
 (defn- replace-Heading-with-Paragraph
-  "replace all heading with paragraph when indent-style is no-indent"
+  "works on block-ast
+  replace all heading with paragraph when indent-style is no-indent"
   [heading-ast]
   (let [[[heading-type {:keys [title marker priority size]}] _pos] heading-ast]
     (if (= heading-type "Heading")
@@ -1407,6 +1424,88 @@
               true vec)]
         (add-fake-pos ["Paragraph" inline-coll]))
       heading-ast)))
+
+(defn- remove-emphasis
+  "works on inline ast"
+  [inline-ast]
+  (let [[ast-type ast-content] inline-ast]
+    (case ast-type
+      "Emphasis"
+      (let [[_ inline-coll] ast-content]
+        inline-coll)
+      ;; else
+      [inline-ast])))
+
+(defn- remove-page-ref-brackets
+  "works on inline-ast"
+  [inline-ast]
+  (let [[ast-type ast-content] inline-ast]
+    (case ast-type
+      "Link"
+      (let [{:keys [url label]} ast-content]
+        (if (and (= "Page_ref" (first url))
+                 (or (empty? label)
+                     (= label [["Plain" ""]])))
+          ["Plain" (second url)]
+          inline-ast))
+      ;; else
+      inline-ast)))
+
+(defn- walk-block-ast-helper
+  [inline-coll map-fns-on-inline-ast mapcat-fns-on-inline-ast]
+  (->>
+   inline-coll
+   (map #(reduce (fn [inline-ast f] (f inline-ast)) % map-fns-on-inline-ast))
+   (mapcat #(reduce (fn [inline-ast-coll f] (mapcat f inline-ast-coll)) [%] mapcat-fns-on-inline-ast))))
+
+(declare walk-block-ast)
+
+(defn- walk-block-ast-for-list
+  [list-items map-fns-on-inline-ast mapcat-fns-on-inline-ast]
+  (mapv
+   (fn [{block-ast-coll :content sub-items :items :as item}]
+     (assoc item
+            :content
+            (mapv (comp remove-pos
+                        (partial walk-block-ast {:map-fns-on-inline-ast map-fns-on-inline-ast
+                                                 :mapcat-fns-on-inline-ast mapcat-fns-on-inline-ast})
+                        add-fake-pos)
+                   block-ast-coll)
+            :items
+            (walk-block-ast-for-list sub-items map-fns-on-inline-ast mapcat-fns-on-inline-ast)))
+   list-items))
+
+(defn- walk-block-ast
+  [{:keys [map-fns-on-inline-ast mapcat-fns-on-inline-ast] :as fns}
+   block-ast]
+  (let [[[ast-type ast-content] _pos] block-ast]
+    (case ast-type
+      "Paragraph"
+      (add-fake-pos
+       ["Paragraph" (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
+      "Heading"
+      (let [{:keys [title]} ast-content]
+        (add-fake-pos
+         ["Heading"
+          (assoc ast-content
+                 :title
+                 (walk-block-ast-helper title map-fns-on-inline-ast mapcat-fns-on-inline-ast))]))
+      "List"
+      (add-fake-pos
+       ["List" (walk-block-ast-for-list ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
+      "Quote"
+      (add-fake-pos
+       ["Quote" (mapv (comp remove-pos (partial walk-block-ast fns) add-fake-pos) ast-content)])
+      "Footnote_Definition"
+      (let [[name contents] (rest (first block-ast))]
+        (add-fake-pos
+         ["Footnote_Definition"
+          name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast)]))
+      "Table"
+       ;; TODO
+      block-ast
+       ;; else
+      block-ast)))
 
 
 (defn- simple-ast->string
@@ -1512,7 +1611,7 @@
 
 (comment
   ;; (def x (apply export-blocks-as-markdown xxxx))
-  (binding [*state* (assoc-in *state* [:export-options :indent-style] "no-indent")]
+  (binding [*state* (assoc-in *state* [:export-options :indent-style] "dashes")]
     (time (let [indent-style (get-in *state* [:export-options :indent-style])
                 replaced (cond->> (time (replace-block&page-reference&embed x))
                            (= "no-indent" indent-style) (mapv replace-Heading-with-Paragraph))
@@ -1530,11 +1629,11 @@
 (defn export-blocks-as-markdown
   [repo root-block-uuids indent-style remove-options]
   {:pre [(seq root-block-uuids)]}
-  (prn :remove-options remove-options)
   (binding [*state* (merge *state*
                            {:export-options
                             {:indent-style indent-style
-                             :remove-emphasis? (contains? (set remove-options) :emphasis)}})]
+                             :remove-emphasis? (contains? (set remove-options) :emphasis)
+                             :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)}})]
     (let [content (util/profile :root-block-uuids->content
                                 (root-block-uuids->content repo root-block-uuids))
           first-block (db/entity [:block/uuid (first root-block-uuids)])
@@ -1545,5 +1644,14 @@
           ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                   (util/profile :replace-Heading-with-Paragraph (mapv replace-Heading-with-Paragraph ast*))
                   ast*)
-          simple-asts (util/profile :block-ast->simple-ast (doall (mapcat block-ast->simple-ast ast**)))]
+          config-for-walk-block-ast (cond-> {}
+                                      (get-in *state* [:export-options :remove-emphasis?])
+                                      (update :mapcat-fns-on-inline-ast conj remove-emphasis)
+
+                                      (get-in *state* [:export-options :remove-page-ref-brackets?])
+                                      (update :map-fns-on-inline-ast conj remove-page-ref-brackets))
+          ast*** (if-not (empty? config-for-walk-block-ast)
+                   (util/profile :walk-block-ast (mapv (partial walk-block-ast config-for-walk-block-ast) ast**))
+                   ast**)
+          simple-asts (util/profile :block-ast->simple-ast (doall (mapcat block-ast->simple-ast ast***)))]
       (util/profile :simple-asts->string (simple-asts->string simple-asts)))))
