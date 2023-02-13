@@ -355,16 +355,6 @@
                                         "untitled"
                                         (js/JSON.stringify (clj->js %3)))))
 
-(defn export-blocks-as-markdown
-  [repo root-block-uuids indent-style remove-options]
-  (def xxxx [repo root-block-uuids indent-style remove-options])
-  (export-blocks-as-aux repo root-block-uuids
-                        #(fp/exportMarkdown f/mldoc-record %1
-                                            (f/get-default-config
-                                             %2
-                                             {:export-md-indent-style indent-style
-                                              :export-md-remove-options remove-options})
-                                            (js/JSON.stringify (clj->js %3)))))
 (defn export-blocks-as-html
   [repo root-block-uuids]
   (export-blocks-as-aux repo root-block-uuids
@@ -678,27 +668,52 @@
      [:level :int]
      [:extra-space-count :int]]]))
 
-(defn- raw-text [content]
-  {:type :raw-text :content content})
+(defn- raw-text [& contents]
+  {:type :raw-text :content (reduce str contents)})
 (def ^:private space {:type :space})
 (defn- newline* [line-count]
   {:type :newline :line-count line-count})
 (defn- indent [level extra-space-count]
   {:type :indent :level level :extra-space-count extra-space-count})
 
-(def ^:private ^:dynamic *state*
-  {;; current level of Heading (use when `block-ast->simple-ast`)
+(def ^{:private true
+       :dynamic true}
+  *state*
+  { ;; current level of Heading, start from 1(same as mldoc), use when `block-ast->simple-ast`
    :current-level 1
    ;; emphasis symbol (use when `block-ast->simple-ast`)
    :outside-em-symbol nil
    ;; (use when `block-ast->simple-ast`)
    :indent-after-break-line? false
+   ;; TODO: :last-empty-heading? false
+   ;;       current:  |  want:
+   ;;       -         |  - xxx
+   ;;         xxx     |    yyy
+   ;;         yyy     |
+
    ;; this submap is used when replace block-reference, block-embed, page-embed
    :replace-ref-embed
-   {:current-level 1
-    :block&page-embed-replaced? false}})
+   { ;; start from 1
+    :current-level 1
+    :block-ref-replaced? false
+    :block&page-embed-replaced? false}
+   :export-options
+   { ;; dashes, spaces, no-indent
+    :indent-style "dashes"
+    :trim-brackets? false
+    :remove-emphasis? false}})
 
 ;;; block-ast->simple-ast
+
+(defn indent-with-2-spaces
+  "also consider (get-in *state* [:export-options :indent-style])"
+  [level]
+  (let [indent-style (get-in *state* [:export-options :indent-style])]
+    (case indent-style
+      "dashes"               (indent level 2)
+      ("spaces" "no-indent") (indent level 0)
+      (assert false (str "unknown indent-style: " indent-style)))))
+
 (declare inline-ast->simple-ast block-ast->simple-ast block-ast-without-pos->simple-ast)
 (defn- block-heading
   [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
@@ -775,6 +790,90 @@
                       block-coll)
               [(newline* 2)]))))
 
+(declare inline-latex-fragment)
+(defn- block-latex-fragment
+  [ast-content]
+  (inline-latex-fragment ast-content))
+
+(defn- block-latex-env
+  [[name options content]]
+  (let [level (dec (get *state* :current-level 1))]
+    [(indent level 2) (raw-text "\\begin{" name "}" options)
+     (newline* 1)
+     (indent level 2) (raw-text content)
+     (newline* 1)
+     (indent level 2) (raw-text "\\end{" name "}")
+     (newline* 1)]))
+
+(defn- block-displayed-math
+  [ast-content]
+  [space (raw-text "$$" ast-content "$$") space])
+
+(defn- block-drawer
+  [[name lines]]
+  (let [level (dec (get *state* :current-level))]
+    (concat
+     [(raw-text ":" name ":")
+      (newline* 1)]
+     (mapcat (fn [line] [(indent level 2) (raw-text line)]) lines)
+     [(newline* 1) (raw-text ":END:") (newline* 1)])))
+
+(defn- block-footnote-defnition
+  [[name content]]
+  (concat
+   [(raw-text "[^" name "]:") space]
+   (mapcat inline-ast->simple-ast content)
+   [(newline* 1)]))
+
+(def ^:private block-horizontal-rule [(newline* 1) (raw-text "---") (newline* 1)])
+
+(defn- block-table
+  [{:keys [header groups]}]
+  (when (seq header)
+    (let [level    (dec (get *state* :current-level 1))
+          sep-line (raw-text "|" (string/join "|" (repeat (count header) "---")) "|")
+          header-line
+          (concat (mapcat
+                   (fn [h] (concat [space (raw-text "|") space] (mapcat inline-ast->simple-ast h)))
+                   header)
+                  [space (raw-text "|")])
+          group-lines
+          (mapcat
+           (fn [group]
+             (mapcat
+              (fn [row]
+                (concat [(indent level 2)]
+                        (mapcat
+                         (fn [col]
+                           (concat [(raw-text "|") space]
+                                   (mapcat inline-ast->simple-ast col)
+                                   [space]))
+                         row)
+                        [(raw-text "|") (newline* 1)]))
+              group))
+           groups)]
+      (concat [(newline* 1) (indent level 2)]
+              header-line
+              [(newline* 1) (indent level 2) sep-line (newline* 1)]
+              group-lines))))
+
+(defn- block-comment
+  [s]
+  (let [level (dec (get *state* :current-level 1))]
+    [(indent level 2) (raw-text "<!---") (newline* 1)
+     (indent level 2) (raw-text s) (newline* 1)
+     (indent level 2) (raw-text "-->") (newline* 1)]))
+
+(defn- block-raw-html
+  [s]
+  (let [level (dec (get *state* :current-level 1))]
+    [(indent level 2) (raw-text s) (newline* 1)]))
+
+(defn- block-hiccup
+  [s]
+  (let [level (dec (get *state* :current-level 1))]
+    [(indent level 2) (raw-text s) space]))
+
 (defn- inline-link
   [{full-text :full_text}]
   [(raw-text full-text)])
@@ -797,7 +896,7 @@
 
 (defn- inline-footnote-reference
   [{name :name}]
-  [(raw-text (str "[" name "]"))])
+  [(raw-text  "[" name "]")])
 
 (defn- inline-cookie
   [ast-content]
@@ -904,7 +1003,7 @@
        (block-heading ast-content)
        "List"
        (block-list ast-content)
-       ("Directive" "Results" "Property_Drawer")
+       ("Directive" "Results" "Property_Drawer" "Export" "CommentBlock" "Custom")
        nil
        "Example"
        (block-example ast-content)
@@ -912,7 +1011,29 @@
        (block-src ast-content)
        "Quote"
        (block-quote ast-content)
-
+       "Latex_Fragment"
+       (block-latex-fragment ast-content)
+       "Latex_Environment"
+       (block-latex-env (rest (first block)))
+       "Displayed_Math"
+       (block-displayed-math ast-content)
+       "Drawer"
+       (block-drawer (rest (first block)))
+       ;; TODO: option: toggle Property_Drawer
+       ;; "Property_Drawer"
+       ;; (block-property-drawer ast-content)
+       "Footnote_Definition"
+       (block-footnote-defnition (rest (first block)))
+       "Horizontal_Rule"
+       block-horizontal-rule
+       "Table"
+       (block-table ast-content)
+       "Comment"
+       (block-comment ast-content)
+       "Raw_Html"
+       (block-raw-html ast-content)
+       "Hiccup"
+       (block-hiccup ast-content)
        (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet"))))))
 
 (defn- block-ast-without-pos->simple-ast
@@ -1002,6 +1123,7 @@
             [["Link" {:url ["Block_ref" block-uuid]}]]
             (let [[[[_ {title-inline-coll :title}]]]
                   (block-uuid->ast (uuid block-uuid))]
+              (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
               title-inline-coll)
 
             :else [%])
@@ -1015,6 +1137,7 @@
       [["Link" {:url ["Block_ref" block-uuid]}]]
       (let [[[[_ {title-inline-coll :title}]]]
             (block-uuid->ast (uuid block-uuid))]
+        (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
         title-inline-coll)
       :else [%])
    inline-coll))
@@ -1053,6 +1176,16 @@
 
       ;; else
       block-ast)))
+
+(defn- replace-block-references-until-stable
+  [block-ast]
+  (binding [*state* *state*]
+    (loop [block-ast block-ast]
+      (let [block-ast* (replace-block-references block-ast)]
+        (if (get-in *state* [:replace-ref-embed :block-ref-replaced?])
+          (do (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] false))
+              (recur block-ast*))
+          block-ast*)))))
 
 ;;; replace {{embed ((block-uuid))}} {{embed [[page]]}}
 
@@ -1206,24 +1339,39 @@
       [block-ast])))
 
 (defn- replace-block&page-reference&embed
-  "block-ast-coll ->
-  block-ast-coll-to-replace-references ->
-  if :block-ref-replaced? then block-ast-coll-to-replace-embeds else result-block-ast-tcoll
-  -----
-  block-ast-coll-to-replace-embeds ->
-  if :block&page-embed-replaced? then block-ast-coll-to-replace-references else result-block-ast-tcoll
-  -----
-  block-ast-coll-to-replace-references -> block-ast-coll-to-replace-embeds"
+  "add meta :embed-depth to the embed replaced block-ast,
+  to avoid too deep block-ref&embed (or maybe it's a cycle)"
   [block-ast-coll]
   (loop [block-ast-coll block-ast-coll
          result-block-ast-tcoll (transient [])
          block-ast-coll-to-replace-references []
          block-ast-coll-to-replace-embeds []]
+    ;; (println :block-ast-coll (count block-ast-coll)
+    ;;          :block-ast-coll-to-replace-references (count block-ast-coll-to-replace-references)
+    ;;          :block-ast-coll-to-replace-embeds (count block-ast-coll-to-replace-embeds)
+    ;;          :block-ast-coll-to-replace-embeds-depth (mapv meta block-ast-coll-to-replace-embeds))
+
     (cond
+      (seq block-ast-coll-to-replace-references)
+      (let [[block-ast-to-replace-ref & other-block-asts-to-replace-ref]
+            block-ast-coll-to-replace-references
+            embed-depth (:embed-depth (meta block-ast-to-replace-ref) 0)
+            block-ast-replaced (-> (replace-block-references-until-stable block-ast-to-replace-ref)
+                                   (with-meta {:embed-depth embed-depth}))]
+        (if (>= embed-depth 5)
+          ;; if :embed-depth >= 5, dont replace embed for this block anymore
+          ;; there is too deep, or maybe it just a ref/embed cycle
+          (recur block-ast-coll (conj! result-block-ast-tcoll block-ast-replaced)
+                 (vec other-block-asts-to-replace-ref) block-ast-coll-to-replace-embeds)
+          (recur block-ast-coll result-block-ast-tcoll (vec other-block-asts-to-replace-ref)
+               (conj block-ast-coll-to-replace-embeds block-ast-replaced))))
+
       (seq block-ast-coll-to-replace-embeds)
       (let [[block-ast-to-replace-embed & other-block-asts-to-replace-embed]
             block-ast-coll-to-replace-embeds
-            block-ast-coll-replaced (replace-block&page-embeds block-ast-to-replace-embed)]
+            embed-depth (:embed-depth (meta block-ast-to-replace-embed) 0)
+            block-ast-coll-replaced (->> (replace-block&page-embeds block-ast-to-replace-embed)
+                                         (mapv #(with-meta % {:embed-depth (inc embed-depth)})))]
         (if (get-in *state* [:replace-ref-embed :block&page-embed-replaced?])
           (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] false))
               (recur block-ast-coll result-block-ast-tcoll
@@ -1231,12 +1379,7 @@
                      (vec other-block-asts-to-replace-embed)))
           (recur block-ast-coll (reduce conj! result-block-ast-tcoll block-ast-coll-replaced)
                  (vec block-ast-coll-to-replace-references) (vec other-block-asts-to-replace-embed))))
-      (seq block-ast-coll-to-replace-references)
-      (let [[block-ast-to-replace-ref & other-block-asts-to-replace-ref]
-            block-ast-coll-to-replace-references
-            block-ast-replaced (replace-block-references block-ast-to-replace-ref)]
-        (recur block-ast-coll result-block-ast-tcoll (vec other-block-asts-to-replace-ref)
-               (conj block-ast-coll-to-replace-embeds block-ast-replaced)))
+
       :else
       (let [[block-ast & other-block-ast] block-ast-coll]
         (if-not block-ast
@@ -1245,6 +1388,19 @@
                  (conj block-ast-coll-to-replace-references block-ast)
                  (vec block-ast-coll-to-replace-embeds)))))))
 
+(defn- replace-Heading-with-Paragraph
+  "replace all heading with paragraph when indent-style is no-indent"
+  [heading-ast]
+  (let [[[heading-type {:keys [title marker priority size]}] _pos] heading-ast]
+    (if (= heading-type "Heading")
+      (let [inline-coll
+            (cond->> title
+              priority (cons ["Plain" (str (priority->string priority) " ")])
+              marker (cons ["Plain" (str marker " ")])
+              size (cons ["Plain" (str (reduce str (repeat size "#")) " ")])
+              true vec)]
+        (add-fake-pos ["Paragraph" inline-coll]))
+      heading-ast)))
 
 
 (defn- simple-ast->string
@@ -1349,11 +1505,13 @@
        string/join))
 
 (comment
-  (def x (apply export-blocks-as-markdown-v2 xxxx))
-  (time (let [replaced (time (replace-block&page-reference&embed x))
-              simple-asts (binding [*state* *state*]
-                            (time (doall (mapcat block-ast->simple-ast replaced))))]
-          (binding [*state* *state*]
+  ;; (def x (apply export-blocks-as-markdown xxxx))
+  (binding [*state* (assoc-in *state* [:export-options :indent-style] "no-indent")]
+    (time (let [indent-style (get-in *state* [:export-options :indent-style])
+                replaced (cond->> (time (replace-block&page-reference&embed x))
+                           (= "no-indent" indent-style) (mapv replace-Heading-with-Paragraph))
+                simple-asts (binding [*state* *state*]
+                              (time (doall (mapcat block-ast->simple-ast replaced))))]
             (println (time (simple-asts->string simple-asts)))))))
 
 ;;; ================================================================
@@ -1363,10 +1521,23 @@
   (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
-(defn export-blocks-as-markdown-v2
+(defn export-blocks-as-markdown
   [repo root-block-uuids indent-style remove-options]
   {:pre [(seq root-block-uuids)]}
-  (let [content (root-block-uuids->content repo root-block-uuids)
-        first-block (db/entity [:block/uuid (first root-block-uuids)])
-        format (or (:block/format first-block) (state/get-preferred-format))]
-    (def xxx (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
+  (prn :remove-options remove-options)
+  (binding [*state* (merge *state*
+                           {:export-options
+                            {:indent-style indent-style
+                             :remove-emphasis? (contains? (set remove-options) :emphasis)}})]
+    (let [content (util/profile :root-block-uuids->content
+                                (root-block-uuids->content repo root-block-uuids))
+          first-block (db/entity [:block/uuid (first root-block-uuids)])
+          format (or (:block/format first-block) (state/get-preferred-format))
+          ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+          _ (def x ast)
+          ast* (util/profile :replace-block&page-reference&embed (replace-block&page-reference&embed ast))
+          ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+                  (util/profile :replace-Heading-with-Paragraph (mapv replace-Heading-with-Paragraph ast*))
+                  ast*)
+          simple-asts (util/profile :block-ast->simple-ast (doall (mapcat block-ast->simple-ast ast**)))]
+      (util/profile :simple-asts->string (simple-asts->string simple-asts)))))
