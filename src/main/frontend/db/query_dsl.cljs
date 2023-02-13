@@ -20,9 +20,12 @@
 
 ;; Query fields:
 
+;; Operators:
 ;; and
 ;; or
 ;; not
+
+;; Filters:
 ;; between
 ;;   Example: (between -7d +7d)
 ;;            (between created-at -1d today)
@@ -32,6 +35,10 @@
 ;; task (block)
 ;; priority (block)
 ;; page
+;; sample
+;; full-text-search ""
+
+;; namespace
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags

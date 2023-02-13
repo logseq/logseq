@@ -3,21 +3,22 @@
   (:require [clojure.walk :as walk]
             [frontend.util :as util]))
 
-(def operators #{:and :or :not})
-;; [:and (page-ref Foo) [:or (page-ref Bar) (page-ref Baz)]]
+;; TODO: make it extensible for Datalog/SPARQL etc.
 
-;; (def filters #{:page-ref :tags :property})
+(def operators [:and :or :not])
+(def page-filters [:all-tags :namespace :tags :property :sample])
+(def block-filters [:page-ref :property :task :priority :page :full-text-search :between :sample])
 
-(defn- dissoc-item-in-vec
+(defn- vec-dissoc-item
   [vec idx]
   (into (subvec vec 0 idx) (subvec vec (inc idx))))
 
-(defn- assoc-item-in-vec
+(defn- vec-assoc-item
   [vec idx item]
   (into (conj (subvec vec 0 idx) item)
         (subvec vec idx)))
 
-(defn- replace-item-in-vec
+(defn- vec-replace-item
   [vec idx item]
   (into (conj (subvec vec 0 idx) item)
         (subvec vec (inc idx))))
@@ -27,12 +28,12 @@
   {:pre [(vector? loc) (some? x)]}
   (cond
     (and (seq loc) (= 1 (count loc)))
-    (assoc-item-in-vec q (first loc) x)
+    (vec-assoc-item q (first loc) x)
 
     (seq loc)
     (update-in q (vec (butlast loc))
                (fn [v]
-                 (assoc-item-in-vec v (last loc) x)))
+                 (vec-assoc-item v (last loc) x)))
 
     (seq q)
     (conj q x)
@@ -45,7 +46,7 @@
   {:pre [(vector? loc) (seq loc)]}
   (let [idx (last loc)
         ks (vec (butlast loc))
-        f #(dissoc-item-in-vec % idx)]
+        f #(vec-dissoc-item % idx)]
     (if (seq ks)
       (update-in q ks f)
       (f q))))
@@ -54,14 +55,14 @@
   [q loc x]
   {:pre [(vector? loc) (seq loc) (some? x)]}
   (if (= 1 (count loc))
-    (replace-item-in-vec q (first loc) x)
+    (vec-replace-item q (first loc) x)
     (update-in q (vec (butlast loc))
                (fn [v]
-                 (replace-item-in-vec v (last loc) x)))))
+                 (vec-replace-item v (last loc) x)))))
 
 (defn wrap-operator
   [q loc operator]
-  {:pre [(seq q) (seq loc) (operators operator)]}
+  {:pre [(seq q) (seq loc) ((set operators) operator)]}
   (when-let [x (get-in q loc)]
     (let [x' [operator x]]
       (replace-element q loc x'))))
@@ -70,7 +71,7 @@
   [q loc]
   {:pre [(seq q) (seq loc)]}
   (when-let [x (get-in q loc)]
-    (when (and (operators (first x))
+    (when (and ((set operators) (first x))
                (= 1 (count (rest x))))
       (let [x' (second x)]
         (replace-element q loc x')))))
@@ -86,7 +87,7 @@
        (vector? f)
        (apply list f)
 
-       (and (keyword f) (operators f))
+       (and (keyword f) ((set operators) f))
        (symbol f)
 
        :else f))
@@ -99,7 +100,7 @@
      (cond
        (and (list? f)
             (symbol? (first f))
-            (operators (keyword (first f)))) ; operator
+            ((set operators) (keyword (first f)))) ; operator
        (into [(keyword (first f))] (rest f))
 
        (list? f)
