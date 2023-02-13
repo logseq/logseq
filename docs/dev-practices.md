@@ -4,9 +4,11 @@ This page describes development practices for this codebase.
 
 ## Linting
 
-Most of our linters require babashka. Before running them, please install
-https://github.com/babashka/babashka#installation. To invoke all the linters in
-this section, run `bb dev:lint`.
+Most of our linters require babashka. Before running them, please [install babashka](https://github.com/babashka/babashka#installation). To invoke all the linters in this section, run
+
+```sh
+bb dev:lint
+```
 
 ### Clojure code
 
@@ -95,7 +97,7 @@ yarn e2e-test # or npx playwright test
 If e2e failed after first running:
 - `rm -rdf ~/.logseq`
 - `rm -rdf ~/.config/Logseq`
-- `rm -rdf <repo dir>/tmp/`  
+- `rm -rdf <repo dir>/tmp/`
 - Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
 
 There's a `traceAll()` helper function to enable playwright trace file dump for specific test files https://github.com/logseq/logseq/pull/8332
@@ -218,7 +220,8 @@ We use [malli](https://github.com/metosin/malli) for optionally validating fns
 a.k.a instrumenting fns. Function validation is enabled in dev mode. To add
 typing for a fn, just add it to a var's metadata [per this
 example](https://github.com/metosin/malli/blob/master/docs/function-schemas.md#function-schema-metadata).
-To re-generate the clj-kondo type annotations for malli typed fns, update
+We also have clj-kondo type annotations derived from these fn schemas. To
+re-generate them after new schemas have been added, update the namespaces in
 `gen-malli-kondo-config.core` and then run `bb dev:gen-malli-kondo-config`. To
 learn more about fn instrumentation, see [this
 page](https://github.com/metosin/malli/blob/master/docs/clojurescript-function-instrumentation.md).
@@ -229,9 +232,24 @@ Currently the codebase is not formatted/indented consistently. We loosely follow
 
 ## Development Tools
 
-There are some babashka tasks under `nbb:` which are useful for inspecting
-database changes in realtime. See [these
-docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
+### Babashka tasks
+
+There are a number of bb tasks under `dev:` for developers. There are also some
+tasks under `nbb:` which are useful for inspecting database changes in realtime.
+See [these docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for
+more info.
+
+### Dev Commands
+
+In the app, you can enable Dev commands under `Settings > Advanced > Developer
+mode`. Then search for commands starting with `(Dev)`. Commands include
+inspectors for block/page data and AST.
+
+### Desktop Developer Tools
+
+Since the desktop app is built with Electron, a full set of Chromium developer
+tools is available under the menu `View > Toggle Developer Tools`. Handy tools
+include a JS console and HTML inspector.
 
 ## FAQ
 

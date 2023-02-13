@@ -110,11 +110,8 @@
                                            (map first))
                                       (get grouped-ast false)]
           properties (map (fn [[_directive k v]]
-                            (let [kname (string/lower-case k)
-                                  k (keyword kname)
-                                  mldoc-ast (get-references v config)]
-                              [k v mldoc-ast]))
-                       properties-ast)]
+                            [k v (get-references v config)])
+                          properties-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))))

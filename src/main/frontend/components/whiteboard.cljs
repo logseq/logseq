@@ -17,6 +17,7 @@
                                   use-click-outside]]
             [frontend.state :as state]
             [frontend.storage :as storage]
+            [frontend.config :as config]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -177,8 +178,9 @@
      [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
      (references-count page-name nil {:hover? true})]]
-   [:div.p-4.h-64.flex.justify-center
-    (tldraw-preview page-name)]])
+   (ui/lazy-visible
+    (fn [] [:div.p-4.h-64.flex.justify-center
+            (tldraw-preview page-name)]))])
 
 (rum/defc dashboard-create-card
   []
@@ -300,6 +302,7 @@
   []
   (when (and (user-handler/feature-available? :whiteboard)
              (not (or (state/sub :whiteboard/onboarding-tour?)
+                      (config/demo-graph?)
                       (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding-tour?] true)

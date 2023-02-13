@@ -117,7 +117,7 @@
      :editor/content                        {}
      :editor/block                          nil
      :editor/block-dom-id                   nil
-     :editor/set-timestamp-block            nil
+     :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
      :editor/last-input-time                nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
@@ -324,17 +324,13 @@
   "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
-  (apply merge-with
+  (->> configs
+       (filter map?)
+       (apply merge-with
          (fn merge-config [current new]
            (if (and (map? current) (map? new))
              (merge current new)
-             new))
-         configs))
-
-(defn validate-current-config
-  "TODO: Temporal fix"
-  [config]
-  (when (map? config) config))
+             new)))))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -345,7 +341,7 @@ should be done through this fn in order to get global config and config defaults
    (merge-configs
     default-config
     (get-in @state [:config ::global-config])
-    (validate-current-config (get-in @state [:config repo-url])))))
+    (get-in @state [:config repo-url]))))
 
 (defonce publishing? (atom nil))
 
@@ -557,10 +553,10 @@ Similar to re-frame subscriptions"
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
-   (let [config (validate-current-config (sub :config))]
+   (let [config (sub :config)]
      (merge-configs default-config
                     (get config ::global-config)
-                    (validate-current-config (get config repo))))))
+                    (get config repo)))))
 
 (defn enable-grammarly?
   []
@@ -577,7 +573,8 @@ Similar to re-frame subscriptions"
 (defn enable-fold-button-right?
   []
   (let [_ (sub :ui/viewport)]
-    (util/md-breakpoint?)))
+    (and (util/mobile?)
+         (util/sm-breakpoint?))))
 
 (defn enable-journals?
   ([]
@@ -600,7 +597,7 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    ((resolve 'frontend.handler.user/alpha-or-beta-user?)) ;; using resolve to avoid circular dependency
+    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
 (defn export-heading-to-list?
@@ -1729,6 +1726,7 @@ Similar to re-frame subscriptions"
   (:system/events @state))
 
 (defn pub-event!
+  {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
@@ -1766,14 +1764,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn whiteboard-active-but-not-editing-portal?
+(defn editing-whiteboard-portal?
   []
-  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
 
 (defn block-component-editing?
   []
-  (or (:block/component-editing-mode? @state)
-      (whiteboard-active-but-not-editing-portal?)))
+  (and (:block/component-editing-mode? @state)
+       (not (editing-whiteboard-portal?))))
 
 (defn set-block-component-editing-mode!
   [value]
@@ -1836,6 +1834,7 @@ Similar to re-frame subscriptions"
                       :editor/block block
                       :editor/editing? {edit-input-id true}
                       :editor/last-key-code nil
+                      :editor/set-timestamp-block nil
                       :cursor-range cursor-range))))
         (when-let [input (gdom/getElement edit-input-id)]
           (let [pos (count cursor-range)]
@@ -2115,3 +2114,7 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn clear-user-info!
+  []
+  (storage/remove :user-groups))
