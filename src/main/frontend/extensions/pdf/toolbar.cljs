@@ -55,7 +55,7 @@
     (rum/use-effect!
      (fn []
        (let [cb #(let [^js target (.-target %)]
-                   (when (and (not (.contains (rum/deref *el-popup) target))
+                   (when (and (not (some-> (rum/deref *el-popup) (.contains target)))
                               (nil? (.closest target ".ui__modal")))
                      (hide-settings!)))]
          (js/setTimeout
@@ -166,7 +166,7 @@
                          (when-let [^js target (and (string/blank? (.-value (rum/deref *el-input)))
                                                     (.-target e))]
                            (when (and (not= "Search" (.-title target))
-                                      (not (.contains (rum/deref *el-finder) target)))
+                                      (not (some-> (rum/deref *el-finder) (.contains target))))
                              (close-finder!))))]
            (.addEventListener doc "click" handler)
            #(.removeEventListener doc "click" handler))))
@@ -392,7 +392,7 @@
                     (when-let [^js target (.-target e)]
                       (when (and
                              (not= "Outline" (.-title target))
-                             (not (.contains (rum/deref *el-container) target)))
+                             (not (some-> (rum/deref *el-container) (.contains target))))
                         (set-visible! false)
                         (set-outline-visible!))))]
            (.addEventListener doc "click" cb)
