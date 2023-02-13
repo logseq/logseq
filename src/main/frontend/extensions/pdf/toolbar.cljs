@@ -13,7 +13,8 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [frontend.extensions.pdf.windows :refer [resolve-app-container] :as pdf-windows]))
 
 (declare make-docinfo-in-modal)
 
@@ -54,13 +55,14 @@
 
     (rum/use-effect!
      (fn []
-       (let [cb #(let [^js target (.-target %)]
-                   (when (and (not (some-> (rum/deref *el-popup) (.contains target)))
-                              (nil? (.closest target ".ui__modal")))
-                     (hide-settings!)))]
+       (let [cb  #(let [^js target (.-target %)]
+                    (when (and (not (some-> (rum/deref *el-popup) (.contains target)))
+                               (nil? (.closest target ".ui__modal")))
+                      (hide-settings!)))
+             doc (resolve-app-container viewer)]
          (js/setTimeout
-          #(.addEventListener js/document.body "click" cb))
-         #(.removeEventListener js/document.body "click" cb)))
+          #(.addEventListener doc "click" cb))
+         #(.removeEventListener doc "click" cb)))
      [])
 
     [:div.extensions__pdf-settings.hls-popup-overlay.visible
@@ -92,7 +94,6 @@
         [:span.flex.items-center.justify-between.w-full
          (t :pdf/doc-metadata)
          (svg/icon-info)]]]]]))
-
 
 (rum/defc docinfo-display
   [info close-fn!]
@@ -161,7 +162,7 @@
 
     (rum/use-effect!
      (fn []
-       (when-let [^js doc (and viewer js/document.body)]
+       (when-let [^js doc (resolve-app-container viewer)]
          (let [handler (fn [^js e]
                          (when-let [^js target (and (string/blank? (.-value (rum/deref *el-input)))
                                                     (.-target e))]
@@ -250,8 +251,6 @@
             (:total find-state)
             (str " matches (\"" (:query find-state) "\")")]
            [:div.px-3.py-3.text-xs.opacity-80.text-red-600 "Not found."]))]]]))
-
-
 
 (rum/defc pdf-outline-item
   [^js viewer
@@ -387,7 +386,7 @@
 
     (rum/use-effect!
      (fn []
-       (when-let [^js doc (and viewer js/document.body)]
+       (when-let [^js doc (resolve-app-container viewer)]
          (let [cb (fn [^js e]
                     (when-let [^js target (.-target e)]
                       (when (and
@@ -419,21 +418,23 @@
          (pdf-highlights-list viewer))]]]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-toolbar
-  [^js viewer]
+  [^js viewer {:keys [on-external-win]}]
   (let [[area-mode?, set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [finder-visible?, set-finder-visible!] (rum/use-state false)
         [highlight-mode?, set-highlight-mode!] (use-atom *highlight-mode?)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
-        *page-ref (rum/use-ref nil)
+        *page-ref         (rum/use-ref nil)
         [current-page-num, set-current-page-num!] (rum/use-state 1)
         [total-page-num, set-total-page-num!] (rum/use-state 1)
-        [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))]
+        [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))
+        group-id          (.-$groupIdentity viewer)
+        in-system-window? (.-$inSystemWindow viewer)]
 
     ;; themes hooks
     (rum/use-effect!
      (fn []
-       (when-let [^js el (js/document.getElementById "pdf-layout-container")]
+       (when-let [^js el (js/document.getElementById (str "pdf-layout-container_" group-id))]
          (set! (. (. el -dataset) -theme) viewer-theme)
          (storage/set "ls-pdf-viewer-theme" viewer-theme)
          #(js-delete (. el -dataset) "theme")))
@@ -544,8 +545,15 @@
           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
+        (when-not in-system-window?
+          [:a.button
+           {:on-click #(on-external-win)}
+           (ui/icon "window-maximize")])
+
         [:a.button
-         {:on-click #(state/set-state! :pdf/current nil)}
+         {:on-click #(if in-system-window?
+                       (pdf-windows/exit-pdf-in-system-window!)
+                       (state/set-current-pdf! nil))}
          (t :close)]]]
 
       ;; contents outline

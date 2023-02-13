@@ -602,7 +602,7 @@
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
   []
-  (let [win (win/create-main-window)]
+  (let [win (win/create-main-window!)]
     (win/on-close-actions! win close-watcher-when-orphaned!)
     (win/setup-window-listeners! win)
     win))
