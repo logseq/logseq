@@ -4,15 +4,19 @@
             [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
+            [frontend.components.select :as component-select]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [frontend.format.block :as block]
+            [frontend.search :as search]
+            [logseq.db.default :as db-default]
             [medley.core :as medley]
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
@@ -32,54 +36,88 @@
                     (reset! *find (keyword v)))
                   nil)])
 
-(rum/defcs picker < (rum/local nil ::mode)
+(defn- select
+  ([items on-chosen]
+   (select items on-chosen {}))
+  ([items on-chosen options]
+   (prn {:opts (merge
+                {:items items
+                 :on-chosen on-chosen}
+                options)})
+   (component-select/select (merge
+                             {:items items
+                              :on-chosen on-chosen
+                              :extract-fn nil}
+                             options))))
+
+(rum/defcs picker <
+  (rum/local nil ::mode)
   [state *find *tree loc]
   (prn {:loc loc})
   (let [*mode (::mode state)
+        repo (state/get-current-repo)
         filters (if (= @*find :block)
                   query-builder/block-filters
                   query-builder/page-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? (set query-builder/operators) (keyword %))]
-    [:div.query-builder-picker.flex.flex-row.items-center
-     (ui/select
-       (mapv
-        (fn [k]
-          {:label (name k)})
-        filters-and-ops)
-       (fn [value]
-         (when (operator? value)
-           ;; TODO
-           (prn "operator")
-           )
-         (reset! *mode value))
-       nil)
+    [:div.query-builder-picker.mt-8
+     (when-not @*mode
+       (select
+         (map name filters-and-ops)
+         (fn [value]
+           (when (operator? value)
+             ;; TODO
+             (prn "operator")
+             )
+           (reset! *mode value))
+         {:input-default-placeholder "Add operator/filter"}))
      (when-not (operator? @*mode)
-       [:div.ml-2
+       [:div.ml-2.mt-2
         (case @*mode
           "all-tags"
           "todo" ; insert (all-page-tags) into query
 
           "namespace"
-          "todo" ; namespace auto-complete
+          (let [items (sort (db-model/get-all-namespace-parents repo))]
+            (select items
+              (fn [value]
+                (prn "chosen " value))))
 
           "tags"
-          "todo" ; (page-tags x) auto-complete
+          (let [items (->> (db-model/get-all-tagged-pages repo)
+                           (map second)
+                           sort)]
+            (select items
+              (fn [value]
+                (prn "chosen " value))))
 
           "property"
-          "todo" ; key auto-complete, value optional (auto-complete)
+          (let [properties (search/get-all-properties)]
+            (select properties
+             (fn [value]
+               (prn "chosen " value))))
 
           "sample"
-          "todo" ; number input
+          (select (range 1 101)
+             (fn [value]
+               (prn "chosen " value)))
 
           "task"
-          "todo" ; marker auto-complete
+          (select db-default/built-in-markers
+            (fn [value]
+              (prn "chosen " value)))
 
           "priority"
-          "todo" ; priority auto-complete
+          (select db-default/built-in-priorities
+            (fn [value]
+              (prn "chosen " value)))
 
           "page"
-          "todo" ; page auto-complete
+          (let [pages (sort (db-model/get-all-page-original-names repo))]
+            (select pages
+             (fn [value]
+               (prn "chosen " value))))
 
           "full-text-search"
           "todo" ; string input
@@ -87,8 +125,13 @@
           "between"
           "todo" ; start - date picker, end(optional) - date picker
 
-          "Input ref"                     ; page auto-complete
-          )])]))
+          "page-ref"
+          (let [pages (sort (db-model/get-all-page-original-names repo))]
+            (select pages
+              (fn [value]
+                (prn "chosen " value))))
+
+          nil)])]))
 
 (rum/defcs actions < (rum/local false ::show-picker?)
   [state *find *tree loc {:keys [group?]}]
@@ -107,17 +150,7 @@
 
       [:a.ml-2 {:title "Remove this clause"
                 :on-click (fn [])}
-       (ui/icon "x" {:style {:font-size 20}})]
-
-
-      ;; [:div.ml-1
-      ;;  (if (= @*find :block)
-      ;;    [:div.grid.grid-cols-4.gap-1
-      ;;     (filter-item "Page reference" #(reset! *tree '(page-ref)))
-      ;;     (filter-item "Property" #(reset! *tree '(property)))]
-      ;;    [:div
-      ;;     (filter-item "Property" #(reset! *tree '(property)))])]
-      ]
+       (ui/icon "x" {:style {:font-size 20}})]]
 
      (when @*show-picker?
        (picker *find *tree loc))]))
@@ -183,7 +216,8 @@
         *tree (::tree state)
 
         ;; debug
-        *tree (atom []
+        *tree (atom
+               []
                ;; '(and (page-ref foo)
                ;;            (property key value)
                ;;            (or (page-ref bar)
