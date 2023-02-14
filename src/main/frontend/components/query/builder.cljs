@@ -126,9 +126,11 @@
 
 (rum/defcs picker <
   (rum/local nil ::mode)                ; pick mode
+  (rum/local nil ::property)
   [state *find *tree *show-picker? loc clause]
   (let [*mode (::mode state)
-                repo (state/get-current-repo)
+        *property (::property state)
+        repo (state/get-current-repo)
         filters (if (= @*find :block)
                   query-builder/block-filters
                   query-builder/page-filters)
@@ -157,7 +159,18 @@
             (let [properties (search/get-all-properties)]
               (select properties
                 (fn [value]
-                  (append-tree! *tree *show-picker? loc [:property (keyword value)]))))
+                  (reset! *mode "property-value")
+                  (reset! *property (keyword value)))))
+
+            "property-value"
+            (let [values (cons "Select all" (db-model/get-property-values @*property))]
+              (select values
+                (fn [value]
+                  (let [x (if (= value "Select all")
+                            [:property @*property]
+                            [:property @*property value])]
+                    (reset! *property nil)
+                    (append-tree! *tree *show-picker? loc x)))))
 
             "sample"
             (select (range 1 101)
