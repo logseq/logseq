@@ -1,6 +1,5 @@
 (ns frontend.extensions.pdf.windows
-  (:require [clojure.string :as string]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [rum.core :as rum]))
 
 (def *active-win (atom nil))
