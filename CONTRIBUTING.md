@@ -25,7 +25,8 @@ There are many ways you can help:
 - You can be help others on [Discord][discord] or [Reddit](https://www.reddit.com/r/logseq).
 - You can [contribute to the official docs](https://github.com/logseq/docs/blob/master/CONTRIBUTING.md).
 - You can confirm bugs on the [issue tracker][issue-tracker] and mention reproducible steps. It helps the core team to get more reports so we can fix the highest priority bugs.
-- You can contribute code. See [our Project board](https://github.com/orgs/logseq/projects/5/views/1) for ideas.
+- You can contribute [translations][translations] with a [pull request](#submit-pr).
+- You can contribute code with a [pull request](#submit-pr). See [our Project board](https://github.com/orgs/logseq/projects/5/views/1?pane=info) and [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) for ideas.
 - You can extend Logseq with [plugins](https://docs.logseq.com/#/page/Plugins) to share functionality that our community can benefit from.
 
 ## <a name="question"></a> Got a Question or a Problem?
@@ -84,7 +85,13 @@ behavior and design you'd like to add.
 3. Please sign our [Contributor License Agreement (CLA)](#cla). We cannot accept
 code without a signed CLA.
 
-After doing the above, you are ready to work on your PR! If you've never done this before, see [Github's excellent guides](https://docs.github.com/en/pull-requests).
+After doing the above, you are ready to work on your PR! To create a PR, fork
+this repository and then create a branch for the fix. Once you push your code to
+your fork, you'll be able to open a PR to the Logseq repository. For more info
+you can follow this [GitHub
+guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).
+For more github PR guides, see [these
+guides](https://docs.github.com/en/pull-requests).
 
 ### PR Guidelines
 
@@ -98,7 +105,7 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 
 4. The PR has [test(s)](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#testing) for features or enhancements. Tests for bug fixes are also appreciated as they help prevent regressions.
 
-5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one of the following prefixes:
+5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one these prefixes to categorize the PR e.g. `PREFIX: DESCRIPTION ...`:
    * `chore` - Misc changes that aren't dev, feat or fix
    * `dev` - Developer related changes
    * `enhance` - Enhancements i.e. changes to existing features
@@ -106,7 +113,9 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
    * `fix` - Bug fixes
    * `test` - Test only changes
 
-6. The PR avoids the following changes that are not helpful to the core team:
+6.  The PR having "allow edits from maintainers" enabled would be appreciated. Helps us help your contribution.
+
+7. The PR avoids the following changes that are not helpful to the core team:
    * Unrelated refactoring or heavy refactoring
    * Code or doc formatting changes including whitespace changes
 
