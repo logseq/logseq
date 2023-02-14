@@ -110,9 +110,10 @@
 
   (rum/use-effect!
    (fn []
-     (let [cb #(clear-ctx-menu!)]
-       (js/setTimeout #(js/document.addEventListener "click" cb))
-       #(js/document.removeEventListener "click" cb)))
+     (let [cb  #(clear-ctx-menu!)
+           doc (pdf-windows/resolve-own-document viewer)]
+       (js/setTimeout #(.addEventListener doc "click" cb))
+       #(.removeEventListener doc "click" cb)))
    [])
 
   ;; TODO: precise position

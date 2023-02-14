@@ -14,12 +14,14 @@
       (set! (.-href link) r)
       (.appendChild (.-head doc) link))))
 
-(defn resolve-app-container
+(defn resolve-own-document
   [^js viewer]
-  (when viewer
-    (if (.-$inSystemWindow viewer)
-      (.closest (.-container viewer) "body")
-      js/document.body)))
+  (some-> viewer (.-viewer) (.-ownerDocument)))
+
+(defn resolve-own-container
+  [^js viewer]
+  (some-> (resolve-own-document viewer)
+          (.querySelector "body")))
 
 ;(defn check-in-new-window?
 ;  [^js el]
