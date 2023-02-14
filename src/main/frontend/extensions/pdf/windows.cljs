@@ -63,7 +63,7 @@
     (.close win)))
 
 (defn open-pdf-in-new-window!
-  [pdf-container pdf-current]
+  [pdf-playground pdf-current]
   (when pdf-current
     (let [setup-win!
           (fn []
@@ -77,7 +77,7 @@
                 (resolve-classes! doc)
                 (resolve-styles! doc)
                 (.appendChild (.-body doc) main)
-                (rum/mount (pdf-container pdf-current) main))
+                (rum/mount (pdf-playground pdf-current) main))
 
               ;; events
               (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))

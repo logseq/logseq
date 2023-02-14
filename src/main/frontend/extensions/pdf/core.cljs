@@ -19,12 +19,12 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(declare pdf-container)
+(declare pdf-container system-embed-playground)
 
 (def *highlight-last-color (atom :yellow))
 
 (defn open-external-win! [pdf-current]
-  (pdf-windows/open-pdf-in-new-window! pdf-container pdf-current))
+  (pdf-windows/open-pdf-in-new-window! system-embed-playground pdf-current))
 
 (defn reset-current-pdf!
   []
@@ -954,7 +954,7 @@
    [active])
   nil)
 
-(rum/defcs playground
+(rum/defcs default-embed-playground
   < rum/static rum/reactive
     (shortcut/mixin :shortcut.handler/pdf)
   [_]
@@ -969,3 +969,9 @@
        (js/ReactDOM.createPortal
         (pdf-container pdf-current)
         (js/document.querySelector "#app-single-container")))]))
+
+(rum/defcs system-embed-playground
+  < rum/reactive
+  [_ _]
+  (let [pdf-current (state/sub :pdf/current)]
+    (pdf-container pdf-current)))
