@@ -264,14 +264,7 @@
          (clauses-group *tree *find (conj loc 0) kind (rest clause))
 
          [:div.flex.flex-row.items-center
-          (case kind
-            :page-ref
-            [:div
-             [:span.mr-1 "Page reference:"]
-             [:span (str (second clause))]]
-
-            ;; :property
-            (str clause))
+          (str (query-builder/->dsl clause))
 
           (rum/with-key
             (actions *find *tree loc clause {:group? false})

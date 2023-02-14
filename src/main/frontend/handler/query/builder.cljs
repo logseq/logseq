@@ -113,20 +113,25 @@
 
 (defn ->dsl
   [col]
-  (walk/prewalk
-   (fn [f]
-     (cond
-       (and (vector? f) (= :page-ref (first f)))
-       (symbol (util/format "[[%s]]" (second f)))
+  (->>
+   (walk/prewalk
+    (fn [f]
+      (cond
+        (and (vector? f) (= :page-ref (first f)))
+        (symbol (util/format "[[%s]]" (second f)))
 
-       (vector? f)
-       (apply list f)
+        (and (vector? f) (contains? #{:task :priority :page :between :namespace :tags} (first f)))
+        (into [(first f)] (map #(symbol (util/format "[[%s]]" %)) (rest f)))
 
-       (and (keyword f) (operators-set f))
-       (symbol f)
+        :else f))
+    col)
+   (walk/prewalk
+    (fn [f]
+      (cond
+        (vector? f)
+        (cons (symbol (first f)) (rest f))
 
-       :else f))
-   col))
+        :else f)))))
 
 (defn from-dsl
   [dsl-form]
