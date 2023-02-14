@@ -4,6 +4,7 @@
    [frontend.db :as db]
    [frontend.extensions.zip :as zip]
    [frontend.handler.export.common :as common :refer [*state*]]
+   [frontend.handler.export.macro :refer [binding*]]
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
@@ -94,7 +95,7 @@
 
 (defn- block-list
   [l & {:keys [in-list?]}]
-  (binding [*state* (update *state* :current-level inc)]
+  (binding* [*state* (update *state* :current-level inc)]
     (concat (mapcat block-list-item l)
             (when (and (pos? (count l))
                        (not in-list?))
@@ -124,7 +125,7 @@
 (defn- block-quote
   [block-coll]
   (let [level (dec (get *state* :current-level 1))]
-    (binding [*state* (assoc *state* :indent-after-break-line? true)]
+    (binding* [*state* (assoc *state* :indent-after-break-line? true)]
       (concat (mapcat (fn [block]
                         (let [block-simple-ast (block-ast->simple-ast block)]
                           (when (seq block-simple-ast)
@@ -296,7 +297,7 @@
 
 (defn- emphasis-wrap-with
   [inline-coll em-symbol]
-  (binding [*state* (assoc *state* :outside-em-symbol (first em-symbol))]
+  (binding* [*state* (assoc *state* :outside-em-symbol (first em-symbol))]
     (concat [(raw-text em-symbol)]
             (mapcat inline-ast->simple-ast inline-coll)
             [(raw-text em-symbol)])))
@@ -311,7 +312,7 @@
       "Italic"
       (emphasis-wrap-with inline-coll (if (= outside-em-symbol "*") "_" "*"))
       "Underline"
-      (binding [*state* (assoc *state* :outside-em-symbol outside-em-symbol)]
+      (binding* [*state* (assoc *state* :outside-em-symbol outside-em-symbol)]
         (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll))
       "Strike_through"
       (emphasis-wrap-with inline-coll "~~")
@@ -542,7 +543,7 @@
 
 (defn- export-helper
   [content format indent-style remove-options]
-  (binding [*state* (merge *state*
+  (binding* [*state* (merge *state*
                            {:export-options
                             {:indent-style indent-style
                              :remove-emphasis? (contains? (set remove-options) :emphasis)

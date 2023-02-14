@@ -1,9 +1,11 @@
 (ns frontend.handler.export.common
+  "common fns for exporting."
   (:require
    [cljs.core.match :refer [match]]
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.db :as db]
+   [frontend.handler.export.macro :refer [binding*]]
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
    [frontend.state :as state]
@@ -198,6 +200,7 @@
 
 
 ;;; replace block-ref, block-embed, page-embed
+
 (defn- replace-block-reference-in-heading
   [{:keys [title] :as ast-content}]
   (let [inline-coll  title
@@ -205,7 +208,7 @@
         (mapcat
          #(match [%]
                  [["Link" {:url ["Block_ref" block-uuid]}]]
-                 (let [[[[_ {title-inline-coll :title}]]]
+                 (let [[[_ {title-inline-coll :title}]]
                        (block-uuid->ast (uuid block-uuid))]
                    (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
                    title-inline-coll)
@@ -219,7 +222,7 @@
   (mapcat
    #(match [%]
       [["Link" {:url ["Block_ref" block-uuid]}]]
-      (let [[[[_ {title-inline-coll :title}]]]
+      (let [[[_ {title-inline-coll :title}]]
             (block-uuid->ast (uuid block-uuid))]
         (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
         title-inline-coll)
@@ -242,6 +245,39 @@
   [block-ast-coll]
   (mapv replace-block-references block-ast-coll))
 
+(defn- replace-block-reference-in-table
+  [{:keys [header groups] :as table}]
+  (let [header*
+        (mapcat
+         #(match [%]
+            [["Link" {:url ["Block_ref" block-uuid]}]]
+            (let [[[_ {title-inline-coll :title}]]
+                  (block-uuid->ast (uuid block-uuid))]
+              (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+              title-inline-coll)
+            :else [%])
+         header)
+        groups*
+        (mapv
+         (fn [group]
+           (mapv
+            (fn [row]
+              (mapv
+               (fn [col]
+                 (mapcat
+                  #(match [%]
+                     [["Link" {:url ["Block_ref" block-uuid]}]]
+                     (let [[[_ {title-inline-coll :title}]]
+                           (block-uuid->ast (uuid block-uuid))]
+                       (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+                       title-inline-coll)
+                     :else [%])
+                  col))
+               row))
+            group))
+         groups)]
+    (assoc table :header header* :groups groups*)))
+
 (defn- replace-block-references
   [block-ast]
   (let [[ast-type ast-content] block-ast]
@@ -259,14 +295,13 @@
       [ast-type (replace-block-reference-in-quote ast-content)]
 
       "Table"
-      ;; TODO
-      block-ast
+      [ast-type (replace-block-reference-in-table ast-content)]
       ;; else
       block-ast)))
 
 (defn- replace-block-references-until-stable
   [block-ast]
-  (binding [*state* *state*]
+  (binding* [*state* *state*]
     (loop [block-ast block-ast]
       (let [block-ast* (replace-block-references block-ast)]
         (if (get-in *state* [:replace-ref-embed :block-ref-replaced?])
@@ -382,13 +417,13 @@
 
 (defn- replace-block&page-embeds-in-list-helper
   [list-items]
-  (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
-    (mapv
-     (fn [{block-ast-coll :content sub-items :items :as item}]
-       (assoc item
-              :content (doall (mapcat replace-block&page-embeds block-ast-coll))
-              :items (replace-block&page-embeds-in-list-helper sub-items)))
-     list-items)))
+  (binding* [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
+            (mapv
+             (fn [{block-ast-coll :content sub-items :items :as item}]
+               (assoc item
+                      :content (doall (mapcat replace-block&page-embeds block-ast-coll))
+                      :items (replace-block&page-embeds-in-list-helper sub-items)))
+             list-items)))
 
 (defn- replace-block&page-embeds-in-list
   [list-items]
@@ -415,7 +450,7 @@
       "Quote"
       (replace-block&page-embeds-in-quote ast-content)
       "Table"
-      ;; TODO
+      ;; TODO: block&page embeds in table are not replaced yet
       [block-ast]
       ;; else
       [block-ast])))
