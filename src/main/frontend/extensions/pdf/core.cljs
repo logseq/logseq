@@ -136,12 +136,13 @@
                               content   (:content highlight)]
                           (case action
                             "ref"
-                            (pdf-assets/copy-hl-ref! highlight)
+                            (pdf-assets/copy-hl-ref! highlight viewer)
 
                             "copy"
                             (do
                               (util/copy-to-clipboard!
-                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))))
+                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))) nil
+                               (pdf-windows/resolve-own-window viewer))
                               (pdf-utils/clear-all-selection))
 
                             "link"
@@ -165,7 +166,7 @@
                                                         :properties properties})]
                                   (add-hl! highlight)
                                   (pdf-utils/clear-all-selection)
-                                  (pdf-assets/copy-hl-ref! highlight))
+                                  (pdf-assets/copy-hl-ref! highlight viewer))
 
                                 ;; update highlight
                                 (upd-hl! (assoc highlight :properties properties)))

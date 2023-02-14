@@ -23,6 +23,11 @@
   (some-> (resolve-own-document viewer)
           (.querySelector "body")))
 
+(defn resolve-own-window
+  [^js viewer]
+  (some-> (resolve-own-document viewer)
+          (.-defaultView)))
+
 ;(defn check-in-new-window?
 ;  [^js el]
 ;  (when-let [^js html (and el (.-documentElement (.-ownerDocument el)))]

@@ -16,6 +16,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -212,9 +213,11 @@
       (editor-handler/delete-block-aux! block true))))
 
 (defn copy-hl-ref!
-  [highlight]
+  [highlight ^js viewer]
   (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
-    (util/copy-to-clipboard! (block-ref/->block-ref (:block/uuid ref-block)))))
+    (util/copy-to-clipboard!
+     (block-ref/->block-ref (:block/uuid ref-block)) nil
+     (pdf-windows/resolve-own-window viewer))))
 
 (defn open-block-ref!
   [block]
