@@ -6,7 +6,7 @@
             ["@sentry/react" :as Sentry]
             [frontend.mobile.util :as mobile-util]))
 
-(goog-define SENTRY-DSN "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.sentry.io/5311485")
+(goog-define SENTRY-DSN "")
 
 (def config
   {:dsn SENTRY-DSN
