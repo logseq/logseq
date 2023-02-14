@@ -13,6 +13,7 @@
 
 
 (def ^:dynamic *state*
+  "dynamic var, state used for exporting"
   { ;; current level of Heading, start from 1(same as mldoc), use when `block-ast->simple-ast`
    :current-level 1
    ;; emphasis symbol (use when `block-ast->simple-ast`)
@@ -37,7 +38,7 @@
     :remove-page-ref-brackets? false
     :remove-emphasis? false}})
 
-
+;;; internal utils
 (defn- get-blocks-contents
   [repo root-block-uuid]
   (->
@@ -56,7 +57,7 @@
   (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
-;;; utils
+
 (defn- block-uuid->ast
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
@@ -76,14 +77,7 @@
         format :markdown]
     (gp-mldoc/->edn content (gp-mldoc/default-config format))))
 
-(defn add-fake-pos
-  [block-ast-without-pos]
-  (vector block-ast-without-pos {:fake-pos 0}))
-
-(defn remove-pos
-  [[block-ast-without-pos]]
-  block-ast-without-pos)
-
+(declare add-fake-pos)
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
   (mapv
@@ -97,6 +91,18 @@
 (defn- plain-indent-inline-ast
   [level & {:keys [spaces] :or {spaces "  "}}]
   ["Plain" (str (reduce str (repeat (dec level) "\t")) spaces)])
+
+;;; internal utils (ends)
+
+;;; utils
+
+(defn add-fake-pos
+  [block-ast-without-pos]
+  (vector block-ast-without-pos {:fake-pos 0}))
+
+(defn remove-pos
+  [[block-ast-without-pos]]
+  block-ast-without-pos)
 
 (defn priority->string
   [priority]
