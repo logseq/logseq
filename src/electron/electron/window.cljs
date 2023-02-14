@@ -19,22 +19,6 @@
                          (str "file://" (path/join js/__dirname "index.html"))
                          (str "file://" (path/join js/__dirname "electron.html"))))
 
-(defn create-blank-window!
-  [parent opts]
-  (let [win-opts (merge {:parent               parent
-                         :frame                true
-                         :titleBarStyle        "hiddenInset"
-                         :trafficLightPosition {:x 16 :y 16}
-                         :autoHideMenuBar      (not mac?)
-                         :webPreferences
-                         {:plugins          true
-                          :nodeIntegration  false
-                          :webSecurity      (not dev?)
-                          :preload          (path/join js/__dirname "js/preload.js")}
-                         } opts)
-        win      (BrowserWindow. (bean/->js win-opts))]
-    (.loadURL win "about:blank") win))
-
 (defn create-main-window!
   ([]
    (create-main-window! MAIN_WINDOW_ENTRY nil))
