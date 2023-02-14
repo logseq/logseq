@@ -57,10 +57,11 @@
    (reset! *exit-pending? false)))
 
 (defn exit-pdf-in-system-window!
-  []
-  (when-let [^js win @*active-win]
-    (reset! *exit-pending? true)
-    (.close win)))
+  ([] (exit-pdf-in-system-window! true))
+  ([restore?]
+   (when-let [^js win @*active-win]
+     (when restore? (reset! *exit-pending? true))
+     (.close win))))
 
 (defn open-pdf-in-new-window!
   [pdf-playground pdf-current]

@@ -592,21 +592,21 @@
 
          ;;(doto (.-eventBus viewer))
 
-         (doto el
-           (.addEventListener "mousedown" fn-selection))
+         (when el
+           (.addEventListener el "mousedown" fn-selection))
 
-         (doto win
-           (.addEventListener "resize" fn-resize))
+         (when win
+           (.addEventListener win "resize" fn-resize))
 
          ;; destroy
          #(do
             ;;(doto (.-eventBus viewer))
 
-            (doto el
-              (.removeEventListener "mousedown" fn-selection))
+            (when el
+              (.removeEventListener el "mousedown" fn-selection))
 
-            (doto win
-              (.removeEventListener "resize" fn-resize)))))
+            (when win
+              (.removeEventListener win "resize" fn-resize)))))
 
      [viewer])
 
@@ -769,7 +769,7 @@
      [(:viewer state)
       (:loaded-pages ano-state)])
 
-    (let [^js viewer (:viewer state)
+    (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
       [:div.extensions__pdf-viewer-cnt
        [:div.extensions__pdf-viewer
@@ -790,7 +790,7 @@
        (when (and page-ready? viewer)
          [(when-not in-system-window?
             (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
-          (rum/with-key (pdf-toolbar viewer {:on-external-win #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
+          (rum/with-key (pdf-toolbar viewer {:on-external-window! #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity] :as pdf-current}]
@@ -845,13 +845,13 @@
     ;; load document
     (rum/use-effect!
      (fn []
-       (let [^js loader-el  (rum/deref *doc-ref)
-             get-doc$       (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
-             opts           {:url           url
-                             :ownerDocument (.-ownerDocument loader-el)
-                             :cMapUrl       "./cmaps/"
-                             ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
-                             :cMapPacked    true}]
+       (let [^js loader-el (rum/deref *doc-ref)
+             get-doc$      (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
+             opts          {:url           url
+                            :ownerDocument (.-ownerDocument loader-el)
+                            :cMapUrl       "./cmaps/"
+                            ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
+                            :cMapPacked    true}]
 
          (set-loader-state! {:status :loading})
 

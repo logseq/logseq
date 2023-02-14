@@ -76,7 +76,6 @@
                {:key it :class it :on-click #(select-theme! it)}
                (when (= theme it) (svg/check))])
             ["light", "warm", "dark"])]
-
       [:div.extensions__pdf-settings-item.toggle-input
        [:label (t :pdf/toggle-dashed)]
        (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
@@ -418,7 +417,7 @@
          (pdf-highlights-list viewer))]]]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-toolbar
-  [^js viewer {:keys [on-external-win]}]
+  [^js viewer {:keys [on-external-window!]}]
   (let [[area-mode?, set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [finder-visible?, set-finder-visible!] (rum/use-state false)
@@ -480,6 +479,18 @@
          {:title    "More settings"
           :on-click #(set-settings-visible! (not settings-visible?))}
          (svg/adjustments 18)]
+
+        ;; system window
+        [:a.button
+         {:title    (if in-system-window?
+                      "Open in app window"
+                      "Open in external window")
+          :on-click #(if in-system-window?
+                       (pdf-windows/exit-pdf-in-system-window! true)
+                       (on-external-window!))}
+         (ui/icon (if in-system-window?
+                    "window-minimize"
+                    "window-maximize"))]
 
         ;; selection
         [:a.button
@@ -546,14 +557,9 @@
           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
-        (when-not in-system-window?
-          [:a.button
-           {:on-click #(on-external-win)}
-           (ui/icon "window-maximize")])
-
         [:a.button
          {:on-click #(if in-system-window?
-                       (pdf-windows/exit-pdf-in-system-window!)
+                       (pdf-windows/exit-pdf-in-system-window! false)
                        (state/set-current-pdf! nil))}
          (t :close)]]]
 
