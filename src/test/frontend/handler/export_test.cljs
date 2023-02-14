@@ -3,6 +3,7 @@
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [clojure.edn :as edn]
             [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
             [promesa.core :as p]))
 
@@ -36,7 +37,7 @@
   (p/do!
    (are [expect block-uuid-s]
         (= expect
-           (export/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)] "dashes" []))
+           (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)] "dashes" []))
         "- 1  \n\t- 2  \n\t\t- 3  \n\t\t- 3  "
         "61506710-484c-46d5-9983-3d1651ec02c8"
 
@@ -47,7 +48,7 @@
   (p/do!
    (are [expect files]
         (= expect
-           (@#'export/export-files-as-markdown (state/get-current-repo) files true))
+           (@#'export-text/export-files-as-markdown (state/get-current-repo) files "dashes" nil))
         [["pages/page1.md" "- 1  \n\t- 2  \n\t\t- 3  \n\t\t- 3  \n- 4  "]]
         [{:path "pages/page1.md" :content (:file/content (nth test-files 0)) :names ["page1"] :format :markdown}]
 

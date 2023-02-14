@@ -50,7 +50,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.export :as export-handler]
+            [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -457,7 +457,7 @@
          (resizable-image config title href metadata full_text false))))))
 
 
-(def timestamp-to-string export-handler/timestamp-to-string)
+(def timestamp-to-string export-common-handler/timestamp-to-string)
 
 (defn timestamp [{:keys [active _date _time _repetition _wday] :as t} kind]
   (let [prefix (case kind

@@ -1,5 +1,6 @@
 (ns frontend.components.export
   (:require [frontend.context.i18n :refer [t]]
+            [frontend.handler.export.text :as export-text]
             [frontend.handler.export :as export]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -25,15 +26,16 @@
           (t :export-public-pages)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]]
+         [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
+          (t :export-markdown)]])
+      (when-not (mobile-util/native-platform?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
           (t :export-opml)]])
       (when-not (mobile-util/native-platform?)
-       [:li.mb-4
-        [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-         (t :export-roam-json)]])]
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
+          (t :export-roam-json)]])]
      [:a#download-as-edn-v2.hidden]
      [:a#download-as-json-v2.hidden]
      [:a#download-as-roam-json.hidden]
@@ -56,18 +58,22 @@
 (rum/defcs export-blocks
   < rum/reactive
   (rum/local false ::copied?)
+  (rum/local {} ::exported-content)
   [state root-block-ids]
   (let [current-repo (state/get-current-repo)
         type (rum/react *export-block-type)
         text-indent-style (state/sub :copy/export-block-text-indent-style)
         text-remove-options (state/sub :copy/export-block-text-remove-options)
         copied? (::copied? state)
-        content
-        (case type
-          :text (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
-          :opml (export/export-blocks-as-opml current-repo root-block-ids)
-          :html (export/export-blocks-as-html current-repo root-block-ids)
-          (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options)))]
+        exported-content (::exported-content state)
+        _ (println type text-remove-options text-indent-style)
+        content (or (get exported-content type)
+                    (case type
+                      :text (export-text/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
+                      :opml "" ;; (export/export-blocks-as-opml current-repo root-block-ids)
+                      :html "" ;; (export/export-blocks-as-html current-repo root-block-ids)
+                      "" ;; (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
+                      ))]
     [:div.export.resize
      [:div.flex
       {:class "mb-2"}
@@ -127,7 +133,7 @@
 
      [:div.mt-4
       (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
-        :on-click (fn []
-                    (util/copy-to-clipboard! content (when (= type :html)
-                                                       content))
-                    (reset! copied? true)))]]))
+                 :on-click (fn []
+                             (util/copy-to-clipboard! content (when (= type :html)
+                                                                content))
+                             (reset! copied? true)))]]))

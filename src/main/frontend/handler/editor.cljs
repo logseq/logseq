@@ -16,6 +16,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -948,7 +949,7 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
                                    (map :block/uuid))
-        content (export/export-blocks-as-markdown
+        content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
                  (state/get-export-block-text-indent-style)
                  (into [] (state/get-export-block-text-remove-options)))]
