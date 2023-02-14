@@ -58,34 +58,37 @@
     (string/join "\n" (mapv string/trim-newline contents))))
 
 
+(declare remove-block-ast-pos)
+
 (defn- block-uuid->ast
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
         content (outliner-file/tree->file-content [block] {:init-level 1})
         format :markdown]
-    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
+    (mapv remove-block-ast-pos
+          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
   (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
         format :markdown]
-    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
+    (mapv remove-block-ast-pos
+          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
 
 (defn- page-name->ast
   [page-name]
   (let [content (get-page-content (state/get-current-repo) page-name)
         format :markdown]
-    (gp-mldoc/->edn content (gp-mldoc/default-config format))))
+    (mapv remove-block-ast-pos
+          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
 
-(declare add-fake-pos)
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
   (mapv
-   (fn [[[ast-type ast-content] _pos]]
-     (add-fake-pos
-      (if (= ast-type "Heading")
+   (fn [[ast-type ast-content]]
+     (if (= ast-type "Heading")
         [ast-type (update ast-content :level #(+ (dec %) origin-level))]
-        [ast-type ast-content])))
+        [ast-type ast-content]))
    block-ast-coll))
 
 (defn- plain-indent-inline-ast
@@ -95,14 +98,6 @@
 ;;; internal utils (ends)
 
 ;;; utils
-
-(defn add-fake-pos
-  [block-ast-without-pos]
-  (vector block-ast-without-pos {:fake-pos 0}))
-
-(defn remove-pos
-  [[block-ast-without-pos]]
-  block-ast-without-pos)
 
 (defn priority->string
   [priority]
@@ -231,48 +226,42 @@
    inline-coll))
 
 
-(declare replace-block-references
-         replace-block-references-xf)
+(declare replace-block-references)
 
 (defn- replace-block-reference-in-list
   [list-items]
   (mapv
    (fn [{block-ast-coll :content sub-items :items :as item}]
      (assoc item
-            :content (doall (sequence replace-block-references-xf block-ast-coll))
+            :content (mapv replace-block-references block-ast-coll)
             :items (replace-block-reference-in-list sub-items)))
    list-items))
 
 (defn- replace-block-reference-in-quote
   [block-ast-coll]
-  (doall (sequence replace-block-references-xf block-ast-coll)))
+  (mapv replace-block-references block-ast-coll))
 
 (defn- replace-block-references
   [block-ast]
-  (let [[[ast-type ast-content] _pos] block-ast]
+  (let [[ast-type ast-content] block-ast]
     (case ast-type
       "Heading"
-      (add-fake-pos [ast-type (replace-block-reference-in-heading ast-content)])
+      [ast-type (replace-block-reference-in-heading ast-content)]
 
       "Paragraph"
-      (add-fake-pos [ast-type (replace-block-reference-in-paragraph ast-content)])
+      [ast-type (replace-block-reference-in-paragraph ast-content)]
 
       "List"
-      (add-fake-pos [ast-type (replace-block-reference-in-list ast-content)])
+      [ast-type (replace-block-reference-in-list ast-content)]
 
       "Quote"
-      (add-fake-pos [ast-type (replace-block-reference-in-quote ast-content)])
+      [ast-type (replace-block-reference-in-quote ast-content)]
 
       "Table"
       ;; TODO
       block-ast
       ;; else
       block-ast)))
-
-(def ^:private replace-block-references-xf
-  (comp (map add-fake-pos)
-        (map (comp remove-pos replace-block-references))))
-
 
 (defn- replace-block-references-until-stable
   [block-ast]
@@ -292,7 +281,7 @@
                   level)]
     (cond-> blocks-tcoll
       (seq current-paragraph-inlines)
-      (conj! (add-fake-pos ["Paragraph" current-paragraph-inlines]))
+      (conj! ["Paragraph" current-paragraph-inlines])
       true
       (#(reduce conj! % ast-coll)))))
 
@@ -304,7 +293,7 @@
                   level)]
     (cond-> blocks-tcoll
       (seq current-paragraph-inlines)
-      (conj! (add-fake-pos ["Paragraph" current-paragraph-inlines]))
+      (conj! ["Paragraph" current-paragraph-inlines])
       true
       (#(reduce conj! % ast-coll)))))
 
@@ -313,7 +302,7 @@
   (set! *state* (assoc-in *state* [:replace-ref-embed :current-level] origin-level))
   (if (empty? inline-coll)
     ;; it's just a empty Heading, return itself
-    [(add-fake-pos ["Heading" ast-content])]
+    [["Heading" ast-content]]
     (loop [[inline & other-inlines] inline-coll
            heading-exist? false
            current-paragraph-inlines []
@@ -321,11 +310,9 @@
       (if-not inline
         (persistent!
          (if (seq current-paragraph-inlines)
-           (->> (if heading-exist?
-                  ["Paragraph" current-paragraph-inlines]
-                  ["Heading" (assoc ast-content :title current-paragraph-inlines)])
-                add-fake-pos
-                (conj! r))
+           (conj! r (if heading-exist?
+                      ["Paragraph" current-paragraph-inlines]
+                      ["Heading" (assoc ast-content :title current-paragraph-inlines)]))
            r))
         (match [inline]
           [["Macro" {:name "embed" :arguments [block-uuid-or-page-name]}]]
@@ -363,9 +350,7 @@
       (if-not inline
         (persistent!
          (if (seq current-paragraph-inlines)
-           (->> ["Paragraph" current-paragraph-inlines]
-                add-fake-pos
-                (conj! blocks))
+           (conj! blocks ["Paragraph" current-paragraph-inlines])
            blocks))
         (match [inline]
           [["Macro" {:name "embed" :arguments [block-uuid-or-page-name]}]]
@@ -392,8 +377,7 @@
                   current-paragraph-inlines)]
             (recur other-inlines (conj current-paragraph-inlines* inline) false blocks)))))))
 
-(declare replace-block&page-embeds
-         replace-block&page-embeds-xf)
+(declare replace-block&page-embeds)
 
 (defn- replace-block&page-embeds-in-list-helper
   [list-items]
@@ -401,29 +385,25 @@
     (mapv
      (fn [{block-ast-coll :content sub-items :items :as item}]
        (assoc item
-              :content (doall (sequence replace-block&page-embeds-xf block-ast-coll))
+              :content (doall (mapcat replace-block&page-embeds block-ast-coll))
               :items (replace-block&page-embeds-in-list-helper sub-items)))
      list-items)))
 
 (defn- replace-block&page-embeds-in-list
   [list-items]
-  (->> (replace-block&page-embeds-in-list-helper list-items)
-       (vector "List")
-       add-fake-pos
-       vector))
+  [["List" (replace-block&page-embeds-in-list-helper list-items)]])
 
 (defn- replace-block&page-embeds-in-quote
   [block-ast-coll]
   (->> block-ast-coll
-       (sequence replace-block&page-embeds-xf)
+       (mapcat replace-block&page-embeds)
        doall
        (vector "Quote")
-       add-fake-pos
        vector))
 
 (defn- replace-block&page-embeds
   [block-ast]
-  (let [[[ast-type ast-content] _pos] block-ast]
+  (let [[ast-type ast-content] block-ast]
     (case ast-type
       "Heading"
       (replace-block&page-embeds-in-heading ast-content)
@@ -438,11 +418,6 @@
       [block-ast]
       ;; else
       [block-ast])))
-
-(def ^:private replace-block&page-embeds-xf
-  (comp (map add-fake-pos)
-        (mapcat replace-block&page-embeds)
-        (map remove-pos)))
 
 (defn replace-block&page-reference&embed
   "add meta :embed-depth to the embed replaced block-ast,
@@ -491,11 +466,15 @@
 
 ;;; replace block-ref, block-embed, page-embed (ends)
 
+(def remove-block-ast-pos
+  "[[ast-type ast-content] _pos] -> [ast-type ast-content]"
+  first)
+
 (defn replace-Heading-with-Paragraph
   "works on block-ast
   replace all heading with paragraph when indent-style is no-indent"
   [heading-ast]
-  (let [[[heading-type {:keys [title marker priority size]}] _pos] heading-ast]
+  (let [[heading-type {:keys [title marker priority size]}] heading-ast]
     (if (= heading-type "Heading")
       (let [inline-coll
             (cond->> title
@@ -503,7 +482,7 @@
               marker (cons ["Plain" (str marker " ")])
               size (cons ["Plain" (str (reduce str (repeat size "#")) " ")])
               true vec)]
-        (add-fake-pos ["Paragraph" inline-coll]))
+        ["Paragraph" inline-coll])
       heading-ast)))
 
 
@@ -554,11 +533,11 @@
    (fn [{block-ast-coll :content sub-items :items :as item}]
      (assoc item
             :content
-            (mapv (comp remove-pos
-                        (partial walk-block-ast {:map-fns-on-inline-ast map-fns-on-inline-ast
-                                                 :mapcat-fns-on-inline-ast mapcat-fns-on-inline-ast})
-                        add-fake-pos)
-                   block-ast-coll)
+            (mapv
+             (partial walk-block-ast
+                      {:map-fns-on-inline-ast map-fns-on-inline-ast
+                       :mapcat-fns-on-inline-ast mapcat-fns-on-inline-ast})
+             block-ast-coll)
             :items
             (walk-block-ast-for-list sub-items map-fns-on-inline-ast mapcat-fns-on-inline-ast)))
    list-items))
@@ -566,29 +545,24 @@
 (defn walk-block-ast
   [{:keys [map-fns-on-inline-ast mapcat-fns-on-inline-ast] :as fns}
    block-ast]
-  (let [[[ast-type ast-content] _pos] block-ast]
+  (let [[ast-type ast-content] block-ast]
     (case ast-type
       "Paragraph"
-      (add-fake-pos
-       ["Paragraph" (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
+      ["Paragraph" (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)]
       "Heading"
       (let [{:keys [title]} ast-content]
-        (add-fake-pos
-         ["Heading"
-          (assoc ast-content
-                 :title
-                 (walk-block-ast-helper title map-fns-on-inline-ast mapcat-fns-on-inline-ast))]))
+        ["Heading"
+         (assoc ast-content
+                :title
+                (walk-block-ast-helper title map-fns-on-inline-ast mapcat-fns-on-inline-ast))])
       "List"
-      (add-fake-pos
-       ["List" (walk-block-ast-for-list ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
+      ["List" (walk-block-ast-for-list ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)]
       "Quote"
-      (add-fake-pos
-       ["Quote" (mapv (comp remove-pos (partial walk-block-ast fns) add-fake-pos) ast-content)])
+      ["Quote" (mapv (partial walk-block-ast fns) ast-content)]
       "Footnote_Definition"
-      (let [[name contents] (rest (first block-ast))]
-        (add-fake-pos
-         ["Footnote_Definition"
-          name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast)]))
+      (let [[name contents] (rest block-ast)]
+        ["Footnote_Definition"
+         name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
       "Table"
        ;; TODO
       block-ast

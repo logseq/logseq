@@ -52,8 +52,7 @@
       (assert false (str "unknown indent-style: " indent-style)))))
 
 (declare inline-ast->simple-ast
-         block-ast->simple-ast
-         block-ast-without-pos->simple-ast)
+         block-ast->simple-ast)
 
 (defn- block-heading
   [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
@@ -73,7 +72,7 @@
 (declare block-list)
 (defn- block-list-item
   [{:keys [content items number _name checkbox]}]
-  (let [content* (mapcat block-ast-without-pos->simple-ast content)
+  (let [content* (mapcat block-ast->simple-ast content)
         number* (raw-text
                  (if number
                    (str number ". ")
@@ -127,7 +126,7 @@
   (let [level (dec (get *state* :current-level 1))]
     (binding [*state* (assoc *state* :indent-after-break-line? true)]
       (concat (mapcat (fn [block]
-                        (let [block-simple-ast (block-ast-without-pos->simple-ast block)]
+                        (let [block-simple-ast (block-ast->simple-ast block)]
                           (when (seq block-simple-ast)
                             (concat [(indent-with-2-spaces level) (raw-text ">") space]
                                     block-simple-ast))))
@@ -335,7 +334,7 @@
   [block]
   (remove
    nil?
-   (let [[[ast-type ast-content] _pos] block]
+   (let [[ast-type ast-content] block]
      (case ast-type
        "Paragraph"
        (concat (mapcat inline-ast->simple-ast ast-content) [(newline* 1)])
@@ -358,16 +357,16 @@
        "Latex_Fragment"
        (block-latex-fragment ast-content)
        "Latex_Environment"
-       (block-latex-env (rest (first block)))
+       (block-latex-env (rest block))
        "Displayed_Math"
        (block-displayed-math ast-content)
        "Drawer"
-       (block-drawer (rest (first block)))
+       (block-drawer (rest block))
        ;; TODO: option: toggle Property_Drawer
        ;; "Property_Drawer"
        ;; (block-property-drawer ast-content)
        "Footnote_Definition"
-       (block-footnote-defnition (rest (first block)))
+       (block-footnote-defnition (rest block))
        "Horizontal_Rule"
        block-horizontal-rule
        "Table"
@@ -379,10 +378,6 @@
        "Hiccup"
        (block-hiccup ast-content)
        (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet"))))))
-
-(defn- block-ast-without-pos->simple-ast
-  [block]
-  (block-ast->simple-ast (common/add-fake-pos block)))
 
 (defn- inline-ast->simple-ast
   [inline]
@@ -546,13 +541,15 @@
 ;;; export fns
 
 (defn- export-helper
-  [repo content format indent-style remove-options]
+  [content format indent-style remove-options]
   (binding [*state* (merge *state*
                            {:export-options
                             {:indent-style indent-style
                              :remove-emphasis? (contains? (set remove-options) :emphasis)
                              :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)}})]
     (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+          ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
+          _ (def x ast)
           ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
           ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                   (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
@@ -567,7 +564,7 @@
                    (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                    ast**)
           simple-asts (util/profile :block-ast->simple-ast (doall (mapcat block-ast->simple-ast ast***)))]
-      (def x ast)
+
       (util/profile :simple-asts->string (simple-asts->string simple-asts)))))
 
 (defn export-blocks-as-markdown
@@ -577,21 +574,21 @@
                               (common/root-block-uuids->content repo root-block-uuids))
         first-block (db/entity [:block/uuid (first root-block-uuids)])
         format (or (:block/format first-block) (state/get-preferred-format))]
-    (export-helper repo content format indent-style remove-options)))
+    (export-helper content format indent-style remove-options)))
 
 (defn export-files-as-markdown
-  [repo files indent-style remove-options]
+  [files indent-style remove-options]
   (mapv
    (fn [{:keys [path content names format]}]
      (when (first names)
-       [path (export-helper repo content format indent-style remove-options)]))
+       [path (export-helper content format indent-style remove-options)]))
    files))
 
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
   (when-let [files (common/get-file-contents-with-suffix repo)]
-    (let [files (export-files-as-markdown repo files "dashes" nil)
+    (let [files (export-files-as-markdown files "dashes" nil)
           zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
       (p/let [zipfile (zip/make-zip zip-file-name files repo)]
         (when-let [anchor (gdom/getElement "export-as-markdown")]

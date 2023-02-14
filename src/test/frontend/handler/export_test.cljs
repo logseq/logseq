@@ -48,7 +48,7 @@
   (p/do!
    (are [expect files]
         (= expect
-           (@#'export-text/export-files-as-markdown (state/get-current-repo) files "dashes" nil))
+           (@#'export-text/export-files-as-markdown files "dashes" nil))
         [["pages/page1.md" "- 1  \n\t- 2  \n\t\t- 3  \n\t\t- 3  \n- 4  "]]
         [{:path "pages/page1.md" :content (:file/content (nth test-files 0)) :names ["page1"] :format :markdown}]
 
