@@ -23,9 +23,9 @@
   (try
     (edn/read-string content)
     (catch :default e
-      (notification/show! "The file 'logseq/config.edn' is invalid. Please reload the app to in order to see the error and fix it." :error)
-      ;; Rethrow so we know how long this is an issue and to prevent downstream errors
-      (throw e))))
+      (notification/show! "The file 'logseq/config.edn' is invalid. Failback to use default config. Please re-index the graph to in order to see the error and fix it." :error)
+      (prn ::error e)
+      (edn/read-string config/config-default-content))))
 
 (defn set-repo-config-state!
   "Sets repo config state using given file content"
