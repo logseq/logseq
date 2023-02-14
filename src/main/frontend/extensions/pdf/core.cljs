@@ -769,7 +769,8 @@
      [(:viewer state)
       (:loaded-pages ano-state)])
 
-    (let [^js viewer (:viewer state)]
+    (let [^js viewer (:viewer state)
+          in-system-window? (some-> viewer (.-$inSystemWindow))]
       [:div.extensions__pdf-viewer-cnt
        [:div.extensions__pdf-viewer
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
@@ -787,7 +788,8 @@
              ops) "pdf-highlights")])]
 
        (when (and page-ready? viewer)
-         [(rum/with-key (pdf-resizer viewer) "pdf-resizer")
+         [(when-not in-system-window?
+            (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
           (rum/with-key (pdf-toolbar viewer {:on-external-win #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
 (rum/defc ^:large-vars/data-var pdf-loader
