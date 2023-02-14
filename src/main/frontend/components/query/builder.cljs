@@ -193,11 +193,11 @@
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  [:div.flex.flex-row.border.p-1
-   [:div.text-xs.font-bold.uppercase.toned-down.mr-2
+  [:div.border.p-1.grid.grid-flow-col.auto-cols-max.gap-1
+   [:div.text-xs.font-bold.uppercase.toned-down.mr-2.grow
     (name kind)]
 
-   [:div.flex.flex-col
+   [:div
     [:div
      (map-indexed (fn [i item]
                     (clause *tree *find (update loc (dec (count loc)) inc) item))
