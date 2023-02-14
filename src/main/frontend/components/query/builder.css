@@ -1,3 +1,7 @@
 .cp__select-main {
   width: fit-content;
 }
+
+.cp__query-builder {
+  @apply mt-2 ml-2 grid auto-rows-max gap-2;
+}

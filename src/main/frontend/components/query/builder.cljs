@@ -16,6 +16,7 @@
             [frontend.util.property :as property]
             [frontend.format.block :as block]
             [frontend.search :as search]
+            [frontend.mixins :as mixins]
             [logseq.db.default :as db-default]
             [medley.core :as medley]
             [rum.core :as rum]
@@ -50,6 +51,36 @@
                               :extract-fn nil}
                              options))))
 
+(defn append-tree!
+  [*tree *show-picker? loc x]
+  (swap! *tree #(query-builder/append-element % loc x))
+  (reset! *show-picker? false))
+
+(rum/defcs search < (rum/local nil ::input-value)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {;; enter
+       13 (fn [state e]
+            (let [input-value (get state ::input-value)]
+              (when-not (string/blank? @input-value)
+                (util/stop e)
+                (let [on-submit (first (:rum/args state))]
+                  (on-submit @input-value))
+                (reset! input-value nil))))
+       ;; escape
+       27 (fn [_state _e]
+            (let [[_on-submit on-cancel] (:rum/args state)]
+              (on-cancel)))})))
+  [state _on-submit _on-cancel]
+  (let [*input-value (::input-value state)]
+    [:input#query-builder-search.form-input.block.sm:text-sm.sm:leading-5
+    {:auto-focus true
+     :placeholder "Full text search"
+     :aria-label "Full text search"
+     :on-change #(reset! *input-value (util/evalue %))}]))
+
 (rum/defcs picker <
   (rum/local nil ::mode)                ; pick mode
   [state *find *tree *show-picker? loc]
@@ -60,8 +91,6 @@
                   query-builder/page-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
-    (prn {:loc loc
-          :mode @*mode})
     [:div.query-builder-picker.mt-8
      (if @*mode
        (when-not (operator? @*mode)
@@ -71,8 +100,7 @@
             (let [items (sort (db-model/get-all-namespace-parents repo))]
               (select items
                 (fn [value]
-                  (swap! *tree #(query-builder/append-element % loc [:namespace value]))
-                  (reset! *show-picker? false))))
+                  (append-tree! *tree *show-picker? loc [:namespace value]))))
 
             "tags"
             (let [items (->> (db-model/get-all-tagged-pages repo)
@@ -80,43 +108,44 @@
                              sort)]
               (select items
                 (fn [value]
-                  (prn "chosen " value))))
+                  (append-tree! *tree *show-picker? loc [:page-tags value]))))
 
             "property"
             (let [properties (search/get-all-properties)]
               (select properties
                 (fn [value]
-                  (prn "chosen " value))))
+                  (append-tree! *tree *show-picker? loc [:property (keyword value)]))))
 
             "sample"
             (select (range 1 101)
               (fn [value]
-                (prn "chosen " value)))
+                (append-tree! *tree *show-picker? loc [:sample (util/safe-parse-int value)])))
 
             "task"
             (select db-default/built-in-markers
               (fn [value]
-                (prn "chosen " value)))
+                (append-tree! *tree *show-picker? loc [:task value])))
 
             "priority"
             (select db-default/built-in-priorities
-              (fn [value]
-                (prn "chosen " value)))
+              (fn [value]y
+                (append-tree! *tree *show-picker? loc [:priority value])))
 
             "page"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
               (select pages
                 (fn [value]
-                  (prn "chosen " value))))
+                  (append-tree! *tree *show-picker? loc [:page value]))))
 
             "page-ref"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
               (select pages
                 (fn [value]
-                  (prn "chosen " value))))
+                  (append-tree! *tree *show-picker? loc [:page-ref value]))))
 
             "full-text-search"
-            "todo" ; string input
+            (search (fn [v] (append-tree! *tree *show-picker? loc v))
+                    (fn [] (reset! *show-picker? false)))
 
             "between"
             "todo" ; start - date picker, end(optional) - date picker
@@ -127,14 +156,10 @@
          (fn [value]
            (cond
              (= value "all-tags")
-             (do
-               (swap! *tree #(query-builder/append-element % loc [:all-page-tags]))
-               (reset! *show-picker? false))
+             (append-tree! *tree *show-picker? loc [:all-page-tags])
 
              (operator? value)
-             (do
-               (swap! *tree #(query-builder/append-element % loc [(keyword value)]))
-               (reset! *show-picker? false))
+             (append-tree! *tree *show-picker? loc (keyword value))
 
              :else
              (reset! *mode value)))
@@ -156,8 +181,7 @@
          [:a.ml-2.grid {:title (str "Wrapped by " (name op) " operator")
                         :on-click (fn []
                                     (let [loc' (if group? (vec (butlast loc)) loc)]
-                                      (swap! *tree (fn [q] (query-builder/wrap-operator q loc' op))))
-                                    )}
+                                      (swap! *tree (fn [q] (query-builder/wrap-operator q loc' op)))))}
           (str "(" (name op) ")")])]
 
       [:a.grid.ml-2 {:title "Remove this clause"
@@ -239,12 +263,8 @@
                ;;            (property key value)
                ;;            (or (page-ref bar)
                ;;                (page-ref baz)))
-               )
-        ]
-    (def debug-tree *tree)
-    [:div.query-builder.mt-2.ml-2
+               )]
+    [:div.cp__query-builder
      (page-block-selector *find)
-     [:hr]
      (clause-tree *tree *find)
-     [:hr]
      (query *tree)]))
