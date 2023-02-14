@@ -37,7 +37,7 @@
     [:org-mode/insert-file-link? :boolean]
     [:shortcuts [:map-of
                  :keyword
-                 [:or :string [:vector :string]]]]
+                 [:or :string false? [:vector :string]]]]
     [:shortcut/doc-mode-enter-for-new-block? :boolean]
     [:block/content-max-length :int]
     [:ui/show-command-doc? :boolean]
