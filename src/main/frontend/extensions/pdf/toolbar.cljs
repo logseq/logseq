@@ -14,7 +14,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
-            [frontend.extensions.pdf.windows :refer [resolve-app-container] :as pdf-windows]))
+            [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]))
 
 (declare make-docinfo-in-modal)
 
@@ -59,7 +59,7 @@
                     (when (and (not (some-> (rum/deref *el-popup) (.contains target)))
                                (nil? (.closest target ".ui__modal")))
                       (hide-settings!)))
-             doc (resolve-app-container viewer)]
+             doc (resolve-own-container viewer)]
          (js/setTimeout
           #(.addEventListener doc "click" cb))
          #(.removeEventListener doc "click" cb)))
@@ -162,7 +162,7 @@
 
     (rum/use-effect!
      (fn []
-       (when-let [^js doc (resolve-app-container viewer)]
+       (when-let [^js doc (resolve-own-container viewer)]
          (let [handler (fn [^js e]
                          (when-let [^js target (and (string/blank? (.-value (rum/deref *el-input)))
                                                     (.-target e))]
@@ -386,7 +386,7 @@
 
     (rum/use-effect!
      (fn []
-       (when-let [^js doc (resolve-app-container viewer)]
+       (when-let [^js doc (resolve-own-container viewer)]
          (let [cb (fn [^js e]
                     (when-let [^js target (.-target e)]
                       (when (and
@@ -429,12 +429,13 @@
         [total-page-num, set-total-page-num!] (rum/use-state 1)
         [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))
         group-id          (.-$groupIdentity viewer)
-        in-system-window? (.-$inSystemWindow viewer)]
+        in-system-window? (.-$inSystemWindow viewer)
+        doc               (pdf-windows/resolve-own-document viewer)]
 
     ;; themes hooks
     (rum/use-effect!
      (fn []
-       (when-let [^js el (js/document.getElementById (str "pdf-layout-container_" group-id))]
+       (when-let [^js el (some-> doc (.getElementById (str "pdf-layout-container_" group-id)))]
          (set! (. (. el -dataset) -theme) viewer-theme)
          (storage/set "ls-pdf-viewer-theme" viewer-theme)
          #(js-delete (. el -dataset) "theme")))
