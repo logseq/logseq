@@ -129,7 +129,18 @@
 
          [:div
           {:style {:visibility (if (= :text type) "visible" "hidden")}}
-          "remove emphasis"]]])
+          "remove emphasis"]
+
+         (ui/checkbox {:style {:margin-right 6
+                               :margin-left "1em"
+                               :visibility (if (= :text type) "visible" "hidden")}
+                       :checked (contains? text-remove-options :tag)
+                       :on-change (fn [e]
+                                    (state/update-export-block-text-remove-options! e :tag))})
+
+         [:div
+          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          "remove #tags"]]])
 
      [:div.mt-4
       (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")

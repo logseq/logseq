@@ -36,7 +36,8 @@
    { ;; dashes, spaces, no-indent
     :indent-style "dashes"
     :remove-page-ref-brackets? false
-    :remove-emphasis? false}})
+    :remove-emphasis? false
+    :remove-tags? false}})
 
 ;;; internal utils
 (defn- get-blocks-contents
@@ -489,7 +490,7 @@
 ;;; inline transformers
 
 (defn remove-emphasis
-  "works on inline ast"
+  ":mapcat-fns-on-inline-ast"
   [inline-ast]
   (let [[ast-type ast-content] inline-ast]
     (case ast-type
@@ -500,7 +501,7 @@
       [inline-ast])))
 
 (defn remove-page-ref-brackets
-  "works on inline-ast"
+  ":map-fns-on-inline-ast"
   [inline-ast]
   (let [[ast-type ast-content] inline-ast]
     (case ast-type
@@ -513,6 +514,16 @@
           inline-ast))
       ;; else
       inline-ast)))
+
+(defn remove-tags
+  ":mapcat-fns-on-inline-ast"
+  [inline-ast]
+  (let [[ast-type _ast-content] inline-ast]
+    (case ast-type
+      "Tag"
+      []
+      ;; else
+      [inline-ast])))
 
 ;;; inline transformers (ends)
 

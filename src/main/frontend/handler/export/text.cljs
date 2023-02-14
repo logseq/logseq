@@ -546,7 +546,8 @@
                            {:export-options
                             {:indent-style indent-style
                              :remove-emphasis? (contains? (set remove-options) :emphasis)
-                             :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)}})]
+                             :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)
+                             :remove-tags? (contains? (set remove-options) :tag)}})]
     (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
           ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
           _ (def x ast)
@@ -559,7 +560,10 @@
                                       (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
 
                                       (get-in *state* [:export-options :remove-page-ref-brackets?])
-                                      (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets))
+                                      (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
+
+                                      (get-in *state* [:export-options :remove-tags?])
+                                      (update :mapcat-fns-on-inline-ast conj common/remove-tags))
           ast*** (if-not (empty? config-for-walk-block-ast)
                    (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                    ast**)
