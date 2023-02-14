@@ -155,7 +155,9 @@
        (for [op query-builder/operators]
          [:a.ml-2.grid {:title (str "Wrapped by " (name op) " operator")
                         :on-click (fn []
-                                    (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))}
+                                    (let [loc' (if group? (vec (butlast loc)) loc)]
+                                      (swap! *tree (fn [q] (query-builder/wrap-operator q loc' op))))
+                                    )}
           (str "(" (name op) ")")])]
 
       [:a.grid.ml-2 {:title "Remove this clause"
@@ -201,7 +203,8 @@
    [:div
     [:div
      (map-indexed (fn [i item]
-                    (clause *tree *find (update loc (dec (count loc)) inc) item))
+                    (clause *tree *find (update loc (dec (count loc))
+                                                #(+ % i 1)) item))
                   clauses)]
     (rum/with-key (actions *find *tree loc {:group? true})
       (str loc))]])
