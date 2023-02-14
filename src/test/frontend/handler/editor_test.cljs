@@ -66,8 +66,62 @@
     "TODO" "## TODO content" "## DOING content"
     "DONE" "DONE content" "content"))
 
+(defn- keyup-handler
+  "Spied version of editor/keyup-handler"
+  [{:keys [value cursor-pos action commands]
+    ;; Default to some commands matching which matches default behavior for most
+    ;; completion scenarios
+    :or {commands [:fake-command]}}]
+  ;; Reset editor action in order to test result
+  (state/set-editor-action! action)
+  ;; Default cursor pos to end of line
+  (let [pos (or cursor-pos (count value))
+        input #js {:value value}]
+    (with-redefs [editor/get-matched-commands (constantly commands)
+                  ;; Ignore as none of its behaviors are tested
+                  editor/default-case-for-keyup-handler (constantly nil)
+                  cursor/pos (constantly pos)]
+      ((editor/keyup-handler nil input nil)
+       #js {:key (subs value (dec (count value)))}
+       nil))))
+
+(deftest keyup-handler-test
+  (testing "Command autocompletion"
+    (keyup-handler {:value "/b"
+                    :action :commands
+                    :commands [:fake-command]})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if there is a matching command")
+
+    (keyup-handler {:value "/zz"
+                    :action :commands
+                    :commands []})
+    (is (= nil (state/get-editor-action))
+        "Completion closed if there no matching commands")
+
+    (keyup-handler {:value "/ " :action :commands})
+    (is (= nil (state/get-editor-action))
+        "Completion closed after a space follows /")
+
+    (keyup-handler {:value "/block " :action :commands})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if space is part of the search term for /"))
+
+  (testing "Tag autocompletion"
+    (keyup-handler {:value "foo #b" :action :page-search-hashtag})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open for one tag")
+
+    (keyup-handler {:value "text # #bar"
+                    :action :page-search-hashtag
+                    :cursor-pos 6})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open when typing tag before another tag"))
+  ;; Reset state
+  (state/set-editor-action! nil))
+
 (defn- handle-last-input-handler
-  "Spied version of editor/keydown-not-matched-handler"
+  "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos]}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! nil)
@@ -97,6 +151,27 @@
                                 :cursor-pos (dec (count "first "))})
     (is (= nil (state/get-editor-action))
         "Don't autocomplete properties if typing in a block where properties already exist"))
+
+  (testing "Command autocompletion"
+    (handle-last-input-handler {:value "/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search if only / has been typed")
+
+    (handle-last-input-handler {:value "some words /"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of new word")
+
+    (handle-last-input-handler {:value "a line\n/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of a new line")
+
+    (handle-last-input-handler {:value "https://"})
+    (is (= nil (state/get-editor-action))
+        "No command search in middle of a word")
+
+    (handle-last-input-handler {:value "#blah/"})
+    (is (= nil (state/get-editor-action))
+        "No command search after a tag search to allow for namespace completion"))
 
   (testing "Tag autocompletion"
     (handle-last-input-handler {:value "#"
