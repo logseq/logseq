@@ -105,4 +105,4 @@
       :on-click on-click}
      child
 
-     (pdf/playground)]))
+     (pdf/default-embed-playground)]))
