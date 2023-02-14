@@ -128,7 +128,7 @@
 
             "priority"
             (select db-default/built-in-priorities
-              (fn [value]y
+              (fn [value]
                 (append-tree! *tree *show-picker? loc [:priority value])))
 
             "page"
