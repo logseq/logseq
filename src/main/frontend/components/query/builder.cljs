@@ -41,10 +41,6 @@
   ([items on-chosen]
    (select items on-chosen {}))
   ([items on-chosen options]
-   (prn {:opts (merge
-                {:items items
-                 :on-chosen on-chosen}
-                options)})
    (component-select/select (merge
                              {:items items
                               :on-chosen on-chosen
@@ -76,14 +72,61 @@
   [state _on-submit _on-cancel]
   (let [*input-value (::input-value state)]
     [:input#query-builder-search.form-input.block.sm:text-sm.sm:leading-5
-    {:auto-focus true
-     :placeholder "Full text search"
-     :aria-label "Full text search"
-     :on-change #(reset! *input-value (util/evalue %))}]))
+     {:auto-focus true
+      :placeholder "Full text search"
+      :aria-label "Full text search"
+      :on-change #(reset! *input-value (util/evalue %))}]))
+
+(defonce *shown-datepicker (atom nil))
+(defonce *between-dates (atom {}))
+(rum/defcs datepicker < rum/reactive
+  (rum/local nil ::input-value)
+  {:init (fn [state]
+           (when (:auto-focus (last (:rum/args state)))
+             (reset! *shown-datepicker (first (:rum/args state))))
+           state)
+   :will-unmount (fn [state]
+                   (swap! *between-dates dissoc (first (:rum/args state)))
+                   state)}
+  [state id placeholder {:keys [auto-focus tree show-picker? loc clause]}]
+  (let [*input-value (::input-value state)
+        show? (= id (rum/react *shown-datepicker))]
+    [:div.ml-4
+     [:input.query-builder-datepicker.form-input.block.sm:text-sm.sm:leading-5
+      {:auto-focus (or auto-focus false)
+       :placeholder placeholder
+       :aria-label placeholder
+       :value @*input-value
+       :on-click #(reset! *shown-datepicker id)}]
+     (when show?
+       (ui/datepicker nil {:on-change (fn [_e date]
+                                        (let [journal-date (date/journal-name date)]
+                                          (reset! *input-value journal-date)
+                                          (reset! *shown-datepicker nil)
+                                          (swap! *between-dates assoc id journal-date)))}))]))
+
+(rum/defcs between <
+  (rum/local nil ::start)
+  (rum/local nil ::end)
+  [state {:keys [tree show-picker? loc clause] :as opts}]
+  [:div
+   [:div.flex.flex-row
+    [:div.font-medium.mt-2 "Between: "]
+    (datepicker :start "Start date" (merge opts {:auto-focus true}))
+    (datepicker :end "End date (optional)" opts)]
+   (ui/button "Submit"
+     :on-click (fn []
+                 (let [{:keys [start end]} @*between-dates]
+                   (when start
+                     (let [clause (cond-> [:between start]
+                                    (some? end)
+                                    (conj end))]
+                       (append-tree! tree show-picker? loc clause)
+                       (reset! *between-dates {}))))))])
 
 (rum/defcs picker <
   (rum/local nil ::mode)                ; pick mode
-  [state *find *tree *show-picker? loc]
+  [state *find *tree *show-picker? loc clause]
   (let [*mode (::mode state)
                 repo (state/get-current-repo)
         filters (if (= @*find :block)
@@ -148,7 +191,10 @@
                     (fn [] (reset! *show-picker? false)))
 
             "between"
-            "todo" ; start - date picker, end(optional) - date picker
+            (between {:tree *tree
+                      :show-picker? *show-picker?
+                      :loc loc
+                      :clause clause})
 
             nil)])
        (select
@@ -166,7 +212,7 @@
          {:input-default-placeholder "Add operator/filter"}))]))
 
 (rum/defcs actions < (rum/local false ::show-picker?)
-  [state *find *tree loc {:keys [group?]}]
+  [state *find *tree loc clause {:keys [group?]}]
   (let [*show-picker? (::show-picker? state)]
     [:div
      [:div.query-builder-filters.flex.flex-row.items-center
@@ -192,7 +238,7 @@
        (ui/icon "x" {:style {:font-size 20}})]]
 
      (when @*show-picker?
-       (picker *find *tree *show-picker? loc))]))
+       (picker *find *tree *show-picker? loc clause))]))
 
 (declare clauses-group)
 
@@ -215,7 +261,7 @@
             (str clause))
 
           (rum/with-key
-            (actions *find *tree loc {:group? false})
+            (actions *find *tree loc clause {:group? false})
             (str loc))]))]))
 
 (rum/defc clauses-group
@@ -230,7 +276,7 @@
                     (clause *tree *find (update loc (dec (count loc))
                                                 #(+ % i 1)) item))
                   clauses)]
-    (rum/with-key (actions *find *tree loc {:group? true})
+    (rum/with-key (actions *find *tree loc nil {:group? true})
       (str loc))]])
 
 ;; '(and (page-ref foo) (property key value))
