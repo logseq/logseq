@@ -218,7 +218,7 @@
              (append-tree! *tree *show-picker? loc [:all-page-tags])
 
              (operator? value)
-             (append-tree! *tree *show-picker? loc (keyword value))
+             (append-tree! *tree *show-picker? loc [(keyword value)])
 
              :else
              (reset! *mode value)))
@@ -310,19 +310,10 @@
 
 (rum/defcs builder <
   (rum/local :block ::find)
-  (rum/local '() ::tree)
+  (rum/local [:and] ::tree)
   [state]
   (let [*find (::find state)
-        *tree (::tree state)
-
-        ;; debug
-        *tree (atom
-               [:and]
-               ;; '(and (page-ref foo)
-               ;;            (property key value)
-               ;;            (or (page-ref bar)
-               ;;                (page-ref baz)))
-               )]
+        *tree (::tree state)]
     [:div.cp__query-builder
      (page-block-selector *find)
      (clause-tree *tree *find)
