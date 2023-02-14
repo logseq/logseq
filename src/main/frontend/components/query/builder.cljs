@@ -71,7 +71,8 @@
             (let [items (sort (db-model/get-all-namespace-parents repo))]
               (select items
                 (fn [value]
-                  (swap! *tree #(query-builder/append-element % loc [:namespace value])))))
+                  (swap! *tree #(query-builder/append-element % loc [:namespace value]))
+                  (reset! *show-picker? false))))
 
             "tags"
             (let [items (->> (db-model/get-all-tagged-pages repo)
@@ -146,22 +147,22 @@
      [:div.query-builder-filters.flex.flex-row.items-center
       (when group?
         [:div
-         [:a {:title "Add clause"
+         [:a.grid {:title "Add clause"
               :on-click #(reset! *show-picker? true)}
           (ui/icon "circle-plus" {:style {:font-size 20}})]])
 
       [:div.flex.flex-row.items-center
        (for [op query-builder/operators]
-         [:a.ml-2 {:title (str "Wrapped by " (name op) " operator")
-                   :on-click (fn []
-                               (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))}
+         [:a.ml-2.grid {:title (str "Wrapped by " (name op) " operator")
+                        :on-click (fn []
+                                    (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))}
           (str "(" (name op) ")")])]
 
-      [:a.ml-2 {:title "Remove this clause"
-                :on-click (fn []
-                            (let [loc' (if group? (vec (butlast loc)) loc)]
-                              (swap! *tree (fn [q]
-                                             (query-builder/remove-element q loc')))))}
+      [:a.grid.ml-2 {:title "Remove this clause"
+                     :on-click (fn []
+                                 (let [loc' (if group? (vec (butlast loc)) loc)]
+                                   (swap! *tree (fn [q]
+                                                  (query-builder/remove-element q loc')))))}
        (ui/icon "x" {:style {:font-size 20}})]]
 
      (when @*show-picker?

@@ -399,3 +399,7 @@ html.is-mobile {
     content: " ";
   }
 }
+
+.ui__radio-list {
+  @apply grid grid-flow-col gap-2;
+}
