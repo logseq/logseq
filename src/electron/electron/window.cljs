@@ -158,12 +158,6 @@
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
 
-          new-win-handler
-          (fn [e url]
-            (when-not (= "about:blank" url)
-              (open-external! url))
-            (.preventDefault e))
-
           will-navigate-handler
           (fn [e url]
             (.preventDefault e)
