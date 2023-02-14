@@ -6,8 +6,11 @@
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
 (def operators [:and :or :not])
+(def operators-set (set operators))
 (def page-filters [:all-tags :namespace :tags :property :sample])
+(def page-filters-set (set page-filters))
 (def block-filters [:page-ref :property :task :priority :page :full-text-search :between :sample])
+(def block-filters-set (set block-filters))
 
 (defn- vec-dissoc-item
   [vec idx]
@@ -26,6 +29,10 @@
 (defn add-element
   [q loc x]
   {:pre [(vector? loc) (some? x)]}
+  (prn "add element: "
+       {:q q
+        :loc loc
+        :x x})
   (cond
     (and (seq loc) (= 1 (count loc)))
     (vec-assoc-item q (first loc) x)
@@ -44,20 +51,31 @@
 (defn append-element
   [q loc x]
   {:pre [(vector? loc) (some? x)]}
-  (let [loc' (update loc (dec (count loc)) inc)]
+  (prn "append element: "
+       {:q q
+        :loc loc
+        :x x})
+  (let [idx (count (get-in q (vec (butlast loc))))
+        loc' (vec-replace-item loc (dec (count loc)) idx)]
     (add-element q loc' x)))
 
 (defn remove-element
   [q loc]
-  {:pre [(vector? loc) (seq loc)]}
-  (let [idx (last loc)
-        ks (vec (butlast loc))
-        f #(vec-dissoc-item % idx)]
-    (if (seq ks)
-      (update-in q ks f)
-      (f q))))
+  (if (seq loc)
+    (let [idx (last loc)
+          ks (vec (butlast loc))
+          f #(vec-dissoc-item % idx)]
+      (if (seq ks)
+        (let [result (update-in q ks f)]
+          (if (seq (get-in result ks))
+            result
+            ;; remove the wrapped empty vector
+            (remove-element result ks)))
+        (f q)))
+    ;; default to AND operator
+    [:and]))
 
-(defn replace-element
+(defn- replace-element
   [q loc x]
   {:pre [(vector? loc) (seq loc) (some? x)]}
   (if (= 1 (count loc))
@@ -68,19 +86,30 @@
 
 (defn wrap-operator
   [q loc operator]
-  {:pre [(seq q) (seq loc) ((set operators) operator)]}
-  (when-let [x (get-in q loc)]
-    (let [x' [operator x]]
-      (replace-element q loc x'))))
+  {:pre [(seq q) (seq loc) (operators-set operator)]}
+  (prn "wrap operator: "
+       {:q q
+        :loc loc
+        :operator operator})
+  (if (= loc [0])
+    [operator q]
+    (when-let [x (get-in q loc)]
+      (let [x' [operator x]]
+        (replace-element q loc x')))))
 
 (defn unwrap-operator
   [q loc]
   {:pre [(seq q) (seq loc)]}
-  (when-let [x (get-in q loc)]
-    (when (and ((set operators) (first x))
-               (= 1 (count (rest x))))
-      (let [x' (second x)]
-        (replace-element q loc x')))))
+  (prn "unwrap operator: "
+       {:q q
+        :loc loc})
+  (if (and (= loc [0]) (operators-set (first q)))
+    (second q)
+    (when-let [x (get-in q loc)]
+      (when (and (operators-set (first x))
+                 (= 1 (count (rest x))))
+        (let [x' (second x)]
+          (replace-element q loc x'))))))
 
 (defn ->dsl
   [col]
@@ -93,7 +122,7 @@
        (vector? f)
        (apply list f)
 
-       (and (keyword f) ((set operators) f))
+       (and (keyword f) (operators-set f))
        (symbol f)
 
        :else f))
@@ -106,7 +135,7 @@
      (cond
        (and (list? f)
             (symbol? (first f))
-            ((set operators) (keyword (first f)))) ; operator
+            (operators-set (keyword (first f)))) ; operator
        (into [(keyword (first f))] (rest f))
 
        (list? f)

@@ -59,7 +59,7 @@
                   query-builder/block-filters
                   query-builder/page-filters)
         filters-and-ops (concat filters query-builder/operators)
-        operator? #(contains? (set query-builder/operators) (keyword %))]
+        operator? #(contains? query-builder/operators-set (keyword %))]
     (prn {:loc loc
           :mode @*mode})
     [:div.query-builder-picker.mt-8
@@ -71,7 +71,7 @@
             (let [items (sort (db-model/get-all-namespace-parents repo))]
               (select items
                 (fn [value]
-                  (prn "chosen " value))))
+                  (swap! *tree #(query-builder/append-element % loc [:namespace value])))))
 
             "tags"
             (let [items (->> (db-model/get-all-tagged-pages repo)
@@ -159,8 +159,9 @@
 
       [:a.ml-2 {:title "Remove this clause"
                 :on-click (fn []
-                            (swap! *tree (fn [q]
-                                           (query-builder/remove-element q loc))))}
+                            (let [loc' (if group? (vec (butlast loc)) loc)]
+                              (swap! *tree (fn [q]
+                                             (query-builder/remove-element q loc')))))}
        (ui/icon "x" {:style {:font-size 20}})]]
 
      (when @*show-picker?
@@ -173,7 +174,7 @@
   (when (seq clause)
     [:div.query-builder-clause.p-1
      (let [kind (keyword (first clause))]
-       (if (#{:and :or :not} kind)
+       (if (query-builder/operators-set kind)
          (clauses-group *tree *find (conj loc 0) kind (rest clause))
 
          [:div.flex.flex-row.items-center
