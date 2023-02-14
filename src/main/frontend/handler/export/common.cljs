@@ -1,22 +1,23 @@
 (ns frontend.handler.export.common
-  "common fns for exporting."
+  "common fns for exporting.
+  exclude some fns which produce lazy-seq, which can cause strange behaviors
+  when use together with dynamic var."
+  (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require
    [cljs.core.match :refer [match]]
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.db :as db]
-   [frontend.handler.export.macro :refer [binding*]]
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
    [frontend.state :as state]
-   [frontend.util :as util]
+   [frontend.util :as util :refer [mapcatv]]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [logseq.graph-parser.util :as gp-util]))
 
-
 (def ^:dynamic *state*
   "dynamic var, state used for exporting"
-  { ;; current level of Heading, start from 1(same as mldoc), use when `block-ast->simple-ast`
+  {;; current level of Heading, start from 1(same as mldoc), use when `block-ast->simple-ast`
    :current-level 1
    ;; emphasis symbol (use when `block-ast->simple-ast`)
    :outside-em-symbol nil
@@ -30,12 +31,12 @@
 
    ;; this submap is used when replace block-reference, block-embed, page-embed
    :replace-ref-embed
-   { ;; start from 1
+   {;; start from 1
     :current-level 1
     :block-ref-replaced? false
     :block&page-embed-replaced? false}
    :export-options
-   { ;; dashes, spaces, no-indent
+   {;; dashes, spaces, no-indent
     :indent-style "dashes"
     :remove-page-ref-brackets? false
     :remove-emphasis? false
@@ -59,7 +60,6 @@
   [repo root-block-uuids]
   (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
-
 
 (declare remove-block-ast-pos)
 
@@ -90,8 +90,8 @@
   (mapv
    (fn [[ast-type ast-content]]
      (if (= ast-type "Heading")
-        [ast-type (update ast-content :level #(+ (dec %) origin-level))]
-        [ast-type ast-content]))
+       [ast-type (update ast-content :level #(+ (dec %) origin-level))]
+       [ast-type ast-content]))
    block-ast-coll))
 
 (defn- plain-indent-inline-ast
@@ -174,12 +174,11 @@
 
 (defn- get-md-file-contents
   [repo]
-  #_:clj-kondo/ignore
-  (filter (fn [[path _]]
-            (let [path (string/lower-case path)]
-              (re-find #"\.(?:md|markdown)$" path)))
-          (get-file-contents repo {:init-level 1
-                                   :heading-to-list? true})))
+  (filterv (fn [[path _]]
+             (let [path (string/lower-case path)]
+               (re-find #"\.(?:md|markdown)$" path)))
+           (get-file-contents repo {:init-level 1
+                                    :heading-to-list? true})))
 
 (defn get-file-contents-with-suffix
   [repo]
@@ -187,17 +186,16 @@
         md-files (get-md-file-contents repo)]
     (->>
      md-files
-     (map (fn [[path content]] {:path path :content content
-                                :names (d/q '[:find [?n ?n2]
-                                              :in $ ?p
-                                              :where [?e :file/path ?p]
-                                              [?e2 :block/file ?e]
-                                              [?e2 :block/name ?n]
-                                              [?e2 :block/original-name ?n2]] db path)
-                                :format (gp-util/get-format path)})))))
+     (mapv (fn [[path content]] {:path path :content content
+                                 :names (d/q '[:find [?n ?n2]
+                                               :in $ ?p
+                                               :where [?e :file/path ?p]
+                                               [?e2 :block/file ?e]
+                                               [?e2 :block/name ?n]
+                                               [?e2 :block/original-name ?n2]] db path)
+                                 :format (gp-util/get-format path)})))))
 
 ;;; utils (ends)
-
 
 ;;; replace block-ref, block-embed, page-embed
 
@@ -205,21 +203,21 @@
   [{:keys [title] :as ast-content}]
   (let [inline-coll  title
         inline-coll*
-        (mapcat
+        (mapcatv
          #(match [%]
-                 [["Link" {:url ["Block_ref" block-uuid]}]]
-                 (let [[[_ {title-inline-coll :title}]]
-                       (block-uuid->ast (uuid block-uuid))]
-                   (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-                   title-inline-coll)
+            [["Link" {:url ["Block_ref" block-uuid]}]]
+            (let [[[_ {title-inline-coll :title}]]
+                  (block-uuid->ast (uuid block-uuid))]
+              (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+              title-inline-coll)
 
-                 :else [%])
+            :else [%])
          inline-coll)]
     (assoc ast-content :title inline-coll*)))
 
 (defn- replace-block-reference-in-paragraph
   [inline-coll]
-  (mapcat
+  (mapcatv
    #(match [%]
       [["Link" {:url ["Block_ref" block-uuid]}]]
       (let [[[_ {title-inline-coll :title}]]
@@ -228,7 +226,6 @@
         title-inline-coll)
       :else [%])
    inline-coll))
-
 
 (declare replace-block-references)
 
@@ -248,14 +245,17 @@
 (defn- replace-block-reference-in-table
   [{:keys [header groups] :as table}]
   (let [header*
-        (mapcat
-         #(match [%]
-            [["Link" {:url ["Block_ref" block-uuid]}]]
-            (let [[[_ {title-inline-coll :title}]]
-                  (block-uuid->ast (uuid block-uuid))]
-              (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-              title-inline-coll)
-            :else [%])
+        (mapv
+         (fn [col]
+           (mapcatv
+            #(match [%]
+               [["Link" {:url ["Block_ref" block-uuid]}]]
+               (let [[[_ {title-inline-coll :title}]]
+                     (block-uuid->ast (uuid block-uuid))]
+                 (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+                 title-inline-coll)
+               :else [%])
+            col))
          header)
         groups*
         (mapv
@@ -264,7 +264,7 @@
             (fn [row]
               (mapv
                (fn [col]
-                 (mapcat
+                 (mapcatv
                   #(match [%]
                      [["Link" {:url ["Block_ref" block-uuid]}]]
                      (let [[[_ {title-inline-coll :title}]]
@@ -301,7 +301,7 @@
 
 (defn- replace-block-references-until-stable
   [block-ast]
-  (binding* [*state* *state*]
+  (binding [*state* *state*]
     (loop [block-ast block-ast]
       (let [block-ast* (replace-block-references block-ast)]
         (if (get-in *state* [:replace-ref-embed :block-ref-replaced?])
@@ -417,13 +417,13 @@
 
 (defn- replace-block&page-embeds-in-list-helper
   [list-items]
-  (binding* [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
-            (mapv
-             (fn [{block-ast-coll :content sub-items :items :as item}]
-               (assoc item
-                      :content (doall (mapcat replace-block&page-embeds block-ast-coll))
-                      :items (replace-block&page-embeds-in-list-helper sub-items)))
-             list-items)))
+  (binding [*state* (update-in *state* [:replace-ref-embed :current-level] inc)]
+    (mapv
+     (fn [{block-ast-coll :content sub-items :items :as item}]
+       (assoc item
+              :content (mapcatv replace-block&page-embeds block-ast-coll)
+              :items (replace-block&page-embeds-in-list-helper sub-items)))
+     list-items)))
 
 (defn- replace-block&page-embeds-in-list
   [list-items]
@@ -432,8 +432,7 @@
 (defn- replace-block&page-embeds-in-quote
   [block-ast-coll]
   (->> block-ast-coll
-       (mapcat replace-block&page-embeds)
-       doall
+       (mapcatv replace-block&page-embeds)
        (vector "Quote")
        vector))
 
@@ -521,7 +520,6 @@
         ["Paragraph" inline-coll])
       heading-ast)))
 
-
 ;;; inline transformers
 
 (defn remove-emphasis
@@ -568,8 +566,9 @@
   [inline-coll map-fns-on-inline-ast mapcat-fns-on-inline-ast]
   (->>
    inline-coll
-   (map #(reduce (fn [inline-ast f] (f inline-ast)) % map-fns-on-inline-ast))
-   (mapcat #(reduce (fn [inline-ast-coll f] (mapcat f inline-ast-coll)) [%] mapcat-fns-on-inline-ast))))
+   (mapv #(reduce (fn [inline-ast f] (f inline-ast)) % map-fns-on-inline-ast))
+   (mapcatv #(reduce
+              (fn [inline-ast-coll f] (mapcatv f inline-ast-coll)) [%] mapcat-fns-on-inline-ast))))
 
 (declare walk-block-ast)
 
@@ -610,8 +609,17 @@
         ["Footnote_Definition"
          name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
       "Table"
-       ;; TODO
-      block-ast
+      (let [{:keys [header groups]} ast-content
+            header* (mapv
+                     #(walk-block-ast-helper % map-fns-on-inline-ast mapcat-fns-on-inline-ast)
+                     header)
+            groups* (mapv
+                     (fn [group])
+
+                     groups)]
+
+        block-ast)
+
        ;; else
       block-ast)))
 

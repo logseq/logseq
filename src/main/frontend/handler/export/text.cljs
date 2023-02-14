@@ -1,12 +1,12 @@
 (ns frontend.handler.export.text
+  (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require
    [clojure.string :as string]
    [frontend.db :as db]
    [frontend.extensions.zip :as zip]
    [frontend.handler.export.common :as common :refer [*state*]]
-   [frontend.handler.export.macro :refer [binding*]]
    [frontend.state :as state]
-   [frontend.util :as util]
+   [frontend.util :as util :refer [mapcatv concatv removev]]
    [goog.dom :as gdom]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [malli.core :as m]
@@ -65,15 +65,15 @@
         size* (and size [space (raw-text (reduce str (repeat size "#")))])
         marker* (and marker (raw-text marker))]
     (set! *state* (assoc *state* :current-level level))
-    (remove nil? (concat heading* size*
-                         [space marker* space priority* space]
-                         (mapcat inline-ast->simple-ast title)
-                         [(newline* 1)]))))
+    (removev nil? (concatv heading* size*
+                           [space marker* space priority* space]
+                           (mapcatv inline-ast->simple-ast title)
+                           [(newline* 1)]))))
 
 (declare block-list)
 (defn- block-list-item
   [{:keys [content items number _name checkbox]}]
-  (let [content* (mapcat block-ast->simple-ast content)
+  (let [content* (mapcatv block-ast->simple-ast content)
         number* (raw-text
                  (if number
                    (str number ". ")
@@ -87,24 +87,24 @@
         indent (when (> current-level 1)
                  (indent (dec current-level) 0))
         items* (block-list items :in-list? true)]
-    (concat [indent number* checkbox* space]
-            content*
-            [(newline* 1)]
-            items*
-            [(newline* 1)])))
+    (concatv [indent number* checkbox* space]
+             content*
+             [(newline* 1)]
+             items*
+             [(newline* 1)])))
 
 (defn- block-list
   [l & {:keys [in-list?]}]
-  (binding* [*state* (update *state* :current-level inc)]
-    (concat (mapcat block-list-item l)
-            (when (and (pos? (count l))
-                       (not in-list?))
-              [(newline* 2)]))))
+  (binding [*state* (update *state* :current-level inc)]
+    (concatv (mapcatv block-list-item l)
+             (when (and (pos? (count l))
+                        (not in-list?))
+               [(newline* 2)]))))
 
 (defn- block-example
   [l]
   (let [level (dec (get *state* :current-level 1))]
-    (mapcat
+    (mapcatv
      (fn [line]
        [(indent-with-2-spaces level)
         (raw-text "    ")
@@ -115,7 +115,7 @@
 (defn- block-src
   [{:keys [lines language]}]
   (let [level (dec (get *state* :current-level 1))]
-    (concat
+    (concatv
      [(indent-with-2-spaces level) (raw-text "```")]
      (when language [space (raw-text language)])
      [(newline* 1)]
@@ -125,14 +125,14 @@
 (defn- block-quote
   [block-coll]
   (let [level (dec (get *state* :current-level 1))]
-    (binding* [*state* (assoc *state* :indent-after-break-line? true)]
-      (concat (mapcat (fn [block]
-                        (let [block-simple-ast (block-ast->simple-ast block)]
-                          (when (seq block-simple-ast)
-                            (concat [(indent-with-2-spaces level) (raw-text ">") space]
-                                    block-simple-ast))))
-                      block-coll)
-              [(newline* 2)]))))
+    (binding [*state* (assoc *state* :indent-after-break-line? true)]
+      (concatv (mapcatv (fn [block]
+                          (let [block-simple-ast (block-ast->simple-ast block)]
+                            (when (seq block-simple-ast)
+                              (concatv [(indent-with-2-spaces level) (raw-text ">") space]
+                                       block-simple-ast))))
+                        block-coll)
+               [(newline* 2)]))))
 
 (declare inline-latex-fragment)
 (defn- block-latex-fragment
@@ -156,17 +156,17 @@
 (defn- block-drawer
   [[name lines]]
   (let [level (dec (get *state* :current-level))]
-    (concat
+    (concatv
      [(raw-text ":" name ":")
       (newline* 1)]
-     (mapcat (fn [line] [(indent-with-2-spaces level) (raw-text line)]) lines)
+     (mapcatv (fn [line] [(indent-with-2-spaces level) (raw-text line)]) lines)
      [(newline* 1) (raw-text ":END:") (newline* 1)])))
 
 (defn- block-footnote-defnition
   [[name content]]
-  (concat
+  (concatv
    [(raw-text "[^" name "]:") space]
-   (mapcat inline-ast->simple-ast content)
+   (mapcatv inline-ast->simple-ast content)
    [(newline* 1)]))
 
 (def ^:private block-horizontal-rule [(newline* 1) (raw-text "---") (newline* 1)])
@@ -177,29 +177,29 @@
     (let [level    (dec (get *state* :current-level 1))
           sep-line (raw-text "|" (string/join "|" (repeat (count header) "---")) "|")
           header-line
-          (concat (mapcat
-                   (fn [h] (concat [space (raw-text "|") space] (mapcat inline-ast->simple-ast h)))
-                   header)
-                  [space (raw-text "|")])
+          (concatv (mapcatv
+                    (fn [h] (concatv [space (raw-text "|") space] (mapcatv inline-ast->simple-ast h)))
+                    header)
+                   [space (raw-text "|")])
           group-lines
-          (mapcat
+          (mapcatv
            (fn [group]
-             (mapcat
+             (mapcatv
               (fn [row]
-                (concat [(indent-with-2-spaces level)]
-                        (mapcat
-                         (fn [col]
-                           (concat [(raw-text "|") space]
-                                   (mapcat inline-ast->simple-ast col)
-                                   [space]))
-                         row)
-                        [(raw-text "|") (newline* 1)]))
+                (concatv [(indent-with-2-spaces level)]
+                         (mapcatv
+                          (fn [col]
+                            (concatv [(raw-text "|") space]
+                                     (mapcatv inline-ast->simple-ast col)
+                                     [space]))
+                          row)
+                         [(raw-text "|") (newline* 1)]))
               group))
            groups)]
-      (concat [(newline* 1) (indent-with-2-spaces level)]
-              header-line
-              [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)]
-              group-lines))))
+      (concatv [(newline* 1) (indent-with-2-spaces level)]
+               header-line
+               [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)]
+               group-lines))))
 
 (defn- block-comment
   [s]
@@ -228,15 +228,15 @@
 
 (defn- inline-subscript
   [inline-coll]
-  (concat [(raw-text "_{")]
-          (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
-          [(raw-text "}")]))
+  (concatv [(raw-text "_{")]
+           (mapcatv (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
+           [(raw-text "}")]))
 
 (defn- inline-superscript
   [inline-coll]
-  (concat [(raw-text "^{")]
-          (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
-          [(raw-text "}")]))
+  (concatv [(raw-text "^{")]
+           (mapcatv (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
+           [(raw-text "}")]))
 
 (defn- inline-footnote-reference
   [{name :name}]
@@ -297,10 +297,10 @@
 
 (defn- emphasis-wrap-with
   [inline-coll em-symbol]
-  (binding* [*state* (assoc *state* :outside-em-symbol (first em-symbol))]
-    (concat [(raw-text em-symbol)]
-            (mapcat inline-ast->simple-ast inline-coll)
-            [(raw-text em-symbol)])))
+  (binding [*state* (assoc *state* :outside-em-symbol (first em-symbol))]
+    (concatv [(raw-text em-symbol)]
+             (mapcatv inline-ast->simple-ast inline-coll)
+             [(raw-text em-symbol)])))
 
 (defn- inline-emphasis
   [emphasis]
@@ -312,8 +312,8 @@
       "Italic"
       (emphasis-wrap-with inline-coll (if (= outside-em-symbol "*") "_" "*"))
       "Underline"
-      (binding* [*state* (assoc *state* :outside-em-symbol outside-em-symbol)]
-        (mapcat (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll))
+      (binding [*state* (assoc *state* :outside-em-symbol outside-em-symbol)]
+        (mapcatv (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll))
       "Strike_through"
       (emphasis-wrap-with inline-coll "~~")
       "Highlight"
@@ -333,12 +333,12 @@
 (m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
-  (remove
+  (removev
    nil?
    (let [[ast-type ast-content] block]
      (case ast-type
        "Paragraph"
-       (concat (mapcat inline-ast->simple-ast ast-content) [(newline* 1)])
+       (concatv (mapcatv inline-ast->simple-ast ast-content) [(newline* 1)])
        "Paragraph_line"
        (assert false "Paragraph_line is mldoc internal ast")
        "Paragraph_Sep"
@@ -434,7 +434,6 @@
 
 ;;; block-ast, inline-ast -> simple-ast (ends)
 
-
 ;;; simple-ast -> string
 (defn- simple-ast->string
   [simple-ast]
@@ -443,8 +442,8 @@
     :raw-text (:content simple-ast)
     :space " "
     :newline (reduce str (repeat (:line-count simple-ast) "\n"))
-    :indent (reduce str (concat (repeat (:level simple-ast) "\t")
-                                (repeat (:extra-space-count simple-ast) " ")))))
+    :indent (reduce str (concatv (repeat (:level simple-ast) "\t")
+                                 (repeat (:extra-space-count simple-ast) " ")))))
 
 (defn- merge-adjacent-spaces&newlines
   [simple-ast-coll]
@@ -543,7 +542,7 @@
 
 (defn- export-helper
   [content format indent-style remove-options]
-  (binding* [*state* (merge *state*
+  (binding [*state* (merge *state*
                            {:export-options
                             {:indent-style indent-style
                              :remove-emphasis? (contains? (set remove-options) :emphasis)
@@ -568,7 +567,7 @@
           ast*** (if-not (empty? config-for-walk-block-ast)
                    (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                    ast**)
-          simple-asts (util/profile :block-ast->simple-ast (doall (mapcat block-ast->simple-ast ast***)))]
+          simple-asts (util/profile :block-ast->simple-ast (doall (mapcatv block-ast->simple-ast ast***)))]
 
       (util/profile :simple-asts->string (simple-asts->string simple-asts)))))
 
