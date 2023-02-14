@@ -379,7 +379,7 @@
 
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]
-  (let [*el-container        (rum/create-ref)
+  (let [*el-container        (rum/use-ref nil)
         [active-tab, set-active-tab!] (rum/use-state "contents")
         set-outline-visible! #(set-active-tab! "contents")
         contents?            (= active-tab "contents")]
@@ -396,7 +396,7 @@
                         (set-outline-visible!))))]
            (.addEventListener doc "click" cb)
            #(.removeEventListener doc "click" cb))))
-     [viewer *el-container])
+     [viewer])
 
     [:div.extensions__pdf-outline-wrap.hls-popup-overlay
      {:class (util/classnames [{:visible visible?}])}
