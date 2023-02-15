@@ -19,7 +19,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["path" :as path]))
 
 (defn- get-path
   [state]
@@ -73,11 +74,12 @@
 (rum/defcs file-inner < rum/reactive
   {:will-mount (fn [state]
                  (let [*content (atom nil)
-                       [path format] (:rum/args state)]
+                       [path format] (:rum/args state)
+                       repo-dir (config/get-repo-dir (state/get-current-repo))
+                       dir (if (string/includes? path repo-dir) repo-dir (path/dirname path))]
                    (when (and format (contains? (gp-config/text-formats) format))
-                     (p/let [content (fs/read-file
-                                      (config/get-repo-dir (state/get-current-repo)) path)]
-                       (reset! *content content)))
+                     (p/let [content (fs/read-file dir path)]
+                            (reset! *content content)))
                    (assoc state ::file-content *content)))
    :did-mount (fn [state]
                 (state/set-file-component! (:rum/react-component state))
