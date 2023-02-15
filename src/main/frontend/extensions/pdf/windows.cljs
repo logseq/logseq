@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.windows
   (:require [frontend.state :as state]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.storage :as storage]))
 
 (def *active-win (atom nil))
 (def *exit-pending? (atom false))
@@ -72,23 +73,35 @@
   (when pdf-current
     (let [setup-win!
           (fn []
-            (when-let [^js win (and (:key pdf-current)
-                                    (js/window.open "about:blank" "_blank" "width=700,height=800"))]
-              (let [^js doc  (.-document win)
-                    ^js base (js/document.createElement "base")
-                    ^js main (js/document.createElement "main")]
-                (set! (.-href base) js/location.href)
-                (.appendChild (.-head doc) base)
-                (resolve-classes! doc)
-                (resolve-styles! doc)
-                (.appendChild (.-body doc) main)
-                (rum/mount (pdf-playground pdf-current) main))
+            (let [layouts (storage/get :ls-pdf-system-win-layout)
+                  layouts (if (and (map? layouts)
+                                   (contains? layouts :width)
+                                   (contains? layouts :height))
+                            (reduce (fn [a [k v]] (str a (name k) "=" v ",")) "" layouts)
+                            "width=700,height=800")]
+              (when-let [^js win (and (:key pdf-current)
+                                      (js/window.open "about:blank" "_blank" layouts))]
+                (let [^js doc    (.-document win)
+                      ^js doc-el (.-documentElement doc)
+                      ^js base   (js/document.createElement "base")
+                      ^js main   (js/document.createElement "main")]
+                  (set! (.-href base) js/location.href)
+                  (.appendChild (.-head doc) base)
+                  (resolve-classes! doc)
+                  (resolve-styles! doc)
+                  (.appendChild (.-body doc) main)
+                  (rum/mount (pdf-playground pdf-current) main)
 
-              ;; events
-              (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))
+                  ;; events
+                  (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))
+                  (.addEventListener win "resize" #(storage/set :ls-pdf-system-win-layout
+                                                                {:height (.-clientHeight doc-el)
+                                                                 :width  (.-clientWidth doc-el)
+                                                                 :x      (.-screenX win)
+                                                                 :y      (.-screenY win)})))
 
-              (reset! *active-win win)
-              (state/set-state! :pdf/system-win? true)))]
+                (reset! *active-win win)
+                (state/set-state! :pdf/system-win? true))))]
 
       (js/setTimeout
        (fn []
