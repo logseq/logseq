@@ -717,7 +717,6 @@
                                     :textLayerMode     2
                                     :annotationMode    2
                                     :removePageBorders true})
-             ^js own-window   (pdf-windows/resolve-own-window viewer)
              in-system-win?   (boolean (.closest el ".is-system-window"))]
 
          (set! (.-$groupIdentity viewer) identity)
@@ -740,8 +739,8 @@
          (p/then (. viewer setDocument pdf-document)
                  #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
 
-         ;; TODO: debug
-         (set! (. own-window -lsPdfViewer) viewer)
+         ;; TODO: set as active viewer
+         (set! (. js/window -lsActivePdfViewer) viewer)
 
          ;; set initial page
          (js/setTimeout
@@ -750,7 +749,7 @@
          ;; destroy
          (fn []
            (.destroy pdf-document)
-           (set! (. own-window -lsPdfViewer) nil)
+           (set! (. js/window -lsActivePdfViewer) nil)
            (.cleanup viewer))))
      [])
 
