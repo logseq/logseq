@@ -23,19 +23,17 @@
             [frontend.modules.outliner.tree :as tree]
             [clojure.string :as string]))
 
-(rum/defc page-block-selector
-  [*find]
-  [:div.flex.flex-row
-   [:div.mr-2 "Find: "]
-   (ui/radio-list [{:label "Blocks"
-                    :value "block"
-                    :selected (= @*find :block)}
-                   {:label "Pages"
-                    :value "page"
-                    :selected (= @*find :page)}]
-                  (fn [v]
-                    (reset! *find (keyword v)))
-                  nil)])
+;; (rum/defc page-block-selector
+;;   [*find]
+;;   [:div.filter-item
+;;    (ui/select [{:label "Blocks"
+;;                 :value "block"
+;;                 :selected (= @*find :block)}
+;;                {:label "Pages"
+;;                 :value "page"
+;;                 :selected (= @*find :page)}]
+;;      (fn [v]
+;;        (reset! *find (keyword v))))])
 
 (defn- select
   ([items on-chosen]
@@ -48,9 +46,10 @@
                              options))))
 
 (defn append-tree!
-  [*tree *show-picker? loc x]
+  [*tree {:keys [toggle-fn toggle?]
+          :or {toggle? true}} loc x]
   (swap! *tree #(query-builder/append-element % loc x))
-  (reset! *show-picker? false))
+  (when toggle? (toggle-fn)))
 
 (rum/defcs search < (rum/local nil ::input-value)
   (mixins/event-mixin
@@ -88,7 +87,7 @@
    :will-unmount (fn [state]
                    (swap! *between-dates dissoc (first (:rum/args state)))
                    state)}
-  [state id placeholder {:keys [auto-focus tree show-picker? loc clause]}]
+  [state id placeholder {:keys [auto-focus tree loc clause]}]
   (let [*input-value (::input-value state)
         show? (= id (rum/react *shown-datepicker))]
     [:div.ml-4
@@ -108,7 +107,7 @@
 (rum/defcs between <
   (rum/local nil ::start)
   (rum/local nil ::end)
-  [state {:keys [tree show-picker? loc clause] :as opts}]
+  [state {:keys [tree loc clause] :as opts}]
   [:div
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
@@ -121,13 +120,25 @@
                      (let [clause (cond-> [:between start]
                                     (some? end)
                                     (conj end))]
-                       (append-tree! tree show-picker? loc clause)
+                       (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
+
+(rum/defcs option-item < rum/reactive
+  {:init (fn [state]
+           (assoc state ::checked? (atom (first (:rum/args state)))))}
+  [state _checked? value on-click]
+  (let [*checked? (::checked? state)]
+    [:div.flex.flex-row.items-center
+     {:on-mouse-down (fn [e] (util/stop e)
+                       (swap! *checked? not)
+                       (on-click @*checked? value))}
+     (ui/checkbox {:checked (rum/react *checked?)})
+     value]))
 
 (rum/defcs picker <
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
-  [state *find *tree *show-picker? loc clause]
+  [state *find *tree loc clause {:keys [toggle-fn] :as opts}]
   (let [*mode (::mode state)
         *property (::property state)
         repo (state/get-current-repo)
@@ -136,7 +147,7 @@
                   query-builder/page-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
-    [:div.query-builder-picker.mt-8
+    [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
          [:div.ml-2.mt-2
@@ -145,7 +156,7 @@
             (let [items (sort (db-model/get-all-namespace-parents repo))]
               (select items
                 (fn [value]
-                  (append-tree! *tree *show-picker? loc [:namespace value]))))
+                  (append-tree! *tree opts loc [:namespace value]))))
 
             "tags"
             (let [items (->> (db-model/get-all-tagged-pages repo)
@@ -153,7 +164,7 @@
                              sort)]
               (select items
                 (fn [value]
-                  (append-tree! *tree *show-picker? loc [:page-tags value]))))
+                  (append-tree! *tree opts loc [:page-tags value]))))
 
             "property"
             (let [properties (search/get-all-properties)]
@@ -170,44 +181,49 @@
                             [:property @*property]
                             [:property @*property value])]
                     (reset! *property nil)
-                    (append-tree! *tree *show-picker? loc x)))))
+                    (append-tree! *tree opts loc x)))))
 
             "sample"
             (select (range 1 101)
               (fn [value]
-                (append-tree! *tree *show-picker? loc [:sample (util/safe-parse-int value)])))
+                (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
 
             "task"
             (select db-default/built-in-markers
               (fn [value]
-                (append-tree! *tree *show-picker? loc [:task value])))
+                (append-tree! *tree opts loc [:task value])))
 
             "priority"
             (select db-default/built-in-priorities
               (fn [value]
-                (append-tree! *tree *show-picker? loc [:priority value])))
+                (append-tree! *tree opts loc [:priority value])))
 
             "page"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
               (select pages
                 (fn [value]
-                  (append-tree! *tree *show-picker? loc [:page value]))))
+                  (append-tree! *tree opts loc [:page value]))))
 
             "page-ref"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
               (select pages
                 (fn [value]
-                  (append-tree! *tree *show-picker? loc [:page-ref value]))))
+                  (append-tree! *tree opts loc [:page-ref value]))
+                {}
+                ;; {:item-cp (fn [value]
+                ;;             (option-item false value (fn [checked? value]
+                ;;                                        (append-tree! *tree (assoc opts :toggle? false) loc [:page-ref value]))))}
+                ))
 
             "full-text-search"
-            (search (fn [v] (append-tree! *tree *show-picker? loc v))
-                    (fn [] (reset! *show-picker? false)))
+            (search (fn [v] (append-tree! *tree opts loc v))
+                    (:toggle-fn opts))
 
             "between"
-            (between {:tree *tree
-                      :show-picker? *show-picker?
-                      :loc loc
-                      :clause clause})
+            (between (merge opts
+                            {:tree *tree
+                             :loc loc
+                             :clause clause}))
 
             nil)])
        (select
@@ -215,75 +231,84 @@
          (fn [value]
            (cond
              (= value "all-tags")
-             (append-tree! *tree *show-picker? loc [:all-page-tags])
+             (append-tree! *tree opts loc [:all-page-tags])
 
              (operator? value)
-             (append-tree! *tree *show-picker? loc [(keyword value)])
+             (append-tree! *tree opts loc [(keyword value)])
 
              :else
              (reset! *mode value)))
          {:input-default-placeholder "Add operator/filter"}))]))
 
-(rum/defcs actions < (rum/local false ::show-picker?)
-  [state *find *tree loc clause {:keys [group?]}]
-  (let [*show-picker? (::show-picker? state)]
-    [:div
-     [:div.query-builder-filters.flex.flex-row.items-center
-      (when group?
-        [:div
-         [:a.grid {:title "Add clause"
-              :on-click #(reset! *show-picker? true)}
-          (ui/icon "circle-plus" {:style {:font-size 20}})]])
-
-      [:div.flex.flex-row.items-center
-       (for [op query-builder/operators]
-         [:a.ml-2.grid {:title (str "Wrapped by " (name op) " operator")
-                        :on-click (fn []
-                                    (let [loc' (if group? (vec (butlast loc)) loc)]
-                                      (swap! *tree (fn [q] (query-builder/wrap-operator q loc' op)))))}
-          (str "(" (name op) ")")])]
-
-      [:a.grid.ml-2 {:title "Remove this clause"
-                     :on-click (fn []
-                                 (let [loc' (if group? (vec (butlast loc)) loc)]
-                                   (swap! *tree (fn [q]
-                                                  (query-builder/remove-element q loc')))))}
-       (ui/icon "x" {:style {:font-size 20}})]]
-
-     (when @*show-picker?
-       (picker *find *tree *show-picker? loc clause))]))
+(rum/defc add-filter
+  [*find *tree loc clause]
+  (ui/dropdown
+   (fn [{:keys [toggle-fn]}]
+     [:a.flex {:title "Add clause"
+               :on-click toggle-fn}
+      (ui/icon "plus" {:style {:font-size 20}})])
+   (fn [{:keys [toggle-fn]}]
+     (picker *find *tree loc clause {:toggle-fn toggle-fn}))
+   {:modal-class (util/hiccup->class
+                  "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")}))
 
 (declare clauses-group)
+
+(rum/defc clause-inner
+  [*tree *find loc clause & {:keys [operator?]}]
+  (ui/dropdown
+   (fn [{:keys [toggle-fn]}]
+     (if operator?
+       [:a.flex.text-sm {:on-click toggle-fn}
+        clause]
+
+       [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border
+        [:a.flex {:on-click toggle-fn}
+         (str (query-builder/->dsl clause))]]))
+   (fn [{:keys [toggle-fn]}]
+     [:div.p-4.flex.flex-col.gap-2
+      [:a {:title "Delete"
+           :on-click (fn []
+                       (swap! *tree (fn [q]
+                                      (let [loc' (if operator? (vec (butlast loc)) loc)]
+                                        (query-builder/remove-element q loc')))))}
+       "Delete (X)"]
+      [:div.font-medium.text-sm "Wrap with: "]
+      [:div.flex.flex-row.gap-2
+       (for [op query-builder/operators]
+         (ui/button (string/upper-case (name op))
+           :intent "logseq"
+           :small? true
+           :on-click (fn []
+                       (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))))]])
+   {:modal-class (util/hiccup->class
+                  "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
 (rum/defc clause
   [*tree *find loc clause]
   (when (seq clause)
-    [:div.query-builder-clause.p-1
+    [:div.query-builder-clause
      (let [kind (keyword (first clause))]
        (if (query-builder/operators-set kind)
-         (clauses-group *tree *find (conj loc 0) kind (rest clause))
-
-         [:div.flex.flex-row.items-center
-          (str (query-builder/->dsl clause))
-
-          (rum/with-key
-            (actions *find *tree loc clause {:group? false})
-            (str loc))]))]))
+         [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
+          [:div.text-4xl.mr-1.font-thin "{"]
+          (clauses-group *tree *find (conj loc 0) kind (rest clause))
+          [:div.text-4xl.ml-1.font-thin "}"]]
+         (clause-inner *tree *find loc clause)))]))
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  [:div.border.p-1.grid.grid-flow-col.auto-cols-max.gap-1
-   [:div.text-xs.font-bold.uppercase.toned-down.mr-2.grow
-    (name kind)]
+  [:div.flex.flex-row.gap-1.flex-wrap.items-center
+   (clause-inner *tree *find loc
+                 (string/upper-case (name kind))
+                 :operator? true)
 
-   [:div
-    [:div
-     (map-indexed (fn [i item]
-                    (clause *tree *find (update loc (dec (count loc))
-                                                #(+ % i 1)) item))
-                  clauses)]
-    (rum/with-key (actions *find *tree loc nil {:group? true})
-      (str loc))]])
+   (map-indexed (fn [i item]
+                  (clause *tree *find (update loc (dec (count loc)) #(+ % i 1)) item))
+                clauses)
+
+   (when (not= loc [0])
+     (add-filter *find *tree loc []))])
 
 ;; '(and (page-ref foo) (property key value))
 (rum/defc clause-tree < rum/reactive
@@ -308,6 +333,7 @@
   (let [*find (::find state)
         *tree (::tree state)]
     [:div.cp__query-builder
-     (page-block-selector *find)
-     (clause-tree *tree *find)
+     [:div.cp__query-builder-filter
+      (clause-tree *tree *find)
+      (add-filter *find *tree [0] [])]
      (query *tree)]))

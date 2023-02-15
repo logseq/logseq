@@ -1,7 +1,12 @@
-.cp__select-main {
-  width: fit-content;
-}
-
 .cp__query-builder {
-  @apply mt-2 ml-2 grid auto-rows-max gap-2;
+    @apply grid auto-rows-max gap-2 my-2;
+
+    &-filter {
+        @apply flex flex-row gap-2 items-center;
+    }
+
+    .cp__select-main {
+        width: fit-content;
+        margin: 0;
+    }
 }

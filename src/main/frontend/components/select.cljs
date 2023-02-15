@@ -72,7 +72,7 @@
         :class             "cp__select-results"
         :on-chosen         (fn [x]
                              (when close-modal? (state/close-modal!))
-                             (on-chosen x))
+                             (when on-chosen (on-chosen x)))
         :empty-placeholder (empty-placeholder t)})]]))
 
 (defn select-config
