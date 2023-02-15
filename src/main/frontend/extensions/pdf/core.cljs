@@ -694,7 +694,7 @@
        })]))
 
 (rum/defc pdf-viewer
-  [_url ^js pdf-document {:keys [identity initial-hls initial-page initial-error]} ops]
+  [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-error]} ops]
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
@@ -716,10 +716,12 @@
                                                         #js {:linkService link-service :eventBus event-bus})
                                     :textLayerMode     2
                                     :annotationMode    2
-                                    :removePageBorders true})]
+                                    :removePageBorders true})
+             ^js own-window   (pdf-windows/resolve-own-window viewer)
+             in-system-win?   (boolean (.closest el ".is-system-window"))]
 
          (set! (.-$groupIdentity viewer) identity)
-         (set! (.-$inSystemWindow viewer) (boolean (.closest el ".is-system-window")))
+         (set! (.-$inSystemWindow viewer) in-system-win?)
          (. link-service setDocument pdf-document)
          (. link-service setViewer viewer)
 
@@ -739,7 +741,7 @@
                  #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
 
          ;; TODO: debug
-         (set! (. js/window -lsPdfViewer) viewer)
+         (set! (. own-window -lsPdfViewer) viewer)
 
          ;; set initial page
          (js/setTimeout
@@ -748,9 +750,18 @@
          ;; destroy
          (fn []
            (.destroy pdf-document)
-           (set! (. js/window -lsPdfViewer) nil)
+           (set! (. own-window -lsPdfViewer) nil)
            (.cleanup viewer))))
      [])
+
+    ;; update window title
+    (rum/use-effect!
+     (fn []
+       (when-let [^js viewer (:viewer state)]
+         (when (pdf-windows/check-viewer-in-system-win? viewer)
+           (some-> (pdf-windows/resolve-own-document viewer)
+                   (set! -title filename)))))
+     [(:viewer state)])
 
     ;; interaction events
     (rum/use-effect!
@@ -794,7 +805,7 @@
           (rum/with-key (pdf-toolbar viewer {:on-external-window! #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
 (rum/defc ^:large-vars/data-var pdf-loader
-  [{:keys [url hls-file identity] :as pdf-current}]
+  [{:keys [url hls-file identity filename] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
@@ -910,6 +921,7 @@
             [(rum/with-key (pdf-viewer
                             url pdf-document
                             {:identity      identity
+                             :filename      filename
                              :initial-hls   initial-hls
                              :initial-page  initial-page
                              :initial-error initial-error}
