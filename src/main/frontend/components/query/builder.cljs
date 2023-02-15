@@ -23,17 +23,17 @@
             [frontend.modules.outliner.tree :as tree]
             [clojure.string :as string]))
 
-;; (rum/defc page-block-selector
-;;   [*find]
-;;   [:div.filter-item
-;;    (ui/select [{:label "Blocks"
-;;                 :value "block"
-;;                 :selected (= @*find :block)}
-;;                {:label "Pages"
-;;                 :value "page"
-;;                 :selected (= @*find :page)}]
-;;      (fn [v]
-;;        (reset! *find (keyword v))))])
+(rum/defc page-block-selector
+  [*find]
+  [:div.filter-item
+   (ui/select [{:label "Blocks"
+                :value "block"
+                :selected (= @*find :block)}
+               {:label "Pages"
+                :value "page"
+                :selected (= @*find :page)}]
+     (fn [v]
+       (reset! *find (keyword v))))])
 
 (defn- select
   ([items on-chosen]
@@ -271,7 +271,8 @@
            :on-click (fn []
                        (swap! *tree (fn [q]
                                       (let [loc' (if operator? (vec (butlast loc)) loc)]
-                                        (query-builder/remove-element q loc')))))}
+                                        (query-builder/remove-element q loc'))))
+                       (toggle-fn))}
        "Delete (X)"]
       [:div.font-medium.text-sm "Wrap with: "]
       [:div.flex.flex-row.gap-2
@@ -280,7 +281,10 @@
            :intent "logseq"
            :small? true
            :on-click (fn []
-                       (swap! *tree (fn [q] (query-builder/wrap-operator q loc op))))))]])
+                       (swap! *tree (fn [q]
+                                      (let [loc' (if operator? (vec (butlast loc)) loc)]
+                                        (query-builder/wrap-operator q loc' op))))
+                       (toggle-fn))))]])
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
@@ -299,9 +303,12 @@
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
   [:div.flex.flex-row.gap-1.flex-wrap.items-center
-   (clause-inner *tree *find loc
-                 (string/upper-case (name kind))
-                 :operator? true)
+   (when-not (and (= loc [0])
+                  (= kind :and)
+                  (<= (count clauses) 1))
+     (clause-inner *tree *find loc
+                   (string/upper-case (name kind))
+                   :operator? true))
 
    (map-indexed (fn [i item]
                   (clause *tree *find (update loc (dec (count loc)) #(+ % i 1)) item))
@@ -334,6 +341,7 @@
         *tree (::tree state)]
     [:div.cp__query-builder
      [:div.cp__query-builder-filter
+      (page-block-selector *find)
       (clause-tree *tree *find)
       (add-filter *find *tree [0] [])]
      (query *tree)]))
