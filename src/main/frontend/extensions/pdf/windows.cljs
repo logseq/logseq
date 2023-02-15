@@ -28,10 +28,9 @@
   (some-> (resolve-own-document viewer)
           (.-defaultView)))
 
-;(defn check-in-new-window?
-;  [^js el]
-;  (when-let [^js html (and el (.-documentElement (.-ownerDocument el)))]
-;    (.contains (.-classList html) "is-system-window")))
+(defn check-viewer-in-system-win?
+  [^js viewer]
+  (some-> viewer (.-$inSystemWindow)))
 
 ;(defn get-base-root
 ;  [^js el]
@@ -87,6 +86,7 @@
                       ^js main   (js/document.createElement "main")]
                   (set! (.-href base) js/location.href)
                   (.appendChild (.-head doc) base)
+                  (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)
