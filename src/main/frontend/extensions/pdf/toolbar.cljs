@@ -480,18 +480,6 @@
           :on-click #(set-settings-visible! (not settings-visible?))}
          (svg/adjustments 18)]
 
-        ;; system window
-        [:a.button
-         {:title    (if in-system-window?
-                      "Open in app window"
-                      "Open in external window")
-          :on-click #(if in-system-window?
-                       (pdf-windows/exit-pdf-in-system-window! true)
-                       (on-external-window!))}
-         (ui/icon (if in-system-window?
-                    "window-minimize"
-                    "window-maximize"))]
-
         ;; selection
         [:a.button
          {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
@@ -532,6 +520,18 @@
          {:title    "Annotations page"
           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
          (svg/annotations 16)]
+
+        ;; system window
+        [:a.button
+         {:title    (if in-system-window?
+                      "Open in app window"
+                      "Open in external window")
+          :on-click #(if in-system-window?
+                       (pdf-windows/exit-pdf-in-system-window! true)
+                       (on-external-window!))}
+         (ui/icon (if in-system-window?
+                    "window-minimize"
+                    "window-maximize"))]
 
         ;; pager
         [:div.pager.flex.items-center.ml-1
