@@ -693,7 +693,7 @@
        :add-hl!         add-hl!
        })]))
 
-(rum/defc pdf-viewer
+(rum/defc ^:large-vars/data-var pdf-viewer
   [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-error]} ops]
 
   (let [*el-ref (rum/create-ref)
