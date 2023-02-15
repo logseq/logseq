@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.assets
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
             [frontend.config :as config]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
@@ -67,7 +68,7 @@
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          data     (pr-str {:highlights highlights :extra extra})]
+          data     (with-out-str (pprint/pprint {:highlights highlights :extra extra}))]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$
