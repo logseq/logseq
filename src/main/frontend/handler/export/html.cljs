@@ -1,12 +1,12 @@
 (ns frontend.handler.export.html
   "export blocks/pages as html"
-  (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require
    [clojure.edn :as edn]
    [clojure.string :as string]
    [clojure.zip :as z]
    [frontend.db :as db]
    [frontend.handler.export.common :as common :refer [*state*]]
+   [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
    [frontend.state :as state]
    [frontend.util :as util :refer [concatv mapcatv]]
    [hiccups.runtime :as h]
@@ -16,7 +16,7 @@
 (def ^:private hiccup-malli-schema
   [:cat :keyword [:* :any]])
 
-;;; utils for contruct hiccup
+;;; utils for construct hiccup
 ;; - a
 ;;   - b
 ;;     - c
@@ -33,18 +33,8 @@
 
 (def ^:private empty-ul-hiccup (ul-hiccup-zip [:ul [:placeholder]]))
 
-(defn- goto-last
-  [loc]
-  (let [loc* (z/next loc)]
-    (if (z/end? loc*)
-      loc
-      (recur loc*))))
-
-(defn- get-level
-  [loc]
-  (count (z/path loc)))
-
 (defn- add-same-level-li-at-right
+  "[:ul [:li ]"
   [loc]
   (-> loc
       (z/insert-right [:li])
@@ -67,19 +57,6 @@
 (defn- replace-same-level-li
   [loc]
   (z/replace loc [:li]))
-
-(defn- goto-level
-  [loc level]
-  (let [current-level (get-level loc)]
-    (assert (<= level (inc current-level))
-            (print-str :level level :current-level current-level))
-    (let [diff (- level current-level)
-          up-or-down (if (pos? diff) z/down z/up)
-          diff* (abs diff)]
-      (loop [loc loc count* diff*]
-        (if (zero? count*)
-          loc
-          (recur (up-or-down loc) (dec count*)))))))
 
 (defn- add-items-in-li
   [loc items]
@@ -189,7 +166,7 @@
        [(apply vector :p (mapv inline-ast->hiccup inline-coll))])))
 
 (defn- block-heading
-  [loc {:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
+  [loc {:keys [title _tags marker level _numbering priority _anchor _meta _unordered _size]}]
   (let [loc (goto-last loc)
         current-level (get-level loc)
         title* (mapv inline-ast->hiccup title)

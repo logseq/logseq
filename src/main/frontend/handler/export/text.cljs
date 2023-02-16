@@ -1,46 +1,21 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
-  (:refer-clojure :exclude [map filter mapcat concat remove])
+  (:refer-clojure :exclude [map filter mapcat concat remove newline])
   (:require
    [clojure.string :as string]
    [frontend.db :as db]
    [frontend.extensions.zip :as zip]
-   [frontend.handler.export.common :as common :refer [*state*]]
+   [frontend.handler.export.common :as common :refer
+    [*state*
+     simple-ast-malli-schema
+     raw-text space newline* indent simple-asts->string]]
    [frontend.state :as state]
    [frontend.util :as util :refer [mapcatv concatv removev]]
    [goog.dom :as gdom]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [malli.core :as m]
-   [malli.util :as mu]
    [promesa.core :as p]))
 
-;;; define simple text ast
-
-(def ^:private simple-ast-malli-schema
-  (mu/closed-schema
-   [:or
-    [:map
-     [:type [:= :raw-text]]
-     [:content :string]]
-    [:map
-     [:type [:= :space]]]
-    [:map
-     [:type [:= :newline]]
-     [:line-count :int]]
-    [:map
-     [:type [:= :indent]]
-     [:level :int]
-     [:extra-space-count :int]]]))
-
-(defn- raw-text [& contents]
-  {:type :raw-text :content (reduce str contents)})
-(def ^:private space {:type :space})
-(defn- newline* [line-count]
-  {:type :newline :line-count line-count})
-(defn- indent [level extra-space-count]
-  {:type :indent :level level :extra-space-count extra-space-count})
-
-;;; define simple text ast(ends)
 
 ;;; block-ast, inline-ast -> simple-ast
 
@@ -51,7 +26,7 @@
     (case indent-style
       "dashes"               (indent level 2)
       ("spaces" "no-indent") (indent level 0)
-      (assert false (str "unknown indent-style: " indent-style)))))
+      (assert false (print-str "unknown indent-style:" indent-style)))))
 
 (declare inline-ast->simple-ast
          block-ast->simple-ast)
@@ -320,7 +295,7 @@
       "Highlight"
       (emphasis-wrap-with inline-coll "^^")
       ;; else
-      (assert false (str :inline-emphasis " " emphasis " is invalid")))))
+      (assert false (print-str :inline-emphasis emphasis "is invalid")))))
 
 (defn- inline-break-line
   []
@@ -379,7 +354,7 @@
        (block-raw-html ast-content)
        "Hiccup"
        (block-hiccup ast-content)
-       (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet"))))))
+       (assert false (print-str :block-ast->simple-ast ast-type "not implemented yet"))))))
 
 (defn- inline-ast->simple-ast
   [inline]
@@ -392,7 +367,7 @@
       "Verbatim"
       [(raw-text ast-content)]
       "Code"
-      (mapv raw-text ["`" ast-content "`"])
+      [(raw-text "`" ast-content "`")]
       "Tag"
       [(raw-text (str "#" (common/hashtag-value->string ast-content)))]
       "Spaces"                          ; what's this ast-type for ?
@@ -431,113 +406,10 @@
       [(raw-text ast-content)]
       ("Export_Snippet" "Inline_Source_Block")
       nil
-      (assert false (str :inline-ast->simple-ast " " ast-type " not implemented yet")))))
+      (assert false (print-str :inline-ast->simple-ast ast-type "not implemented yet")))))
 
 ;;; block-ast, inline-ast -> simple-ast (ends)
 
-;;; simple-ast -> string
-(defn- simple-ast->string
-  [simple-ast]
-  {:pre [(m/validate simple-ast-malli-schema simple-ast)]}
-  (case (:type simple-ast)
-    :raw-text (:content simple-ast)
-    :space " "
-    :newline (reduce str (repeat (:line-count simple-ast) "\n"))
-    :indent (reduce str (concatv (repeat (:level simple-ast) "\t")
-                                 (repeat (:extra-space-count simple-ast) " ")))))
-
-(defn- merge-adjacent-spaces&newlines
-  [simple-ast-coll]
-  (loop [r                             (transient [])
-         last-ast                      nil
-         last-raw-text-space-suffix?   false
-         last-raw-text-newline-suffix? false
-         [simple-ast & other-ast-coll] simple-ast-coll]
-    (if (nil? simple-ast)
-      (persistent! (if last-ast (conj! r last-ast) r))
-      (let [tp            (:type simple-ast)
-            last-ast-type (:type last-ast)]
-        (case tp
-          :space
-          (if (or (contains? #{:space :newline :indent} last-ast-type)
-                  last-raw-text-space-suffix?
-                  last-raw-text-newline-suffix?)
-            ;; drop this :space
-            (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
-            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
-
-          :newline
-          (case last-ast-type
-            (:space :indent) ;; drop last-ast
-            (recur r simple-ast false false other-ast-coll)
-            :newline
-            (let [last-newline-count (:line-count last-ast)
-                  current-newline-count (:line-count simple-ast)
-                  kept-ast (if (> last-newline-count current-newline-count) last-ast simple-ast)]
-              (recur r kept-ast false false other-ast-coll))
-            :raw-text
-            (if last-raw-text-newline-suffix?
-              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
-              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
-            ;; no-last-ast
-            (recur r simple-ast false false other-ast-coll))
-
-          :indent
-          (case last-ast-type
-            (:space :indent)            ; drop last-ast
-            (recur r simple-ast false false other-ast-coll)
-            :newline
-            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll)
-            :raw-text
-            (if last-raw-text-space-suffix?
-              ;; drop this :indent
-              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
-              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
-            ;; no-last-ast
-            (recur r simple-ast false false other-ast-coll))
-
-          :raw-text
-          (let [content         (:content simple-ast)
-                empty-content?  (empty? content)
-                first-ch        (first content)
-                last-ch         (let [num (count content)]
-                                  (when (pos? num)
-                                    (nth content (dec num))))
-                newline-prefix? (some-> first-ch #{"\r" "\n"} boolean)
-                newline-suffix? (some-> last-ch #{"\n"} boolean)
-                space-prefix?   (some-> first-ch #{" "} boolean)
-                space-suffix?   (some-> last-ch #{" "} boolean)]
-            (cond
-              empty-content?            ;drop this raw-text
-              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
-              newline-prefix?
-              (case last-ast-type
-                (:space :indent :newline) ;drop last-ast
-                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
-                :raw-text
-                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
-                ;; no-last-ast
-                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
-              space-prefix?
-              (case last-ast-type
-                (:space :indent)        ;drop last-ast
-                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
-                (:newline :raw-text)
-                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
-                ;; no-last-ast
-                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
-              :else
-              (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll))))))))
-
-(defn- simple-asts->string
-  [simple-ast-coll]
-  (->> simple-ast-coll
-       merge-adjacent-spaces&newlines
-       merge-adjacent-spaces&newlines
-       (mapv simple-ast->string)
-       string/join))
-
-;;; simple-ast -> string (ends)
 
 ;;; export fns
 

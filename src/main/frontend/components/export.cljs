@@ -2,6 +2,7 @@
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.export.html :as export-html]
+            [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export :as export]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -31,7 +32,7 @@
           (t :export-markdown)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
+         [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
           (t :export-opml)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
@@ -73,7 +74,7 @@
                       :text (export-text/export-blocks-as-markdown
                              current-repo root-block-ids
                              {:indent-style text-indent-style :remove-options text-remove-options})
-                      :opml "" ;; (export/export-blocks-as-opml current-repo root-block-ids)
+                      :opml (export-opml/export-blocks-as-opml current-repo root-block-ids {:remove-options text-remove-options})
                       :html (export-html/export-blocks-as-html current-repo root-block-ids {:remove-options text-remove-options})
                       "" ;; (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
                       ))]
@@ -107,10 +108,10 @@
                                (state/set-export-block-text-indent-style! value)))}
                (for [{:keys [label value selected]} options]
                  [:option (cond->
-                           {:key   label
-                            :value (or value label)}
-                            selected
-                            (assoc :selected selected))
+                              {:key   label
+                               :value (or value label)}
+                              selected
+                              (assoc :selected selected))
                   label])]]
         [:div.flex.items-center
          (ui/checkbox {:style {:margin-right 6

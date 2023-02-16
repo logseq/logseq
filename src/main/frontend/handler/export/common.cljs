@@ -13,7 +13,9 @@
    [frontend.state :as state]
    [frontend.util :as util :refer [mapcatv concatv]]
    [logseq.graph-parser.mldoc :as gp-mldoc]
-   [logseq.graph-parser.util :as gp-util]))
+   [logseq.graph-parser.util :as gp-util]
+   [malli.core :as m]
+   [malli.util :as mu]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -36,6 +38,8 @@
     :current-level 1
     :block-ref-replaced? false
     :block&page-embed-replaced? false}
+
+   ;; export-options submap
    :export-options
    {;; dashes, spaces, no-indent
     :indent-style "dashes"
@@ -625,3 +629,140 @@
       block-ast)))
 
 ;;; walk on block-ast, apply inline transformers (ends)
+
+;;; simple ast
+(def simple-ast-malli-schema
+  (mu/closed-schema
+   [:or
+    [:map
+     [:type [:= :raw-text]]
+     [:content :string]]
+    [:map
+     [:type [:= :space]]]
+    [:map
+     [:type [:= :newline]]
+     [:line-count :int]]
+    [:map
+     [:type [:= :indent]]
+     [:level :int]
+     [:extra-space-count :int]]]))
+
+(defn raw-text [& contents]
+  {:type :raw-text :content (reduce str contents)})
+(def space {:type :space})
+(defn newline* [line-count]
+  {:type :newline :line-count line-count})
+(defn indent [level extra-space-count]
+  {:type :indent :level level :extra-space-count extra-space-count})
+
+(defn- simple-ast->string
+  [simple-ast]
+  {:pre [(m/validate simple-ast-malli-schema simple-ast)]}
+  (case (:type simple-ast)
+    :raw-text (:content simple-ast)
+    :space " "
+    :newline (reduce str (repeat (:line-count simple-ast) "\n"))
+    :indent (reduce str (concatv (repeat (:level simple-ast) "\t")
+                                 (repeat (:extra-space-count simple-ast) " ")))))
+
+(defn- merge-adjacent-spaces&newlines
+  [simple-ast-coll]
+  (loop [r                             (transient [])
+         last-ast                      nil
+         last-raw-text-space-suffix?   false
+         last-raw-text-newline-suffix? false
+         [simple-ast & other-ast-coll] simple-ast-coll]
+    (if (nil? simple-ast)
+      (persistent! (if last-ast (conj! r last-ast) r))
+      (let [tp            (:type simple-ast)
+            last-ast-type (:type last-ast)]
+        (case tp
+          :space
+          (if (or (contains? #{:space :newline :indent} last-ast-type)
+                  last-raw-text-space-suffix?
+                  last-raw-text-newline-suffix?)
+            ;; drop this :space
+            (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+
+          :newline
+          (case last-ast-type
+            (:space :indent) ;; drop last-ast
+            (recur r simple-ast false false other-ast-coll)
+            :newline
+            (let [last-newline-count (:line-count last-ast)
+                  current-newline-count (:line-count simple-ast)
+                  kept-ast (if (> last-newline-count current-newline-count) last-ast simple-ast)]
+              (recur r kept-ast false false other-ast-coll))
+            :raw-text
+            (if last-raw-text-newline-suffix?
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+            ;; no-last-ast
+            (recur r simple-ast false false other-ast-coll))
+
+          :indent
+          (case last-ast-type
+            (:space :indent)            ; drop last-ast
+            (recur r simple-ast false false other-ast-coll)
+            :newline
+            (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll)
+            :raw-text
+            (if last-raw-text-space-suffix?
+              ;; drop this :indent
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              (recur (if last-ast (conj! r last-ast) r) simple-ast false false other-ast-coll))
+            ;; no-last-ast
+            (recur r simple-ast false false other-ast-coll))
+
+          :raw-text
+          (let [content         (:content simple-ast)
+                empty-content?  (empty? content)
+                first-ch        (first content)
+                last-ch         (let [num (count content)]
+                                  (when (pos? num)
+                                    (nth content (dec num))))
+                newline-prefix? (some-> first-ch #{"\r" "\n"} boolean)
+                newline-suffix? (some-> last-ch #{"\n"} boolean)
+                space-prefix?   (some-> first-ch #{" "} boolean)
+                space-suffix?   (some-> last-ch #{" "} boolean)]
+            (cond
+              empty-content?            ;drop this raw-text
+              (recur r last-ast last-raw-text-space-suffix? last-raw-text-newline-suffix? other-ast-coll)
+              newline-prefix?
+              (case last-ast-type
+                (:space :indent :newline) ;drop last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
+                :raw-text
+                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
+                ;; no-last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
+              space-prefix?
+              (case last-ast-type
+                (:space :indent)        ;drop last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll)
+                (:newline :raw-text)
+                (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll)
+                ;; no-last-ast
+                (recur r simple-ast space-suffix? newline-suffix? other-ast-coll))
+              :else
+              (recur (if last-ast (conj! r last-ast) r) simple-ast space-suffix? newline-suffix? other-ast-coll))))))))
+
+(defn simple-asts->string
+  [simple-ast-coll]
+  (->> simple-ast-coll
+       merge-adjacent-spaces&newlines
+       merge-adjacent-spaces&newlines
+       (mapv simple-ast->string)
+       string/join))
+
+;;; simple ast (ends)
+
+
+;;; TODO: walk the hiccup tree,
+;;; and call escape-html on all its contents
+;;;
+
+
+;;; walk the hiccup tree,
+;;; and call escape-html on all its contents (ends)
