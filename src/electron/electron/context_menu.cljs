@@ -1,6 +1,5 @@
 (ns electron.context-menu
-  (:require [clojure.string :as string]
-            [electron.utils :as utils]
+  (:require [electron.utils :as utils]
             ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
             ["electron-dl" :refer [download]]))
 
