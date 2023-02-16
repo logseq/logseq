@@ -16,7 +16,7 @@
                 edit-flags (.-editFlags params)
                 editable? (.-isEditable params)
                 selection-text (.-selectionText params)
-                has-text? (not (string/blank? (string/trim selection-text)))
+                has-text? (seq selection-text)
                 link-url (not-empty (.-linkURL params))
                 media-type (.-mediaType params)]
 
@@ -45,7 +45,6 @@
                                            (.. url -searchParams (set "q" selection-text))
                                            (.. shell (openExternal (.toString url))))}))
               (. menu append (MenuItem. #js {:type "separator"})))
-
 
             (when editable?
               (when has-text?
