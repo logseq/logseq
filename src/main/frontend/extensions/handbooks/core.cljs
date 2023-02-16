@@ -13,6 +13,7 @@
    [frontend.util :as util]
    [frontend.storage :as storage]
    [frontend.extensions.video.youtube :as youtube]
+   [frontend.context.i18n :refer [t]]
    [clojure.edn :as edn]))
 
 (defn get-handbooks-endpoint
@@ -207,16 +208,16 @@
     [:div.pane.dashboard-pane
      (when-let [popular-topics (:popular-topics root)]
        [:<>
-        [:h2 "Popular topics"]
+        [:h2 (t :handbook/popular-topics)]
         [:div.topics-list
          (for [topic-key popular-topics]
            (when-let [topic (and (string? topic-key)
                                  (->> (util/safe-lower-case topic-key)
                                       (csk/->snake_case_string)
                                       (get handbooks-nodes)))]
-             (topic-card topic #(nav-to-pane! [:topic-detail topic "Helps"] [:dashboard]) nil)))]])
+             (topic-card topic #(nav-to-pane! [:topic-detail topic (t :handbook/title)] [:dashboard]) nil)))]])
 
-     [:h2 "Help categories"]
+     [:h2 (t :handbook/help-categories)]
      [:div.categories-list
       (let [categories (:children root)]
         (for [{:keys [key title children color] :as category} categories]
@@ -225,7 +226,7 @@
             :style    {:background-color (or color "#676767")}
             :on-click #(nav-to-pane! [:topics category title] pane-state)}
            [:strong title]
-           [:span (str (count children) " topics")]]))]]))
+           [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]
@@ -345,7 +346,7 @@
 (rum/defc ^:large-vars/data-var content
   []
   (let [[active-pane0, set-active-pane0!]
-        (rum/use-state [:dashboard nil "Helps"])
+        (rum/use-state [:dashboard nil (t :handbook/title)])
 
         [handbooks-state, set-handbooks-state!]
         (rum/use-state nil)
@@ -428,7 +429,7 @@
 
        [:h1.text-lg.flex.items-center
         (if dashboard?
-          [:span "Helps"]
+          [:span (t :handbook/title)]
           [:span.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
@@ -437,7 +438,7 @@
                                (set-active-pane0! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
-           [:span (or (last active-pane0) "Handbooks")]])]
+           [:span (or (last active-pane0) (t :handbook/title))]])]
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
@@ -473,7 +474,10 @@
      (when handbooks-loaded?
        ;; footer
        [:div.ft
-        [:p [:span.text-xs.opacity-40 "Join community for more help!"]]
+        [:p [:a.text-xs.text-gray-400.opacity-80
+             {:href   "https://discord.com/invite/URphjhk"
+              :target "_blank"}
+             "Join community for more help!"]]
 
         ;; TODO: how to get related topics?
         ;(when (= :topic-detail active-pane)
