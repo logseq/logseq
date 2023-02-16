@@ -29,10 +29,6 @@
 (defn add-element
   [q loc x]
   {:pre [(vector? loc) (some? x)]}
-  (prn "add element: "
-       {:q q
-        :loc loc
-        :x x})
   (cond
     (and (seq loc) (= 1 (count loc)))
     (vec-assoc-item q (first loc) x)
@@ -51,10 +47,6 @@
 (defn append-element
   [q loc x]
   {:pre [(vector? loc) (some? x)]}
-  (prn "append element: "
-       {:q q
-        :loc loc
-        :x x})
   (let [idx (count (get-in q (vec (butlast loc))))
         loc' (vec-replace-item loc (dec (count loc)) idx)]
     (add-element q loc' x)))
@@ -87,10 +79,6 @@
 (defn wrap-operator
   [q loc operator]
   {:pre [(seq q) (seq loc) (operators-set operator)]}
-  (prn "wrap operator: "
-       {:q q
-        :loc loc
-        :operator operator})
   (if (= loc [0])
     [operator q]
     (when-let [x (get-in q loc)]
@@ -100,9 +88,6 @@
 (defn unwrap-operator
   [q loc]
   {:pre [(seq q) (seq loc)]}
-  (prn "unwrap operator: "
-       {:q q
-        :loc loc})
   (if (and (= loc [0]) (operators-set (first q)))
     (second q)
     (when-let [x (get-in q loc)]

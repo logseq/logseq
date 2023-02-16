@@ -254,6 +254,28 @@
 
 (declare clauses-group)
 
+(defn- dsl-human-output
+  [clause]
+  (let [f (first clause)]
+    (cond
+      (string? clause)
+      (str "search: " clause)
+
+      (= f :tags)
+      (str "# (second clause)")
+
+      (= f :property)
+      (str (name (second clause)) ": " (last clause))
+
+      (= f :between)
+      (str "between: " (second clause) " - " (last clause))
+
+      (= 2 (count clause))
+      (str (name f) ": " (second clause))
+
+      :else
+      (str (query-builder/->dsl clause)))))
+
 (rum/defc clause-inner
   [*tree *find loc clause & {:keys [operator?]}]
   (ui/dropdown
@@ -264,7 +286,7 @@
 
        [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border
         [:a.flex {:on-click toggle-fn}
-         (str (query-builder/->dsl clause))]]))
+         (dsl-human-output clause)]]))
    (fn [{:keys [toggle-fn]}]
      [:div.p-4.flex.flex-col.gap-2
       [:a {:title "Delete"
@@ -274,6 +296,7 @@
                                         (query-builder/remove-element q loc'))))
                        (toggle-fn))}
        "Delete (X)"]
+
       [:div.font-medium.text-sm "Wrap with: "]
       [:div.flex.flex-row.gap-2
        (for [op query-builder/operators]
@@ -284,7 +307,20 @@
                        (swap! *tree (fn [q]
                                       (let [loc' (if operator? (vec (butlast loc)) loc)]
                                         (query-builder/wrap-operator q loc' op))))
-                       (toggle-fn))))]])
+                       (toggle-fn))))]
+
+      (when operator?
+        [:div
+         [:div.font-medium.text-sm "Replace with: "]
+         [:div.flex.flex-row.gap-2
+          (for [op (remove #{(keyword (string/lower-case clause))} query-builder/operators)]
+            (ui/button (string/upper-case (name op))
+              :intent "logseq"
+              :small? true
+              :on-click (fn []
+                          (swap! *tree (fn [q]
+                                         (query-builder/replace-element q loc op)))
+                          (toggle-fn))))]])])
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
@@ -327,12 +363,6 @@
                           [:and [@tree]])]
     (clauses-group *tree *find [0] kind' clauses)))
 
-(rum/defc query < rum/reactive
-  [*tree]
-  [:div
-   "Query: "
-   (str (query-builder/->dsl (rum/react *tree)))])
-
 (rum/defcs builder <
   (rum/local :block ::find)
   (rum/local [:and] ::tree)
@@ -343,5 +373,4 @@
      [:div.cp__query-builder-filter
       (page-block-selector *find)
       (clause-tree *tree *find)
-      (add-filter *find *tree [0] [])]
-     (query *tree)]))
+      (add-filter *find *tree [0] [])]]))
