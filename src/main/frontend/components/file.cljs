@@ -19,8 +19,7 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [promesa.core :as p]
-            ["path" :as path]))
+            [promesa.core :as p]))
 
 (defn- get-path
   [state]
