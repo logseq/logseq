@@ -818,7 +818,7 @@
     {:class     (or class "form-select")
      :on-change (fn [e]
                   (let [value (util/evalue e)]
-                    (on-change value)))}
+                    (on-change e value)))}
     (for [{:keys [label value selected disabled]
            :or {selected false disabled false}} options]
       [:option (cond->

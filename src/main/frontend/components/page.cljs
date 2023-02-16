@@ -560,7 +560,7 @@
               ;;         item))
               ;;     [{:label "gForce"}
               ;;      {:label "dagre"}])
-              ;;    (fn [value]
+              ;;    (fn [_e value]
               ;;      (set-setting! :layout value))
               ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2

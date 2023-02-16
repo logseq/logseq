@@ -145,6 +145,9 @@
       (= current-filter 'not)
       (cons 'and clauses)
 
+      (and nested-and? (= 1 (count clauses)))
+      (first clauses)
+
       (or (= current-filter 'or)
           nested-and?)
       (cons 'and clauses)
@@ -549,12 +552,21 @@ Some bindings in this fn:
       (apply conj q where)
       (conj q where))))
 
+(defn parse-query
+  [q]
+  (let [q' (template/resolve-dynamic-template! q)]
+    (parse q')))
+
+(defn pre-transform-query
+  [q]
+  (let [q' (template/resolve-dynamic-template! q)]
+    (pre-transform q')))
+
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
   [repo query-string]
   (when (and (string? query-string) (not= "\"\"" query-string))
-    (let [query-string' (template/resolve-dynamic-template! query-string)
-          {:keys [query rules sort-by blocks? sample]} (parse query-string')]
+    (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (let [sort-by (or sort-by identity)
               random-samples (if @sample

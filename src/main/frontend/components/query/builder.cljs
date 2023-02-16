@@ -21,18 +21,21 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.graph-parser.util :as gp-util]))
 
 (rum/defc page-block-selector
   [*find]
-  [:div.filter-item
+  [:div.filter-item {:on-mouse-down (fn [e] (util/stop-propagation e))}
    (ui/select [{:label "Blocks"
                 :value "block"
                 :selected (= @*find :block)}
                {:label "Pages"
                 :value "page"
                 :selected (= @*find :page)}]
-     (fn [v]
+     (fn [e v]
+       ;; Prevent opening the current block's editor
+       (util/stop e)
        (reset! *find (keyword v))))])
 
 (defn- select
@@ -108,7 +111,7 @@
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc clause] :as opts}]
-  [:div
+  [:div {:on-mouse-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))
@@ -261,13 +264,13 @@
       (string? clause)
       (str "search: " clause)
 
-      (= f :tags)
+      (= (keyword f) :tags)
       (str "# (second clause)")
 
-      (= f :property)
+      (= (keyword f) :property)
       (str (name (second clause)) ": " (last clause))
 
-      (= f :between)
+      (= (keyword f) :between)
       (str "between: " (second clause) " - " (last clause))
 
       (= 2 (count clause))
@@ -363,7 +366,7 @@
                           [:and [@tree]])]
     (clauses-group *tree *find [0] kind' clauses)))
 
-(rum/defc query < rum/reactive
+(rum/defc query-cp < rum/reactive
   [*tree]
   [:div
    "Query: "
@@ -371,8 +374,27 @@
 
 (rum/defcs builder <
   (rum/local :block ::find)
-  (rum/local [:and] ::tree)
-  [state]
+  {:init (fn [state]
+           (let [q-str (first (:rum/args state))
+                 query (gp-util/safe-read-string (query-dsl/pre-transform-query q-str))
+                 query' (if (contains? #{'and 'or 'not} (first query))
+                          query
+                          [:and query])
+                 tree (query-builder/from-dsl query')
+                 *tree (atom tree)
+                 config (last (:rum/args state))]
+             (add-watch *tree :updated (fn [_ _ _old new]
+                                         (when-let [block (:block config)]
+                                           (let [q (str (query-builder/->dsl @*tree))
+                                                 repo (state/get-current-repo)
+                                                 block (db/pull [:block/uuid (:block/uuid block)])]
+                                             (when block
+                                               (let [content (string/replace (:block/content block)
+                                                                             (util/format "{{query %s}}" q-str)
+                                                                             (util/format "{{query %s}}" q))]
+                                                 (editor-handler/save-block! repo (:block/uuid block) content)))))))
+             (assoc state ::tree *tree)))}
+  [state query config]
   (let [*find (::find state)
         *tree (::tree state)]
     [:div.cp__query-builder
@@ -380,4 +402,4 @@
       (page-block-selector *find)
       (clause-tree *tree *find)
       (add-filter *find *tree [0] [])]
-     (query *tree)]))
+     (query-cp *tree)]))

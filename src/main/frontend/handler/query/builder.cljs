@@ -1,7 +1,8 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
@@ -102,18 +103,21 @@
    (walk/prewalk
     (fn [f]
       (cond
-        (and (vector? f) (= :page-ref (first f)))
+        (and (vector? f) (= :page-ref (keyword (first f))))
         (symbol (util/format "[[%s]]" (second f)))
 
-        (and (vector? f) (contains? #{:task :priority :page :between :namespace :tags} (first f)))
-        (into [(first f)] (map #(symbol (util/format "[[%s]]" %)) (rest f)))
+        (and (vector? f) (= :between (keyword (first f))))
+        (into [(symbol :between)] (map symbol (rest f)))
+
+        (and (vector? f) (contains? #{:task :page :namespace :tags} (keyword (first f))))
+        (into [(symbol (first f))] (map #(symbol (util/format "[[%s]]" %)) (rest f)))
 
         :else f))
     col)
    (walk/prewalk
     (fn [f]
       (cond
-        (vector? f)
+        (and (vector? f) (keyword (first f)))
         (cons (symbol (first f)) (rest f))
 
         :else f)))))
@@ -123,6 +127,12 @@
   (walk/prewalk
    (fn [f]
      (cond
+       (and (vector? f) (vector? (first f)))
+       [:page-ref (page-ref/get-page-name (str f))]
+
+       (and (string? f) (page-ref/get-page-name f))
+       [:page-ref (page-ref/get-page-name f)]
+
        (and (list? f)
             (symbol? (first f))
             (operators-set (keyword (first f)))) ; operator
