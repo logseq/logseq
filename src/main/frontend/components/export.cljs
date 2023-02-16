@@ -112,35 +112,35 @@
                   label])]]
         [:div.flex.items-center
          (ui/checkbox {:style {:margin-right 6
-                               :visibility (if (= :text type) "visible" "hidden")}
+                               :visibility (if (#{:text :html} type) "visible" "hidden")}
                        :checked (contains? text-remove-options :page-ref)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :page-ref))})
 
          [:div
-          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
           "[[text]] -> text"]
 
          (ui/checkbox {:style {:margin-right 6
                                :margin-left "1em"
-                               :visibility (if (= :text type) "visible" "hidden")}
+                               :visibility (if (#{:text :html} type) "visible" "hidden")}
                        :checked (contains? text-remove-options :emphasis)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :emphasis))})
 
          [:div
-          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
           "remove emphasis"]
 
          (ui/checkbox {:style {:margin-right 6
                                :margin-left "1em"
-                               :visibility (if (= :text type) "visible" "hidden")}
+                               :visibility (if (#{:text :html} type) "visible" "hidden")}
                        :checked (contains? text-remove-options :tag)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :tag))})
 
          [:div
-          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
           "remove #tags"]]])
 
      [:div.mt-4

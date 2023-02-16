@@ -396,7 +396,7 @@
   (binding [*state* (merge *state*
                            {:export-options
                             {:remove-emphasis? (contains? (set remove-options) :emphasis)
-                             :remove-page-ref? (contains? (set remove-options) :page-ref)
+                             :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)
                              :remove-tags? (contains? (set remove-options) :tag)}})]
     (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
           ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
