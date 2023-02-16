@@ -82,7 +82,8 @@
         (.setAttribute anchor "download" file-path)
         (.click anchor)))))
 
-(defn export-repo-as-html!
+(defn download-repo-as-html!
+  "download public pages as html"
   [repo]
   (when-let [db (db/get-db repo)]
     (let [[db asset-filenames]           (if (state/all-pages-public?)

@@ -23,7 +23,7 @@
         (t :export-json)]]
       (when (util/electron?)
         [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
+         [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
           (t :export-public-pages)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4

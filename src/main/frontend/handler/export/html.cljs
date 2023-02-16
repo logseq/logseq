@@ -390,6 +390,8 @@
       (add-items-in-li loc [(edn/read-string ast-content)])
       (assert false (str :block-ast->simple-ast " " ast-type " not implemented yet")))))
 
+;;; block/inline-ast -> hiccup (ends)
+
 ;;; export fns
 (defn- export-helper
   [content format remove-options]
