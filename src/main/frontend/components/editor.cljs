@@ -450,8 +450,12 @@
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
-  [content format]
-  (let [content (if content (str content) "")]
+  [block content format]
+  (let [content (if content (str content) "")
+        heading (-> block :block/properties :heading)
+        heading (if (true? heading)
+                  (min (inc (:block/level block)) 6)
+                  heading)]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
      (if (or (> (.-length content) 1000)
@@ -462,6 +466,7 @@
      (case format
        :markdown
        (cond
+         heading (str "h" heading)
          (string/starts-with? content "# ") "h1"
          (string/starts-with? content "## ") "h2"
          (string/starts-with? content "### ") "h3"
@@ -472,6 +477,7 @@
          :else "normal-block")
        ;; other formats
        (cond
+         heading (str "h" heading)
          (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
@@ -585,7 +591,7 @@
   lifecycle/lifecycle
   [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content id)
-        heading-class (get-editor-style-class content format)]
+        heading-class (get-editor-style-class block content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea

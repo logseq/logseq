@@ -208,12 +208,12 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (last (split-last "." path-or-file-name)))
+  (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
 
 (defn get-format
   [file]
   (when file
-    (normalize-format (keyword (string/lower-case (path->file-ext file))))))
+    (normalize-format (keyword (some-> (path->file-ext file) string/lower-case)))))
 
 (defn get-file-ext
   "Copy of frontend.util/get-file-ext. Too basic to couple to main app"

@@ -1,7 +1,7 @@
 (ns electron.context-menu
   (:require [clojure.string :as string]
             [electron.utils :as utils]
-            ["electron" :refer [Menu MenuItem shell] :as electron]
+            ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
             ["electron-dl" :refer [download]]))
 
 ;; context menu is registerd in window/setup-window-listeners!
@@ -88,7 +88,8 @@
 
               (. menu append
                  (MenuItem. #js {:label "Copy Image"
-                                 :click #(. web-contents copyImageAt (.-x params) (.-y params))})))
+                                 :click (fn []
+                                          (. clipboard writeImage (. nativeImage createFromPath (subs (.-srcURL params) 7))))})))
 
             (when (not-empty (.-items menu))
               (. menu popup))))]
