@@ -1,4 +1,5 @@
 (ns frontend.handler.export.text
+  "export blocks/pages as text"
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require
    [clojure.string :as string]
@@ -162,7 +163,7 @@
      (mapcatv (fn [line] [(indent-with-2-spaces level) (raw-text line)]) lines)
      [(newline* 1) (raw-text ":END:") (newline* 1)])))
 
-(defn- block-footnote-defnition
+(defn- block-footnote-definition
   [[name content]]
   (concatv
    [(raw-text "[^" name "]:") space]
@@ -367,7 +368,7 @@
        ;; "Property_Drawer"
        ;; (block-property-drawer ast-content)
        "Footnote_Definition"
-       (block-footnote-defnition (rest block))
+       (block-footnote-definition (rest block))
        "Horizontal_Rule"
        block-horizontal-rule
        "Table"

@@ -1,6 +1,7 @@
 (ns frontend.components.export
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.export.text :as export-text]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.export :as export]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -63,15 +64,15 @@
   (let [current-repo (state/get-current-repo)
         type (rum/react *export-block-type)
         text-indent-style (state/sub :copy/export-block-text-indent-style)
-        text-remove-options (state/sub :copy/export-block-text-remove-options)
+        text-remove-options (set (state/sub :copy/export-block-text-remove-options))
         copied? (::copied? state)
         exported-content (::exported-content state)
         _ (println type text-remove-options text-indent-style)
         content (or (get exported-content type)
                     (case type
-                      :text (export-text/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
+                      :text (export-text/export-blocks-as-markdown current-repo root-block-ids text-indent-style text-remove-options)
                       :opml "" ;; (export/export-blocks-as-opml current-repo root-block-ids)
-                      :html "" ;; (export/export-blocks-as-html current-repo root-block-ids)
+                      :html (export-html/export-blocks-as-html current-repo root-block-ids text-remove-options)
                       "" ;; (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
                       ))]
     [:div.export.resize

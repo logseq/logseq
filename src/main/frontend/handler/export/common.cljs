@@ -11,10 +11,11 @@
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
    [frontend.state :as state]
-   [frontend.util :as util :refer [mapcatv]]
+   [frontend.util :as util :refer [mapcatv concatv]]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [logseq.graph-parser.util :as gp-util]))
 
+;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
   "dynamic var, state used for exporting"
   {;; current level of Heading, start from 1(same as mldoc), use when `block-ast->simple-ast`
@@ -486,7 +487,7 @@
         (if (get-in *state* [:replace-ref-embed :block&page-embed-replaced?])
           (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] false))
               (recur block-ast-coll result-block-ast-tcoll
-                     (reduce conj block-ast-coll-to-replace-references block-ast-coll-replaced)
+                     (concatv block-ast-coll-to-replace-references block-ast-coll-replaced)
                      (vec other-block-asts-to-replace-embed)))
           (recur block-ast-coll (reduce conj! result-block-ast-tcoll block-ast-coll-replaced)
                  (vec block-ast-coll-to-replace-references) (vec other-block-asts-to-replace-embed))))
