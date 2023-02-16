@@ -822,12 +822,9 @@ input::-webkit-inner-spin-button {
     }
 
     [data-hl-type=area] {
-      display: flex;
-      margin-bottom: 10px;
-      flex-direction: column;
-
       .prefix-link {
-        display: inline;
+        padding-top: 5px;
+        display: block;
       }
 
       .hl-page {
