@@ -48,7 +48,7 @@ on:
 
 env:
   CLOJURE_VERSION: '1.10.1.763'
-  NODE_VERSION: '16'
+  NODE_VERSION: '18'
 
 jobs:
   compile-cljs:
