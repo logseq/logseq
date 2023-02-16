@@ -390,8 +390,8 @@
                                                  block (db/pull [:block/uuid (:block/uuid block)])]
                                              (when block
                                                (let [content (string/replace (:block/content block)
-                                                                             (re-pattern (util/format "{{query %s\\s*}}" q-str))
-                                                                             (util/format "{{query %s}}" q))]
+                                                                             (util/format "{{query %s" q-str)
+                                                                             (util/format "{{query %s" q))]
                                                  (editor-handler/save-block! repo (:block/uuid block) content)))))))
              (assoc state ::tree *tree)))}
   [state query config]
