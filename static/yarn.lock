@@ -2083,8 +2083,8 @@ electron-winstaller@^5.0.0:
     lodash.template "^4.2.2"
     temp "^0.9.0"
 
-electron@*, electron@20.3.11:
-  version "20.3.11"
+electron@*, electron@20.3.8:
+  version "20.3.8"
   resolved "https://registry.yarnpkg.com/electron/-/electron-20.3.11.tgz#dd3a1a26edecd012a807ae96409d52d0a0cc4f11"
   integrity sha512-+dZRzUCDIeVcOqha4hW/y/rNOjoM23rcuLQgrdzayj2FHfgs8mud6fAzvTeJN3TT2c6em/u5cZYQXqdrYcZqAg==
   dependencies:
