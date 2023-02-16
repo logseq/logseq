@@ -80,7 +80,7 @@ body:
       label: Are you willing to submit a PR? If you know how to fix the bug.
       description: |
         If you are not familiar with programming, you can skip this step.
-        If you are a developer and know how to fix the bug, you can submit a PR to fix it. You can find the [contributing guide](https://github.com/logseq/logseq#how-to-contribute-with-a-pr) here.
+        If you are a developer and know how to fix the bug, you can [submit a PR to fix it](https://github.com/logseq/logseq/blob/master/CONTRIBUTING.md#submit-pr).
         Your contributions are greatly appreciated and play a vital role in helping to improve the project!
       options:
         - label: I'm willing to submit a PR (Thank you!)
