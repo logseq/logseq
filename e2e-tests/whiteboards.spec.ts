@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac } from './utils'
+import { modKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
@@ -88,13 +88,20 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
+test('copy/paste the shapes', async ({ page }) => {
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+Shift+c')
+  await page.mouse.move(0, 0) //ensure the mouse is not over an element
+  await page.keyboard.press('Escape')
+  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press('Escape')
+
+  // There should be 4 rectangles now (2 visible shapes + 2 hitarea shapes)
+  await expect( page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(4)
+})
 
 test('cleanup the shapes', async ({ page }) => {
-  if (IsMac) {
-    await page.keyboard.press('Meta+a')
-  } else {
-    await page.keyboard.press('Control+a')
-  }
+  await page.keyboard.press(modKey + '+a')
   await page.keyboard.press('Delete')
   await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
