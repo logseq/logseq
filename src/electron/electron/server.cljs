@@ -127,7 +127,7 @@
   []
   (-> (p/let [_     (close!)
               _     (set-status! :starting)
-              ^js s (Fastify. #js {:logger                true
+              ^js s (Fastify. #js {:logger                (not utils/win32?)
                                    :requestTimeout        (* 1000 42)
                                    :forceCloseConnections true})
               ;; hooks & routes
