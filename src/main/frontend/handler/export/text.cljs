@@ -542,58 +542,63 @@
 ;;; export fns
 
 (defn- export-helper
-  [content format indent-style remove-options]
-  (binding [*state* (merge *state*
-                           {:export-options
-                            {:indent-style indent-style
-                             :remove-emphasis? (contains? (set remove-options) :emphasis)
-                             :remove-page-ref-brackets? (contains? (set remove-options) :page-ref)
-                             :remove-tags? (contains? (set remove-options) :tag)}})]
-    (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
-          ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
-          _ (def x ast)
-          ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
-          ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                  (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
-                  ast*)
-          config-for-walk-block-ast (cond-> {}
-                                      (get-in *state* [:export-options :remove-emphasis?])
-                                      (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
+  [content format options]
+  (let [remove-options (set (:remove-options options))]
+    (binding [*state* (merge *state*
+                             {:export-options
+                              {:indent-style (or (:indent-style options) "dashes")
+                               :remove-emphasis? (contains? remove-options :emphasis)
+                               :remove-page-ref-brackets? (contains? remove-options :page-ref)
+                               :remove-tags? (contains? remove-options :tag)}})]
+      (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+            ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
+            _ (def x ast)
+            ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
+            ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+                    (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
+                    ast*)
+            config-for-walk-block-ast (cond-> {}
+                                        (get-in *state* [:export-options :remove-emphasis?])
+                                        (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
 
-                                      (get-in *state* [:export-options :remove-page-ref-brackets?])
-                                      (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
+                                        (get-in *state* [:export-options :remove-page-ref-brackets?])
+                                        (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
 
-                                      (get-in *state* [:export-options :remove-tags?])
-                                      (update :mapcat-fns-on-inline-ast conj common/remove-tags))
-          ast*** (if-not (empty? config-for-walk-block-ast)
-                   (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
-                   ast**)
-          simple-asts (util/profile :block-ast->simple-ast (doall (mapcatv block-ast->simple-ast ast***)))]
+                                        (get-in *state* [:export-options :remove-tags?])
+                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags))
+            ast*** (if-not (empty? config-for-walk-block-ast)
+                     (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
+                     ast**)
+            simple-asts (util/profile :block-ast->simple-ast (doall (mapcatv block-ast->simple-ast ast***)))]
 
-      (util/profile :simple-asts->string (simple-asts->string simple-asts)))))
+        (util/profile :simple-asts->string (simple-asts->string simple-asts))))))
 
 (defn export-blocks-as-markdown
-  [repo root-block-uuids indent-style remove-options]
+  "options:
+  :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
+  :remove-options [:emphasis :page-ref :tag]"
+  [repo root-block-uuids options]
   {:pre [(seq root-block-uuids)]}
   (let [content (util/profile :root-block-uuids->content
                               (common/root-block-uuids->content repo root-block-uuids))
         first-block (db/entity [:block/uuid (first root-block-uuids)])
         format (or (:block/format first-block) (state/get-preferred-format))]
-    (export-helper content format indent-style remove-options)))
+    (export-helper content format options)))
 
 (defn export-files-as-markdown
-  [files indent-style remove-options]
+  "options see also `export-blocks-as-markdown`"
+  [files options]
   (mapv
    (fn [{:keys [path content names format]}]
      (when (first names)
-       [path (export-helper content format indent-style remove-options)]))
+       [path (export-helper content format options)]))
    files))
 
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
   (when-let [files (common/get-file-contents-with-suffix repo)]
-    (let [files (export-files-as-markdown files "dashes" nil)
+    (let [files (export-files-as-markdown files nil)
           zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
       (p/let [zipfile (zip/make-zip zip-file-name files repo)]
         (when-let [anchor (gdom/getElement "export-as-markdown")]

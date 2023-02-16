@@ -70,9 +70,11 @@
         _ (println type text-remove-options text-indent-style)
         content (or (get exported-content type)
                     (case type
-                      :text (export-text/export-blocks-as-markdown current-repo root-block-ids text-indent-style text-remove-options)
+                      :text (export-text/export-blocks-as-markdown
+                             current-repo root-block-ids
+                             {:indent-style text-indent-style :remove-options text-remove-options})
                       :opml "" ;; (export/export-blocks-as-opml current-repo root-block-ids)
-                      :html (export-html/export-blocks-as-html current-repo root-block-ids text-remove-options)
+                      :html (export-html/export-blocks-as-html current-repo root-block-ids {:remove-options text-remove-options})
                       "" ;; (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
                       ))]
     [:div.export.resize

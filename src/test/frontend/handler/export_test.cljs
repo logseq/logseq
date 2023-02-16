@@ -37,7 +37,7 @@
   (p/do!
    (are [expect block-uuid-s]
         (= expect
-           (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)] "dashes" []))
+           (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)] {}))
         "- 1  \n\t- 2  \n\t\t- 3  \n\t\t- 3  "
         "61506710-484c-46d5-9983-3d1651ec02c8"
 

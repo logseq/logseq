@@ -343,12 +343,6 @@
                                         "untitled"
                                         (js/JSON.stringify (clj->js %3)))))
 
-(defn export-blocks-as-html
-  [repo root-block-uuids]
-  (export-blocks-as-aux repo root-block-uuids
-                        #(fp/toHtml f/mldoc-record %1
-                                    (f/get-default-config %2)
-                                    (js/JSON.stringify (clj->js %3)))))
 
 (defn- get-file-contents-with-suffix
   [repo]
