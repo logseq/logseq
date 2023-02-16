@@ -76,10 +76,13 @@
                  (let [*content (atom nil)
                        [path format] (:rum/args state)
                        repo-dir (config/get-repo-dir (state/get-current-repo))
-                       dir (if (string/includes? path repo-dir) repo-dir (path/dirname path))]
+                       [dir path] (if (string/starts-with? path repo-dir)
+                                    [repo-dir (-> (string/replace-first path repo-dir "")
+                                                  (string/replace #"^/+" ""))]
+                                    ["" path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file dir path)]
-                            (reset! *content content)))
+                       (reset! *content (or content ""))))
                    (assoc state ::file-content *content)))
    :did-mount (fn [state]
                 (state/set-file-component! (:rum/react-component state))
@@ -132,6 +135,7 @@
                              content'
                              {}))
 
+       ;; wait for content load
        (and format
             (contains? (gp-config/text-formats) format))
        (ui/loading "Loading ...")
