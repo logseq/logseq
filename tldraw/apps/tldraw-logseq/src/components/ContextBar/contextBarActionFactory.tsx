@@ -195,7 +195,7 @@ const LogseqPortalViewModeAction = observer(() => {
       value={collapsed ? '1' : '0'}
       onValueChange={v => {
         shapes.forEach(shape => {
-          shape.setCollapsed(v === '1' ? true : false)
+          shape.toggleCollapsed()
         })
         app.persist()
       }}
