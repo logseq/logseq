@@ -118,6 +118,7 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 7. The PR avoids the following changes that are not helpful to the core team:
    * Unrelated refactoring or heavy refactoring
    * Code or doc formatting changes including whitespace changes
+   * Dependency updates e.g. in package.json
 
 ### PR Additional Links
 
