@@ -92,12 +92,12 @@ test('copy/paste the shapes', async ({ page }) => {
   await page.keyboard.press(modKey + '+a')
   await page.keyboard.press(modKey + '+Shift+c')
   await page.mouse.move(0, 0) //ensure the mouse is not over an element
+  await page.waitForTimeout(200)
   await page.keyboard.press('Escape')
   await page.keyboard.press(modKey + '+v')
   await page.keyboard.press('Escape')
 
-  // There should be 4 rectangles now (2 visible shapes + 2 hitarea shapes)
-  await expect( page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(4)
+  await expect( page.locator('.logseq-tldraw .tl-positioned-svg rect:not(.tl-hitarea-fill)')).toHaveCount(2)
 })
 
 test('cleanup the shapes', async ({ page }) => {
