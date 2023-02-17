@@ -89,15 +89,5 @@
            "Commit"]]]])]))
 
 (defn show-commit-modal! [e]
-  (when (and
-         (util/electron?)
-         (not (util/input? (gobj/get e "target")))
-         (not (gobj/get e "shiftKey"))
-         (not (gobj/get e "ctrlKey"))
-         (not (gobj/get e "altKey"))
-         (not (gobj/get e "metaKey")))
-    #_:clj-kondo/ignore
-    (when-let [repo-url (state/get-current-repo)]
-      (when-not (state/get-edit-input-id)
-        (util/stop e)
-        (state/set-modal! add-commit-message)))))
+  (state/set-modal! add-commit-message)
+  (when e (util/stop e)))
