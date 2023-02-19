@@ -344,8 +344,10 @@
         vw-height js/window.innerHeight
         vw-max-width (- vw-width (:left rect))
         vw-max-height (- vw-height (:top rect))
+        vw-max-height' (:top rect)
         sm? (< vw-width 415)
-        max-height (min (- vw-max-height 20) 800)
+        max-height (min (- vw-max-height 20) 700)
+        max-height' (min (- vw-max-height' 70) 600)
         max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
         offset-top 24
         to-max-height (if (and (seq rect) (> vw-height max-height))
@@ -367,8 +369,9 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        y-overflow-vh? (< to-max-height 130)
-        to-max-height (if y-overflow-vh? max-height to-max-height)
+        y-overflow-vh? (or (< to-max-height 150)
+                           (> (- max-height' to-max-height) 150))
+        to-max-height (if y-overflow-vh? max-height' to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))
