@@ -122,8 +122,9 @@
                                         portal?]
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
+         page (model/pull-block (:db/id page-entity))
          block-uuid (:block/uuid page-entity)
-         refs-count (model/get-block-references-count block-uuid)]
+         refs-count (count (:block/_refs page))]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]
