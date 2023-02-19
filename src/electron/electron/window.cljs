@@ -152,14 +152,15 @@
 
           window-open-handler
           (fn [^js details]
-            (let [url (.-url details)
-                  features (string/split (.-features details) ",")
-                  features (when (seq features)
-                             (reduce (fn [a b]
-                                       (let [[k v] (string/split b "=")]
-                                         (if (string? v)
-                                           (assoc a (keyword k) (parse-long (string/trim v)))
-                                           a))) {} features))]
+            (let [url         (.-url details)
+                  fullscreen? (.isFullScreen win)
+                  features    (string/split (.-features details) ",")
+                  features    (when (seq features)
+                                (reduce (fn [a b]
+                                          (let [[k v] (string/split b "=")]
+                                            (if (string? v)
+                                              (assoc a (keyword k) (parse-long (string/trim v)))
+                                              a))) {} features))]
               (-> (if (= url "about:blank")
                     (merge {:action "allow"
                             :overrideBrowserWindowOptions
@@ -167,6 +168,7 @@
                              :titleBarStyle        "default"
                              :trafficLightPosition {:x 16 :y 16}
                              :autoHideMenuBar      (not mac?)
+                             :fullscreenable       (not fullscreen?)
                              :webPreferences
                              {:plugins          true
                               :nodeIntegration  false
