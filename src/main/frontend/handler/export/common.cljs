@@ -510,6 +510,10 @@
   "[[ast-type ast-content] _pos] -> [ast-type ast-content]"
   first)
 
+(defn Properties-block-ast?
+  [[tp _]]
+  (= tp "Properties"))
+
 (defn replace-Heading-with-Paragraph
   "works on block-ast
   replace all heading with paragraph when indent-style is no-indent"

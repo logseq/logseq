@@ -8,7 +8,7 @@
    [frontend.handler.export.common :as common :refer [*state*]]
    [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
    [frontend.state :as state]
-   [frontend.util :as util :refer [concatv mapcatv]]
+   [frontend.util :as util :refer [concatv mapcatv removev]]
    [hiccups.runtime :as h]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [malli.core :as m]))
@@ -379,6 +379,7 @@
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
+            ast (removev common/Properties-block-ast? ast)
             ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
