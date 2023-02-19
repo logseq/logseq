@@ -1212,11 +1212,10 @@
   [:div.dsl-query.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
-     (when-not (string/blank? query)
-       (custom-query (assoc config :dsl-query? true)
-                     {:title (rum/with-key (query-builder/builder query config)
-                               query)
-                      :query query})))])
+     (custom-query (assoc config :dsl-query? true)
+                   {:title (rum/with-key (query-builder/builder query config)
+                             query)
+                    :query query}))])
 
 (defn- macro-function-cp
   [config arguments]
@@ -3049,7 +3048,8 @@
 
                                              :else
                                              [false (query-dsl/query (state/get-current-repo) q)]))
-                                         [false (db/custom-query query {:current-block-uuid current-block-uuid})])
+                                         [false (db/custom-query query {:current-block-uuid current-block-uuid
+                                                                        :use-cache? false})])
         query-atom (if (instance? Atom query-atom)
                      query-atom
                      result-atom)]
@@ -3139,7 +3139,7 @@
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
       (when-not (and built-in? (empty? result))
-        [:div.custom-query.mt-4 (get config :attr {})
+        [:div.custom-query (get config :attr {})
          [:div.custom-query-title.flex.justify-between.w-full
           [:div.flex.items-center
            [:span.title-text (cond
@@ -3171,7 +3171,7 @@
             [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
              (when-not page-list?
                [:div.flex.flex-row
-                [:div.mx-2 [:span.text-sm "Table view"]]
+                [:div.mr-2 [:span.text-sm "Table view"]]
                 [:div {:style {:margin-top 5}}
                  (ui/toggle table?
                             (fn []

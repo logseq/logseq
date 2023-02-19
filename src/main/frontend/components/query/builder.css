@@ -1,5 +1,5 @@
 .cp__query-builder {
-    @apply grid auto-rows-max gap-2 my-2;
+    @apply grid auto-rows-max gap-2 mb-2;
 
     &-filter {
         @apply flex flex-row gap-2 items-center;

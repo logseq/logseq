@@ -29,7 +29,7 @@
   [:div.filter-item {:on-mouse-down (fn [e] (util/stop-propagation e))}
    (ui/select [{:label "Blocks"
                 :value "block"
-                :selected (= @*find :block)}
+                :selected (not= @*find :page)}
                {:label "Pages"
                 :value "page"
                 :selected (= @*find :page)}]
@@ -145,9 +145,9 @@
   (let [*mode (::mode state)
         *property (::property state)
         repo (state/get-current-repo)
-        filters (if (= @*find :block)
-                  query-builder/block-filters
-                  query-builder/page-filters)
+        filters (if (= :page @*find)
+                  query-builder/page-filters
+                  query-builder/block-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
     [:div.query-builder-picker
@@ -356,7 +356,6 @@
    (when (not= loc [0])
      (add-filter *find *tree loc []))])
 
-;; '(and (page-ref foo) (property key value))
 (rum/defc clause-tree < rum/reactive
   [*tree *find]
   (let [tree (rum/react *tree)
@@ -368,24 +367,34 @@
 
 (rum/defc query-cp < rum/reactive
   [*tree]
-  [:div
-   "Query: "
-   (str (query-builder/->dsl (rum/react *tree)))])
+  (when (and (seq @*tree)
+             (not= @*tree [:and]))
+    [:div
+     "Query: "
+     (str (query-builder/->dsl (rum/react *tree)))]))
 
 (rum/defcs builder <
-  (rum/local :block ::find)
+  (rum/local nil ::find)
   {:init (fn [state]
            (let [q-str (first (:rum/args state))
                  query (gp-util/safe-read-string (query-dsl/pre-transform-query q-str))
-                 query' (if (contains? #{'and 'or 'not} (first query))
+                 query' (cond
+                          (contains? #{'and 'or 'not} (first query))
                           query
-                          [:and query])
+
+                          query
+                          [:and query]
+
+                          :else
+                          [:and])
                  tree (query-builder/from-dsl query')
                  *tree (atom tree)
                  config (last (:rum/args state))]
              (add-watch *tree :updated (fn [_ _ _old new]
                                          (when-let [block (:block config)]
-                                           (let [q (str (query-builder/->dsl @*tree))
+                                           (let [q (if (= [:and] @*tree)
+                                                     ""
+                                                     (str (query-builder/->dsl @*tree)))
                                                  repo (state/get-current-repo)
                                                  block (db/pull [:block/uuid (:block/uuid block)])]
                                              (when block
@@ -393,7 +402,20 @@
                                                                              (util/format "{{query %s" q-str)
                                                                              (util/format "{{query %s" q))]
                                                  (editor-handler/save-block! repo (:block/uuid block) content)))))))
-             (assoc state ::tree *tree)))}
+             (assoc state ::tree *tree)))
+   :will-mount (fn [state]
+                 (let [q-str (first (:rum/args state))
+                       parsed-query (query-dsl/parse-query q-str)
+                       blocks-query? (:blocks? parsed-query)
+                       find-mode (cond
+                                   blocks-query?
+                                   :block
+                                   (false? blocks-query?)
+                                   :page
+                                   :else
+                                   nil)]
+                   (when find-mode (reset! (::find state) find-mode))
+                   state))}
   [state query config]
   (let [*find (::find state)
         *tree (::tree state)]
