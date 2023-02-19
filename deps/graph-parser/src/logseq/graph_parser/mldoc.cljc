@@ -15,6 +15,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]))
 
+;; Shared Mldoc instance
+(defonce MldocInstance Mldoc)
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
