@@ -83,10 +83,12 @@
                 (let [^js doc    (.-document win)
                       ^js doc-el (.-documentElement doc)
                       ^js base   (js/document.createElement "base")
-                      ^js main   (js/document.createElement "main")]
+                      ^js main   (js/document.createElement "main")
+                      theme-mode (:ui/theme @state/state)]
                   (set! (.-href base) js/location.href)
                   (.appendChild (.-head doc) base)
                   (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
+                  (set! (.-dataset doc-el) -theme (str theme-mode))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)
