@@ -38,11 +38,11 @@
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
 
           {:title "About"
-           :children [[(t :help/about) "https://logseq.com/blog/about"]]}
+           :children [[(t :help/about) "https://blog.logseq.com/about/"]]}
 
           {:title "Terms"
-           :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
-                      [(t :help/terms) "https://logseq.com/blog/terms"]]}]]
+           :children [[(t :help/privacy) "https://blog.logseq.com/privacy-policy/"]
+                      [(t :help/terms) "https://blog.logseq.com/terms/"]]}]]
 
 
 
