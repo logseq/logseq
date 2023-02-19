@@ -257,9 +257,11 @@
                                          (:db/id (:block/page block)))
                                 blocks [[::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
-                                path-refs' (keep (fn [ref]
-                                                   (when-not (= (:db/id ref) page-id)
-                                                     [::refs (:db/id ref)])) path-refs)
+                                path-refs' (->> (keep (fn [ref]
+                                                        (when-not (= (:db/id ref) page-id)
+                                                          [[::refs (:db/id ref)]
+                                                           [::block (:db/id ref)]])) path-refs)
+                                                (apply concat))
                                 page-blocks (when page-id
                                               [[::page-blocks page-id]])]
                             (concat blocks page-blocks path-refs')))
@@ -267,7 +269,8 @@
 
                        (mapcat
                         (fn [ref]
-                          [[::refs ref]])
+                          [[::refs ref]
+                           [::block ref]])
                         refs)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
