@@ -57,98 +57,119 @@
                                 {:label "no-indent"
                                  :selected false}])
 
-(rum/defcs export-blocks
-  < rum/reactive
-  (rum/local false ::copied?)
-  (rum/local {} ::exported-content)
-  [state root-block-ids]
+(defn- export-helper
+  [block-uuids]
   (let [current-repo (state/get-current-repo)
-        type (rum/react *export-block-type)
-        text-indent-style (state/sub :copy/export-block-text-indent-style)
-        text-remove-options (set (state/sub :copy/export-block-text-remove-options))
-        copied? (::copied? state)
-        exported-content (::exported-content state)
-        _ (println type text-remove-options text-indent-style)
-        content (or (get exported-content type)
-                    (case type
-                      :text (export-text/export-blocks-as-markdown
-                             current-repo root-block-ids
-                             {:indent-style text-indent-style :remove-options text-remove-options})
-                      :opml (export-opml/export-blocks-as-opml current-repo root-block-ids {:remove-options text-remove-options})
-                      :html (export-html/export-blocks-as-html current-repo root-block-ids {:remove-options text-remove-options})
-                      "" ;; (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
-                      ))]
+        text-indent-style (state/get-export-block-text-indent-style)
+        text-remove-options (set (state/get-export-block-text-remove-options))
+        tp @*export-block-type]
+    (case tp
+      :text (export-text/export-blocks-as-markdown current-repo block-uuids
+                                                   {:indent-style text-indent-style :remove-options text-remove-options})
+      :opml (export-opml/export-blocks-as-opml current-repo block-uuids {:remove-options text-remove-options})
+      :html (export-html/export-blocks-as-html current-repo block-uuids {:remove-options text-remove-options})
+      "")))
+
+(rum/defcs export-blocks
+  < rum/static
+  (rum/local false ::copied?)
+  (rum/local nil ::text-remove-options)
+  (rum/local nil ::text-indent-style)
+  (rum/local nil ::content)
+  {:will-mount (fn [state]
+                 (let [content (export-helper (last (:rum/args state)))]
+                   (reset! (::content state) content)
+                   (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
+                   (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
+                   state))}
+  [state root-block-uuids]
+  (let [tp @*export-block-type
+        *text-remove-options (::text-remove-options state)
+        *text-indent-style (::text-indent-style state)
+        *copied? (::copied? state)
+        *content (::content state)]
     [:div.export.resize
      [:div.flex
       {:class "mb-2"}
       (ui/button "Text"
                  :class "mr-4 w-20"
-                 :on-click #(reset! *export-block-type :text))
+                 :on-click #(do (reset! *export-block-type :text)
+                                (reset! *content (export-helper root-block-uuids))))
       (ui/button "OPML"
                  :class "mr-4 w-20"
-                 :on-click #(reset! *export-block-type :opml))
+                 :on-click #(do (reset! *export-block-type :opml)
+                                (reset! *content (export-helper root-block-uuids))))
       (ui/button "HTML"
                  :class "w-20"
-                 :on-click #(reset! *export-block-type :html))]
-     [:textarea.overflow-y-auto.h-96 {:value content}]
+                 :on-click #(do (reset! *export-block-type :html)
+                                (reset! *content (export-helper root-block-uuids))))]
+     [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}]
      (let [options (->> text-indent-style-options
                         (mapv (fn [opt]
-                                (if (= text-indent-style (:label opt))
+                                (if (= @*text-indent-style (:label opt))
                                   (assoc opt :selected true)
                                   opt))))]
        [:div [:div.flex.items-center
               [:label.mr-4
-               {:style {:visibility (if (= :text type) "visible" "hidden")}}
+               {:style {:visibility (if (= :text tp) "visible" "hidden")}}
                "Indentation style:"]
               [:select.block.my-2.text-lg.rounded.border
                {:style     {:padding "0 0 0 12px"
-                            :visibility (if (= :text type) "visible" "hidden")}
+                            :visibility (if (= :text tp) "visible" "hidden")}
                 :on-change (fn [e]
                              (let [value (util/evalue e)]
-                               (state/set-export-block-text-indent-style! value)))}
+                               (state/set-export-block-text-indent-style! value)
+                               (reset! *text-indent-style value)
+                               (reset! *content (export-helper root-block-uuids))))}
                (for [{:keys [label value selected]} options]
                  [:option (cond->
-                              {:key   label
-                               :value (or value label)}
-                              selected
-                              (assoc :selected selected))
+                           {:key   label
+                            :value (or value label)}
+                            selected
+                            (assoc :selected selected))
                   label])]]
         [:div.flex.items-center
          (ui/checkbox {:style {:margin-right 6
-                               :visibility (if (#{:text :html} type) "visible" "hidden")}
-                       :checked (contains? text-remove-options :page-ref)
+                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                       :checked (contains? @*text-remove-options :page-ref)
                        :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :page-ref))})
+                                    (state/update-export-block-text-remove-options! e :page-ref)
+                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                    (reset! *content (export-helper root-block-uuids)))})
 
          [:div
-          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "[[text]] -> text"]
 
          (ui/checkbox {:style {:margin-right 6
                                :margin-left "1em"
-                               :visibility (if (#{:text :html} type) "visible" "hidden")}
-                       :checked (contains? text-remove-options :emphasis)
+                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                       :checked (contains? @*text-remove-options :emphasis)
                        :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :emphasis))})
+                                    (state/update-export-block-text-remove-options! e :emphasis)
+                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                    (reset! *content (export-helper root-block-uuids)))})
 
          [:div
-          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove emphasis"]
 
          (ui/checkbox {:style {:margin-right 6
                                :margin-left "1em"
-                               :visibility (if (#{:text :html} type) "visible" "hidden")}
-                       :checked (contains? text-remove-options :tag)
+                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                       :checked (contains? @*text-remove-options :tag)
                        :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :tag))})
+                                    (state/update-export-block-text-remove-options! e :tag)
+                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                    (reset! *content (export-helper root-block-uuids)))})
 
          [:div
-          {:style {:visibility (if (#{:text :html} type) "visible" "hidden")}}
+          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove #tags"]]])
 
      [:div.mt-4
-      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
+      (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
                  :on-click (fn []
-                             (util/copy-to-clipboard! content (when (= type :html)
-                                                                content))
-                             (reset! copied? true)))]]))
+                             (util/copy-to-clipboard! @*content (when (= tp :html)
+                                                                  @*content))
+                             (reset! *copied? true)))]]))

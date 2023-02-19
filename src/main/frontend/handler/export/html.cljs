@@ -70,15 +70,16 @@
 
 (defn- inline-emphasis
   [[[type] inline-coll]]
-  (-> (case type
-        "Bold"           :b
-        "Italic"         :i
-        "Underline"      :ins
-        "Strike_through" :del
-        "Highlight"      :mark
-        ;; else
-        :b)
-      (apply vector (mapv inline-ast->hiccup inline-coll))))
+  (apply vector
+         (case type
+           "Bold"           :b
+           "Italic"         :i
+           "Underline"      :ins
+           "Strike_through" :del
+           "Highlight"      :mark
+               ;; else
+           :b)
+         (mapv inline-ast->hiccup inline-coll)))
 
 (defn- inline-tag
   [inline-coll]
@@ -221,7 +222,6 @@
    loc
    [(z/root (reduce block-ast->hiccup (goto-last (ul-hiccup-zip [:blockquote])) block-ast-coll))]))
 
-
 (defn- block-latex-env
   [loc [name options content]]
   (add-items-in-li
@@ -271,7 +271,6 @@
 (defn- block-comment
   [loc s]
   (add-items-in-li loc [(str "<!---\n" s "\n-->\n")]))
-
 
 (m/=> inline-ast->hiccup [:=> [:cat [:sequential :any]] [:or hiccup-malli-schema :string :nil]])
 (defn- inline-ast->hiccup
@@ -380,7 +379,6 @@
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
-            _ (def x ast)
             ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
@@ -399,7 +397,6 @@
                      ast**)
             hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))]
         (h/render-html hiccup)))))
-
 
 (defn export-blocks-as-html
   "options:
