@@ -12,7 +12,6 @@
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.handler.history :as history]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -182,17 +181,7 @@
 
   (js/window.apis.on "syncAPIServerState"
                      (fn [^js data]
-                       (state/set-state! :electron/server (bean/->clj data))))
-
-  (js/window.apis.on "invokeEditorHandler"
-                     (fn [action]
-                       (println "invokeEditorHandler with action:" action)
-                       (case action
-                         "undo" (history/undo! nil)
-                         "redo" (history/redo! nil)
-                         "copy" (editor-handler/shortcut-copy nil)
-                         "cut" (editor-handler/shortcut-cut nil) ;; FIXME this handler relies on arg Event
-                         ))))
+                       (state/set-state! :electron/server (bean/->clj data)))))
 
 (defn listen!
   []
