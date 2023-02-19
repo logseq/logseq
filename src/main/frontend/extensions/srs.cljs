@@ -539,13 +539,14 @@
 (defn cloze-parse
   "Parse the cloze content, and return [answer cue]."
   [content]
-  (let [parts (string/split content cloze-cue-separator)]
-    (if (> (count parts) 1)
-      ;; If there are more than one separator, only the last component is considered the cue.
-      [(string/trimr (string/join cloze-cue-separator (drop-last parts)))
-       (string/trim (last parts))]
-      ;; No separator found.
-      [(string/join cloze-cue-separator parts) nil])))
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        (if (string/blank? cue)
+          [(string/trimr (string/join cloze-cue-separator (drop-last parts))) nil]
+          [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue])))))
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
