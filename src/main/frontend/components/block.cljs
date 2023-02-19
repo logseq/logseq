@@ -3116,7 +3116,8 @@
                                  (boolean (:result-transform q))
                                  (and (string? query) (string/includes? query "(by-page false)")))
         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                 (db-utils/group-by-page transformed-query-result)
+                 (-> (db-utils/group-by-page transformed-query-result)
+                     (dissoc nil))
                  transformed-query-result)
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -3225,7 +3226,10 @@
                               (str (util/pp-str record) "\n")
                               record))
                           (remove nil?))]
-              [:pre result])
+              (when (seq result)
+                [:ul
+                 (for [item result]
+                   [:li (str item)])]))
 
             :else
             [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]]))))
