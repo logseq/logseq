@@ -3166,73 +3166,74 @@
                                    {:on-mouse-down (fn [e]
                                                      (util/stop e)
                                                      (trigger-custom-query! state))}))]]
-         [:div
-          (when (and current-block (not view-f) (nil? table-view?))
-            [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-             (when-not page-list?
-               [:div.flex.flex-row
-                [:div.mr-2 [:span.text-sm "Table view"]]
-                [:div {:style {:margin-top 5}}
-                 (ui/toggle table?
-                            (fn []
-                              (editor-handler/set-block-property! current-block-uuid
-                                                                  "query-table"
-                                                                  (not table?)))
-                            true)]])
+         (when-not (or collapsed? (:block/collapsed? current-block))
+           [:div
+            (when (and current-block (not view-f) (nil? table-view?))
+              [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
+               (when-not page-list?
+                 [:div.flex.flex-row
+                  [:div.mr-2 [:span.text-sm "Table view"]]
+                  [:div {:style {:margin-top 5}}
+                   (ui/toggle table?
+                              (fn []
+                                (editor-handler/set-block-property! current-block-uuid
+                                                                    "query-table"
+                                                                    (not table?)))
+                              true)]])
 
-             [:a.mx-2.block.fade-link
-              {:on-click (fn []
-                           (let [all-keys (query-table/get-keys result page-list?)]
-                             (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-              [:span.table-query-properties
-               [:span.text-sm.mr-1 "Set properties"]
-               svg/settings-sm]]])
-          (cond
-            (and (seq result) view-f)
-            (let [result (try
-                           (sci/call-fn view-f result)
-                           (catch :default error
-                             (log/error :custom-view-failed {:error error
-                                                             :result result})
-                             [:div "Custom view failed: "
-                              (str error)]))]
-              (util/hiccup-keywordize result))
+               [:a.mx-2.block.fade-link
+                {:on-click (fn []
+                             (let [all-keys (query-table/get-keys result page-list?)]
+                               (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                [:span.table-query-properties
+                 [:span.text-sm.mr-1 "Set properties"]
+                 svg/settings-sm]]])
+            (cond
+              (and (seq result) view-f)
+              (let [result (try
+                             (sci/call-fn view-f result)
+                             (catch :default error
+                               (log/error :custom-view-failed {:error error
+                                                               :result result})
+                               [:div "Custom view failed: "
+                                (str error)]))]
+                (util/hiccup-keywordize result))
 
-            page-list?
-            (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+              page-list?
+              (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
-            table?
-            (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+              table?
+              (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
-            (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-            (->hiccup result (cond-> (assoc config
-                                            :custom-query? true
-                                            :dsl-query? dsl-query?
-                                            :query query
-                                            :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                                breadcrumb-show?
-                                                                true)
-                                            :group-by-page? blocks-grouped-by-page?
-                                            :ref? true)
-                               children?
-                               (assoc :ref? true))
-                      {:style {:margin-top "0.25rem"
-                               :margin-left "0.25rem"}})
+              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+              (->hiccup result (cond-> (assoc config
+                                              :custom-query? true
+                                              :dsl-query? dsl-query?
+                                              :query query
+                                              :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                                  breadcrumb-show?
+                                                                  true)
+                                              :group-by-page? blocks-grouped-by-page?
+                                              :ref? true)
+                                 children?
+                                 (assoc :ref? true))
+                        {:style {:margin-top "0.25rem"
+                                 :margin-left "0.25rem"}})
 
-            (seq result)
-            (let [result (->>
-                          (for [record result]
-                            (if (map? record)
-                              (str (util/pp-str record) "\n")
-                              record))
-                          (remove nil?))]
-              (when (seq result)
-                [:ul
-                 (for [item result]
-                   [:li (str item)])]))
+              (seq result)
+              (let [result (->>
+                            (for [record result]
+                              (if (map? record)
+                                (str (util/pp-str record) "\n")
+                                record))
+                            (remove nil?))]
+                (when (seq result)
+                  [:ul
+                   (for [item result]
+                     [:li (str item)])]))
 
-            :else
-            [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]]))))
+              :else
+              [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])]))))
 
 (rum/defc custom-query
   [config q]
