@@ -11,7 +11,7 @@
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
    [frontend.state :as state]
-   [frontend.util :as util :refer [mapcatv concatv]]
+   [frontend.util :as util :refer [mapcatv concatv removev]]
    [logseq.graph-parser.mldoc :as gp-mldoc]
    [logseq.graph-parser.util :as gp-util]
    [malli.core :as m]
@@ -66,29 +66,32 @@
   (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
-(declare remove-block-ast-pos)
+(declare remove-block-ast-pos Properties-block-ast?)
 
 (defn- block-uuid->ast
   [block-uuid]
   (let [block (into {} (db/get-block-by-uuid block-uuid))
         content (outliner-file/tree->file-content [block] {:init-level 1})
         format :markdown]
-    (mapv remove-block-ast-pos
-          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
+    (removev Properties-block-ast?
+             (mapv remove-block-ast-pos
+                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
   (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
         format :markdown]
-    (mapv remove-block-ast-pos
-          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
+    (removev Properties-block-ast?
+             (mapv remove-block-ast-pos
+                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
 
 (defn- page-name->ast
   [page-name]
   (let [content (get-page-content (state/get-current-repo) page-name)
         format :markdown]
-    (mapv remove-block-ast-pos
-          (gp-mldoc/->edn content (gp-mldoc/default-config format)))))
+    (removev Properties-block-ast?
+             (mapv remove-block-ast-pos
+                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
