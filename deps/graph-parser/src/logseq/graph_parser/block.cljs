@@ -592,6 +592,19 @@
                 (assoc :block/updated-at updated-at))]
     (dissoc block :title :body :anchor)))
 
+(defn fix-duplicate-id-in-same-file
+  [block]
+  (-> block
+      (assoc :uuid (d/squuid))
+      (update :properties dissoc :id)
+      (update :properties-text-values dissoc :id)
+      (update :properties-order #(vec (remove #{:id} %)))
+      (update :content (fn [c]
+                         (let [replace-str (if (= :markdown (:format block))
+                                             (str "\nid:: " (:uuid block))
+                                             (str "\n:id: " (:uuid block)))]
+                           (string/replace c replace-str ""))))))
+
 (defn extract-blocks
   "Extract headings from mldoc ast.
   Args:
@@ -603,43 +616,50 @@
                :extract-macros, :date-formatter and :db"
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
-  (let [encoded-content (utf8/encode content)
-        [blocks body pre-block-properties]
-        (loop [headings []
-               blocks (reverse blocks)
-               timestamps {}
-               properties {}
-               body []]
-          (if (seq blocks)
-            (let [[block pos-meta] (first blocks)
-                  ;; fix start_pos
-                  pos-meta (assoc pos-meta :end_pos
-                                  (if (seq headings)
-                                    (get-in (last headings) [:meta :start_pos])
-                                    nil))]
-              (cond
-                (paragraph-timestamp-block? block)
-                (let [timestamps (extract-timestamps block)
-                      timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) timestamps' properties body))
+  (try
+    (let [encoded-content (utf8/encode content)
+         [blocks body pre-block-properties]
+         (loop [headings []
+                block-ids #{}
+                blocks (reverse blocks)
+                timestamps {}
+                properties {}
+                body []]
+           (if (seq blocks)
+             (let [[block pos-meta] (first blocks)
+                   ;; fix start_pos
+                   pos-meta (assoc pos-meta :end_pos
+                                   (if (seq headings)
+                                     (get-in (last headings) [:meta :start_pos])
+                                     nil))]
+               (cond
+                 (paragraph-timestamp-block? block)
+                 (let [timestamps (extract-timestamps block)
+                       timestamps' (merge timestamps timestamps)]
+                   (recur headings block-ids (rest blocks) timestamps' properties body))
 
-                (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) timestamps properties body))
+                 (gp-property/properties-ast? block)
+                 (let [properties (extract-properties (second block) (assoc user-config :format format))]
+                   (recur headings block-ids (rest blocks) timestamps properties body))
 
-                (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
-                  (recur (conj headings block'') (rest blocks) {} {} []))
+                 (heading-block? block)
+                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))
+                       [block-ids block] (if (block-ids (:uuid block''))
+                                           [block-ids (fix-duplicate-id-in-same-file block'')]
+                                           [(conj block-ids (:uuid block'')) block''])]
+                   (recur (conj headings block) block-ids (rest blocks) {} {} []))
 
-                :else
-                (recur headings (rest blocks) timestamps properties (conj body block))))
-            [(-> (reverse headings)
-                 sanity-blocks-data)
-             body
-             properties]))
-        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
-    (map #(dissoc % :block/meta) result)))
+                 :else
+                 (recur headings block-ids (rest blocks) timestamps properties (conj body block))))
+             [(-> (reverse headings)
+                  sanity-blocks-data)
+              body
+              properties]))
+         result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
+      (map #(dissoc % :block/meta) result))
+    (catch js/Error e
+      (js/console.error e))))
 
 (defn with-parent-and-left
   [page-id blocks]
