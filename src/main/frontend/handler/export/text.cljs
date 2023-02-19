@@ -424,7 +424,6 @@
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
-            _ (def x ast)
             ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))

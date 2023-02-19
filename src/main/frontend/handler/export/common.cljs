@@ -619,11 +619,16 @@
                      #(walk-block-ast-helper % map-fns-on-inline-ast mapcat-fns-on-inline-ast)
                      header)
             groups* (mapv
-                     (fn [group])
-
+                     (fn [group]
+                       (mapv
+                        (fn [row]
+                          (mapv
+                           (fn [col]
+                             (walk-block-ast-helper col map-fns-on-inline-ast mapcat-fns-on-inline-ast))
+                           row))
+                        group))
                      groups)]
-
-        block-ast)
+        ["Table" (assoc ast-content :header header* :groups groups*)])
 
        ;; else
       block-ast)))
