@@ -544,9 +544,7 @@
       [content nil]
       (let [cue (string/trim (last parts))]
         ;; If there are more than one separator, only the last component is considered the cue.
-        (if (string/blank? cue)
-          [(string/trimr (string/join cloze-cue-separator (drop-last parts))) nil]
-          [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue])))))
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
@@ -563,9 +561,9 @@
       [:a.cloze-revealed {:on-click toggle!}
        (util/format "[%s]" answer)]
       [:a.cloze {:on-click toggle!}
-       (if cue
-         (str "(" cue ")")
-         "[...]")])))
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
