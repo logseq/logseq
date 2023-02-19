@@ -70,8 +70,7 @@
       :html (export-html/export-blocks-as-html current-repo block-uuids {:remove-options text-remove-options})
       "")))
 
-(rum/defcs export-blocks
-  < rum/static
+(rum/defcs export-blocks < rum/static
   (rum/local false ::copied?)
   (rum/local nil ::text-remove-options)
   (rum/local nil ::text-indent-style)
@@ -136,9 +135,7 @@
                                     (state/update-export-block-text-remove-options! e :page-ref)
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                     (reset! *content (export-helper root-block-uuids)))})
-
-         [:div
-          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "[[text]] -> text"]
 
          (ui/checkbox {:style {:margin-right 6
@@ -150,8 +147,7 @@
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                     (reset! *content (export-helper root-block-uuids)))})
 
-         [:div
-          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove emphasis"]
 
          (ui/checkbox {:style {:margin-right 6
@@ -163,13 +159,11 @@
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                     (reset! *content (export-helper root-block-uuids)))})
 
-         [:div
-          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove #tags"]]])
 
      [:div.mt-4
       (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
                  :on-click (fn []
-                             (util/copy-to-clipboard! @*content (when (= tp :html)
-                                                                  @*content))
+                             (util/copy-to-clipboard! @*content (when (= tp :html) @*content))
                              (reset! *copied? true)))]]))

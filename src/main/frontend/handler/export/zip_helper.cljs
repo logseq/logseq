@@ -1,4 +1,5 @@
 (ns frontend.handler.export.zip-helper
+  "zipper helpers used in opml&html exporting"
   (:require [clojure.zip :as z]))
 
 (defn goto-last
