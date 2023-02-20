@@ -451,7 +451,8 @@
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
-  (util/profile :export-blocks-as-markdown
+  (util/profile
+   :export-blocks-as-markdown
    (let [content
          (if (string? root-block-uuids-or-page-name)
            ;; page

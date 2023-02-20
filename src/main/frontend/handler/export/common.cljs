@@ -73,25 +73,28 @@
   (let [block (into {} (db/get-block-by-uuid block-uuid))
         content (outliner-file/tree->file-content [block] {:init-level 1})
         format :markdown]
-    (removev Properties-block-ast?
-             (mapv remove-block-ast-pos
-                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
+    (when content
+      (removev Properties-block-ast?
+               (mapv remove-block-ast-pos
+                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
   (let [content (get-blocks-contents (state/get-current-repo) block-uuid)
         format :markdown]
-    (removev Properties-block-ast?
-             (mapv remove-block-ast-pos
-                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
+    (when content
+      (removev Properties-block-ast?
+               (mapv remove-block-ast-pos
+                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
 
 (defn- page-name->ast
   [page-name]
   (let [content (get-page-content page-name)
         format :markdown]
-    (removev Properties-block-ast?
-             (mapv remove-block-ast-pos
-                   (gp-mldoc/->edn content (gp-mldoc/default-config format))))))
+    (when content
+      (removev Properties-block-ast?
+               (mapv remove-block-ast-pos
+                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]

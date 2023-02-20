@@ -74,6 +74,17 @@
       (z/edit #(update % :text str text))
       z/up))
 
+(defn- append-text-to-current-outline*
+  "if current-level = 0(it's just `init-opml-body-hiccup`), need to add a new outline item."
+  [loc text]
+  (if (pos? (get-level loc))
+    (append-text-to-current-outline loc text)
+    ;; at root
+    (-> loc
+        z/down
+        (add-same-level-outline-at-right {:text nil})
+        (append-text-to-current-outline text))))
+
 (defn- zip-loc->opml
   [hiccup title]
   (let [[_ _ body] hiccup]
@@ -258,7 +269,7 @@
   [loc inline-coll]
   (-> loc
       goto-last-outline
-      (append-text-to-current-outline
+      (append-text-to-current-outline*
        (simple-asts->string
         (cons space (mapcatv inline-ast->simple-ast inline-coll))))))
 
@@ -301,11 +312,11 @@
 
 (defn- block-example
   [loc str-coll]
-  (append-text-to-current-outline loc (string/join " " str-coll)))
+  (append-text-to-current-outline* loc (string/join " " str-coll)))
 
 (defn- block-src
   [loc {:keys [_language lines]}]
-  (append-text-to-current-outline loc (string/join " " lines)))
+  (append-text-to-current-outline* loc (string/join " " lines)))
 
 (defn- block-quote
   [loc block-ast-coll]
@@ -313,7 +324,7 @@
 
 (defn- block-latex-env
   [loc [name options content]]
-  (append-text-to-current-outline
+  (append-text-to-current-outline*
    loc
    (str "\\begin{" name "}" options "\n"
         content "\n"
@@ -321,12 +332,12 @@
 
 (defn- block-displayed-math
   [loc s]
-  (append-text-to-current-outline loc s))
+  (append-text-to-current-outline* loc s))
 
 (defn- block-footnote-definition
   [loc [name inline-coll]]
   (let [inline-simple-asts (mapcatv inline-ast->simple-ast inline-coll)]
-    (append-text-to-current-outline
+    (append-text-to-current-outline*
      loc
      (str "[^" name "]: " (simple-asts->string inline-simple-asts)))))
 
@@ -353,7 +364,7 @@
       "Quote"
       (block-quote loc ast-content)
       "Latex_Fragment"
-      (append-text-to-current-outline loc (simple-asts->string (inline-latex-fragment ast-content)))
+      (append-text-to-current-outline* loc (simple-asts->string (inline-latex-fragment ast-content)))
       "Latex_Environment"
       (block-latex-env loc (rest block-ast))
       "Displayed_Math"
@@ -386,12 +397,12 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)}})
               *opml-state* *opml-state*]
-      (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
-            ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
+      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+            ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
-            ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
+            ast* (common/replace-block&page-reference&embed ast)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                    (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
+                    (mapv common/replace-Heading-with-Paragraph ast*)
                     ast*)
             config-for-walk-block-ast (cond-> {}
                                         (get-in *state* [:export-options :remove-emphasis?])
@@ -403,9 +414,10 @@
                                         (get-in *state* [:export-options :remove-tags?])
                                         (update :mapcat-fns-on-inline-ast conj common/remove-tags))
             ast*** (if-not (empty? config-for-walk-block-ast)
-                     (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
+                     (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
-            hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup init-opml-body-hiccup ast***)))]
+            _ (def x ast***)
+            hiccup (z/root (reduce block-ast->hiccup init-opml-body-hiccup ast***))]
         (zip-loc->opml hiccup "untitled")))))
 
 (defn export-blocks-as-opml
@@ -414,14 +426,16 @@
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
-  (let [content
-        (if (string? root-block-uuids-or-page-name)
-          ;; page
-          (common/get-page-content root-block-uuids-or-page-name)
-          (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-        first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
-        format (or (:block/format first-block) (state/get-preferred-format))]
-    (export-helper content format options)))
+  (util/profile
+   :export-blocks-as-opml
+   (let [content
+         (if (string? root-block-uuids-or-page-name)
+           ;; page
+           (common/get-page-content root-block-uuids-or-page-name)
+           (common/root-block-uuids->content repo root-block-uuids-or-page-name))
+         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
+         format (or (:block/format first-block) (state/get-preferred-format))]
+     (export-helper content format options))))
 
 (defn export-files-as-opml
   "options see also `export-blocks-as-opml`"
@@ -429,7 +443,8 @@
   (mapv
    (fn [{:keys [path content names format]}]
      (when (first names)
-       [path (export-helper content format options)]))
+       (util/profile (print-str :export-files-as-opml path)
+                     [path (export-helper content format options)])))
    files))
 
 (defn export-repo-as-opml!
