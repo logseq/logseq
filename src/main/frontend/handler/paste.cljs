@@ -76,16 +76,16 @@
 
 (defn- selection-within-link?
   [selection-and-format]
-  (let [{:keys [format selection-start selection-end selection value]} selection-and-format
-        matched-links (case format
-                        :markdown (util/re-pos #"\[.*?\]\(.*?\)" value)
-                        :org (util/re-pos #"\[\[.*?\]\[.*?\]\]" value))]
-    (when (not= selection-start selection-end)
-      (->> matched-links
-           (some (fn [[start-index matched-text]]
-                   (and (<= start-index selection-start)
-                        (>= (+ start-index (count matched-text)) selection-end)
-                        (clojure.string/includes? matched-text selection))))))))
+  (let [{:keys [format selection-start selection-end selection value]} selection-and-format]
+    (and (not= selection-start selection-end)
+         (->> (case format
+                :markdown (util/re-pos #"\[.*?\]\(.*?\)" value)
+                :org (util/re-pos #"\[\[.*?\]\[.*?\]\]" value))
+              (some (fn [[start-index matched-text]]
+                      (and (<= start-index selection-start)
+                           (>= (+ start-index (count matched-text)) selection-end)
+                           (clojure.string/includes? matched-text selection))))
+              some?))))
 
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
