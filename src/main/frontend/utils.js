@@ -245,11 +245,14 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html}) => {
+export const writeClipboard = ({text, html}, ownerWindow) => {
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
     }
+
+    const navigator = (ownerWindow || window).navigator
+
     navigator.permissions.query({
         name: "clipboard-write"
     }).then((result) => {

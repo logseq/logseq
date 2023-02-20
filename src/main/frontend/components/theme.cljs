@@ -1,5 +1,5 @@
 (ns frontend.components.theme
-  (:require [frontend.extensions.pdf.highlights :as pdf]
+  (:require [frontend.extensions.pdf.core :as pdf]
             [frontend.config :as config]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -105,4 +105,4 @@
       :on-click on-click}
      child
 
-     (pdf/playground)]))
+     (pdf/default-embed-playground)]))
