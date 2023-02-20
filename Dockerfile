@@ -1,6 +1,6 @@
 # NOTE: please keep it in sync with .github pipelines
 # NOTE: during testing make sure to change the branch below
-# NOTE: before runing the build-docker GH action edit
+# NOTE: before running the build-docker GH action edit
 #       build-docker.yml and change the release channel from :latest to :testing
 
 # Builder image

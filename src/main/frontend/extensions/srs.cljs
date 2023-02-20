@@ -299,10 +299,10 @@
                                          (nil? next-sched*)
                                          (t/before? next-sched* time))))
                                  blocks),
-        sort-by-next-shedule   (sort-by (fn [b]
-                                (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
+        sort-by-next-schedule   (sort-by (fn [b]
+                                           (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
     {:total (count blocks)
-     :result sort-by-next-shedule}))
+     :result sort-by-next-schedule}))
 
 
 ;;; ================================================================
@@ -412,14 +412,14 @@
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
-    [:span btn-text (when-not (util/sm-breakpoint?)
-                      [" " (ui/render-keyboard-shortcut shortcut)])]
-    :id id
-    :class (str id " " class)
-    :background background
-    :on-mouse-down (fn [e] (util/stop-propagation e))
-    :on-click (fn [_e]
-                (js/setTimeout #(on-click) 10))))
+   [:span btn-text (when-not (util/sm-breakpoint?)
+                     [" " (ui/render-keyboard-shortcut shortcut)])]
+   :id id
+   :class (str id " " class)
+   :background background
+   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-click (fn [_e]
+               (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view < rum/reactive db-mixins/query
   (rum/local 1 ::phase)
@@ -502,11 +502,11 @@
                          :class "tippy-hover"
                          :interactive true}
                         (ui/button [:span "Reset"]
-                          :id "card-reset"
-                          :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
-                          :on-click (fn [e]
-                                      (util/stop e)
-                                      (operation-reset! card)))))]
+                                   :id "card-reset"
+                                   :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
+                                   :on-click (fn [e]
+                                               (util/stop e)
+                                               (operation-reset! card)))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
