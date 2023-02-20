@@ -600,9 +600,12 @@
       (update :properties-text-values dissoc :id)
       (update :properties-order #(vec (remove #{:id} %)))
       (update :content (fn [c]
-                         (let [replace-str (if (= :markdown (:format block))
-                                             (str "\nid:: " (:uuid block))
-                                             (str "\n:id: " (:uuid block)))]
+                         (let [replace-str (re-pattern
+                                            (str
+                                             "\n*\\s*"
+                                             (if (= :markdown (:format block))
+                                               (str "id:: " (:uuid block))
+                                               (str ":id: " (:uuid block)))))]
                            (string/replace c replace-str ""))))))
 
 (defn extract-blocks
