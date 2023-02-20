@@ -13,6 +13,7 @@
         "@tailwindcss/typography": "0.5.7",
         "@types/gulp": "^4.0.7",
         "autoprefixer": "^10.4.13",
+        "browser-fs-access": "^0.32.1",
         "cross-env": "^7.0.3",
         "cssnano": "^5.1.13",
         "del": "^6.0.0",
