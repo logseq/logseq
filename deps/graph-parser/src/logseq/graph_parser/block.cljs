@@ -608,6 +608,12 @@
                                                (str ":id: " (:uuid block)))))]
                            (string/replace c replace-str ""))))))
 
+(defn block-exists-in-another-page?
+  [db block-uuid current-page-name]
+  (when (and db current-page-name
+             (some? (first (d/datoms db :avet :block/uuid block-uuid))))
+    (not= current-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid]))))))
+
 (defn extract-blocks
   "Extract headings from mldoc ast.
   Args:
@@ -616,8 +622,8 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-               :extract-macros, :date-formatter and :db"
-  [blocks content with-id? format {:keys [user-config] :as options}]
+               :extract-macros, :date-formatter, :page-name and :db"
+  [blocks content with-id? format {:keys [user-config db page-name] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         [blocks body pre-block-properties]
@@ -647,10 +653,13 @@
                 (heading-block? block)
                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))
-                      [block-ids block] (if (block-ids (:uuid block''))
-                                          [block-ids (fix-duplicate-id block'')]
-                                          [(conj block-ids (:uuid block'')) block''])]
-                  (recur (conj headings block) block-ids (rest blocks) {} {} []))
+                      block-uuid (:uuid block'')
+                      fixed-block (if (or (block-ids block-uuid)
+                                          (block-exists-in-another-page? db block-uuid page-name))
+                                    (fix-duplicate-id block'')
+                                    block'')
+                      block-ids' (conj block-ids (:uuid fixed-block))]
+                  (recur (conj headings fixed-block) block-ids' (rest blocks) {} {} []))
 
                 :else
                 (recur headings block-ids (rest blocks) timestamps properties (conj body block))))

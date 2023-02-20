@@ -88,7 +88,7 @@
           ;; add empty pos metadata
           parsed-blocks (map (fn [b] [b {}]) parsed-blocks)
           parsed-blocks (->>
-                         (block/extract-blocks parsed-blocks "" :markdown {})
+                         (block/extract-blocks parsed-blocks "" :markdown {:db (db/get-db repo)})
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (db/page-exists? page-name))

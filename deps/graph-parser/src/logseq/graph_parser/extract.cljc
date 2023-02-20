@@ -135,7 +135,8 @@
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (-> options
                        (assoc :page-name page-name
-                              :original-page-name page))
+                              :original-page-name page
+                              :db db))
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
