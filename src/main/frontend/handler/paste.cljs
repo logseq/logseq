@@ -107,18 +107,20 @@
       (let [blocks (:copy/blocks copied-blocks)]
         (when (seq blocks)
           (editor-handler/paste-blocks blocks {})))
-      (let [{:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-            shape-refs-text (when (and (not (string/blank? html))
+      (let [shape-refs-text (when (and (not (string/blank? html))
                                        (get-whiteboard-tldr-from-text html))
                               ;; text should alway be prepared block-ref generated in tldr
                               text)
-            text-url? (gp-util/url? text)]
+            {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+            text-url? (gp-util/url? text)
+            selection-url? (gp-util/url? selection)]
         (cond
           (not (string/blank? shape-refs-text))
           (commands/simple-insert! input-id shape-refs-text nil)
 
-          (and (or text-url? (gp-util/url? selection))
-               (selection-within-link? selection-and-format))
+          (or (and (or text-url? selection-url?)
+                   (selection-within-link? selection-and-format))
+              (and text-url? selection-url?))
           (replace-text-f text)
 
           (and (or text-url?
