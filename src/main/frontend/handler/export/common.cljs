@@ -3,19 +3,18 @@
   exclude some fns which produce lazy-seq, which can cause strange behaviors
   when use together with dynamic var."
   (:refer-clojure :exclude [map filter mapcat concat remove])
-  (:require
-   [cljs.core.match :refer [match]]
-   [clojure.string :as string]
-   [datascript.core :as d]
-   [frontend.db :as db]
-   [frontend.modules.file.core :as outliner-file]
-   [frontend.modules.outliner.tree :as outliner-tree]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [mapcatv concatv removev]]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [logseq.graph-parser.util :as gp-util]
-   [malli.core :as m]
-   [malli.util :as mu]))
+  (:require [cljs.core.match :refer [match]]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [frontend.db :as db]
+            [frontend.modules.file.core :as outliner-file]
+            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]
+            [malli.core :as m]
+            [malli.util :as mu]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -55,11 +54,12 @@
    (outliner-tree/blocks->vec-tree (str root-block-uuid))
    (outliner-file/tree->file-content {:init-level 1})))
 
-(defn- get-page-content
-  [repo page]
-  (outliner-file/tree->file-content
-   (outliner-tree/blocks->vec-tree
-    (db/get-page-blocks-no-cache repo page) page) {:init-level 1}))
+(defn get-page-content
+  [page]
+  (-> page
+      db/get-page
+      :block/file
+      :file/content))
 
 (defn root-block-uuids->content
   [repo root-block-uuids]
@@ -87,7 +87,7 @@
 
 (defn- page-name->ast
   [page-name]
-  (let [content (get-page-content (state/get-current-repo) page-name)
+  (let [content (get-page-content page-name)
         format :markdown]
     (removev Properties-block-ast?
              (mapv remove-block-ast-pos
@@ -164,29 +164,22 @@
            inline-coll)))
 
 (defn- get-file-contents
-  ([repo]
-   (get-file-contents repo {:init-level 1}))
-  ([repo file-opts]
-   (let [db (db/get-db repo)]
-     (->> (d/q '[:find ?n ?fp
-                 :where
-                 [?e :block/file ?f]
-                 [?f :file/path ?fp]
-                 [?e :block/name ?n]] db)
-          (mapv (fn [[page-name file-path]]
-                  [file-path
-                   (outliner-file/tree->file-content
-                    (outliner-tree/blocks->vec-tree
-                     (db/get-page-blocks-no-cache page-name) page-name)
-                    file-opts)]))))))
+  [repo]
+  (let [db (db/get-db repo)]
+    (->> (d/q '[:find ?fp
+                :where
+                [?e :block/file ?f]
+                [?f :file/path ?fp]] db)
+         (mapv (fn [[file-path]]
+                 [file-path
+                  (db/get-file file-path)])))))
 
 (defn- get-md-file-contents
   [repo]
   (filterv (fn [[path _]]
              (let [path (string/lower-case path)]
                (re-find #"\.(?:md|markdown)$" path)))
-           (get-file-contents repo {:init-level 1
-                                    :heading-to-list? true})))
+           (get-file-contents repo)))
 
 (defn get-file-contents-with-suffix
   [repo]

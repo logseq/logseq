@@ -58,16 +58,19 @@
                                  :selected false}])
 
 (defn- export-helper
-  [block-uuids]
+  [block-uuids-or-page-name]
   (let [current-repo (state/get-current-repo)
         text-indent-style (state/get-export-block-text-indent-style)
         text-remove-options (set (state/get-export-block-text-remove-options))
         tp @*export-block-type]
     (case tp
-      :text (export-text/export-blocks-as-markdown current-repo block-uuids
-                                                   {:indent-style text-indent-style :remove-options text-remove-options})
-      :opml (export-opml/export-blocks-as-opml current-repo block-uuids {:remove-options text-remove-options})
-      :html (export-html/export-blocks-as-html current-repo block-uuids {:remove-options text-remove-options})
+      :text (export-text/export-blocks-as-markdown
+             current-repo block-uuids-or-page-name
+             {:indent-style text-indent-style :remove-options text-remove-options})
+      :opml (export-opml/export-blocks-as-opml
+             current-repo block-uuids-or-page-name {:remove-options text-remove-options})
+      :html (export-html/export-blocks-as-html
+             current-repo block-uuids-or-page-name {:remove-options text-remove-options})
       "")))
 
 (rum/defcs export-blocks < rum/static
@@ -81,7 +84,7 @@
                    (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
                    (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
                    state))}
-  [state root-block-uuids]
+  [state root-block-uuids-or-page-name]
   (let [tp @*export-block-type
         *text-remove-options (::text-remove-options state)
         *text-indent-style (::text-indent-style state)
@@ -93,15 +96,15 @@
       (ui/button "Text"
                  :class "mr-4 w-20"
                  :on-click #(do (reset! *export-block-type :text)
-                                (reset! *content (export-helper root-block-uuids))))
+                                (reset! *content (export-helper root-block-uuids-or-page-name))))
       (ui/button "OPML"
                  :class "mr-4 w-20"
                  :on-click #(do (reset! *export-block-type :opml)
-                                (reset! *content (export-helper root-block-uuids))))
+                                (reset! *content (export-helper root-block-uuids-or-page-name))))
       (ui/button "HTML"
                  :class "w-20"
                  :on-click #(do (reset! *export-block-type :html)
-                                (reset! *content (export-helper root-block-uuids))))]
+                                (reset! *content (export-helper root-block-uuids-or-page-name))))]
      [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}]
      (let [options (->> text-indent-style-options
                         (mapv (fn [opt]
@@ -119,7 +122,7 @@
                              (let [value (util/evalue e)]
                                (state/set-export-block-text-indent-style! value)
                                (reset! *text-indent-style value)
-                               (reset! *content (export-helper root-block-uuids))))}
+                               (reset! *content (export-helper root-block-uuids-or-page-name))))}
                (for [{:keys [label value selected]} options]
                  [:option (cond->
                            {:key   label
@@ -134,7 +137,7 @@
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :page-ref)
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids)))})
+                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "[[text]] -> text"]
 
@@ -145,7 +148,7 @@
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :emphasis)
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids)))})
+                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove emphasis"]
@@ -157,7 +160,7 @@
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :tag)
                                     (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids)))})
+                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove #tags"]]])

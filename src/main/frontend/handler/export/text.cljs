@@ -423,7 +423,7 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
-            ast  (mapv common/remove-block-ast-pos ast)
+            ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
@@ -448,12 +448,18 @@
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
   :remove-options [:emphasis :page-ref :tag]"
-  [repo root-block-uuids options]
-  {:pre [(seq root-block-uuids)]}
-  (let [content (common/root-block-uuids->content repo root-block-uuids)
-        first-block (db/entity [:block/uuid (first root-block-uuids)])
-        format (or (:block/format first-block) (state/get-preferred-format))]
-    (export-helper content format options)))
+  [repo root-block-uuids-or-page-name options]
+  {:pre [(or (coll? root-block-uuids-or-page-name)
+             (string? root-block-uuids-or-page-name))]}
+  (util/profile :export-blocks-as-markdown
+   (let [content
+         (if (string? root-block-uuids-or-page-name)
+           ;; page
+           (common/get-page-content root-block-uuids-or-page-name)
+           (common/root-block-uuids->content repo root-block-uuids-or-page-name))
+         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
+         format (or (:block/format first-block) (state/get-preferred-format))]
+     (export-helper content format options))))
 
 (defn export-files-as-markdown
   "options see also `export-blocks-as-markdown`"
@@ -468,7 +474,7 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (when-let [files (common/get-file-contents-with-suffix repo)]
+  (when-let [files (util/profile :get-file-content (common/get-file-contents-with-suffix repo))]
     (let [files (export-files-as-markdown files nil)
           zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
       (p/let [zipfile (zip/make-zip zip-file-name files repo)]
