@@ -427,7 +427,7 @@
              :command.ui/toggle-left-sidebar         "Linke Seitenleiste umschalten"
              :command.ui/toggle-settings             "Einstellungen umschalten"
              :command.ui/toggle-wide-mode            "Breitbildmodus umschalten"
-             :command.ui/toggle-theme                "Umschalten zwischen dunklem/hellem Thema"
+             :command.ui/toggle-theme                "Umschalten zwischen dunklem/hellem Theme"
              :shortcut.category/basics               "Grundlagen"
              :shortcut.category/block-command-editing "Blockbefehl bearbeiten"
              :shortcut.category/block-editing        "Blockbearbeitung allgemein"
