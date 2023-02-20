@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.utils :as db-utils]
             [frontend.db.model :as model-db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
@@ -95,7 +96,12 @@
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
-  (let [ref-blocks (db/get-block-referenced-blocks block-id)
+  (let [e (db/entity [:block/uuid block-id])
+        page? (some? (:block/name e))
+        ref-blocks (if page?
+                     (-> (db/get-page-referenced-blocks (:block/name e))
+                         db-utils/group-by-page)
+                     (db/get-block-referenced-blocks block-id))
         ref-hiccup (block/->hiccup ref-blocks
                                    {:id (str block-id)
                                     :ref? true
