@@ -592,7 +592,7 @@
                 (assoc :block/updated-at updated-at))]
     (dissoc block :title :body :anchor)))
 
-(defn fix-duplicate-id-in-same-file
+(defn fix-duplicate-id
   [block]
   (-> block
       (assoc :uuid (d/squuid))
@@ -645,7 +645,7 @@
                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))
                       [block-ids block] (if (block-ids (:uuid block''))
-                                          [block-ids (fix-duplicate-id-in-same-file block'')]
+                                          [block-ids (fix-duplicate-id block'')]
                                           [(conj block-ids (:uuid block'')) block''])]
                   (recur (conj headings block) block-ids (rest blocks) {} {} []))
 
