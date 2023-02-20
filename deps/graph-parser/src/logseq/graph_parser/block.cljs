@@ -610,9 +610,9 @@
 
 (defn block-exists-in-another-page?
   [db block-uuid current-page-name]
-  (when (and db current-page-name
-             (some? (first (d/datoms db :avet :block/uuid block-uuid))))
-    (not= current-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid]))))))
+  (when (and db current-page-name)
+    (when-let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid])))]
+      (not= current-page-name block-page-name))))
 
 (defn extract-blocks
   "Extract headings from mldoc ast.
@@ -626,9 +626,11 @@
   [blocks content with-id? format {:keys [user-config db page-name extracted-block-ids] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
-        *block-ids (if (instance? Atom extracted-block-ids)
-                    extracted-block-ids
-                    (atom #{}))
+        *block-ids (or extracted-block-ids (atom #{}))
+        ;; TODO: nbb doesn't support `Atom`
+        ;; *block-ids (if (instance? Atom extracted-block-ids)
+        ;;             extracted-block-ids
+        ;;             (atom #{}))
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)
