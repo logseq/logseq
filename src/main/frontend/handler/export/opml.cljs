@@ -87,13 +87,13 @@
 
 (defn- zip-loc->opml
   [hiccup title]
-  (let [[_ _ body] hiccup]
+  (let [[_ _ & body] hiccup]
     (str
      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
      (h/render-html
       [:opml {:version "2.0"}
        [:head [:title title]]
-       [:body body]]))))
+       (concatv [:body] body)]))))
 
 ;;; utils for construct opml hiccup (ends)
 
