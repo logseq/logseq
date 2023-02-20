@@ -54,13 +54,13 @@
 
 ## 🤔 Why Logseq?
 
-Logseq is a **comprehensive tool for knowledge management** and collaboration that helps you stay connected with the information that is most important to you. With support for multiple file-formats including **Markdown**** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
+Logseq is a **comprehensive tool for knowledge management** and collaboration that helps you stay connected with the most critical information. With support for multiple file formats, including **Markdown**** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
 
-[Logseq](https://logseq.com) stores your notes locally on your device in plain text files, ensuring that your data is **private** and **secure**. The application also has a strong emphasis on [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes with confidence.
+[Logseq](https://logseq.com) stores your notes locally on your device in plain text files, ensuring that your data is **private** and **secure**. Logseq also strongly emphasizes [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes confidently.
 
 In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and customization options. Mobile apps are also available, providing access to most features from the desktop application.
 
-Whether you're a student, a professional, or simply someone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
+Whether you're a student, a professional, or anyone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
 
 ![Image of Logseq](https://user-images.githubusercontent.com/25513724/210489520-873e7cf0-3219-4f62-aca5-9f1eb3b0f2ee.png)
 
@@ -79,18 +79,24 @@ Whether you're a student, a professional, or simply someone who values a clear a
 
 ## 🫶 Support Logseq Development
 
-[Sponsor our contributors on Open Collective](https://opencollective.com/logseq), Logseq will move to Stripe later!
+[Sponsor our contributors on Open Collective](https://opencollective.com/logseq)
 
 ## 💎 Sponsors
 
 Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com/logseq#sponsor)]
 
-<a href="https://www.deta.sh/" target="_blank"><img width=200 height=100
-        src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"/></a>
+<!-- JetBrains Logo -->
+<p align="center">
+    <a href="https://www.deta.sh/" alt="Deta">
+        <img src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"
+        style="width: 200px; height: 100px;"/></a>
+</p>
 
-## ✍️ Plugins documentation
+## 🔌 Plugin API documentation
 
-The plugins documentation is at <https://logseq.github.io/plugins>. Any feedback would be greatly appreciated!
+The plugin API documentation is available at [logseq.github.io/plugins](https://logseq.github.io/plugins).
+
+Any feedback would be greatly appreciated!
 
 ## 💡 Feature requests
 
@@ -116,7 +122,7 @@ ClojureScript and JS
 - [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document
 [parser](https://github.com/mldoc/mldoc)
 - [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for NodeJS and web browsers
-- [sci](https://github.com/borkdude/sci) - Small Clojure Interpreter
+- [SCI](https://github.com/borkdude/sci) - Small Clojure Interpreter
 
 ![Logseq Credits](https://asset.logseq.com/static/img/credits.png)
 
@@ -125,7 +131,7 @@ ClojureScript and JS
 - Our blog: [https://blog.logseq.com/](https://blog.logseq.com)
 - Please be sure to visit our [About page](https://blog.logseq.com/about) for the latest updates
 - Twitter: <https://twitter.com/logseq>
-- Forum: <https://discuss.logseq.com> - Where we answer questions, discuss workflows and share tips
+- Forum: <https://discuss.logseq.com> - Where we answer questions, discuss workflows, and share tips
 - Discord: <https://discord.gg/KpN4eHY>
 - 中文 Discord：<https://discord.gg/xYqcrXWymg>
 - GitHub: <https://github.com/logseq/logseq> - everyone is encouraged to report issues!
@@ -159,7 +165,7 @@ And here is a list of some [good first issues](https://github.com/logseq/logseq/
 
 # 🙏 Thank You
 
-Thank you to our Open Collective sponsors, backers and to our contributors.
+Thank you to our Open Collective sponsors, backers, and to our contributors.
 
 ## 💎 Our Sponsors
 
