@@ -416,7 +416,6 @@
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
-            _ (def x ast***)
             hiccup (z/root (reduce block-ast->hiccup init-opml-body-hiccup ast***))]
         (zip-loc->opml hiccup "untitled")))))
 
