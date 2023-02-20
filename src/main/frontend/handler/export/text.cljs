@@ -460,9 +460,9 @@
   [files options]
   (mapv
    (fn [{:keys [path content names format]}]
-     (println :export-files-as-markdown path)
      (when (first names)
-       [path (export-helper content format options)]))
+       (util/profile (print-str :export-files-as-markdown path)
+                     [path (export-helper content format options)])))
    files))
 
 (defn export-repo-as-markdown!
