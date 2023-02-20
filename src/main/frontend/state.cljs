@@ -208,6 +208,7 @@
      :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
+     :pdf/system-win?                       false
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)

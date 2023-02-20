@@ -18,6 +18,7 @@ export class TLViewport {
 
   static readonly minZoom = 0.1
   static readonly maxZoom = 4
+  static readonly panMultiplier = 0.05
 
   /* ------------------- Properties ------------------- */
 
@@ -47,6 +48,17 @@ export class TLViewport {
       point: Vec.sub(this.camera.point, Vec.div(delta, this.camera.zoom)),
     })
   }
+
+  panToPointWhenOutOfBounds = (point: number[]) => {
+    const deltaMax = Vec.sub([this.currentView.maxX, this.currentView.maxY], point)
+    const deltaMin = Vec.sub([this.currentView.minX, this.currentView.minY], point)
+
+    const deltaX = deltaMax[0] < 0 ? deltaMax[0] : deltaMin[0] > 0 ? deltaMin[0] : 0
+    const deltaY = deltaMax[1] < 0 ? deltaMax[1] : deltaMin[1] > 0 ? deltaMin[1] : 0
+
+    this.panCamera(Vec.mul([deltaX, deltaY], -TLViewport.panMultiplier))
+}
+
 
   @action update = ({ point, zoom }: Partial<{ point: number[]; zoom: number }>): this => {
     if (point !== undefined && !isNaN(point[0]) && !isNaN(point[1])) this.camera.point = point
