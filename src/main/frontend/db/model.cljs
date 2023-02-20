@@ -20,6 +20,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]))
 
@@ -1424,19 +1425,37 @@ independent of format as format specific heading characters are stripped"
          distinct
          sort)))
 
+(defn- property-value-for-refs-and-text
+  "Given a property value's refs and full text, determines the value to
+  autocomplete"
+  [[refs text]]
+  (if (or (not (coll? refs)) (= 1 (count refs)))
+    text
+    (map #(cond
+            (string/includes? text (page-ref/->page-ref %))
+            (page-ref/->page-ref %)
+            (string/includes? text (str "#" %))
+            (str "#" %)
+            :else
+            %)
+         refs)))
+
 (defn get-property-values
   [property]
-  (let [pred (fn [_db properties]
-               (get properties property))]
+  (let [pred (fn [_db properties text-properties]
+               [(get properties property)
+                (get text-properties property)])]
     (->>
      (d/q
-      '[:find [?property-val ...]
+      '[:find ?property-val ?text-property-val
         :in $ ?pred
         :where
-        [_ :block/properties ?p]
-        [(?pred $ ?p) ?property-val]]
+        [?b :block/properties ?p]
+        [?b :block/properties-text-values ?p2]
+        [(?pred $ ?p ?p2) [?property-val ?text-property-val]]]
       (conn/get-db)
       pred)
+     (map property-value-for-refs-and-text)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
      (map str)

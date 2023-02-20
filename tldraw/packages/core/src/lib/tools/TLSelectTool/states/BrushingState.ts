@@ -68,6 +68,7 @@ export class BrushingState<
       // Select hit shapes
       this.app.setSelectedShapes(hits)
     }
+    this.app.viewport.panToPointWhenOutOfBounds(currentPoint)
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {

@@ -297,14 +297,14 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
-#?(:cljs 
+#?(:cljs
    (defn cancelable-debounce
      "Create a stateful debounce function with specified interval
-   
+
       Returns [fire-fn, cancel-fn]
-   
+
       Use `fire-fn` to call the function(debounced)
-   
+
       Use `cancel-fn` to cancel pending callback if there is"
      [f interval]
      (let [debouncer (Debouncer. f interval)]
@@ -777,7 +777,13 @@
      ([s]
       (utils/writeClipboard (clj->js {:text s})))
      ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+      (utils/writeClipboard (clj->js {:text s :html html})))
+     ([s html owner-window]
+      (-> (cond-> {:text s}
+            (not (string/blank? html))
+            (assoc :html html))
+          (bean/->js)
+          (utils/writeClipboard owner-window)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -1360,10 +1366,7 @@
        (< (.-offsetWidth js/document.documentElement) size))
 
      (defn sm-breakpoint?
-       [] (breakpoint? 640))
-
-     (defn md-breakpoint?
-       [] (breakpoint? 768))))
+       [] (breakpoint? 640))))
 
 #?(:cljs
    (defn event-is-composing?

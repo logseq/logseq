@@ -437,6 +437,7 @@
                                      :fn      ui-handler/toggle-cards!}
 
    :git/commit                      {:binding "mod+g c"
+                                     :inactive (not (util/electron?))
                                      :fn      commit/show-commit-modal!}
 
    :dev/show-block-data            {:binding false

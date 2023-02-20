@@ -1,5 +1,6 @@
 (ns electron.server
   (:require ["fastify" :as Fastify]
+            ["@fastify/cors" :as FastifyCORS]
             ["electron" :refer [ipcMain]]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
@@ -127,9 +128,11 @@
   []
   (-> (p/let [_     (close!)
               _     (set-status! :starting)
-              ^js s (Fastify. #js {:logger                true
+              ^js s (Fastify. #js {:logger                (not utils/win32?)
                                    :requestTimeout        (* 1000 42)
                                    :forceCloseConnections true})
+              ;; middlewares
+              _     (.register s FastifyCORS #js {:origin "*"})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
