@@ -276,7 +276,7 @@
   (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
-      (if-not (mobile-util/native-ios?)
+      (if (not (mobile-util/native-platform?))
         (cond->
          {:className "resize image-resize"
           :onSizeChanged (fn [value]
