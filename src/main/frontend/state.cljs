@@ -603,10 +603,6 @@ Similar to re-frame subscriptions"
     ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list? (sub-config)))))
-
 (defn enable-git-auto-push?
   [repo]
   (not (false? (:git-auto-push (sub-config repo)))))
