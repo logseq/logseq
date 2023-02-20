@@ -1950,43 +1950,52 @@
                                      bg-color)
                  :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
          :class "px-1 with-bg-color"}))
-     (remove-nils
-      (concat
-       [(when-not slide? checkbox)
-        (when-not slide? marker-switch)
-        marker-cp
-        priority]
-       (if title
-         (conj
-          (map-inline config title)
-          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])
-          (when (and
-                 (or config/publishing? (util/electron?))
-                 (not (#{:default :whiteboard-shape} block-type)))
-            (let [area? (= :area (keyword (:hl-type properties)))]
-              [:div.prefix-link
-               {:on-mouse-down (fn [^js e]
-                                 (let [^js target (.-target e)]
-                                   (case block-type
-                                     ;; pdf annotation
-                                     :annotation
-                                     (if (and area? (.contains (.-classList target) "blank"))
-                                       :actions
-                                       (do
-                                         (pdf-assets/open-block-ref! t)
-                                         (util/stop e)))
 
-                                     :dune)))}
+     ;; children
+     (let [area?  (= :area (keyword (:hl-type properties)))
+           hl-ref #(when (and (or config/publishing? (util/electron?))
+                              (not (#{:default :whiteboard-shape} block-type)))
+                     [:div.prefix-link
+                      {:on-mouse-down
+                       (fn [^js e]
+                         (let [^js target (.-target e)]
+                           (case block-type
+                             ;; pdf annotation
+                             :annotation
+                             (if (and area? (.contains (.-classList target) "blank"))
+                               :actions
+                               (do
+                                 (pdf-assets/open-block-ref! t)
+                                 (util/stop e)))
 
-               [:span.hl-page
-                [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
-                [:label.blank " "]]
+                             :dune)))}
 
-               (when (and area? (:hl-stamp properties))
-                 (pdf-assets/area-display t))])))
+                      [:span.hl-page
+                       [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+                       [:label.blank " "]]
 
-         [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
-       [tags])))))
+                      (when (and area? (:hl-stamp properties))
+                        (pdf-assets/area-display t))])]
+       (remove-nils
+        (concat
+         [(when-not slide? checkbox)
+          (when-not slide? marker-switch)
+          marker-cp
+          priority]
+
+         ;; highlight ref block (inline)
+         (when-not area? [(hl-ref)])
+
+         (if title
+           (conj
+            (map-inline config title)
+            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
+           [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
+
+         [tags]
+
+         ;; highlight ref block (area)
+         (when area? [(hl-ref)])))))))
 
 (rum/defc span-comma
   []

@@ -228,42 +228,7 @@
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}
-                       {:role "editMenu"
-                        ;; https://github.com/electron/electron/blob/85f41d59aceabbdeee1fdec75770249c6335e73a/lib/browser/api/menu-item-roles.ts#L239-L276
-                        :submenu (concat
-                                  [{:label "Undo"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "undo")))
-                                    :accelerator "CommandOrControl+Z"}
-                                   {:label "Redo"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "redo")))
-                                    :accelerator "Shift+CommandOrControl+Z"}
-                                   {:type "separator"}
-                                   {:role "cut"}
-                                   {:label "Copy"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "copy")))
-                                    :accelerator "CommandOrControl+C"}
-                                   {:role "paste"}]
-
-                                  (if mac?
-                                    [{:role "pasteAndMatchStyle"}
-                                     {:role "delete"}
-                                     {:role "selectAll"} ;; FIXME not work as expected
-                                     {:type "separator"}
-                                     {:label "Speech"
-                                      :submenu [{:role "startSpeaking"},
-                                                {:role "stopSpeaking"}]}]
-                                    [{:role "delete"}
-                                     {:type "separator"}
-                                     {:role "selectAll"}]))}
+                       {:role "editMenu"}
                        {:role "viewMenu"}
                        {:role "windowMenu"})
         ;; Windows has no about role
@@ -335,7 +300,7 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
-                   ^js win (win/create-main-window)
+                   ^js win (win/create-main-window!)
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
