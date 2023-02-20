@@ -18,6 +18,16 @@ env:
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
+  typos:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions Repository
+        uses: actions/checkout@v3
+      - name: Check spelling with custom config file
+        uses: crate-ci/typos@v1.13.10
+        with:
+          config: ./typos.toml
 
   test:
     strategy:

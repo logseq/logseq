@@ -342,7 +342,7 @@
       (remove-user-graph-uuid-prefix o)
 
       :else
-      (throw (js/Error. (str "unsupport type " (str o)))))))
+      (throw (js/Error. (str "unsupported type " (str o)))))))
 
 (defprotocol IChecksum
   (-checksum [this]))
@@ -3258,7 +3258,7 @@
 
 ;;; ### some add-watches
 
-;; TOOD: replace this logic by pause/resume state
+;; TODO: replace this logic by pause/resume state
 (defonce network-online-cursor (rum/cursor state/state :network/online?))
 (add-watch network-online-cursor "sync-manage"
            (fn [_k _r o n]

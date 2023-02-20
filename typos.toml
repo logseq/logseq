@@ -1,0 +1,14 @@
+[default.extend-words]
+edn = "edn"
+datas = "datas"
+BA = "BA"
+juxt = "juxt"
+fo = "fo"
+collapsable = "collapsable" # TODO: should be collapsible
+Ded = "Ded"
+aks = "aks"
+Mannor = "Mannor"
+revison = "revison"         # TODO: should be revision
+referer = "referer"         # TODO: should be referrer
+[files]
+extend-exclude = ["resources/*", "templates/*", "dicts.cljc"]

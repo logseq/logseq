@@ -576,7 +576,7 @@
                        (pdf-utils/fix-local-asset-pagename page-name)
 
                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
-                       page-name-in-block ;; page-name-in-block might be overrided (legacy))
+                       page-name-in-block ;; page-name-in-block might be overridden (legacy))
 
                        :else
                        (util/trim-safe page-name))
@@ -1899,7 +1899,7 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        ;; `heading-level` is for backward compatiblity, will remove it in later releases
+        ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
                  (and heading-level
@@ -2991,7 +2991,7 @@
   [log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
         clocks (reverse (sort-by str clocks))
-        ;; TODO: diplay states change log
+        ;; TODO: display states change log
         ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
         ]
     (when (seq clocks)

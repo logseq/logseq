@@ -47,7 +47,7 @@ test('switch code editing mode', async ({ page }) => {
   await page.waitForTimeout(200) // editor unloading
   await page.press('.block-editor textarea', 'Escape')
   await page.waitForTimeout(200) // editor loading
-  // click position is estimated to be at the begining of the first line
+  // click position is estimated to be at the beginning of the first line
   await page.click('.CodeMirror pre', { position: { x: 1, y: 5 } })
   await page.waitForTimeout(200)
 
