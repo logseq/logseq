@@ -50,6 +50,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -455,40 +456,8 @@
                       (get-file-absolute-path config href)))]
          (resizable-image config title href metadata full_text false))))))
 
-(defn repetition-to-string
-  [[[kind] [duration] n]]
-  (let [kind (case kind
-               "Dotted" "."
-               "Plus" "+"
-               "DoublePlus" "++")]
-    (str kind n (string/lower-case (str (first duration))))))
 
-(defn timestamp-to-string
-  [{:keys [_active date time repetition wday active]}]
-  (let [{:keys [year month day]} date
-        {:keys [hour min]} time
-        [open close] (if active ["<" ">"] ["[" "]"])
-        repetition (if repetition
-                     (str " " (repetition-to-string repetition))
-                     "")
-        hour (when hour (util/zero-pad hour))
-        min  (when min (util/zero-pad min))
-        time (cond
-               (and hour min)
-               (util/format " %s:%s" hour min)
-               hour
-               (util/format " %s" hour)
-               :else
-               "")]
-    (util/format "%s%s-%s-%s %s%s%s%s"
-                 open
-                 (str year)
-                 (util/zero-pad month)
-                 (util/zero-pad day)
-                 wday
-                 time
-                 repetition
-                 close)))
+(def timestamp-to-string export-common-handler/timestamp-to-string)
 
 (defn timestamp [{:keys [active _date _time _repetition _wday] :as t} kind]
   (let [prefix (case kind
