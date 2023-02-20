@@ -606,7 +606,7 @@
                                              (if (= :markdown (:format block))
                                                (str "id:: " (:uuid block))
                                                (str ":id: " (:uuid block)))))]
-                           (string/replace c replace-str ""))))))
+                           (string/replace-first c replace-str ""))))))
 
 (defn extract-blocks
   "Extract headings from mldoc ast.
