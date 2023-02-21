@@ -11,7 +11,7 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 * JRE 8 (required for Clojure)
 * Visual Studio (required for desktop app)
 
-(updated 20230215. May confirm via JAVA_VERSION and NODE_VERSION in [THIS FILE](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml))
+(updated 20230221. May confirm via JAVA_VERSION and NODE_VERSION in [THIS FILE](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml))
 
 ### An example of installing pre-requisites on Windows
 * Install [Chocolatey](https://chocolatey.org/)
@@ -30,7 +30,7 @@ Congrats! The pre-requisites are ready.
 
 ## Set-up development environment (web app)
 
-The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.  
+The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.
 Go to your cloned Logseq repo. Then install dependencies, execute the `clj` equivalent of `yarn watch`. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`.
 
 * Copy files in `resources` to `static`
