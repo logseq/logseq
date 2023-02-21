@@ -1,12 +1,11 @@
+;; FIXME: this file cannot be introduced in the graph parser nbb test runner
 (ns logseq.graph-parser.util.db
   "Db util fns that are useful for the frontend and nbb-logseq. This may be used
   by the graph-parser soon but if not, it should be in its own library"
   (:require [cljs-time.core :as t]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.util :as gp-util]
             [datascript.core :as d]
-            [clojure.pprint :as clj-pp]
             [clojure.string :as string]))
 
 (defn date-at-local-ms
@@ -168,62 +167,3 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 
     :else
     input))
-
-;; Copy of db/sort-by-left
-(defn- sort-by-left
-  ([db blocks parent]
-   (sort-by-left db blocks parent {:check? true}))
-  ([db blocks parent {:keys [check?]}]
-   (let [blocks (gp-util/distinct-by :db/id (seq blocks))]
-     (when (and check?
-                ;; Top-level blocks on whiteboards have no relationships of :block/left
-                (not= "whiteboard" (:block/type (d/entity db (:db/id parent)))))
-       (when (not= (count blocks) (count (set (map :block/left blocks))))
-         (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                               frequencies
-                               (filter (fn [[_k v]] (> v 1)))
-                               (map (fn [[k _v]]
-                                      (let [left (d/pull db '[*] k)]
-                                        {:left left
-                                         :duplicates (->>
-                                                      (filter (fn [block]
-                                                                (= k (:db/id (:block/left block))))
-                                                              blocks)
-                                                      (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-           (clj-pp/pprint duplicates)))
-       (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
-
-     (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-       (loop [block parent
-              result []]
-         (if-let [next (get left->blocks (:db/id block))]
-           (recur next (conj result next))
-           (vec result)))))))
-
-;; Diverged of db-model/get-sorted-page-block-ids
-(defn get-sorted-page-block-ids
-  "page-name: the page name, original name
-   return: a list with elements in:
-       :id    - a list of block ids, sorted by :block/left
-       :level - the level of the block, 1 for root, 2 for children of root, etc."
-  [db page-name]
-  {:pre [(string? page-name)]}
-  (let [sanitized-page (gp-util/page-name-sanity-lc page-name)
-        page-id (:db/id (d/entity db [:block/name sanitized-page]))
-        root (d/entity db page-id)] ;; TODO Junyi
-    (loop [result []
-           children (sort-by-left db (:block/_parent root) root)
-           ;; BFS log of walking depth
-           levels (repeat (count children) 1)]
-      (if (seq children)
-        (let [child (first children)
-              cur-level (first levels)
-              next-children (sort-by-left db (:block/_parent child) child)]
-          (recur (conj result {:id (:db/id child) :level cur-level})
-                 (concat
-                  next-children
-                  (rest children))
-                 (concat
-                  (repeat (count next-children) (inc cur-level))
-                  (rest levels))))
-        result))))

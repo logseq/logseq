@@ -10,6 +10,7 @@
             [logseq.graph-parser.util.page-ref-test]
             [logseq.graph-parser.util-test]
             [logseq.graph-parser.util.file-name-test]
+            [logseq.graph-parser.data-bridge-test]
             [logseq.graph-parser-test]))
 
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
@@ -28,4 +29,5 @@
    'logseq.graph-parser.util.page-ref-test
    'logseq.graph-parser-test
    'logseq.graph-parser.util.file-name-test
+   'logseq.graph-parser.data-bridge-test
    'logseq.graph-parser.util-test))
