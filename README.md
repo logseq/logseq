@@ -89,7 +89,7 @@ If you find Logseq useful and want to help us keep the project growing, please c
 
 ## 💎 Sponsors
 
-Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com/logseq#sponsor)]
+Our top sponsors are shown below!
 
 <!-- JetBrains Logo -->
 <p align="center">
@@ -98,9 +98,14 @@ Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com
         style="width: 200px; height: 100px;"/></a>
 </p>
 
-## 🔌 Plugin API documentation
+<p align="center">
+    <a href="https://opencollective.com/logseq#sponsor"> [Become a sponsor]</a>
+</p>
 
-Logseq provides a plugin API that enables developers to create custom plugins and extend the functionality of Logseq. The plugin API documentation is available at [logseq.github.io/plugins](https://logseq.github.io/plugins), where you can find everything needed to get started with plugin development.
+
+## 🔌 Plugin API
+
+Logseq provides a plugin API that enables developers to create custom plugins and extend the functionality of Logseq. The plugin API documentation is available at [plugins-doc.logseq.com](https://plugins-doc.logseq.com/), where you can find everything needed to get started with plugin development.
 
 We value your feedback and suggestions on how to improve our documentation. Please do not hesitate to contact us with any comments or questions. Your input helps us to provide a better experience for our users and developers.
 
