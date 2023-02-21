@@ -127,7 +127,7 @@
 (defn html-link-format!
   ([]
    (html-link-format! nil))
-  ([link]
+  ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
@@ -137,8 +137,11 @@
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
 
-                                   link
-                                   (config/with-label-link format selection link)
+                                   (and text selection-link?)
+                                   (config/with-label-link format text selection)
+
+                                   text
+                                   (config/with-label-link format selection text)
 
                                    selection-link?
                                    (config/with-default-link format selection)
