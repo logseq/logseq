@@ -313,7 +313,7 @@
                                                 (editor-handler/escape-editing)
                                                 (state/pub-event! [:modal/command-palette]))}
 
-   :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
+   :graph/export-as-html           {:fn #(export-handler/download-repo-as-html!
                                           (state/get-current-repo))
                                     :binding false}
 

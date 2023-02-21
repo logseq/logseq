@@ -15,7 +15,8 @@
             [frontend.fs :as fs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -126,7 +127,7 @@
 (defn html-link-format!
   ([]
    (html-link-format! nil))
-  ([link]
+  ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
@@ -136,8 +137,11 @@
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
 
-                                   link
-                                   (config/with-label-link format selection link)
+                                   (and text selection-link?)
+                                   (config/with-label-link format text selection)
+
+                                   text
+                                   (config/with-label-link format selection text)
 
                                    selection-link?
                                    (config/with-default-link format selection)
@@ -948,10 +952,10 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
                                    (map :block/uuid))
-        content (export/export-blocks-as-markdown
+        content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
-                 (state/get-export-block-text-indent-style)
-                 (into [] (state/get-export-block-text-remove-options)))]
+                 {:indent-style (state/get-export-block-text-indent-style)
+                  :remove-options (set (state/get-export-block-text-remove-options))})]
     [top-level-block-uuids content]))
 
 (defn- get-all-blocks-by-ids
@@ -973,7 +977,7 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
+        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
@@ -1189,7 +1193,7 @@
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
-          html (export/export-blocks-as-html repo [block-id])
+          html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
       (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
@@ -2006,7 +2010,7 @@
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
-  [tree-vec format keep-uuid?]
+  [tree-vec format keep-uuid? page-name]
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
@@ -2014,7 +2018,7 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* format {})
+                    blocks (block/extract-blocks ast content* format {:page-name page-name})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -2026,8 +2030,9 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
-        page-id (:db/id (:block/page target-block))
+  (let [page-id (:db/id (:block/page target-block))
+        page-name (some-> page-id (db/entity) :block/name)
+        blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-left page-id blocks)
         block-refs (->> (mapcat :block/refs blocks)
                         (set)

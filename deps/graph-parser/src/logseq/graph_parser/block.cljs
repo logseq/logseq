@@ -592,6 +592,29 @@
                 (assoc :block/updated-at updated-at))]
     (dissoc block :title :body :anchor)))
 
+(defn fix-duplicate-id
+  [block]
+  (println "Logseq will assign a new id for this block: " block)
+  (-> block
+      (assoc :uuid (d/squuid))
+      (update :properties dissoc :id)
+      (update :properties-text-values dissoc :id)
+      (update :properties-order #(vec (remove #{:id} %)))
+      (update :content (fn [c]
+                         (let [replace-str (re-pattern
+                                            (str
+                                             "\n*\\s*"
+                                             (if (= :markdown (:format block))
+                                               (str "id" gp-property/colons " " (:uuid block))
+                                               (str (gp-property/colons-org "id") " " (:uuid block)))))]
+                           (string/replace-first c replace-str ""))))))
+
+(defn block-exists-in-another-page?
+  [db block-uuid current-page-name]
+  (when (and db current-page-name)
+    (when-let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid])))]
+      (not= current-page-name block-page-name))))
+
 (defn extract-blocks
   "Extract headings from mldoc ast.
   Args:
@@ -600,10 +623,12 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-               :extract-macros, :date-formatter and :db"
-  [blocks content with-id? format {:keys [user-config] :as options}]
+               :extract-macros, :extracted-block-ids, :date-formatter, :page-name and :db"
+  [blocks content with-id? format {:keys [user-config db page-name extracted-block-ids] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
+        *block-ids (or extracted-block-ids (atom #{}))
+        ;; TODO: nbb doesn't support `Atom`
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)
@@ -629,8 +654,14 @@
 
                 (heading-block? block)
                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
-                  (recur (conj headings block'') (rest blocks) {} {} []))
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))
+                      block-uuid (:uuid block'')
+                      fixed-block (if (or (@*block-ids block-uuid)
+                                          (block-exists-in-another-page? db block-uuid page-name))
+                                    (fix-duplicate-id block'')
+                                    block'')]
+                  (swap! *block-ids conj (:uuid fixed-block))
+                  (recur (conj headings fixed-block) (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
