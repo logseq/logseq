@@ -3,7 +3,6 @@
             [cljs.test :refer [are deftest]]))
 
 (deftest page-ref?
-  []
   (are [x y] (= (page-ref/page-ref? x) y)
        "[[page]]" true
        "[[another page]]" true

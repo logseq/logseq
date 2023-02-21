@@ -30,6 +30,7 @@
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [medley.core :as medley]
             [frontend.pubsub :as pubsub]))
+  #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -296,6 +297,19 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
+#?(:cljs
+   (defn cancelable-debounce
+     "Create a stateful debounce function with specified interval
+
+      Returns [fire-fn, cancel-fn]
+
+      Use `fire-fn` to call the function(debounced)
+
+      Use `cancel-fn` to cancel pending callback if there is"
+     [f interval]
+     (let [debouncer (Debouncer. f interval)]
+       [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
+        (fn [] (.stop debouncer))])))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
@@ -763,7 +777,13 @@
      ([s]
       (utils/writeClipboard (clj->js {:text s})))
      ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+      (utils/writeClipboard (clj->js {:text s :html html})))
+     ([s html owner-window]
+      (-> (cond-> {:text s}
+            (not (string/blank? html))
+            (assoc :html html))
+          (bean/->js)
+          (utils/writeClipboard owner-window)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -1345,10 +1365,7 @@
        (< (.-offsetWidth js/document.documentElement) size))
 
      (defn sm-breakpoint?
-       [] (breakpoint? 640))
-
-     (defn md-breakpoint?
-       [] (breakpoint? 768))))
+       [] (breakpoint? 640))))
 
 #?(:cljs
    (defn event-is-composing?
@@ -1480,3 +1497,19 @@ Arg *stop: atom, reset to true to stop the loop"
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
+
+
+(defmacro concatv
+  "Vector version of concat. non-lazy"
+  [& args]
+  `(vec (concat ~@args)))
+
+(defmacro mapcatv
+  "Vector version of mapcat. non-lazy"
+  [f coll & colls]
+  `(vec (mapcat ~f ~coll ~@colls)))
+
+(defmacro removev
+  "Vector version of remove. non-lazy"
+  [pred coll]
+  `(vec (remove ~pred ~coll)))

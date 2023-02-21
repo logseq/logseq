@@ -30,7 +30,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
     if (!elm) return
     const size = rSize.current ?? [0, 0]
     const [x, y] = getContextBarTranslation(size, offsets)
-    elm.style.setProperty('transform', `translateX(${x}px) translateY(${y}px)`)
+    elm.style.transform = `translateX(${x}px) translateY(${y}px)`
   }, [offsets])
 
   if (!app) return null

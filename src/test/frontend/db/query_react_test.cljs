@@ -1,14 +1,13 @@
 (ns frontend.db.query-react-test
   (:require [cljs.test :refer [deftest is use-fixtures]]
             [cljs-time.core :as t]
-            [clojure.pprint]
             [clojure.string :as string]
             [frontend.state :as state]
+            [frontend.date :as date]
             [logseq.graph-parser.util.db :as db-util]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react :as react]
             [goog.string :as gstring]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -18,27 +17,52 @@
   "Use custom-query over react-query for testing since it tests react-query and
 adds rules that users often use"
   [query & [opts]]
-  (react/clear-query-state!)
   (when-let [result (query-custom/custom-query test-helper/test-db query opts)]
     (map first (deref result))))
 
 (defn- blocks-created-between-inputs [a b]
-   (sort
-     (map #(-> % :block/content string/split-lines first)
-          (custom-query {:inputs [a b]
-                         :query '[:find (pull ?b [*])
-                                  :in $ ?start ?end
-                                  :where
-                                  [?b :block/content]
-                                  [?b :block/created-at ?timestamp]
-                                  [(>= ?timestamp ?start)]
-                                  [(<= ?timestamp ?end)]]}))))
+  (sort
+   (map #(-> % :block/content string/split-lines first)
+        (custom-query {:inputs [a b]
+                       :query '[:find (pull ?b [*])
+                                :in $ ?start ?end
+                                :where
+                                [?b :block/content]
+                                [?b :block/created-at ?timestamp]
+                                [(>= ?timestamp ?start)]
+                                [(<= ?timestamp ?end)]]}))))
 
 (defn- blocks-journaled-between-inputs [a b]
   (map :block/content (custom-query {:inputs [a b]
                                      :query '[:find (pull ?b [*])
                                               :in $ ?start ?end
                                               :where (between ?b ?start ?end)]})))
+
+(defn- block-with-content [block-content]
+  (-> (db-utils/q '[:find (pull ?b [:block/uuid])
+                    :in $ ?content
+                    :where [?b :block/content ?content]]
+                  block-content)
+      ffirst))
+
+(defn- blocks-on-journal-page-from-block-with-content [page-input block-content]
+  (map :block/content (custom-query {:inputs [page-input]
+                                     :query '[:find (pull ?b [*])
+                                              :in $ ?page
+                                              :where [?b :block/page ?e]
+                                                     [?e :block/name ?page]]}
+                                    {:current-block-uuid (get (block-with-content block-content) :block/uuid)})))
+
+(defn- blocks-with-tag-on-specified-current-page [& {:keys [current-page tag]}]
+  (map :block/content (custom-query {:title "Query title"
+                                     :inputs [:current-page tag] 
+                                     :query '[:find (pull ?b [*]) 
+                                              :in $ ?current-page ?tag-name
+                                              :where [?b :block/page ?bp] 
+                                                     [?bp :block/name ?current-page] 
+                                                     [?b :block/ref-pages ?t] 
+                                                     [?t :block/name ?tag-name]]}
+                                    {:current-page-fn (constantly current-page)})))
 
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
@@ -54,7 +78,7 @@ adds rules that users often use"
                                :query '[:find (pull ?b [*])
                                         :in $ ?current-page
                                         :where [?b :block/page ?bp]
-                                        [?bp :block/name ?current-page]]}))))
+                                               [?bp :block/name ?current-page]]}))))
       ":current-page input resolves to current page name")
 
   (is (= []
@@ -188,7 +212,7 @@ created-at:: %s"
   (is (= ["today" "tonight"] (blocks-created-between-inputs :start-of-today-ms :end-of-today-ms))
       ":start-of-today-ms and :end-of-today-ms resolve to correct datetime range")
 
-  (is (= ["+1d" "-1d" "today" "tonight"] (blocks-created-between-inputs :1d-before-ms :5d-after-ms)) 
+  (is (= ["+1d" "-1d" "today" "tonight"] (blocks-created-between-inputs :1d-before-ms :5d-after-ms))
       ":Xd-before-ms and :Xd-after-ms resolve to correct datetime range")
 
   (is (= ["today" "tonight"] (blocks-created-between-inputs :today-start :today-end))
@@ -222,10 +246,10 @@ created-at:: %s"
       ":-XT-HHMM and :+XT-HHMM resolve to correct datetime range")
 
   (is (= [] (blocks-created-between-inputs :-0d-abcd :+1d-23.45))
-      ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully")) 
-        
+      ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully"))
 
-(deftest resolve-input-for-relative-date-queries 
+
+(deftest resolve-input-for-relative-date-queries
   (load-test-files [{:file/content "- -1y" :file/path "journals/2022_01_01.md"}
                     {:file/content "- -1m" :file/path "journals/2022_12_01.md"}
                     {:file/content "- -1w" :file/path "journals/2022_12_25.md"}
@@ -239,10 +263,10 @@ created-at:: %s"
   (with-redefs [t/today (constantly (t/date-time 2023 1 1))]
     (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-365d :today))
         ":-365d and today resolve to correct journal range")
-    
+
     (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs :-1y :today))
         ":-1y and today resolve to correct journal range")
-    
+
     (is (= ["now" "-1d" "-1w" "-1m"] (blocks-journaled-between-inputs :-1m :today))
         ":-1m and today resolve to correct journal range")
 
@@ -254,10 +278,10 @@ created-at:: %s"
 
     (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+365d))
         ":+365d and today resolve to correct journal range")
-    
+
     (is (= ["+1y" "+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1y))
         ":+1y and today resolve to correct journal range")
-    
+
     (is (= ["+1m" "+1w" "+1d" "now"] (blocks-journaled-between-inputs :today :+1m))
         ":+1m and today resolve to correct journal range")
 
@@ -270,3 +294,29 @@ created-at:: %s"
     (is (= ["+1d" "now"] (blocks-journaled-between-inputs :today :today/+1d))
         ":today/+1d and today resolve to correct journal range")))
 
+(deftest resolve-input-for-query-page
+  (load-test-files [{:file/content "- -1d" :file/path "journals/2022_12_31.md"}
+                    {:file/content "- now" :file/path "journals/2023_01_01.md"}
+                    {:file/content "- +1d" :file/path "journals/2023_01_02.md"}])
+
+  (with-redefs [state/get-current-page (constantly (date/journal-name (t/date-time 2023 1 1)))]
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :current-page "now"))
+        ":current-page resolves to the stateful page when called from a block on the stateful page")
+
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :query-page "now"))
+        ":query-page resolves to the stateful page when called from a block on the stateful page")
+
+    (is (= ["now"] (blocks-on-journal-page-from-block-with-content :current-page "+1d"))
+        ":current-page resolves to the stateful page when called from a block on another page")
+
+    (is (= ["+1d"] (blocks-on-journal-page-from-block-with-content :query-page "+1d"))
+        ":query-page resolves to the parent page when called from another page")))
+
+(deftest cache-input-for-page-inputs
+  (load-test-files [{:file/path "pages/a.md" :file/content "- a #shared-tag"}
+                    {:file/path "pages/b.md" :file/content "- b #shared-tag"}])
+
+  (is (not= (blocks-with-tag-on-specified-current-page :current-page "a" :tag "shared-tag")
+            (blocks-with-tag-on-specified-current-page :current-page "b" :tag "shared-tag")
+            [])
+      "Querying for blocks with tag on current page from page returns not-empty but differing results"))

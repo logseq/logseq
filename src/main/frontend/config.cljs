@@ -219,7 +219,7 @@
 
 (defn link-format
   [format label link]
-  (if label
+  (if (not-empty label)
     (case format
       :org
       (util/format "[[%s][%s]]" link label)

@@ -58,6 +58,7 @@
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
+             frontend.handler.common.developer dev-common-handler
              frontend.handler.config config-handler
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
@@ -82,6 +83,7 @@
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
+             frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var
              frontend.util.text text-util

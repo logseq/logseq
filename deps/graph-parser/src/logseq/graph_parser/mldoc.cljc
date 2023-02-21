@@ -110,11 +110,8 @@
                                            (map first))
                                       (get grouped-ast false)]
           properties (map (fn [[_directive k v]]
-                            (let [kname (string/lower-case k)
-                                  k (keyword kname)
-                                  mldoc-ast (get-references v config)]
-                              [k v mldoc-ast]))
-                       properties-ast)]
+                            [k v (get-references v config)])
+                          properties-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))))
@@ -167,3 +164,13 @@
   (when (string? link)
     (some-> (first (inline->edn link (default-config format)))
             ast-link?)))
+
+(defn mldoc-link?
+  "Check whether s is a link (including page/block refs)."
+  [format s]
+  (let [result (inline->edn s (default-config format))]
+    (and
+     (= 1 (count result))
+     (let [result' (first result)]
+       (or (contains? #{"Nested_link"} (first result'))
+           (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))

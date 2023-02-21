@@ -370,6 +370,14 @@
     ajv-formats "^2.1.1"
     fast-uri "^2.0.0"
 
+"@fastify/cors@8.2.0":
+  version "8.2.0"
+  resolved "https://registry.yarnpkg.com/@fastify/cors/-/cors-8.2.0.tgz#44ce6b28bc111e12679cb02f980f0ce865ff4877"
+  integrity sha512-qDgwpmg6C4D0D3nh8MTMuRXWyEwPnDZDBODaJv90FP2o9ukbahJByW4FtrM5Bpod5KbTf1oIExBmpItbUTQmHg==
+  dependencies:
+    fastify-plugin "^4.0.0"
+    mnemonist "0.39.5"
+
 "@fastify/deepmerge@^1.0.0":
   version "1.3.0"
   resolved "https://registry.yarnpkg.com/@fastify/deepmerge/-/deepmerge-1.3.0.tgz#8116858108f0c7d9fd460d05a7d637a13fe3239a"
@@ -392,41 +400,41 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.3.tgz#555193ab2e3bb3b6adc3d551c9c030d9e860daf6"
   integrity sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==
 
-"@logseq/rsapi-darwin-arm64@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.61.tgz#9442caab5e12e251c9d7c978b65d0ece64fb2719"
-  integrity sha512-DtifGzabPobaS4CspHxKNRl2Iox+4qmad7UDo6OgcMbjGX08ix2KbeiW4PLqHNfDtUSQNOwgPdbnbvPndsO9EQ==
+"@logseq/rsapi-darwin-arm64@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.65.tgz#92043a62db4834c42b040a70712710e52f82501e"
+  integrity sha512-z6UlT8UXkc98Q7E4QXRpFf/R6R5GtwSlkHrsK9bpqGc7OV3uO+bOjjt2tS4VmVVXjxbXyroB4GT1BMsFAc5w8Q==
 
-"@logseq/rsapi-darwin-x64@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.61.tgz#510752880c77526c59218506f9bff5a38c2e7d54"
-  integrity sha512-n/j/c1/McFUUnctJCTzz/MgPURkcibusbwFWjrIDybcxC1FJ4ZqZnEKtji+zui4ovVQIEb7vM6DMBzQHDe58ZA==
+"@logseq/rsapi-darwin-x64@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.65.tgz#42a4b683df442dcacf4504cb49449050454d398b"
+  integrity sha512-DTWayuvf2ZvnDNL80FDyX51+9ptuo/LOaoXjFlc0tFlEV8xpS9e97Yxxub6NURf3XpiJai4qEwaq/9f1KvpuLg==
 
-"@logseq/rsapi-linux-arm64-gnu@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.61.tgz#b6886e1bbaaa2b057aaad93289e843447db4307f"
-  integrity sha512-IXhZzhAeOxGu2bhJ9I7+HVCRxkqwuadvquwXhFZZ+r0V4NI2dPwmtFPEGkCV0s9Nuyrz2rFVNA/zfSUuMz1XwQ==
+"@logseq/rsapi-linux-arm64-gnu@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.65.tgz#a0633afa3edba610367894dc84ccbca4cccfaa1f"
+  integrity sha512-IXmmnCIX5IV2iCwNkcSC/wLaUrVjOKHpzYL7wOH2aKHV3jO9baqkHAQs1oHIHhOZoduU2B8cJW/JpPTZO5BiBw==
 
-"@logseq/rsapi-linux-x64-gnu@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.61.tgz#08e1d1922ad4ae34b00bb80da3a9f8d3149df3ac"
-  integrity sha512-yj05hwYDb88AwHM+3gBEioKkQ2bPpcsi/HpGv2ymSmW8s9ZESmBiFxIvtVmABzhxQwgU9kS4P5K/jiaSgHPPyQ==
+"@logseq/rsapi-linux-x64-gnu@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.65.tgz#cf5bb98f4235c21c3b33997beb5a7afd192933fa"
+  integrity sha512-ULrTFZAcnnQfbq7vPhziPvOTDHDZXRySd7G6ym1pRXw7llzp7hIfuUo40yvFg5Cb4aETR1qrQNDo+DLSJDjfTg==
 
-"@logseq/rsapi-win32-x64-msvc@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.61.tgz#07c51c71bc0742d0333f4a4cc716089d9d59cc0f"
-  integrity sha512-ejq1qBXrAy+hv1n+VkhmM0XfR1oG/AJ2r6U3v2gF9Fe/8vEfrYdjxk28hBpgsijE45NCwe/CZPHAdoZqtPbcdg==
+"@logseq/rsapi-win32-x64-msvc@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.65.tgz#8c7b5187043ed20ffa477ad7d75e89bb4cf92274"
+  integrity sha512-2Nbh1THeaQEpavzgdzhHBumAq44vVCmF3CHWqRQUiO2HyUqGoAVM+S8fevf45i7WkwhdiDmVX/AlPUSp3rl6Aw==
 
-"@logseq/rsapi@0.0.61":
-  version "0.0.61"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.61.tgz#dbcbc48444b1067e4344a9b47253e572b19193d7"
-  integrity sha512-SYuuCou8K2ENIc+4G02revp6OXckX7UbhtvM1/qQLcQr/xDzwL/84+nsNZnB8C7QCMhIJIcyYkUpSChjvxryBA==
+"@logseq/rsapi@0.0.65":
+  version "0.0.65"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.65.tgz#bcadc75f2784a3bd483fc561d2aa7ccf5389e656"
+  integrity sha512-eZneRAHxMT2co5NJ17UpuDs0Bo/j/u957OpQvn7qstnUWLIwy0ZwQc6KyvmImvcFUh6ZAoKAp0G4wX+UmOd+nw==
   optionalDependencies:
-    "@logseq/rsapi-darwin-arm64" "0.0.61"
-    "@logseq/rsapi-darwin-x64" "0.0.61"
-    "@logseq/rsapi-linux-arm64-gnu" "0.0.61"
-    "@logseq/rsapi-linux-x64-gnu" "0.0.61"
-    "@logseq/rsapi-win32-x64-msvc" "0.0.61"
+    "@logseq/rsapi-darwin-arm64" "0.0.65"
+    "@logseq/rsapi-darwin-x64" "0.0.65"
+    "@logseq/rsapi-linux-arm64-gnu" "0.0.65"
+    "@logseq/rsapi-linux-x64-gnu" "0.0.65"
+    "@logseq/rsapi-win32-x64-msvc" "0.0.65"
 
 "@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0":
   version "1.1.1"
@@ -2289,6 +2297,11 @@ fast-uri@^2.0.0, fast-uri@^2.1.0:
   resolved "https://registry.yarnpkg.com/fast-uri/-/fast-uri-2.2.0.tgz#519a0f849bef714aad10e9753d69d8f758f7445a"
   integrity sha512-cIusKBIt/R/oI6z/1nyfe2FvGKVTohVRfvkOhvx0nCEW+xf5NoCXjAHcWp93uOUBchzYcsvPlrapAdX1uW+YGg==
 
+fastify-plugin@^4.0.0:
+  version "4.5.0"
+  resolved "https://registry.yarnpkg.com/fastify-plugin/-/fastify-plugin-4.5.0.tgz#8b853923a0bba6ab6921bb8f35b81224e6988d91"
+  integrity sha512-79ak0JxddO0utAXAQ5ccKhvs6vX2MGyHHMMsmZkBANrq3hXc1CHzvNPHOcvTsVMEPl5I+NT+RO4YKMGehOfSIg==
+
 fastify@latest:
   version "4.10.2"
   resolved "https://registry.yarnpkg.com/fastify/-/fastify-4.10.2.tgz#0dd1cb8d16df3c14eff938c08aa6da63b4035d0d"
@@ -3585,6 +3598,13 @@ mkdirp@^1.0.3, mkdirp@^1.0.4:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
+mnemonist@0.39.5:
+  version "0.39.5"
+  resolved "https://registry.yarnpkg.com/mnemonist/-/mnemonist-0.39.5.tgz#5850d9b30d1b2bc57cc8787e5caa40f6c3420477"
+  integrity sha512-FPUtkhtJ0efmEFGpU14x7jGbTB+s18LrzRL2KgoWz9YvcY3cPomz8tih01GbHwnGk/OmkOKfqd/RAQoc8Lm7DQ==
+  dependencies:
+    obliterator "^2.0.1"
+
 modify-filename@^1.1.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/modify-filename/-/modify-filename-1.1.0.tgz#9a2dec83806fbb2d975f22beec859ca26b393aa1"
@@ -3752,6 +3772,11 @@ object-keys@^1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/object-keys/-/object-keys-1.1.1.tgz#1c47f272df277f3b1daf061677d9c82e2322c60e"
   integrity sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==
+
+obliterator@^2.0.1:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/obliterator/-/obliterator-2.0.4.tgz#fa650e019b2d075d745e44f1effeb13a2adbe816"
+  integrity sha512-lgHwxlxV1qIg1Eap7LgIeoBWIMFibOjbrYPIPJZcI1mmGAI2m3lNYpK12Y+GBdPQ0U1hRwSord7GIaawz962qQ==
 
 on-exit-leak-free@^2.1.0:
   version "2.1.0"
