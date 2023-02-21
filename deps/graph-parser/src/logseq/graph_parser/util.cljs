@@ -168,9 +168,12 @@
            (map string/capitalize)
            (string/join " ")))
 
-
+;; Copy from Medley
+;; https://github.com/weavejester/medley/blob/1.6.0/src/medley/core.cljc#L336
 (defn distinct-by
-  "Copy from medley"
+  "Returns a lazy sequence of the elements of coll, removing any elements that
+  return duplicate values when passed to a function f. Returns a transducer
+  when no collection is provided."
   [f coll]
   (let [step (fn step [xs seen]
                (lazy-seq

@@ -390,7 +390,7 @@
                                 [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
     block))
 
-(defn- get-block-content
+(defn get-block-content
   [utf8-content block format meta block-pattern]
   (let [content (if-let [end-pos (:end_pos meta)]
                   (utf8/substring utf8-content
@@ -546,6 +546,11 @@
     properties))
 
 (defn- construct-block
+  "dm-id: diff-merge resolved uuid for the block
+   return: the block sturcture -
+       :content - the content of the block
+       :body    - the ast of the block
+   "
   [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
@@ -597,10 +602,12 @@
   Args:
     `blocks`: mldoc ast.
     `content`: markdown or org-mode text.
-    `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
+    `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids, 
+               if no id is found in page entity. For import & pasting usage
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-               :extract-macros, :date-formatter and :db"
+               :extract-macros, :date-formatter :page-name and :db
+               :page-name if provided, will be used to map block "
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)

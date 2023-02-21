@@ -14,6 +14,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.data-bridge.diff-merge :as gp-diff]
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
                :default [lambdaisland.glogi :as log])
             [logseq.graph-parser.whiteboard :as gp-whiteboard]))
@@ -128,7 +129,8 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  "uri-encoded? - if is true, apply URL decode on the file path"
+  "For file extraction
+   uri-encoded? - if is true, apply URL decode on the file path"
   [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
   (try
     (let [page (get-page-name file ast uri-encoded? filename-format)
@@ -136,6 +138,7 @@
           options' (-> options
                        (assoc :page-name page-name
                               :original-page-name page))
+          diff-blocks (gp-diff/ast->diff-blocks ast content format options')
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))

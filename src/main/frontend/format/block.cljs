@@ -16,7 +16,7 @@
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
-and handles unexpected failure."
+and handles unexpected failure. For in-app editting, import or pasting content."
   [blocks content format {:keys [with-id?]
                           :or {with-id? true}}]
   (try

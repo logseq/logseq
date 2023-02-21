@@ -32,8 +32,11 @@
     db
     file-path)))
 
+;; Copy of db/get-page-blocks-no-cache. Too basic to couple to main app
 (defn- get-page-blocks-no-cache
-  "Copy of db/get-page-blocks-no-cache. Too basic to couple to main app"
+  "page: page (original) name
+   options: :pull-keys, :sort?
+            :pull-keys the keys to pull from the blocks"
   [db page {:keys [pull-keys]
             :or {pull-keys '[*]}}]
   (let [sanitized-page (gp-util/page-name-sanity-lc page)
