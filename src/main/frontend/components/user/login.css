@@ -46,6 +46,14 @@
 
     .amplify-tabs-item {
       transition: none;
+
+      &:focus {
+        color: var(--ls-primary-text-color);
+      }
+
+      &:hover {
+        opacity: .9;
+      }
     }
 
     .amplify-field-group {
