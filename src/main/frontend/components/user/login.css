@@ -24,6 +24,7 @@
     --amplify-components-heading-color: var(--ls-primary-text-color);
     --amplify-components-button-link-hover-background-color: transparent;
     --amplify-components-button-link-active-background-color: transparent;
+    --amplify-components-textfield-color: var(--ls-primary-text-color);
 
     border-radius: 4px;
     box-shadow: none;
@@ -32,7 +33,7 @@
 
 .cp__user {
   &-login {
-    @apply min-h-[80vh] flex justify-center pt-10;
+    @apply min-h-[80vh] flex justify-center pt-40;
 
     ::placeholder {
       color: var(--ls-primary-text-color);
@@ -52,6 +53,10 @@
 
       .amplify-button {
         color: var(--ls-primary-text-color);
+
+        &:active, &:hover, &:focus {
+          background-color: transparent;
+        }
       }
     }
 
