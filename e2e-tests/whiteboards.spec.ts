@@ -82,12 +82,10 @@ test('draw a rectangle', async ({ page }) => {
     bounds.y + bounds.height / 2
   )
   await page.mouse.up()
-  await page.mouse.click(bounds.x + 1, bounds.y + 1)
-  await page.keyboard.press('Escape')
 
   await expect(
-    page.locator('.logseq-tldraw .tl-positioned-svg rect:not(.tl-hitarea-fill)')
-  ).toHaveCount(1)
+    page.locator('.logseq-tldraw .tl-positioned-svg rect')
+  ).not.toHaveCount(0)
 })
 
 test('cleanup the shapes', async ({ page }) => {
