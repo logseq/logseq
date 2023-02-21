@@ -26,7 +26,9 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text format {})
+                  (mldoc/->edn text (gp-mldoc/default-config format))
+                  text format
+                  {:page-name (:block/name (db/entity page-id))})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
       (editor-handler/paste-blocks blocks' {}))))
 
@@ -72,6 +74,19 @@
                                              (gp-util/safe-decode-uri-component text))]
     (try-parse-as-json (second matched-text))))
 
+(defn- selection-within-link?
+  [selection-and-format]
+  (let [{:keys [format selection-start selection-end selection value]} selection-and-format]
+    (and (not= selection-start selection-end)
+         (->> (case format
+                :markdown (util/re-pos #"\[.*?\]\(.*?\)" value)
+                :org (util/re-pos #"\[\[.*?\]\[.*?\]\]" value))
+              (some (fn [[start-index matched-text]]
+                      (and (<= start-index selection-start)
+                           (>= (+ start-index (count matched-text)) selection-end)
+                           (clojure.string/includes? matched-text selection))))
+              some?))))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
@@ -80,10 +95,9 @@
         input (state/get-input)
         input-id (state/get-edit-input-id)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-        shape-refs-text (when (and (not (string/blank? html))
-                                   (get-whiteboard-tldr-from-text html))
-                          ;; text should alway be prepared block-ref generated in tldr
-                          text)
+        replace-text-f (fn [text]
+                         (commands/delete-selection! input-id)
+                         (commands/simple-insert! input-id text nil))
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
@@ -93,12 +107,23 @@
       (let [blocks (:copy/blocks copied-blocks)]
         (when (seq blocks)
           (editor-handler/paste-blocks blocks {})))
-      (let [{:keys [value]} (editor-handler/get-selection-and-format)]
+      (let [shape-refs-text (when (and (not (string/blank? html))
+                                       (get-whiteboard-tldr-from-text html))
+                              ;; text should alway be prepared block-ref generated in tldr
+                              text)
+            {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+            text-url? (gp-util/url? text)
+            selection-url? (gp-util/url? selection)]
         (cond
           (not (string/blank? shape-refs-text))
           (commands/simple-insert! input-id shape-refs-text nil)
 
-          (and (or (gp-util/url? text)
+          (or (and (or text-url? selection-url?)
+                   (selection-within-link? selection-and-format))
+              (and text-url? selection-url?))
+          (replace-text-f text)
+
+          (and (or text-url?
                    (and value (gp-util/url? (string/trim value))))
                (not (string/blank? (util/get-selected-text))))
           (editor-handler/html-link-format! text)
@@ -117,10 +142,7 @@
                                              (log/error :exception e)
                                              nil)))]
                             (if (string/blank? result) nil result))
-                text (or html-text text)
-                replace-text-f (fn []
-                                 (commands/delete-selection! input-id)
-                                 (commands/simple-insert! input-id text nil))]
+                text (or html-text text)]
             (match [format
                     (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                     (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
@@ -135,13 +157,13 @@
               (paste-segmented-text format text)
 
               [:markdown true _ true]
-              (replace-text-f)
+              (replace-text-f text)
 
               [:org _ true false]
               (paste-segmented-text format text)
 
               [:org _ true true]
-              (replace-text-f))))))))
+              (replace-text-f text))))))))
 
 (defn paste-text-in-one-block-at-point
   []
