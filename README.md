@@ -80,6 +80,7 @@ To start using Logseq, follow these simple steps:
 That's it! You can now enjoy the benefits of using Logseq to streamline your workflow, manage your projects, and stay on top of your goals. Have fun! 🎉
 
 > **Note**
+>
 > Checkout our docs at [docs.logseq.com](https://docs.logseq.com/#/page/Contents)
 
 ## 🫶 Support Logseq Development
@@ -116,7 +117,7 @@ We appreciate your support, and we look forward to hearing your ideas!
 
 ## 📌 FAQ
 
-- FAQ page: [Logseq Docs - FAQ](https://docs.logseq.com/#/page/faq)
+- FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
 - FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 
 ## 📚 Learn more
@@ -133,13 +134,13 @@ We appreciate your support, and we look forward to hearing your ideas!
 
 ## 🌟 Contributing to Logseq
 
-To start contributing to Logseq, please follow the guidelines outlined in our `CONTRIBUTING.md` file. We have a dedicated [overview page](CODEBASE_OVERVIEW.md) for Logseq's codebase and a [development practices guide](docs/dev-practices.md) that provides detailed information on our development process.
+To start contributing to Logseq, please follow the guidelines outlined in [CONTRIBUTING.md](CONTRIBUTING.md). We have a dedicated [overview page](CODEBASE_OVERVIEW.md) for Logseq's codebase and a [development practices guide](docs/dev-practices.md) that provides detailed information on our development process.
 
 We welcome all contributions, big or small, and we appreciate your time and effort in helping us improve Logseq.
 
 We look forward to your contributions 🚀
 
-## 🛠️ Setting Up a Development Environment
+### 🛠️ Setting Up a Development Environment
 
 If you want to set up a development environment for the Logseq web or desktop app, please refer to the [Develop Logseq](docs/develop-logseq.md) guide for macOS/Linux users and the [Develop Logseq on Windows](docs/develop-logseq-on-windows.md) guide for Windows users.
 
@@ -157,21 +158,33 @@ Logseq is inspired by several unique tools and projects, including [Roam Researc
 
 We owe a huge debt of gratitude to the developers and creators of these projects, and we hope that Logseq can continue to build on their innovative ideas and make them accessible to a broader audience.
 
-Thank you to all those who have inspired us, and we look forward to seeing what the Logseq community will create with this tool!
+Thank you to all those who inspire us, and we look forward to seeing what the Logseq community will create with this tool!
 
 Logseq is also made possible by the following projects:
 
 - [Clojure & ClojureScript](https://clojure.org/) - A dynamic, functional, general-purpose programming language
-- [DataScript](https://github.com/tonsky/datascript) - Immutable database and Datalog query-engine for Clojure,
+- [DataScript](https://github.com/tonsky/datascript) - An immutable database and Datalog query-engine for Clojure,
 ClojureScript and JS
-- [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document
-[parser](https://github.com/mldoc/mldoc)
+- [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document parser [maldoc](https://github.com/mldoc/mldoc)
 - [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for NodeJS and web browsers
-- [SCI](https://github.com/borkdude/sci) - Small Clojure Interpreter
+- [SCI](https://github.com/borkdude/sci) - A Small Clojure Interpreter
 
 # 🙏 Thank You
 
-We want to express our sincere gratitude to our Open Collective sponsors, backers, and contributors. Your support and contributions allow us to continue developing and improving Logseq. Thank you for being a part of our community and helping us make Logseq the best it can be!
+We want to express our sincere gratitude to our [Open Collective](https://opencollective.com/logseq) **sponsors**, **backers**, and **contributors**. Your support and contributions allow us to continue developing and improving Logseq. Thank you for being a part of our community and helping us make Logseq the best it can be!
+
+## 🌟 Our Contributors
+
+<p align="center">
+    <a href="https://github.com/logseq/logseq/graphs/contributors">
+        <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
+</p>
+
+<!-- JetBrains Logo -->
+<p align="center">
+    <a href="https://jetbrains.com" alt="JetBrains">
+        <img src="docs/assets/jetbrains.svg"/></a>
+</p>
 
 ## 💎 Our Sponsors
 
@@ -185,19 +198,6 @@ We want to express our sincere gratitude to our Open Collective sponsors, backer
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
         <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
-</p>
-
-## 🌟 Our Contributors
-
-<p align="center">
-    <a href="https://github.com/logseq/logseq/graphs/contributors">
-        <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
-</p>
-
-<!-- JetBrains Logo -->
-<p align="center">
-    <a href="https://jetbrains.com" alt="JetBrains">
-        <img src="docs/assets/jetbrains.svg"/></a>
 </p>
 
 <!-- ProductHunt Review Button -->
