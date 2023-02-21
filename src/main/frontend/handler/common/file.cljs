@@ -84,6 +84,7 @@
                                             :block-pattern (config/get-block-pattern (gp-util/get-format file))
                                             :supported-formats (gp-config/supported-formats)
                                             :uri-encoded? (boolean (mobile-util/native-platform?))
-                                            :filename-format (state/get-filename-format repo-url)}
+                                            :filename-format (state/get-filename-format repo-url)
+                                            :extracted-block-ids (:extracted-block-ids options)}
                                            (when (some? verbose) {:verbose verbose}))})]
      (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
