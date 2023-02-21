@@ -92,9 +92,10 @@ test('copy/paste the shapes', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
+  await page.mouse.click(bounds.x + 1, bounds.y + 1)
   await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press(`${modKey}+Shift+c`)
-  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.keyboard.press('Escape')
   await page.keyboard.press(`${modKey}+v`)
   await page.mouse.move(bounds.x + 1, bounds.y + 1)
   await page.keyboard.press('Escape')
