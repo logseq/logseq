@@ -1,14 +1,16 @@
 [default.extend-words]
+# Technical words
 edn = "edn"
 datas = "datas"
-BA = "BA"
 juxt = "juxt"
+Ded = "Ded"  # Shows up in ANDed
+referer = "referer" # This is a misspelling in the http spec so not much we can do
+
+# False positives
+collapsable = "collapsable" # This an ok alternative to collapsible
+BA = "BA"
 fo = "fo"
-collapsable = "collapsable" # TODO: should be collapsible
-Ded = "Ded"
 aks = "aks"
 Mannor = "Mannor"
-revison = "revison"         # TODO: should be revision
-referer = "referer"         # TODO: should be referrer
 [files]
 extend-exclude = ["resources/*", "templates/*", "dicts.cljc"]
