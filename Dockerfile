@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gpg
 
 # install NodeJS & yarn
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
 
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
     tee /etc/apt/trusted.gpg.d/yarn.gpg && \
@@ -34,7 +34,7 @@ RUN yarn config set network-timeout 240000 -g && yarn install
 RUN  yarn release 
 
 # Web App Runner image
-FROM nginx:stable-alpine
+FROM nginx:1.23.3-alpine
 
 COPY --from=builder /data/static /usr/share/nginx/html
 
