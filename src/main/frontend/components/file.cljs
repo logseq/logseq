@@ -75,9 +75,16 @@
                  (let [*content (atom nil)
                        [path format] (:rum/args state)
                        repo-dir (config/get-repo-dir (state/get-current-repo))
-                       [dir path] (if (string/starts-with? path repo-dir)
+                       [dir path] (cond
+                                    (string/starts-with? path repo-dir)
                                     [repo-dir (-> (string/replace-first path repo-dir "")
                                                   (string/replace #"^/+" ""))]
+
+                                    ;; browser-fs
+                                    (not (string/starts-with? path "/"))
+                                    [repo-dir path]
+
+                                    :else
                                     ["" path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file dir path)]
