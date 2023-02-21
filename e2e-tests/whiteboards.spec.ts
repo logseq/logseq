@@ -82,22 +82,19 @@ test('draw a rectangle', async ({ page }) => {
     bounds.y + bounds.height / 2
   )
   await page.mouse.up()
+  await page.mouse.click(bounds.x + 1, bounds.y + 1)
+  await page.keyboard.press('Escape')
 
   await expect(
-    page.locator('.logseq-tldraw .tl-positioned-svg rect')
-  ).not.toHaveCount(0)
+    page.locator('.logseq-tldraw .tl-positioned-svg rect:not(.tl-hitarea-fill)')
+  ).toHaveCount(1)
 })
 
 test('copy/paste the shapes', async ({ page }) => {
-  const canvas = await page.waitForSelector('.logseq-tldraw')
-  const bounds = (await canvas.boundingBox())!
-
-  await page.mouse.click(bounds.x + 1, bounds.y + 1)
   await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press(`${modKey}+Shift+c`)
   await page.keyboard.press('Escape')
   await page.keyboard.press(`${modKey}+v`)
-  await page.mouse.move(bounds.x + 1, bounds.y + 1)
   await page.keyboard.press('Escape')
 
   await expect( page.locator('.logseq-tldraw .tl-positioned-svg rect:not(.tl-hitarea-fill)')).toHaveCount(2)
