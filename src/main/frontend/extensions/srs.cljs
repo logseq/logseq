@@ -534,9 +534,9 @@
 
 ;;; register cloze macro
 
-(def cloze-cue-separator "\\\\")
+(def ^:private cloze-cue-separator "\\\\")
 
-(defn cloze-parse
+(defn- cloze-parse
   "Parse the cloze content, and return [answer cue]."
   [content]
   (let [parts (string/split content cloze-cue-separator -1)]
@@ -552,7 +552,6 @@
                  shown? (atom (:show-cloze? config))]
              (assoc state :shown? shown?)))}
   [state config options]
-  (print (:arguments options))
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
         toggle! #(swap! shown?* not)
