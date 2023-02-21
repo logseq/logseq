@@ -74,7 +74,7 @@ test('draw a rectangle', async ({ page }) => {
 
   await page.keyboard.press('r')
 
-  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
 
   await page.mouse.move(
