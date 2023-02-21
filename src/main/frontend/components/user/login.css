@@ -33,8 +33,6 @@
 
 .cp__user {
   &-login {
-    @apply min-h-[80vh] flex justify-center pt-40;
-
     ::placeholder {
       color: var(--ls-primary-text-color);
       opacity: .3;
@@ -75,5 +73,18 @@
     .amplify-input {
       border-radius: 4px !important;
     }
+  }
+}
+
+.ui__modal[label=user-login] {
+  display: flex;
+  align-items: center;
+
+  .ui__modal-panel {
+    top: -60px;
+  }
+
+  .panel-content {
+    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw];
   }
 }

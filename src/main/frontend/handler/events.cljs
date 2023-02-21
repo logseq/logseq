@@ -22,6 +22,7 @@
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
+            [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -122,6 +123,11 @@
   (file-sync-handler/reset-session-graphs)
   (sync/remove-all-pwd!)
   (file-sync-handler/reset-user-state!))
+
+(defmethod handle :user/login [[_]]
+  (if-not util/electron?
+    (js/window.open config/LOGIN-URL)
+    (login/open-login-modal!)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)

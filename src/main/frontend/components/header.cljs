@@ -46,7 +46,8 @@
     (when-not (or config/publishing?
                   logged?
                   (not sync-enabled?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
+      [:a.button.text-sm.font-medium.block
+       {:on-click #(state/pub-event! [:user/login])}
        [:span (t :login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))

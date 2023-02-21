@@ -3,7 +3,8 @@
             [rum.core :as rum]
             [frontend.rum :refer [adapt-class]]
             [cljs-bean.core :as bean]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.state :as state]))
 
 (def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
 (def LSAuthenticator
@@ -51,3 +52,11 @@
                                  (js/console.error "Error: Amplify user payload:" e)))]
 
              (user-pane sign-out! (bean/->clj user))))))]))
+
+(defn open-login-modal!
+  []
+  (state/set-modal!
+    (fn [_close] (page))
+    {:close-btn? false
+     :label      "user-login"
+     :center?    true}))
