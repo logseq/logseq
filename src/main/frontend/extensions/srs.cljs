@@ -534,6 +534,17 @@
 
 ;;; register cloze macro
 
+(def ^:private cloze-cue-separator "\\\\")
+
+(defn- cloze-parse
+  "Parse the cloze content, and return [answer cue]."
+  [content]
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
@@ -543,12 +554,15 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        toggle! #(swap! shown?* not)]
+        toggle! #(swap! shown?* not)
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
     (if (or shown? (:show-cloze? config))
       [:a.cloze-revealed {:on-click toggle!}
-       (util/format "[%s]" (string/join ", " (:arguments options)))]
+       (util/format "[%s]" answer)]
       [:a.cloze {:on-click toggle!}
-       "[...]"])))
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
