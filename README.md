@@ -54,7 +54,7 @@
 
 ## 🤔 Why Logseq?
 
-Logseq is a **comprehensive tool for knowledge management** and collaboration that helps you stay connected with the most critical information. With support for multiple file formats, including **Markdown**** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
+Logseq is a **comprehensive tool for knowledge management** and collaboration that helps you stay connected with the most critical information. With support for multiple file formats, including **Markdown** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
 
 [Logseq](https://logseq.com) stores your notes locally on your device in plain text files, ensuring that your data is **private** and **secure**. Logseq also strongly emphasizes [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes confidently.
 
