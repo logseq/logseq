@@ -344,6 +344,7 @@
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
+        :file-sync/work-dir-changed "This graph's sync work dir has changed(may caused by moving graph dir). Need to delete the file 'logseq/graphs-txid.edn', then create a new remote graph to start syncing."
 
         :notification/clear-all "Clear all"}
 
@@ -1621,6 +1622,7 @@
 
            :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
            :file-sync/graph-deleted "当前远程图谱已经删除"
+           :file-sync/work-dir-changed "当前图谱的同步工作目录已经被改变(可能是由于移动图谱目录造成)。需要删除文件'logseq/graphs-txid.edn'，然后创建一个新的远程图谱来开始同步。"
 
            :notification/clear-all "清除全部通知"}
 
@@ -1724,7 +1726,8 @@
              :pdf/linked-ref "轉到註解"
 
              :file-sync/other-user-graph "當前本地 graph 綁定到其他用戶的遠程 graph 上。因此無法啟動同步。"
-             :file-sync/graph-deleted "當前遠程 graph 已被刪除"}
+             :file-sync/graph-deleted "當前遠程 graph 已被刪除"
+             :file-sync/work-dir-changed "當前圖譜的同步工作目錄已經被改變(可能是由於移動圖譜目錄造成)。需要刪除文件'logseq/graphs-txid.edn'，然後創建一個新的遠程圖譜來開始同步。"}
 
    :af {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
         :on-boarding/add-graph "Add a graph"

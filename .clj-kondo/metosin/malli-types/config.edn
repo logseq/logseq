@@ -22,21 +22,31 @@
      {:arities {1 {:args [:string], :ret :string}}},
      safe-parse-float {:arities {1 {:args [:any], :ret :double}}}},
     frontend.fs.sync
-    {<update-graphs-txid!
-     {:arities
-      {2
-       {:args
-        [{:op :keys,
-          :req {:user-uuid :string, :graph-uuid :string, :txid :int}}
-         :string],
-        :ret :any}}},
+    {<update-graphs-txid-only-txid!
+     {:arities {2 {:args [:int :string], :ret :any}}},
      read-graphs-txid
      {:arities
       {0
        {:args [],
         :ret
         {:op :keys,
-         :req {:user-uuid :string, :graph-uuid :string, :txid :int},
-         :nilable true}}}}},
+         :req
+         {:user-uuid :string,
+          :graph-uuid :string,
+          :txid :int,
+          :work-dir :string},
+         :nilable true}}}},
+     <update-graphs-txid-all-fields!
+     {:arities
+      {2
+       {:args
+        [{:op :keys,
+          :req
+          {:user-uuid :string,
+           :graph-uuid :string,
+           :txid :int,
+           :work-dir :string}}
+         :string],
+        :ret :any}}}},
     frontend.state
     {pub-event! {:arities {1 {:args [:vector], :ret :any}}}}}}}}

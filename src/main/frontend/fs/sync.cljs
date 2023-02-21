@@ -1,41 +1,42 @@
 (ns frontend.fs.sync
   "Main ns for providing file sync functionality"
-  (:require [cljs-http.client :as http]
+  (:require ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
+            ["path" :as path]
+            [cljs-http.client :as http]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [cljs-time.coerce :as tc]
-            [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
+                                               poll! timeout]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
+            [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.pprint :as pp]
             [electron.ipc :as ipc]
-            [goog.string :as gstring]
             [frontend.config :as config]
-            [frontend.debug :as debug]
-            [frontend.handler.user :as user]
-            [frontend.state :as state]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.util.fs :as fs-util]
-            [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
-            [frontend.diff :as diff]
             [frontend.db :as db]
-            [frontend.fs :as fs]
+            [frontend.debug :as debug]
+            [frontend.diff :as diff]
             [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user]
+            [frontend.mobile.util :as mobile-util]
             [frontend.pubsub :as pubsub]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.fs :as fs-util]
+            [frontend.util.persist-var :as persist-var]
+            [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
             [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as path]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -207,30 +208,49 @@
 ;;    (uuid-string-schema "graph-uuid")
 ;;    [:int {:desc "txid"}]])
 
-(def ^:private graphs-txid-schema-now
-  [:map
+(def ^:private graphs-txid-schema
+  [:map {:closed true}
    [:user-uuid (uuid-string-schema)]
    [:graph-uuid (uuid-string-schema)]
-   [:txid [:int {:min 1}]]])
+   [:txid :int]
+   [:work-dir :string]])
 
 (defn <load-graph-txid
   []
   (persist-var/-load graphs-txid))
 
 (defn read-graphs-txid
-  {:malli/schema [:=> [:cat] [:maybe graphs-txid-schema-now]]}
+  {:malli/schema [:=> [:cat] [:maybe graphs-txid-schema]]}
   []
   (let [r @graphs-txid]
     (cond
       (nil? r) nil
       (vector? r)
       (let [[user-uuid graph-uuid txid] r]
-        {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid})
-      (map? r) r)))
+        {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
+         :work-dir (config/get-repo-dir (state/get-current-repo))})
+      (map? r)
+      (if (nil? (:work-dir r))
+        (assoc r :work-dir (config/get-repo-dir (state/get-current-repo)))
+        r))))
+
+(defn- working-dir-changed?
+  []
+  (when-let [work-dir (:work-dir (read-graphs-txid))]
+    (not= work-dir (config/get-repo-dir (state/get-current-repo)))))
 
 (declare assert-local-txid<=remote-txid)
-(defn <update-graphs-txid!
-  {:malli/schema [:=> [:cat graphs-txid-schema-now :string] :any]}
+(defn <update-graphs-txid-only-txid!
+  {:malli/schema [:=> [:cat :int :string] :any]}
+  [txid repo]
+  (let [m (read-graphs-txid)]
+    (p->c
+     (p/let [_ (persist-var/-reset-value! graphs-txid (assoc m :txid txid) repo)
+             _ (persist-var/persist-save graphs-txid)]
+       (when (state/developer-mode?) (assert-local-txid<=remote-txid))))))
+
+(defn <update-graphs-txid-all-fields!
+  {:malli/schema [:=> [:cat graphs-txid-schema :string] :any]}
   [m repo]
   (p->c
    (p/let [_ (persist-var/-reset-value! graphs-txid m repo)
@@ -1603,8 +1623,8 @@
 
 (declare sync-state-reset-full-remote->local-files)
 (defn apply-filetxns-partitions
-  "won't call <update-graphs-txid! when *txid is nil"
-  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused full-sync?]
+  "won't call <update-graphs-txid-only-txid! when *txid is nil"
+  [*sync-state _user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused full-sync?]
   (assert (some? *sync-state))
 
   (go-loop [filetxns-partitions* filetxns-partitions]
@@ -1637,9 +1657,7 @@
               ;; update local-txid
               (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
-                (<! (<update-graphs-txid!
-                     {:user-uuid user-uuid :graph-uuid graph-uuid :txid latest-txid}
-                     repo)))
+                (<! (<update-graphs-txid-only-txid! latest-txid repo)))
               (recur (next filetxns-partitions*)))))))))
 
 (defmulti need-sync-remote? (fn [v] (cond
@@ -2269,9 +2287,7 @@
           :else
           (do
             (swap! *sync-state #(sync-state-reset-full-remote->local-files % []))
-            (<! (<update-graphs-txid!
-                 {:user-uuid user-uuid :graph-uuid graph-uuid :txid latest-txid}
-                 repo))
+            (<! (<update-graphs-txid-only-txid! latest-txid repo))
             (reset! *txid latest-txid)
             {:succ true})))))
 
@@ -2303,9 +2319,7 @@
                         (if (empty? (flatten partitioned-filetxns))
                           (do
                             (swap! *sync-state #(sync-state-reset-full-remote->local-files % []))
-                            (<! (<update-graphs-txid!
-                                 {:user-uuid user-uuid :graph-uuid graph-uuid :txid latest-txid}
-                                 repo))
+                            (<! (<update-graphs-txid-only-txid! latest-txid repo))
                             (reset! *txid latest-txid)
                             {:succ true})
                           (<! (apply-filetxns-partitions
@@ -2587,9 +2601,7 @@
                                                 :exp        remote-graph-info-or-ex
                                                 :epoch      (tc/to-epoch (t/now))}})
                       {:stop true})
-                  (do (<! (<update-graphs-txid!
-                           {:user-uuid user-uuid :graph-uuid graph-uuid :txid remote-txid}
-                           repo))
+                  (do (<! (<update-graphs-txid-only-txid! remote-txid repo))
                       (reset! *txid remote-txid)
                       {:succ true})))
 
@@ -2604,9 +2616,7 @@
               (do
                 (println "sync-local->remote! update txid" r*)
                 ;; persist txid
-                (<! (<update-graphs-txid!
-                     {:user-uuid user-uuid :graph-uuid graph-uuid :txid r*}
-                     repo))
+                (<! (<update-graphs-txid-only-txid! r* repo))
                 (reset! *txid r*)
                 {:succ true})
 
@@ -3196,38 +3206,40 @@
               {:keys [user-uuid graph-uuid txid]} (read-graphs-txid)
               txid                                (or txid 0)
               repo                                (state/get-current-repo)]
-          (when-not (instance? ExceptionInfo current-user-uuid)
-            (when (and repo
-                       @network-online-cursor
-                       user-uuid graph-uuid txid
-                       (graph-sync-off? graph-uuid)
-                       (user/logged-in?)
-                       (not (config/demo-graph? repo)))
-              (try
-                (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                      (config/get-repo-dir repo) repo
-                                                      txid *sync-state)]
-                  (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                    (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                      (clear-graphs-txid! repo)
-                      (do
-                        (state/set-file-sync-state graph-uuid @*sync-state)
-                        (state/set-file-sync-manager graph-uuid sm)
+          (if (working-dir-changed?)
+            (notification/show! (t :file-sync/work-dir-changed) :error false)
+            (when-not (instance? ExceptionInfo current-user-uuid)
+              (when (and repo
+                         @network-online-cursor
+                         user-uuid graph-uuid txid
+                         (graph-sync-off? graph-uuid)
+                         (user/logged-in?)
+                         (not (config/demo-graph? repo)))
+                (try
+                  (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                        (config/get-repo-dir repo) repo
+                                                        txid *sync-state)]
+                    (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                      (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                        (clear-graphs-txid! repo)
+                        (do
+                          (state/set-file-sync-state graph-uuid @*sync-state)
+                          (state/set-file-sync-manager graph-uuid sm)
 
                         ;; update global state when *sync-state changes
-                        (add-watch *sync-state ::update-global-state
-                                   (fn [_ _ _ n]
-                                     (state/set-file-sync-state graph-uuid n)))
+                          (add-watch *sync-state ::update-global-state
+                                     (fn [_ _ _ n]
+                                       (state/set-file-sync-state graph-uuid n)))
 
-                        (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+                          (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                        (.start sm)
+                          (.start sm)
 
-                        (offer! remote->local-full-sync-chan true)
-                        (offer! full-sync-chan true)))))
-                (catch :default e
-                  (prn "Sync start error: ")
-                  (log/error :exception e)))))
+                          (offer! remote->local-full-sync-chan true)
+                          (offer! full-sync-chan true)))))
+                  (catch :default e
+                    (prn "Sync start error: ")
+                    (log/error :exception e))))))
           (reset! *sync-entered? false))))))
 
 (defn- restart-if-stopped!
