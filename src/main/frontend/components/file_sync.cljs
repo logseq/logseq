@@ -1,7 +1,6 @@
 (ns frontend.components.file-sync
   (:require [cljs.core.async :as async]
             [cljs.core.async.interop :refer [p->c]]
-            [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.lazy-editor :as lazy-editor]
