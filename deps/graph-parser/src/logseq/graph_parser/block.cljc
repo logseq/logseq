@@ -12,7 +12,9 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
+               :default [lambdaisland.glogi :as log])))
 
 (defn heading-block?
   [block]
@@ -594,6 +596,8 @@
 
 (defn fix-duplicate-id
   [block]
+  (log/info :duplicated-block block)
+  (log/info :notice "Logseq will assign a new id for this block.")
   (-> block
       (assoc :uuid (d/squuid))
       (update :properties dissoc :id)
@@ -604,8 +608,8 @@
                                             (str
                                              "\n*\\s*"
                                              (if (= :markdown (:format block))
-                                               (str "id:: " (:uuid block))
-                                               (str ":id: " (:uuid block)))))]
+                                               (str "id" gp-property/colons " " (:uuid block))
+                                               (str (gp-property/colons-org "id") " " (:uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
 (defn extract-blocks
