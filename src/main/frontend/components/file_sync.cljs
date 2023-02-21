@@ -132,7 +132,7 @@
               (open-icloud-graph-clone-picker repo)
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
-                (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+                (when-let [GraphUUID (:graph-uuid (async/<! (file-sync-handler/<create-graph graph-name)))]
                   (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
                   ;; update both local && remote graphs
@@ -367,8 +367,9 @@
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
                                      (async/go
-                                       (let [graphs-txid fs-sync/graphs-txid]
-                                         (async/<! (p->c (persist-var/-load graphs-txid)))
+                                       (async/<! (p->c (fs-sync/<load-graph-txid)))
+                                       (let [{current-graph-user-uuid :user-uuid current-graph-uuid :graph-uuid}
+                                             (fs-sync/read-graphs-txid)]
                                          (cond
                                            @*beta-unavailable?
                                            (state/pub-event! [:file-sync/onboarding-tip :unavailable])
@@ -376,30 +377,27 @@
                                            ;; current graph belong to other user, do nothing
                                            (let [user-uuid (async/<! (user-handler/<user-uuid))
                                                  user-uuid (when-not (instance? ExceptionInfo user-uuid) user-uuid)]
-                                             (and (first @graphs-txid)
+                                             (and current-graph-user-uuid
                                                   user-uuid
                                                   (not (fs-sync/check-graph-belong-to-current-user
                                                         user-uuid
-                                                        (first @graphs-txid)))))
+                                                        current-graph-user-uuid))))
                                            nil
 
-                                           (and (second @graphs-txid)
-                                                (fs-sync/graph-sync-off? (second @graphs-txid))
-                                                (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
+                                           (and current-graph-uuid
+                                                (fs-sync/graph-sync-off? current-graph-uuid)
+                                                (async/<! (fs-sync/<check-remote-graph-exists current-graph-uuid)))
                                            (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                           (second @graphs-txid) ; <check-remote-graph-exists -> false
+                                           current-graph-uuid ; <check-remote-graph-exists -> false
                                            (do (state/set-repos!
                                                 (map (fn [r]
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                  (state/get-repos)))
+                                                     (state/get-repos)))
                                                (create-remote-graph-fn))
-
-                                           (second @graphs-txid) ; sync not started yet
-                                           nil
 
                                            :else
                                            (create-remote-graph-fn))))))
@@ -457,8 +455,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-narrow-down"))
-                           }) downloading-files)
+                                    (ui/icon "arrow-narrow-down"))}) downloading-files)
 
              (map (fn [e] (let [icon (case (.-type e)
                                        "add" "plus"
@@ -486,8 +483,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-up"))
-                           }) uploading-files)
+                                    (ui/icon "arrow-up"))}) uploading-files)
 
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
