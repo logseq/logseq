@@ -87,22 +87,6 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
 
 If you find Logseq useful and want to help us keep the project growing, please consider supporting our contributors on [Open Collective](https://opencollective.com/logseq). Your support shows our contributors that their efforts are appreciated and motivates them to continue their excellent work. Every contribution, no matter how small, helps us keep improving Logseq.
 
-## 💎 Sponsors
-
-Our top sponsors are shown below!
-
-<!-- JetBrains Logo -->
-<p align="center">
-    <a href="https://www.deta.sh/" alt="Deta">
-        <img src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"
-        style="width: 200px; height: 100px;"/></a>
-</p>
-
-<p align="center">
-    <a href="https://opencollective.com/logseq#sponsor"> [Become a sponsor]</a>
-</p>
-
-
 ## 🔌 Plugin API
 
 Logseq provides a plugin API that enables developers to create custom plugins and extend the functionality of Logseq. The plugin API documentation is available at [plugins-doc.logseq.com](https://plugins-doc.logseq.com/), where you can find everything needed to get started with plugin development.
@@ -119,7 +103,6 @@ Requests](https://discuss.logseq.com/new-topic?category=feature-requests) sectio
 Your feedback helps us understand our users' needs and prioritize the features that matter most to you. We appreciate your time and effort in sharing your thoughts with us.
 
 We appreciate your support, and we look forward to hearing your ideas!
-
 
 ## 📚 Learn more
 
@@ -175,7 +158,24 @@ ClojureScript and JS
 
 We want to express our sincere gratitude to our [Open Collective](https://opencollective.com/logseq) **sponsors**, **backers**, and **contributors**. Your support and contributions allow us to continue developing and improving Logseq. Thank you for being a part of our community and helping us make Logseq the best it can be!
 
-## 🌟 Our Contributors
+## 💎 Sponsors
+
+<p align="center">
+    <a href="https://opencollective.com/logseq#sponsor"> [Become a sponsor]</a>
+</p>
+<!-- Deta Logo -->
+<p align="center">
+    <a href="https://www.deta.sh/" alt="Deta">
+        <img src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"
+        style="width: 200px; height: 100px;"/></a>
+</p>
+
+<p align="center">
+    <a href="https://opencollective.com/logseq" alt="Sponsors on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=42&width=600"/></a>
+</p>
+
+## 🌟 Contributors
 
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors">
@@ -188,14 +188,7 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
         <img src="docs/assets/jetbrains.svg"/></a>
 </p>
 
-## 💎 Our Sponsors
-
-<p align="center">
-    <a href="https://opencollective.com/logseq" alt="Sponsors on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=42&width=600"/></a>
-</p>
-
-## 🫶 Our Backers
+## 🫶 Backers
 
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
