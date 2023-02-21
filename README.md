@@ -58,7 +58,7 @@ Logseq is a **comprehensive tool for knowledge management** and collaboration th
 
 [Logseq](https://logseq.com) stores your notes locally on your device in plain text files, ensuring that your data is **private** and **secure**. Logseq also strongly emphasizes [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes confidently.
 
-In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and customization options. Mobile apps are also available, providing access to most features from the desktop application.
+In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and customization options. Mobile apps are also available, providing access to most of the features of the desktop application.
 
 Whether you're a student, a professional, or anyone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
 
@@ -84,7 +84,7 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
 
 ## 🫶 Support Logseq Development
 
-If you find Logseq useful and want to help us keep the project growing, please consider supporting our contributors on [Open Collective](https://opencollective.com/logseq). Your support is a way of showing our contributors that their efforts are appreciated and motivates them to continue their excellent work. Every contribution, no matter how small, helps us to keep improving Logseq.
+If you find Logseq useful and want to help us keep the project growing, please consider supporting our contributors on [Open Collective](https://opencollective.com/logseq). Your support shows our contributors that their efforts are appreciated and motivates them to continue their excellent work. Every contribution, no matter how small, helps us keep improving Logseq.
 
 ## 💎 Sponsors
 
@@ -135,7 +135,7 @@ We appreciate your support, and we look forward to hearing your ideas!
 
 To start contributing to Logseq, please follow the guidelines outlined in our `CONTRIBUTING.md` file. We have a dedicated [overview page](CODEBASE_OVERVIEW.md) for Logseq's codebase and a [development practices guide](docs/dev-practices.md) that provides detailed information on our development process.
 
-We welcome all contributions, big or small, and we appreciate your time and effort in helping us to improve Logseq for our users.
+We welcome all contributions, big or small, and we appreciate your time and effort in helping us improve Logseq.
 
 We look forward to your contributions 🚀
 
@@ -171,7 +171,7 @@ ClojureScript and JS
 
 # 🙏 Thank You
 
-We want to express our sincere gratitude to our Open Collective sponsors, backers, and contributors. Your support and contributions allow us to continue developing and improving Logseq. Thank you for being a part of our community and helping us to make Logseq the best it can be!
+We want to express our sincere gratitude to our Open Collective sponsors, backers, and contributors. Your support and contributions allow us to continue developing and improving Logseq. Thank you for being a part of our community and helping us make Logseq the best it can be!
 
 ## 💎 Our Sponsors
 
