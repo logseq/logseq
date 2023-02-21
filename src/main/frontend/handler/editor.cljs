@@ -15,7 +15,8 @@
             [frontend.fs :as fs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -948,10 +949,10 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
                                    (map :block/uuid))
-        content (export/export-blocks-as-markdown
+        content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
-                 (state/get-export-block-text-indent-style)
-                 (into [] (state/get-export-block-text-remove-options)))]
+                 {:indent-style (state/get-export-block-text-indent-style)
+                  :remove-options (set (state/get-export-block-text-remove-options))})]
     [top-level-block-uuids content]))
 
 (defn- get-all-blocks-by-ids
@@ -973,7 +974,7 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
+        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
@@ -1189,7 +1190,7 @@
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
-          html (export/export-blocks-as-html repo [block-id])
+          html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
       (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)

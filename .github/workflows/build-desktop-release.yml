@@ -492,6 +492,8 @@ jobs:
           body: |
             This is a nightly release of the Logseq desktop app.
             It's unstable compared to the official releases, **use it with caution**!
+
+            Known Issue: macOS build is not signed, so you need to allow it to run in System Preferences -> Security & Privacy -> General.
           files: |
             ./SHA256SUMS.txt
             ./*.zip

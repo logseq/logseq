@@ -594,6 +594,7 @@
 
 (defn fix-duplicate-id
   [block]
+  (println "Logseq will assign a new id for this block: " block)
   (-> block
       (assoc :uuid (d/squuid))
       (update :properties dissoc :id)
@@ -604,9 +605,9 @@
                                             (str
                                              "\n*\\s*"
                                              (if (= :markdown (:format block))
-                                               (str "id:: " (:uuid block))
-                                               (str ":id: " (:uuid block)))))]
-                           (string/replace c replace-str ""))))))
+                                               (str "id" gp-property/colons " " (:uuid block))
+                                               (str (gp-property/colons-org "id") " " (:uuid block)))))]
+                           (string/replace-first c replace-str ""))))))
 
 (defn block-exists-in-another-page?
   [db block-uuid current-page-name]
@@ -628,9 +629,6 @@
   (let [encoded-content (utf8/encode content)
         *block-ids (or extracted-block-ids (atom #{}))
         ;; TODO: nbb doesn't support `Atom`
-        ;; *block-ids (if (instance? Atom extracted-block-ids)
-        ;;             extracted-block-ids
-        ;;             (atom #{}))
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)

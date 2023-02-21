@@ -80,11 +80,12 @@
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc render-item-heading
-  [{:keys [key title]}]
+  [{:keys [key title description]}]
 
   [:div.heading-item
    {:data-key key}
-   [:h2 title]])
+   [:h2 title]
+   [:small.pl-1.flex-1 description]])
 
 (rum/defc settings-container
   [schema ^js pl]
