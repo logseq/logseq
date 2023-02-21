@@ -16,7 +16,8 @@
             [logseq.graph-parser.config :as gp-config]
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
                :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.graph-parser.data-bridge.diff-merge :as gp-diff]))
 
 (defn- filepath->page-name
   [filepath]
@@ -137,6 +138,9 @@
           options' (-> options
                        (assoc :page-name page-name
                               :original-page-name page))
+          ;; base-diffblocks (gp-diff/db->diff-blocks db page-name) ;; TODO Junyi
+          ;; income-diffblocks (gp-diff/ast->diff-blocks ast content format options') ;; TODO Junyi
+          ;; _ (prn (gp-diff/diff base-diffblocks income-diffblocks)) ;; TODO Junyi
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))

@@ -2,26 +2,32 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require #?(:org.babashka/nbb ["./diff-merge.cjs$default" :refer [Merger visualizeAsHTML]]
-               :default ["./diffmerge.js" :refer [Merger visualizeAsHTML]])
+  (:require #?(:org.babashka/nbb ["./diff-merge.cjs$default" :refer [Merger Differ visualizeAsHTML]]
+               :default ["./diffmerge.js" :refer [Differ Merger visualizeAsHTML]])
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.utf8 :as utf8]
             [cljs-bean.core :as bean]
             [datascript.core :as d]
             [clojure.pprint :as clj-pp]
-            [logseq.graph-parser.util :as gp-util]
-            ))
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn diff-merge
-  "Accept: blocks
+  "N-ways diff & merge
+   Accept: blocks
    https://github.com/logseq/diff-merge/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22
    https://github.com/logseq/diff-merge/blob/85ca7e9bf7740d3880ed97d535a4f782a963395d/lib/merge.ts#L40"
   [base & branches]
-  (let [mldoc gp-mldoc/MldocInstance
-        merger (Merger. mldoc)]
-    (.mergeBlocks merger base (bean/->js branches))))
+  (let [merger (Merger.)]
+    (.mergeBlocks merger (bean/->js base) (bean/->js branches))))
+
+(defn diff 
+  "2-ways diff
+   Accept: blocks
+   https://github.com/logseq/diff-merge/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22"
+  [base income]
+  (let [differ (Differ.)]
+    (.diff_logseqMode differ (bean/->js base) (bean/->js income))))
 
 (defonce getHTML visualizeAsHTML)
 
