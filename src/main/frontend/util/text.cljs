@@ -24,7 +24,7 @@
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
     (gstring/format "[%s]"
-                 (string/join ", " items))))
+                    (string/join ", " items))))
 
 (defn media-link?
   [media-formats s]
@@ -39,7 +39,7 @@
                           (if (string/starts-with? (string/lower-case line) key)
                             new-line
                             line)))
-                    lines)
+                       lines)
         new-lines (if (not= (map string/trim lines) new-lines)
                     new-lines
                     (cons (first new-lines) ;; title
@@ -94,10 +94,10 @@
   (if (= value "")
     (if before? [0] [(count s)]) ;; Hack: this prevents unnecessary work in wrapped-by?
     (loop [acc []
-          i 0]
-     (if-let [i (string/index-of s value i)]
-       (recur (conj acc i) (+ i (count value)))
-       acc))))
+           i 0]
+      (if-let [i (string/index-of s value i)]
+        (recur (conj acc i) (+ i (count value)))
+        acc))))
 
 (defn wrapped-by?
   "`pos` must be wrapped by `before` and `end` in string `value`, e.g. ((a|b))"
@@ -120,7 +120,7 @@
              ks))))
 
 (defn cut-by
-  "Cut string by specifid wrapping symbols, only match the first occurrence.
+  "Cut string by specified wrapping symbols, only match the first occurrence.
      value - string to cut
      before - cutting symbol (before)
      end - cutting symbol (end)"

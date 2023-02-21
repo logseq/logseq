@@ -109,7 +109,7 @@
           (editor-handler/paste-blocks blocks {})))
       (let [shape-refs-text (when (and (not (string/blank? html))
                                        (get-whiteboard-tldr-from-text html))
-                              ;; text should alway be prepared block-ref generated in tldr
+                              ;; text should always be prepared block-ref generated in tldr
                               text)
             {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
             text-url? (gp-util/url? text)
@@ -209,15 +209,15 @@
                text (.getData clipboard-data "text")
                files (.-files clipboard-data)
                paste-file-if-exist (fn []
-                                      (when id
-                                        (let [_handled
-                                              (let [clipboard-data (gobj/get e "clipboardData")
-                                                    files (.-files clipboard-data)]
-                                                (when-let [file (first files)]
-                                                  (when-let [block (state/get-edit-block)]
-                                                    (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                                                 editor-handler/*asset-uploading? true))))]
-                                          (util/stop e))))]
+                                     (when id
+                                       (let [_handled
+                                             (let [clipboard-data (gobj/get e "clipboardData")
+                                                   files (.-files clipboard-data)]
+                                               (when-let [file (first files)]
+                                                 (when-let [block (state/get-edit-block)]
+                                                   (editor-handler/upload-asset id #js[file] (:block/format block)
+                                                                                editor-handler/*asset-uploading? true))))]
+                                         (util/stop e))))]
            (cond
              (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
              (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)

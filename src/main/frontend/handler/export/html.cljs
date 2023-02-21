@@ -62,7 +62,7 @@
   [loc items]
   (z/edit loc (fn [li] (concatv li items))))
 
-;;; utils for contruct hiccup(ends)
+;;; utils for construct hiccup(ends)
 
 ;;; block/inline-ast -> hiccup
 (declare inline-ast->hiccup
