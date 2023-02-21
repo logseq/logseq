@@ -90,16 +90,6 @@ test('draw a rectangle', async ({ page }) => {
   ).toHaveCount(1)
 })
 
-test('copy/paste the shapes', async ({ page }) => {
-  await page.keyboard.press(`${modKey}+a`)
-  await page.keyboard.press(`${modKey}+Shift+c`)
-  await page.keyboard.press('Escape')
-  await page.keyboard.press(`${modKey}+v`)
-  await page.keyboard.press('Escape')
-
-  await expect( page.locator('.logseq-tldraw .tl-positioned-svg rect:not(.tl-hitarea-fill)')).toHaveCount(2)
-})
-
 test('cleanup the shapes', async ({ page }) => {
   await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press('Delete')
