@@ -120,20 +120,17 @@ Your feedback helps us understand our users' needs and prioritize the features t
 
 We appreciate your support, and we look forward to hearing your ideas!
 
-## 📌 FAQ
-
-- FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
-- FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 
 ## 📚 Learn more
 
 - Website: [logseq.com](https://logseq.com)
 - Documentation: [docs.logseq.com](https://docs.logseq.com)
+  - FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
 - Blog: [blog.logseq.com](https://blog.logseq.com)
   - Please visit our [About page](https://blog.logseq.com/about) for the latest updates.
 - Twitter: [@Logseq](https://twitter.com/logseq)
-- Forum: [discuss.logseq.com](https://discuss.logseq.com)
-  - Where we answer questions, discuss workflows, and share tips
+- Forum: [discuss.logseq.com](https://discuss.logseq.com) - Where we answer questions, discuss workflows, and share tips
+  - FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 - Discord: [discord.gg/logseq](https://discord.gg/logseq)
   - [中文 Discord](https://discord.gg/xYqcrXWymg)
 
