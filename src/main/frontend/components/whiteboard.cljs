@@ -53,7 +53,7 @@
 
 ;; TODO: use frontend.ui instead of making a new one
 (rum/defc dropdown
-  [label children show? outside-click-hander portal?]
+  [label children show? outside-click-handler portal?]
   (let [[anchor-ref anchor-rect] (use-bounding-client-rect show?)
         [content-ref content-rect] (use-bounding-client-rect show?)
         offset-x (when (and anchor-rect content-rect)
@@ -67,7 +67,7 @@
                      (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))))
         offset-y (when (and anchor-rect content-rect)
                    (+ (.-y anchor-rect) (.-height anchor-rect) 8))
-        click-outside-ref (use-click-outside outside-click-hander)
+        click-outside-ref (use-click-outside outside-click-handler)
         [d-open set-d-open] (rum/use-state false)
         _ (rum/use-effect! (fn [] (js/setTimeout #(set-d-open show?) 100))
                            [show?])]
@@ -122,8 +122,9 @@
                                         portal?]
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
+         page (model/pull-block (:db/id page-entity))
          block-uuid (:block/uuid page-entity)
-         refs-count (model/get-block-references-count block-uuid)]
+         refs-count (count (:block/_refs page))]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]

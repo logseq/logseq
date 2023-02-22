@@ -376,3 +376,49 @@
                   (map (comp :block/name first))
                   (remove built-in-pages)
                   set))))))
+
+(deftest duplicated-ids
+  (testing "duplicated block ids in same file"
+    (let [conn (ldb/start-conn)
+          extract-block-ids (atom #{})
+          parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
+          block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "- foo
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+- bar
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+"
+                               parse-opts)
+      (let [blocks (:block/_parent (d/entity @conn [:block/name "foo"]))]
+        (is (= 2 (count blocks)))
+        (is (= 1 (count (filter #(= (:block/uuid %) block-id) blocks)))))))
+
+  (testing "duplicated block ids in multiple files"
+    (let [conn (ldb/start-conn)
+          extract-block-ids (atom #{})
+          parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
+          block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "- foo
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+bar
+- test"
+                               parse-opts)
+      (graph-parser/parse-file conn
+                               "bar.md"
+                               "- bar
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+bar
+- test
+"
+                               parse-opts)
+      (is (= "foo"
+             (-> (d/entity @conn [:block/uuid block-id])
+                 :block/page
+                 :block/name)))
+      (let [bar-block (first (:block/_parent (d/entity @conn [:block/name "bar"])))]
+        (is (some? (:block/uuid bar-block)))
+        (is (not= (:block/uuid bar-block) block-id))))))

@@ -160,7 +160,7 @@ test('template', async ({ page, block }) => {
 test('auto completion square brackets', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // In this test, `type` is unsed instead of `fill`, to allow for auto-completion.
+  // In this test, `type` is unused instead of `fill`, to allow for auto-completion.
 
   // [[]]
   await block.mustType('This is a [', { toBe: 'This is a []' })

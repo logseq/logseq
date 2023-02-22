@@ -46,7 +46,7 @@
          :target        target
          :old-title     old-title
          :changed-title new-title}
-        ;; Even the same file body are producing mis-matched titles - it's unreachable!
+        ;; Even the same file body are producing mismatched titles - it's unreachable!
         {:status        :unreachable
          :target        target
          :old-title     old-title

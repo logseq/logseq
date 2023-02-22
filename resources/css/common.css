@@ -203,7 +203,7 @@ html {
 }
 
 body {
-  color: #24292e;
+  color: var(--ls-primary-text-color);
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;

@@ -133,9 +133,7 @@
   (try
     (let [page (get-page-name file ast uri-encoded? filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          options' (-> options
-                       (assoc :page-name page-name
-                              :original-page-name page))
+          options' (assoc options :page-name page-name)
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))

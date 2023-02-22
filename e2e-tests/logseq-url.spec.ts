@@ -9,7 +9,7 @@ test("Logseq URLs (same graph)", async ({ page, block }) => {
   let page_title = await createRandomPage(page)
   await block.mustFill(identify_text)
 
-  // paste current page's URL to another page, then redirect throught the URL
+  // paste current page's URL to another page, then redirect through the URL
   await page.click('.ui__dropdown-trigger .toolbar-dots-btn')
   await page.locator("text=Copy page URL").click()
   await createRandomPage(page)
@@ -26,7 +26,7 @@ test("Logseq URLs (same graph)", async ({ page, block }) => {
     expect(await cursor_locator.inputValue()).toBe(identify_text)
   }
 
-  // paste the identify block's URL to another page, then redirect throught the URL
+  // paste the identify block's URL to another page, then redirect through the URL
   await page.click('span.bullet >> nth=0', { button: "right" })
   await page.locator("text=Copy block URL").click()
   await createRandomPage(page)

@@ -127,7 +127,7 @@
 (defn html-link-format!
   ([]
    (html-link-format! nil))
-  ([link]
+  ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
@@ -137,8 +137,11 @@
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
 
-                                   link
-                                   (config/with-label-link format selection link)
+                                   (and text selection-link?)
+                                   (config/with-label-link format text selection)
+
+                                   text
+                                   (config/with-label-link format selection text)
 
                                    selection-link?
                                    (config/with-default-link format selection)
@@ -2007,7 +2010,7 @@
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
-  [tree-vec format keep-uuid?]
+  [tree-vec format keep-uuid? page-name]
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
@@ -2015,7 +2018,7 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* format {})
+                    blocks (block/extract-blocks ast content* format {:page-name page-name})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -2027,8 +2030,9 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
-        page-id (:db/id (:block/page target-block))
+  (let [page-id (:db/id (:block/page target-block))
+        page-name (some-> page-id (db/entity) :block/name)
+        blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-left page-id blocks)
         block-refs (->> (mapcat :block/refs blocks)
                         (set)

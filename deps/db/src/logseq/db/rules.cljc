@@ -31,7 +31,7 @@
 ;; https://docs.datomic.com/on-prem/query/query-executing.html#clause-order
 ;; Recursive optimization Reference:
 ;; https://stackoverflow.com/questions/42457136/recursive-datalog-queries-for-datomic-really-slow
-;; Should optimize for query the decendents of a block
+;; Should optimize for query the descendents of a block
 ;; Quote:
 ;; My theory is that your rules are not written in a way that Datalog can optimize for this read pattern - probably resulting in a traversal of all the entities. I suggest to rewrite them as follows:
 ;; [[(ubersymbol ?c ?p)
@@ -62,7 +62,7 @@
 
 (def ^:large-vars/data-var query-dsl-rules
   "Rules used by frontend.db.query-dsl. The symbols ?b and ?p respectively refer
-  to block and page. Do not alter them as they are programatically built by the
+  to block and page. Do not alter them as they are programmatically built by the
   query-dsl ns"
   {:page-property
    '[(page-property ?p ?key ?val)
