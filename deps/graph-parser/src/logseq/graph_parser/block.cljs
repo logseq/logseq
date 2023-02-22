@@ -181,6 +181,20 @@
          (remove string/blank?)
          distinct)))
 
+(defn- extract-block-refs
+  [nodes]
+  (let [ref-blocks (atom nil)]
+    (walk/postwalk
+     (fn [form]
+       (when-let [block (get-block-reference form)]
+         (swap! ref-blocks conj block))
+       form)
+     nodes)
+    (keep (fn [block]
+            (when-let [id (parse-uuid block)]
+              [:block/uuid id]))
+          @ref-blocks)))
+
 (defn extract-properties
   [properties user-config]
   (when (seq properties)
@@ -202,9 +216,10 @@
                                            v' (text/parse-property k v mldoc-ast user-config)]
                                        [k' v' mldoc-ast v])
                                      (do (swap! *invalid-properties conj k)
-                                         nil)))))
+                                       nil)))))
                           (remove #(nil? (second %))))
           page-refs (get-page-ref-names-from-properties properties user-config)
+          block-refs (extract-block-refs properties)
           properties-text-values (->> (map (fn [[k _v _refs original-text]] [k original-text]) properties)
                                       (into {}))
           properties (map (fn [[k v _]] [k v]) properties)
@@ -213,7 +228,8 @@
        :properties-order (map first properties)
        :properties-text-values properties-text-values
        :invalid-properties @*invalid-properties
-       :page-refs page-refs})))
+       :page-refs page-refs
+       :block-refs block-refs})))
 
 (defn- paragraph-timestamp-block?
   [block]
@@ -351,19 +367,9 @@
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
-  (let [ref-blocks (atom nil)]
-    (walk/postwalk
-     (fn [form]
-       (when-let [block (get-block-reference form)]
-         (swap! ref-blocks conj block))
-       form)
-     (concat title body))
-    (let [ref-blocks (keep (fn [block]
-                             (when-let [id (parse-uuid block)]
-                               [:block/uuid id]))
-                           @ref-blocks)
-          refs (distinct (concat (:refs block) ref-blocks))]
-      (assoc block :refs refs))))
+  (let [ref-blocks (extract-block-refs (concat title body))
+        refs (distinct (concat (:refs block) ref-blocks))]
+    (assoc block :refs refs)))
 
 (defn- block-keywordize
   [block]
@@ -532,8 +538,9 @@
                                 :unordered true
                                 :macros (extract-macros-from-ast body)
                                 :body body}
-                         block (with-page-block-refs block false supported-formats db date-formatter)]
-                     (block-keywordize block))
+                         block (with-page-block-refs block false supported-formats db date-formatter)
+                         block' (update block :refs concat (:block-refs pre-block-properties))]
+                     (block-keywordize block'))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
@@ -584,6 +591,7 @@
                 block)
         block (assoc block :body body)
         block (with-page-block-refs block with-id? supported-formats db date-formatter)
+        block (update block :refs concat (:block-refs properties))
         {:keys [created-at updated-at]} (:properties properties)
         block (cond-> block
                 (and created-at (integer? created-at))
