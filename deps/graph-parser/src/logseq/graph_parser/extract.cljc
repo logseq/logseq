@@ -170,9 +170,10 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                       blocks)
-          _ (when (not= (count new-uuids) (count blocks))
-              (prn "mismatch uuids and blocks" (count new-uuids) "and" (count blocks))
-              (prn "ast:" ast))
+          _ (when (and db (not= (count new-uuids) (count blocks)))
+              (prn "mismatch uuids and blocks" (count new-uuids) "and" (count blocks)) ;; TODO Junyi
+              (prn "ast:" ast)
+              (prn "blocks:" blocks))
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
             [(:block/properties (first blocks))

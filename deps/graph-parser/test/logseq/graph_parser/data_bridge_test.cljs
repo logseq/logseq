@@ -21,7 +21,17 @@
 #+tItLe: Well parsed!"
 [{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!" 
   :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b" 
-  :level 1}]))
+  :level 1}]
+    
+    "#+title: Howdy"
+    [{:body "#+title: Howdy" :uuid nil :level 1}]
+    
+    ":PROPERTIES:
+:fiction: [[aldsjfklsda]]
+:END:\n#+title: Howdy"
+    [{:body ":PROPERTIES:\n:fiction: [[aldsjfklsda]]\n:END:\n#+title: Howdy" 
+      :uuid nil 
+      :level 1}]))
 
 (deftest db<->ast-diff-blocks-test \
   (let [conn (ldb/start-conn)
@@ -221,3 +231,27 @@
 :END:
 #+tItLe: Well parsed!"
       ["72289d9a-eb2f-427b-ad97-b605a4b8c59b"])))
+
+(deftest ast->diff-blocks-test
+  (are [ast text diff-blocks]
+       (= (gp-diff/ast->diff-blocks ast text :org {:block-pattern "-"})
+          diff-blocks)
+    [[["Properties" [["TiTlE" "Howdy" []]]] nil]]
+    "#+title: Howdy"
+    [{:body "#+title: Howdy", :level 1, :uuid nil}])
+  
+  (are [ast text diff-blocks]
+       (= (gp-diff/ast->diff-blocks ast text :org {:block-pattern "-" :user-config {:property-pages/enabled? true}})
+          diff-blocks)
+    [[["Property_Drawer" [["foo" "#bar" [["Tag" [["Plain" "bar"]]]]] ["baz" "#bing" [["Tag" [["Plain" "bing"]]]]]]] {:start_pos 0, :end_pos 22}]]
+    "foo:: #bar\nbaz:: #bing"
+     [{:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]))
+
+(deftest ast-empty-diff-test
+  (are [ast text diff-ops]
+       (= (bean/->clj (->> (gp-diff/ast->diff-blocks ast text :org {:block-pattern "-" :user-config {:property-pages/enabled? true}})
+                           (gp-diff/diff [])))
+          diff-ops)
+    [[["Property_Drawer" [["foo" "#bar" [["Tag" [["Plain" "bar"]]]]] ["baz" "#bing" [["Tag" [["Plain" "bing"]]]]]]] {:start_pos 0, :end_pos 22}]]
+    "foo:: #bar\nbaz:: #bing"
+     [[[1 {:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]]]))

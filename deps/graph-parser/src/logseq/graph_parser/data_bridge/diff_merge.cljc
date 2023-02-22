@@ -121,16 +121,11 @@
     (loop [headings []
            blocks (reverse blocks)
            properties {}
-           end-pos nil]
+           end-pos (utf8/length encoded-content)]
       (if (seq blocks)
         (let [[block pos-meta] (first blocks)
-                  ;; fix start_pos
-                  ;; if end-pos is nil, it's the first block; no need to fix
-                  ;; otherwise, the end_pos of the current block should be the start_pos of the previous block
-                  ;; (as we are iterating from back to first)
-              pos-meta (if end-pos
-                         (assoc pos-meta :end_pos end-pos)
-                         pos-meta)]
+              ;; fix start_pos
+              pos-meta (assoc pos-meta :end_pos end-pos)]
           (cond
             (gp-block/heading-block? block)
             (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
@@ -143,13 +138,17 @@
             (let [new-props (:properties (gp-block/extract-properties (second block) (assoc user-config :format format)))]
               ;; sending the current end pos to next, as it's not finished yet
               ;; supports multiple properties sub-block possible in future
-              (if (= 0 (:start_pos pos-meta))
-                (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
-                  (recur (conj headings {:body content
-                                         :level 1 ;; force the level of pre blockto be 1 for better diff
-                                         :uuid (:id (merge properties new-props))}) (rest blocks) {} (:start_pos pos-meta)))
-               (recur headings (rest blocks) (merge properties new-props) (:end_pos pos-meta))))
+              (recur headings (rest blocks) (merge properties new-props) (:end_pos pos-meta)))
 
             :else
             (recur headings (rest blocks) properties (:end_pos pos-meta))))
-        (reverse headings)))))
+        (if (empty? properties)
+          (reverse headings)
+          (let [[block _] (first blocks)
+                pos-meta {:start_pos 0 :end_pos end-pos}
+                content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)
+                uuid (:id properties)]
+            (cons {:body content
+                   :level 1
+                   :uuid uuid}
+                  (reverse headings))))))))

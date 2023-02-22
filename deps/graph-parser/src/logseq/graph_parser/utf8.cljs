@@ -22,3 +22,7 @@
    (if end
      (decode (.subarray arr start end))
      (decode (.subarray arr start)))))
+
+(defn length
+  [arr]
+  (.-length arr))
