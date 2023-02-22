@@ -181,7 +181,7 @@
   [filename]
   (when-not (string/blank? filename)
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls?         (re-find #"^hls__" filename)
+          hls?         (hls-file? filename)
           len          (count filename)]
       (if (or local-asset? hls?)
         (-> filename
