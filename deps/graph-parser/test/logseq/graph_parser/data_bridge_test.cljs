@@ -1,17 +1,44 @@
 (ns logseq.graph-parser.data-bridge-test
-  (:require [cljs.test :refer [deftest are]]
+  (:require [cljs.test :refer [deftest are is]]
             [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.data-bridge.diff-merge :as gp-diff]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [cljs-bean.core :as bean]))
 
+(defn org-text->diffblocks
+  [text]
+  (-> (gp-mldoc/->edn text (gp-mldoc/default-config :org))
+      (gp-diff/ast->diff-blocks text :org {:block-pattern "-"})))
+
+(deftest org->ast->diff-blocks-test
+  (are [text diff-blocks]
+       (= (org-text->diffblocks text)
+          diff-blocks)
+        ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+tItLe: Well parsed!"
+[{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!" 
+  :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b" 
+  :level 1}]))
+
+(deftest db<->ast-diff-blocks-test \
+  (let [conn (ldb/start-conn)
+        text                                    ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+tItLe: Well parsed!"]
+    (graph-parser/parse-file conn "foo.org" text {})
+    (is (= (gp-diff/db->diff-blocks @conn "Well parsed!")
+           (org-text->diffblocks text)))))
+
 (defn text->diffblocks
   [text]
   (-> (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))
       (gp-diff/ast->diff-blocks text :markdown {:block-pattern "-"})))
 
-(deftest ast->diff-blocks-test
+(deftest md->ast->diff-blocks-test
   (are [text diff-blocks]
        (= (text->diffblocks text)
           diff-blocks)
@@ -160,13 +187,13 @@
     (are [page-name diff-blocks] (= (gp-diff/db->diff-blocks @conn page-name)
                                     diff-blocks)
       "foo"
-      [{:body "abc\nid:: 11451400-0000-0000-0000-000000000000" :uuid #uuid "11451400-0000-0000-0000-000000000000" :level 1}
-       {:body "def\nid:: 63246324-6324-6324-6324-632463246324" :uuid #uuid "63246324-6324-6324-6324-632463246324" :level 1}]
-      
+      [{:body "abc\nid:: 11451400-0000-0000-0000-000000000000" :uuid  "11451400-0000-0000-0000-000000000000" :level 1}
+       {:body "def\nid:: 63246324-6324-6324-6324-632463246324" :uuid  "63246324-6324-6324-6324-632463246324" :level 1}]
+
       "bar"
-      [{:body "ghi\nid:: 11451411-1111-1111-1111-111111111111" :uuid #uuid "11451411-1111-1111-1111-111111111111" :level 1}
-       {:body "jkl\nid:: 63241234-1234-1234-1234-123412341234" :uuid #uuid "63241234-1234-1234-1234-123412341234" :level 2}])
-    
+      [{:body "ghi\nid:: 11451411-1111-1111-1111-111111111111" :uuid  "11451411-1111-1111-1111-111111111111" :level 1}
+       {:body "jkl\nid:: 63241234-1234-1234-1234-123412341234" :uuid  "63241234-1234-1234-1234-123412341234" :level 2}])
+
     (are [page-name text new-uuids] (= (let [old-blks (gp-diff/db->diff-blocks @conn page-name)
                                              new-blks (text->diffblocks text)
                                              diff-ops (gp-diff/diff old-blks new-blks)]
@@ -175,11 +202,22 @@
       "foo"
       "- abc
 - def"
-      [#uuid "11451400-0000-0000-0000-000000000000"
+      ["11451400-0000-0000-0000-000000000000"
        "NEW_ID"]
 
       "bar"
       "- ghi
 \t- jkl"
-      [#uuid "11451411-1111-1111-1111-111111111111"
-       "NEW_ID"])))
+      ["11451411-1111-1111-1111-111111111111"
+       "NEW_ID"]
+
+      "non exist page"
+      "- k\n\t- l"
+      ["NEW_ID" "NEW_ID"]
+
+      "another non exist page"
+      ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+tItLe: Well parsed!"
+      ["72289d9a-eb2f-427b-ad97-b605a4b8c59b"])))

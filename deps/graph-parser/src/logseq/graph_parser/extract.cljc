@@ -127,9 +127,20 @@
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
 
+(defn- extract-uuids
+  "Infer new uuids from existing DB data and diff with the new AST
+   Return a list of uuids for the new blocks"
+  [format ast content {:keys [page-name db] :as options'}]
+  (let [base-diffblocks (gp-diff/db->diff-blocks db page-name)
+        income-diffblocks (gp-diff/ast->diff-blocks ast content format options')
+        diff-ops (gp-diff/diff base-diffblocks income-diffblocks)
+        new-uuids (gp-diff/attachUUID diff-ops (map :uuid base-diffblocks))]
+    new-uuids))
+
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   "For file extraction
+   db - the db to extract uuids from. Might not exist when testing / raw extraction
    uri-encoded? - if is true, apply URL decode on the file path"
   [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
   (try
@@ -138,10 +149,7 @@
           options' (-> options
                        (assoc :page-name page-name
                               :original-page-name page))
-          ;; base-diffblocks (gp-diff/db->diff-blocks db page-name)
-          ;; income-diffblocks (gp-diff/ast->diff-blocks ast content format options')
-          ;; diff-ops (gp-diff/diff base-diffblocks income-diffblocks)
-          ;; new-uuids (gp-diff/attachUUID diff-ops (map :uuid base-diffblocks))
+          new-uuids (when db (extract-uuids format ast content options'))
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
@@ -162,6 +170,9 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                       blocks)
+          _ (when (not= (count new-uuids) (count blocks))
+              (prn "mismatch uuids and blocks" (count new-uuids) "and" (count blocks))
+              (prn "ast:" ast))
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
             [(:block/properties (first blocks))

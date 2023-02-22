@@ -37,8 +37,8 @@ v.prototype.diff_compute_ = function(e, n, r, s) {
     return [[w, e], [I, n]];
   var o = this.diff_halfMatch_(e, n);
   if (o) {
-    var h = o[0], f = o[1], c = o[2], u = o[3], d = o[4], g = this.diff_main(h, c, r, s), _ = this.diff_main(f, u, r, s);
-    return g.concat([[b, d]], _);
+    var h = o[0], f = o[1], c = o[2], u = o[3], _ = o[4], g = this.diff_main(h, c, r, s), d = this.diff_main(f, u, r, s);
+    return g.concat([[b, _]], d);
   }
   return r && e.length > 100 && n.length > 100 ? this.diff_lineMode_(e, n, s) : this.diff_bisect_(e, n, s);
 };
@@ -76,40 +76,40 @@ v.prototype.diff_bisect_ = function(e, n, r) {
   for (var s = e.length, i = n.length, t = Math.ceil((s + i) / 2), a = t, l = 2 * t, o = new Array(l), h = new Array(l), f = 0; f < l; f++)
     o[f] = -1, h[f] = -1;
   o[a + 1] = 0, h[a + 1] = 0;
-  for (var c = s - i, u = c % 2 != 0, d = 0, g = 0, _ = 0, m = 0, p = 0; p < t && !(new Date().getTime() > r); p++) {
-    for (var k = -p + d; k <= p - g; k += 2) {
+  for (var c = s - i, u = c % 2 != 0, _ = 0, g = 0, d = 0, m = 0, p = 0; p < t && !(new Date().getTime() > r); p++) {
+    for (var k = -p + _; k <= p - g; k += 2) {
       var M = a + k, E;
       k == -p || k != p && o[M - 1] < o[M + 1] ? E = o[M + 1] : E = o[M - 1] + 1;
-      for (var C = E - k; E < s && C < i && e.charAt(E) == n.charAt(C); )
-        E++, C++;
+      for (var y = E - k; E < s && y < i && e.charAt(E) == n.charAt(y); )
+        E++, y++;
       if (o[M] = E, E > s)
         g += 2;
-      else if (C > i)
-        d += 2;
+      else if (y > i)
+        _ += 2;
       else if (u) {
-        var y = a + c - k;
-        if (y >= 0 && y < l && h[y] != -1) {
-          var D = s - h[y];
+        var A = a + c - k;
+        if (A >= 0 && A < l && h[A] != -1) {
+          var D = s - h[A];
           if (E >= D)
-            return this.diff_bisectSplit_(e, n, E, C, r);
+            return this.diff_bisectSplit_(e, n, E, y, r);
         }
       }
     }
-    for (var B = -p + _; B <= p - m; B += 2) {
-      var y = a + B, D;
-      B == -p || B != p && h[y - 1] < h[y + 1] ? D = h[y + 1] : D = h[y - 1] + 1;
+    for (var B = -p + d; B <= p - m; B += 2) {
+      var A = a + B, D;
+      B == -p || B != p && h[A - 1] < h[A + 1] ? D = h[A + 1] : D = h[A - 1] + 1;
       for (var R = D - B; D < s && R < i && e.charAt(s - D - 1) == n.charAt(i - R - 1); )
         D++, R++;
-      if (h[y] = D, D > s)
+      if (h[A] = D, D > s)
         m += 2;
       else if (R > i)
-        _ += 2;
+        d += 2;
       else if (!u) {
         var M = a + c - B;
         if (M >= 0 && M < l && o[M] != -1) {
-          var E = o[M], C = a + E - M;
+          var E = o[M], y = a + E - M;
           if (D = s - D, E >= D)
-            return this.diff_bisectSplit_(e, n, E, C, r);
+            return this.diff_bisectSplit_(e, n, E, y, r);
         }
       }
     }
@@ -178,21 +178,21 @@ v.prototype.diff_halfMatch_ = function(e, n) {
   if (r.length < 4 || s.length * 2 < r.length)
     return null;
   var i = this;
-  function t(g, _, m) {
-    for (var p = g.substring(m, m + Math.floor(g.length / 4)), k = -1, M = "", E, C, y, D; (k = _.indexOf(p, k + 1)) != -1; ) {
+  function t(g, d, m) {
+    for (var p = g.substring(m, m + Math.floor(g.length / 4)), k = -1, M = "", E, y, A, D; (k = d.indexOf(p, k + 1)) != -1; ) {
       var B = i.diff_commonPrefix(
         g.substring(m),
-        _.substring(k)
+        d.substring(k)
       ), R = i.diff_commonSuffix(
         g.substring(0, m),
-        _.substring(0, k)
+        d.substring(0, k)
       );
-      M.length < R + B && (M = _.substring(k - R, k) + _.substring(k, k + B), E = g.substring(0, m - R), C = g.substring(m + B), y = _.substring(0, k - R), D = _.substring(k + B));
+      M.length < R + B && (M = d.substring(k - R, k) + d.substring(k, k + B), E = g.substring(0, m - R), y = g.substring(m + B), A = d.substring(0, k - R), D = d.substring(k + B));
     }
     return M.length * 2 >= g.length ? [
       E,
-      C,
       y,
+      A,
       D,
       M
     ] : null;
@@ -211,8 +211,8 @@ v.prototype.diff_halfMatch_ = function(e, n) {
   l ? a ? o = a[4].length > l[4].length ? a : l : o = l : o = a;
   var h, f, c, u;
   e.length > n.length ? (h = o[0], f = o[1], c = o[2], u = o[3]) : (c = o[0], u = o[1], h = o[2], f = o[3]);
-  var d = o[4];
-  return [h, f, c, u, d];
+  var _ = o[4];
+  return [h, f, c, u, _];
 };
 v.prototype.diff_cleanupSemantic = function(e) {
   for (var n = !1, r = [], s = 0, i = null, t = 0, a = 0, l = 0, o = 0, h = 0; t < e.length; )
@@ -226,26 +226,26 @@ v.prototype.diff_cleanupSemantic = function(e) {
     ), e[r[s - 1] + 1][0] = I, s--, s--, t = s > 0 ? r[s - 1] : -1, a = 0, l = 0, o = 0, h = 0, i = null, n = !0)), t++;
   for (n && this.diff_cleanupMerge(e), this.diff_cleanupSemanticLossless(e), t = 1; t < e.length; ) {
     if (e[t - 1][0] == w && e[t][0] == I) {
-      var f = e[t - 1][1], c = e[t][1], u = this.diff_commonOverlap_(f, c), d = this.diff_commonOverlap_(c, f);
-      u >= d ? (u >= f.length / 2 || u >= c.length / 2) && (e.splice(
+      var f = e[t - 1][1], c = e[t][1], u = this.diff_commonOverlap_(f, c), _ = this.diff_commonOverlap_(c, f);
+      u >= _ ? (u >= f.length / 2 || u >= c.length / 2) && (e.splice(
         t,
         0,
         [b, c.substring(0, u)]
-      ), e[t - 1][1] = f.substring(0, f.length - u), e[t + 1][1] = c.substring(u), t++) : (d >= f.length / 2 || d >= c.length / 2) && (e.splice(
+      ), e[t - 1][1] = f.substring(0, f.length - u), e[t + 1][1] = c.substring(u), t++) : (_ >= f.length / 2 || _ >= c.length / 2) && (e.splice(
         t,
         0,
-        [b, f.substring(0, d)]
-      ), e[t - 1][0] = I, e[t - 1][1] = c.substring(0, c.length - d), e[t + 1][0] = w, e[t + 1][1] = f.substring(d), t++), t++;
+        [b, f.substring(0, _)]
+      ), e[t - 1][0] = I, e[t - 1][1] = c.substring(0, c.length - _), e[t + 1][0] = w, e[t + 1][1] = f.substring(_), t++), t++;
     }
     t++;
   }
 };
 v.prototype.diff_cleanupSemanticLossless = function(e) {
-  function n(d, g) {
-    if (!d || !g)
+  function n(_, g) {
+    if (!_ || !g)
       return 6;
-    var _ = d.charAt(d.length - 1), m = g.charAt(0), p = _.match(v.nonAlphaNumericRegex_), k = m.match(v.nonAlphaNumericRegex_), M = p && _.match(v.whitespaceRegex_), E = k && m.match(v.whitespaceRegex_), C = M && _.match(v.linebreakRegex_), y = E && m.match(v.linebreakRegex_), D = C && d.match(v.blanklineEndRegex_), B = y && g.match(v.blanklineStartRegex_);
-    return D || B ? 5 : C || y ? 4 : p && !M && E ? 3 : M || E ? 2 : p || k ? 1 : 0;
+    var d = _.charAt(_.length - 1), m = g.charAt(0), p = d.match(v.nonAlphaNumericRegex_), k = m.match(v.nonAlphaNumericRegex_), M = p && d.match(v.whitespaceRegex_), E = k && m.match(v.whitespaceRegex_), y = M && d.match(v.linebreakRegex_), A = E && m.match(v.linebreakRegex_), D = y && _.match(v.blanklineEndRegex_), B = A && g.match(v.blanklineStartRegex_);
+    return D || B ? 5 : y || A ? 4 : p && !M && E ? 3 : M || E ? 2 : p || k ? 1 : 0;
   }
   for (var r = 1; r < e.length - 1; ) {
     if (e[r - 1][0] == b && e[r + 1][0] == b) {
@@ -416,24 +416,24 @@ v.prototype.match_bitap_ = function(e, n, r) {
   if (n.length > this.Match_MaxBits)
     throw new Error("Pattern too long for this browser.");
   var s = this.match_alphabet_(n), i = this;
-  function t(E, C) {
-    var y = E / n.length, D = Math.abs(r - C);
-    return i.Match_Distance ? y + D / i.Match_Distance : D ? 1 : y;
+  function t(E, y) {
+    var A = E / n.length, D = Math.abs(r - y);
+    return i.Match_Distance ? A + D / i.Match_Distance : D ? 1 : A;
   }
   var a = this.Match_Threshold, l = e.indexOf(n, r);
   l != -1 && (a = Math.min(t(0, l), a), l = e.lastIndexOf(n, r + n.length), l != -1 && (a = Math.min(t(0, l), a)));
   var o = 1 << n.length - 1;
   l = -1;
-  for (var h, f, c = n.length + e.length, u, d = 0; d < n.length; d++) {
+  for (var h, f, c = n.length + e.length, u, _ = 0; _ < n.length; _++) {
     for (h = 0, f = c; h < f; )
-      t(d, r + f) <= a ? h = f : c = f, f = Math.floor((c - h) / 2 + h);
+      t(_, r + f) <= a ? h = f : c = f, f = Math.floor((c - h) / 2 + h);
     c = f;
-    var g = Math.max(1, r - f + 1), _ = Math.min(r + f, e.length) + n.length, m = Array(_ + 2);
-    m[_ + 1] = (1 << d) - 1;
-    for (var p = _; p >= g; p--) {
+    var g = Math.max(1, r - f + 1), d = Math.min(r + f, e.length) + n.length, m = Array(d + 2);
+    m[d + 1] = (1 << _) - 1;
+    for (var p = d; p >= g; p--) {
       var k = s[e.charAt(p - 1)];
-      if (d === 0 ? m[p] = (m[p + 1] << 1 | 1) & k : m[p] = (m[p + 1] << 1 | 1) & k | ((u[p + 1] | u[p]) << 1 | 1) | u[p + 1], m[p] & o) {
-        var M = t(d, p - 1);
+      if (_ === 0 ? m[p] = (m[p + 1] << 1 | 1) & k : m[p] = (m[p + 1] << 1 | 1) & k | ((u[p + 1] | u[p]) << 1 | 1) | u[p + 1], m[p] & o) {
+        var M = t(_, p - 1);
         if (M <= a)
           if (a = M, l = p - 1, l > r)
             g = Math.max(1, 2 * r - l);
@@ -441,7 +441,7 @@ v.prototype.match_bitap_ = function(e, n, r) {
             break;
       }
     }
-    if (t(d + 1, r) > a)
+    if (t(_ + 1, r) > a)
       break;
     u = m;
   }
@@ -497,8 +497,8 @@ v.prototype.patch_make = function(e, n, r) {
   if (i.length === 0)
     return [];
   for (var t = [], a = new v.patch_obj(), l = 0, o = 0, h = 0, f = s, c = s, u = 0; u < i.length; u++) {
-    var d = i[u][0], g = i[u][1];
-    switch (!l && d !== b && (a.start1 = o, a.start2 = h), d) {
+    var _ = i[u][0], g = i[u][1];
+    switch (!l && _ !== b && (a.start1 = o, a.start2 = h), _) {
       case I:
         a.diffs[l++] = i[u], a.length2 += g.length, c = c.substring(0, h) + g + c.substring(h);
         break;
@@ -509,7 +509,7 @@ v.prototype.patch_make = function(e, n, r) {
         g.length <= 2 * this.Patch_Margin && l && i.length != u + 1 ? (a.diffs[l++] = i[u], a.length1 += g.length, a.length2 += g.length) : g.length >= 2 * this.Patch_Margin && l && (this.patch_addContext_(a, f), t.push(a), a = new v.patch_obj(), l = 0, f = c, o = h);
         break;
     }
-    d !== I && (o += g.length), d !== w && (h += g.length);
+    _ !== I && (o += g.length), _ !== w && (h += g.length);
   }
   return l && (this.patch_addContext_(a, f), t.push(a)), t;
 };
@@ -552,12 +552,12 @@ v.prototype.patch_apply = function(e, n) {
           i[t] = !1;
         else {
           this.diff_cleanupSemanticLossless(c);
-          for (var u = 0, d, g = 0; g < e[t].diffs.length; g++) {
-            var _ = e[t].diffs[g];
-            _[0] !== b && (d = this.diff_xIndex(c, u)), _[0] === I ? n = n.substring(0, o + d) + _[1] + n.substring(o + d) : _[0] === w && (n = n.substring(0, o + d) + n.substring(o + this.diff_xIndex(
+          for (var u = 0, _, g = 0; g < e[t].diffs.length; g++) {
+            var d = e[t].diffs[g];
+            d[0] !== b && (_ = this.diff_xIndex(c, u)), d[0] === I ? n = n.substring(0, o + _) + d[1] + n.substring(o + _) : d[0] === w && (n = n.substring(0, o + _) + n.substring(o + this.diff_xIndex(
               c,
-              u + _[1].length
-            ))), _[0] !== w && (u += _[1].length);
+              u + d[1].length
+            ))), d[0] !== w && (u += d[1].length);
           }
         }
       }
@@ -678,7 +678,7 @@ const $ = JSON.stringify({
   heading_number: !1,
   keep_line_break: !0
 }), Q = /^[0-9a-fA-F\-]{32,40}$/, U = "$PROPERTY!!DRAWER!!UUID$", j = /^(\s*)/;
-function K(e) {
+function z(e) {
   for (const [n, r, s] of e)
     if (n == "id")
       return r;
@@ -707,7 +707,7 @@ class Y {
     for (let h = 0; h < s.length; h++) {
       const f = s[h];
       if (f[0][0] == "Property_Drawer") {
-        const c = f[0][1], u = K(c);
+        const c = f[0][1], u = z(c);
         u && t.length > 0 && Q.test(u) ? (o = u, a.push(r[h].replace(u, U))) : a.push(r[h]);
         continue;
       } else if (f[0][0] != "Heading") {
@@ -751,7 +751,7 @@ class Y {
     throw new Error(`Unimplemented format: ${this.format}`);
   }
 }
-function z(e) {
+function J(e) {
   let r = e.body.split(`
 `).map((s, i) => {
     const t = (e.level || 1) - 1;
@@ -761,7 +761,7 @@ function z(e) {
   return r.includes(U) && (e.uuid || console.warn("Block content contains UUID placeholder but block has no UUID"), r = r.replace(U, e.uuid || "")), r;
 }
 const T = new v();
-function J(e, n) {
+function K(e, n) {
   let r = T.diff_linesToChars_(e, n);
   const s = r.chars1, i = r.chars2, t = r.lineArray, a = T.diff_main(s, i, !1);
   return T.diff_charsToLines_(a, t), a.map((o) => o[1].endsWith(`
@@ -773,7 +773,7 @@ function O(e) {
   for (const g of e)
     g[1].src === L.BLOCK_SOURCE_BASE ? r = g : s.push(g);
   if (r || (r = e[0], s = e.slice(1), n = !1), !n) {
-    const g = [r].concat(s), _ = S(g).map((k) => k[1]), m = [[A.DIFF_EQUAL, _[0]]], p = _.slice(1).map((k) => [A.DIFF_INSERT, k]);
+    const g = [r].concat(s), d = S(g).map((k) => k[1]), m = [[C.DIFF_EQUAL, d[0]]], p = d.slice(1).map((k) => [C.DIFF_INSERT, k]);
     return m.concat(p);
   }
   const i = r[1], t = s.map((g) => g[1]), a = i.body, l = {
@@ -785,19 +785,19 @@ function O(e) {
   let o = !1, h = l.body;
   const f = [];
   for (const g of t) {
-    const _ = g.body;
+    const d = g.body;
     if (g.uuid && l.uuid && g.uuid != l.uuid) {
       f.push(g);
       continue;
     }
-    if (o && h != _ && a != _) {
+    if (o && h != d && a != d) {
       f.push(g);
       continue;
     }
-    !o && a != _ && (o = !0, h = _, l.body = g.body, l.src = g.src), !l.uuid && g.uuid && (l.uuid = g.uuid, l.src = g.src), g.level && i.level != g.level && (l.level = g.level, l.src = g.src);
+    !o && a != d && (o = !0, h = d, l.body = g.body, l.src = g.src), !l.uuid && g.uuid && (l.uuid = g.uuid, l.src = g.src), g.level && i.level != g.level && (l.level = g.level, l.src = g.src);
   }
-  const c = [[A.DIFF_EQUAL, l]], u = f.map((g) => [A.DIFF_INSERT, g]), d = S(u);
-  return c.concat(d);
+  const c = [[C.DIFF_EQUAL, l]], u = f.map((g) => [C.DIFF_INSERT, g]), _ = S(u);
+  return c.concat(_);
 }
 function S(e) {
   const n = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map(), s = /* @__PURE__ */ new Map(), i = [], t = [];
@@ -815,8 +815,8 @@ function S(e) {
     if (o.size > 1) {
       const h = s.get(l), f = i[h], c = f.body;
       let u = c;
-      for (const d of o)
-        d != c && (u = J(u, d));
+      for (const _ of o)
+        _ != c && (u = K(u, _));
       i[h] = {
         src: f.src,
         uuid: f.uuid,
@@ -825,9 +825,9 @@ function S(e) {
       }, t[h] += ` Merged content of duplicated uuid ${f.uuid} from ${o.size} blocks`;
     }
   }
-  return i.map((l, o) => [A.DIFF_INSERT, l, t[o]]);
+  return i.map((l, o) => [C.DIFF_INSERT, l, t[o]]);
 }
-var A = /* @__PURE__ */ ((e) => (e[e.DIFF_DELETE = -1] = "DIFF_DELETE", e[e.DIFF_EQUAL = 0] = "DIFF_EQUAL", e[e.DIFF_INSERT = 1] = "DIFF_INSERT", e))(A || {});
+var C = /* @__PURE__ */ ((e) => (e[e.DIFF_DELETE = -1] = "DIFF_DELETE", e[e.DIFF_EQUAL = 0] = "DIFF_EQUAL", e[e.DIFF_INSERT = 1] = "DIFF_INSERT", e))(C || {});
 class W {
   // Keeping our own length variable is faster than looking it up.
   /**
@@ -935,17 +935,18 @@ class V {
    * differentiate the baseInsert and newInsert, keep all the non-overlapping operations
    */
   diff_insert_ops(n, r) {
-    return this.diff_logseqMode(n.map((t) => t[1]), r.map((t) => t[1])).flat(1).map((t) => [A.DIFF_INSERT, t[1]]);
+    return this.diff_logseqMode(n.map((t) => t[1]), r.map((t) => t[1])).flat(1).map((t) => [C.DIFF_INSERT, t[1]]);
   }
 }
 function Z(e, n, r) {
   const s = [];
   let i = !1;
+  n.length < e.length && (n = n.concat(Array(e.length - n.length).fill(r)));
   for (const [t, a] of e.entries()) {
     i = !0;
     for (const l of a) {
       const [o, h] = l;
-      (o === A.DIFF_EQUAL || o === A.DIFF_INSERT) && (i ? h.uuid ? (s.push(h.uuid), h.uuid == n[t] && (i = !1)) : (s.push(n[t]), i = !1) : h.uuid ? s.push(h.uuid) : s.push(r));
+      (o === C.DIFF_EQUAL || o === C.DIFF_INSERT) && (i ? h.uuid ? (s.push(h.uuid), h.uuid == n[t] && (i = !1)) : (s.push(n[t]), i = !1) : h.uuid ? s.push(h.uuid) : s.push(r));
     }
   }
   return s;
@@ -955,32 +956,32 @@ function q(e, n, r) {
   let i = 0;
   for (const [t, a] of e.entries())
     for (const l of a) {
-      const [o, h, f] = l, c = z(l[1]), u = document.createElement("tr");
+      const [o, h, f] = l, c = J(l[1]), u = document.createElement("tr");
       if (u.style.padding = "0 0.2em", u.style.borderRadius = "0.2em", n) {
         const m = document.createElement("td");
-        m.innerText = o === A.DIFF_INSERT ? "" : n[t], m.style.opacity = "0.5", u.appendChild(m);
+        m.innerText = o === C.DIFF_INSERT ? "" : n[t] || "", m.style.opacity = "0.5", u.appendChild(m);
       }
       if (r) {
         const m = document.createElement("td");
-        m.innerText = o === A.DIFF_DELETE && r[i] ? "" : r[i] || "", m.style.opacity = "0.5", u.appendChild(m);
+        m.innerText = o === C.DIFF_DELETE ? "" : r[i] || "", m.style.opacity = "0.5", u.appendChild(m);
       }
-      const d = document.createElement("td");
-      d.innerText = t.toString(), d.style.borderRight = "1px solid #e1e4e8";
-      const g = document.createElement("td");
-      g.innerText = c, g.style.whiteSpace = "pre", u.appendChild(d), u.appendChild(g);
       const _ = document.createElement("td");
-      switch (_.innerHTML = f || "", u.appendChild(_), o) {
-        case A.DIFF_INSERT:
+      _.innerText = t.toString(), _.style.borderRight = "1px solid #e1e4e8";
+      const g = document.createElement("td");
+      g.innerText = c, g.style.whiteSpace = "pre", u.appendChild(_), u.appendChild(g);
+      const d = document.createElement("td");
+      switch (d.innerHTML = f || "", u.appendChild(d), o) {
+        case C.DIFF_INSERT:
           u.style.backgroundColor = "#e6ffed", u.style.color = "#24292e";
           break;
-        case A.DIFF_EQUAL:
+        case C.DIFF_EQUAL:
           u.style.color = "#24292e", h.src === L.BLOCK_SOURCE_BRANCH && (u.style.backgroundColor = "#fff2cc");
           break;
-        case A.DIFF_DELETE:
+        case C.DIFF_DELETE:
           u.style.backgroundColor = "#ffeef0", u.style.color = "#24292e", u.style.textDecoration = "line-through";
           break;
       }
-      s.appendChild(u), o !== A.DIFF_DELETE && (i += 1);
+      s.appendChild(u), o !== C.DIFF_DELETE && (i += 1);
     }
   return s;
 }
@@ -1014,22 +1015,22 @@ class G {
         if (h[c] === void 0)
           h[c] = N(u);
         else {
-          const d = N(u);
-          h[c][0] = h[c][0].concat(d[0]), h[c][1] = h[c][1].concat(d[1]), h[c][2] = s.diff_insert_ops(h[c][2], d[2]);
+          const _ = N(u);
+          h[c][0] = h[c][0].concat(_[0]), h[c][1] = h[c][1].concat(_[1]), h[c][2] = s.diff_insert_ops(h[c][2], _[2]);
         }
       return h;
     }, t), l = [];
     let o = 0;
     for (const [h, f] of a.entries()) {
-      const [c, u, d] = f;
+      const [c, u, _] = f;
       if (c.length >= 1)
-        l.push([[A.DIFF_DELETE, n[h]]]), o += 1;
+        l.push([[C.DIFF_DELETE, n[h]]]), o += 1;
       else if (u.length >= 1) {
-        const _ = O(u);
-        l.push(_), o += 1;
+        const d = O(u);
+        l.push(d), o += 1;
       } else
         console.warn(`No DIFF_EQUAL or DIFF_DELETE at position ${h}`);
-      const g = S(d);
+      const g = S(_);
       o === 0 ? (l.push(g), o += 1) : l[o - 1] = l[o - 1].concat(g);
     }
     return l;

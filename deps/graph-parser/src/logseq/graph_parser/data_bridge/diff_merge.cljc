@@ -74,7 +74,7 @@
   {:pre [(string? page-name)]}
   (let [sanitized-page (gp-util/page-name-sanity-lc page-name)
         page-id (:db/id (d/entity db [:block/name sanitized-page]))
-        root (d/entity db page-id)] ;; TODO Junyi
+        root (d/entity db page-id)]
     (loop [result []
            children (sort-by-left db (:block/_parent root) root)
            ;; BFS log of walking depth
@@ -102,7 +102,7 @@
         blocks (d/pull-many db [:block/uuid :block/content :block/level] (map :id walked))
         levels (map :level walked)
         blocks (map (fn [block level]
-                      {:uuid   (:block/uuid block)
+                      {:uuid   (str (:block/uuid block)) ;; Force to be string
                        :body   (:block/content block)
                        :level  level})
                     blocks levels)]
@@ -117,6 +117,7 @@
   [blocks content format {:keys [user-config block-pattern]}]
   {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)]
+    ;; (prn "DEBUG blocks:" blocks) ;; TODO Junyi
     (loop [headings []
            blocks (reverse blocks)
            properties {}
@@ -131,8 +132,7 @@
                          (assoc pos-meta :end_pos end-pos)
                          pos-meta)]
           (cond
-            (or (= 0 (:end_pos pos-meta)) ;; pre-block or first block
-                (gp-block/heading-block? block))
+            (gp-block/heading-block? block)
             (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
               (recur (conj headings {:body  content
                                      :level (:level (second block))
@@ -143,7 +143,12 @@
             (let [new-props (:properties (gp-block/extract-properties (second block) (assoc user-config :format format)))]
               ;; sending the current end pos to next, as it's not finished yet
               ;; supports multiple properties sub-block possible in future
-              (recur headings (rest blocks) (merge properties new-props) (:end_pos pos-meta)))
+              (if (= 0 (:start_pos pos-meta))
+                (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
+                  (recur (conj headings {:body content
+                                         :level 1 ;; force the level of pre blockto be 1 for better diff
+                                         :uuid (:id (merge properties new-props))}) (rest blocks) {} (:start_pos pos-meta)))
+               (recur headings (rest blocks) (merge properties new-props) (:end_pos pos-meta))))
 
             :else
             (recur headings (rest blocks) properties (:end_pos pos-meta))))
