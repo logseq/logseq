@@ -1,7 +1,7 @@
 <!-- logo -->
 <p align="center">
-    <a href="https://logseq.com" alt="Logseq Website">
-    <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="173"/></a>
+    <a href="https://logseq.com" alt="Logseq Logo">
+    <img src="https://user-images.githubusercontent.com/25513724/220608753-f33db466-af72-4611-b603-411440c15ed0.png?sanatize=true" height="173"/></a>
 </p>
 
 <h1 align="center"> Logseq </h1>
