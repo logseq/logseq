@@ -526,21 +526,24 @@
                                                       (when (coll? refs)
                                                         refs))))
                                             (map :block/original-name))
-                         block {:uuid id
-                                :content content
-                                :level 1
-                                :properties properties
-                                :properties-order (vec properties-order)
-                                :properties-text-values properties-text-values
-                                :invalid-properties invalid-properties
-                                :refs property-refs
-                                :pre-block? true
-                                :unordered true
-                                :macros (extract-macros-from-ast body)
-                                :body body}
-                         block (with-page-block-refs block false supported-formats db date-formatter)
-                         block' (update block :refs concat (:block-refs pre-block-properties))]
-                     (block-keywordize block'))
+                         block {:block/uuid id
+                                :block/content content
+                                :block/level 1
+                                :block/properties properties
+                                :block/properties-order (vec properties-order)
+                                :block/properties-text-values properties-text-values
+                                :block/invalid-properties invalid-properties
+                                :block/pre-block? true
+                                :block/unordered true
+                                :block/macros (extract-macros-from-ast body)
+                                :block/body body}
+                         {:keys [tags refs]}
+                         (with-page-block-refs {:body body :refs property-refs} false supported-formats db date-formatter)]
+                     (cond-> block
+                             tags
+                             (assoc :block/tags tags)
+                             true
+                             (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
