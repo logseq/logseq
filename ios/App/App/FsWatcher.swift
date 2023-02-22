@@ -45,7 +45,7 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
         call.resolve()
     }
 
-    public func recevedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?) {
+    public func receivedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?) {
         // NOTE: Event in js {dir path content stat{mtime}}
         switch event {
         case .Unlink:
@@ -112,7 +112,7 @@ extension URL {
 // MARK: PollingWatcher
 
 public protocol PollingWatcherDelegate {
-    func recevedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?)
+    func receivedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?)
 }
 
 public enum PollingWatcherEvent {
@@ -253,14 +253,14 @@ public class PollingWatcher {
             if let idx = self.metaDb.index(forKey: url) {
                 let (_, oldMeta) = self.metaDb.remove(at: idx)
                 if oldMeta != meta {
-                    self.delegate?.recevedNotification(url, .Change, meta)
+                    self.delegate?.receivedNotification(url, .Change, meta)
                 }
             } else {
-                self.delegate?.recevedNotification(url, .Add, meta)
+                self.delegate?.receivedNotification(url, .Add, meta)
             }
         }
         for url in self.metaDb.keys {
-            self.delegate?.recevedNotification(url, .Unlink, nil)
+            self.delegate?.receivedNotification(url, .Unlink, nil)
         }
         self.metaDb = newMetaDb
     }

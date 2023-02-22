@@ -91,7 +91,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Delete to previous block, and check cursor postion, with markup
+  // Delete to previous block, and check cursor position, with markup
   await block.mustFill('`012345`')
   await block.enterNext()
   await block.mustType('`abcdef', { toBe: '`abcdef`' }) // "`" auto-completes
@@ -111,7 +111,7 @@ test.skip('backspace and cursor position #4897', async ({ page, block }) => {
 test.skip('next block and cursor position', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Press Enter and check cursor postion, with markup
+  // Press Enter and check cursor position, with markup
   await block.mustType('abcde`12345', { toBe: 'abcde`12345`' }) // "`" auto-completes
   for (let i = 0; i < 7; i++) {
     await page.keyboard.press('ArrowLeft')
@@ -131,7 +131,7 @@ test(
   // cases should trigger [[]] #3251
   async ({ page, block }) => {
     // This test requires dev mode
-    test.skip(process.env.RELEASE === 'true', 'not avaliable for release version')
+    test.skip(process.env.RELEASE === 'true', 'not available for release version')
 
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,

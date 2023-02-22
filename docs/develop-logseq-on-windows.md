@@ -6,12 +6,12 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 ## Pre-requisites
 * Ensure `Set-ExecutionPolicy Unrestricted` (or other equivalent)
 * Good network connection. Here's [An example of setting up proxy in PowerShell](#an-example-of-setting-up-proxy-in-powershell)
-* Node.js 16.x
+* Node.js 18.x
 * Clojure (follow this [Guidance](https://clojure.org/guides/getting_started#_installation_on_windows))
 * JRE 8 (required for Clojure)
 * Visual Studio (required for desktop app)
 
-(updated 20220218. May confirm via JAVA_VERSION and NODE_VERSION in [THIS FILE](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml))
+(updated 20230221. May confirm via JAVA_VERSION and NODE_VERSION in [THIS FILE](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml))
 
 ### An example of installing pre-requisites on Windows
 * Install [Chocolatey](https://chocolatey.org/)
@@ -19,10 +19,10 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 * Install NVM for Windows, Node.js, and Yarn
   ```
   choco install nvm
-  nvm install 16.13 (or whatever version)
-  nvm use 16.13
+  nvm install 18.12.0 (or whatever version)
+  nvm use 18.12.0
   npm install -g yarn
-  nvm use 16.13
+  nvm use 18.12.0
   ```
 * Install [clj-on-windows](https://github.com/clojure/tools.deps.alpha/wiki/clj-on-Windows)
 
@@ -30,7 +30,7 @@ Congrats! The pre-requisites are ready.
 
 ## Set-up development environment (web app)
 
-The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.  
+The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.
 Go to your cloned Logseq repo. Then install dependencies, execute the `clj` equivalent of `yarn watch`. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`.
 
 * Copy files in `resources` to `static`

@@ -137,7 +137,7 @@
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []
-                                     (export/export-blocks [(:block/uuid page)])))}})
+                                     (export/export-blocks (:block/name page))))}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))

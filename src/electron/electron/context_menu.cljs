@@ -3,7 +3,7 @@
             ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
             ["electron-dl" :refer [download]]))
 
-;; context menu is registerd in window/setup-window-listeners!
+;; context menu is registered in window/setup-window-listeners!
 (defn setup-context-menu!
   [^js win]
   (let [web-contents (.-webContents win)

@@ -298,11 +298,3 @@
 
          (ui/icon "maximize")]]
        [:img {:src asset-path}]])))
-
-(defn human-page-name
-  [page-name]
-  (cond
-    (string/starts-with? page-name "hls__")
-    (pdf-utils/fix-local-asset-pagename page-name)
-
-    :else (util/trim-safe page-name)))

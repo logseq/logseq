@@ -133,7 +133,7 @@
 (defonce *file-tx (atom nil))
 
 (defn- parse-and-load-file!
-  [repo-url file {:keys [new-graph? verbose skip-db-transact?]
+  [repo-url file {:keys [new-graph? verbose skip-db-transact? extracted-block-ids]
                   :or {skip-db-transact? true}}]
   (try
     (reset! *file-tx
@@ -143,7 +143,8 @@
                                      (merge {:new-graph? new-graph?
                                              :re-render-root? false
                                              :from-disk? true
-                                             :skip-db-transact? skip-db-transact?}
+                                             :skip-db-transact? skip-db-transact?
+                                             :extracted-block-ids extracted-block-ids}
                                             (when (some? verbose) {:verbose verbose}))))
     (state/set-parsing-state! (fn [m]
                                 (update m :finished inc)))
@@ -182,7 +183,8 @@
         total (count supported-files)
         large-graph? (> total 1000)
         *page-names (atom #{})
-        *page-name->path (atom {})]
+        *page-name->path (atom {})
+        *extracted-block-ids (atom #{})]
     (when (seq delete-data) (db/transact! repo-url delete-data {:delete-files? true}))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -210,7 +212,8 @@
 
             (when yield-for-ui? (async/<! (async/timeout 1)))
 
-            (let [opts' (select-keys opts [:new-graph? :verbose])
+            (let [opts' (-> (select-keys opts [:new-graph? :verbose])
+                            (assoc :extracted-block-ids *extracted-block-ids))
                   ;; whiteboards might have conflicting block IDs so that db transaction could be failed
                   opts' (if whiteboard?
                           (assoc opts' :skip-db-transact? false)
