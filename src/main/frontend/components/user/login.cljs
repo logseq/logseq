@@ -35,13 +35,18 @@
 
 (rum/defc page
   []
-  (let [[ready?, set-ready?] (rum/use-state false)]
+  (let [[ready?, set-ready?] (rum/use-state false)
+        *ref-el (rum/use-ref nil)]
 
     (rum/use-effect!
       (fn [] (setup-configure!)
-        (set-ready? true)) [])
+        (set-ready? true)
+        (when-let [^js el (rum/deref *ref-el)]
+          (js/setTimeout #(some-> (.querySelector el "input[name=username]")
+                                  (.focus)) 100))) [])
 
     [:div.cp__user-login
+     {:ref *ref-el}
      (when ready?
        (LSAuthenticator
          (fn [^js op]

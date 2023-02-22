@@ -25,6 +25,7 @@
     --amplify-components-button-link-hover-background-color: transparent;
     --amplify-components-button-link-active-background-color: transparent;
     --amplify-components-textfield-color: var(--ls-primary-text-color);
+    --amplify-components-checkbox-icon-background-color: var(--color-indigo-600);
 
     border-radius: 4px;
     box-shadow: none;
