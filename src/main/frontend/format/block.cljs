@@ -20,7 +20,7 @@ and handles unexpected failure. For in-app editting, import or pasting content."
   [blocks content format {:keys [with-id?]
                           :or {with-id? true}}]
   (try
-    (gp-block/extract-blocks blocks content with-id? format
+    (gp-block/extract-blocks blocks content with-id? format nil
                              {:user-config (state/get-config)
                               :block-pattern (config/get-block-pattern format)
                               :supported-formats (gp-config/supported-formats)

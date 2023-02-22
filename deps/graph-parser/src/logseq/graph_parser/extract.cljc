@@ -150,7 +150,7 @@
                        (assoc :page-name page-name
                               :original-page-name page))
           new-uuids (when db (extract-uuids format ast content options'))
-          blocks (->> (gp-block/extract-blocks ast content false format options')
+          blocks (->> (gp-block/extract-blocks ast content false format new-uuids options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
           ref-pages (atom #{})
@@ -170,10 +170,6 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                       blocks)
-          _ (when (and db (not= (count new-uuids) (count blocks)))
-              (prn "mismatch uuids and blocks" (count new-uuids) "and" (count blocks)) ;; TODO Junyi
-              (prn "ast:" ast)
-              (prn "blocks:" blocks))
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
             [(:block/properties (first blocks))
