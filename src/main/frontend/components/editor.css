@@ -44,7 +44,6 @@
   &[data-modal-name="commands"] {
     width: 380px !important;
     max-width: 90vw !important;
-    max-height: 520px !important;
   }
 }
 
