@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.assets
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
             [frontend.config :as config]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
@@ -16,6 +17,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -66,7 +68,7 @@
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          data     (pr-str {:highlights highlights :extra extra})]
+          data     (with-out-str (pprint/pprint {:highlights highlights :extra extra}))]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$
@@ -212,9 +214,11 @@
       (editor-handler/delete-block-aux! block true))))
 
 (defn copy-hl-ref!
-  [highlight]
+  [highlight ^js viewer]
   (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
-    (util/copy-to-clipboard! (block-ref/->block-ref (:block/uuid ref-block)))))
+    (util/copy-to-clipboard!
+     (block-ref/->block-ref (:block/uuid ref-block)) nil
+     (pdf-windows/resolve-own-window viewer))))
 
 (defn open-block-ref!
   [block]
@@ -294,11 +298,3 @@
 
          (ui/icon "maximize")]]
        [:img {:src asset-path}]])))
-
-(defn human-page-name
-  [page-name]
-  (cond
-    (string/starts-with? page-name "hls__")
-    (pdf-utils/fix-local-asset-pagename page-name)
-
-    :else (util/trim-safe page-name)))

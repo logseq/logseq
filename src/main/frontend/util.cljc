@@ -777,7 +777,13 @@
      ([s]
       (utils/writeClipboard (clj->js {:text s})))
      ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+      (utils/writeClipboard (clj->js {:text s :html html})))
+     ([s html owner-window]
+      (-> (cond-> {:text s}
+            (not (string/blank? html))
+            (assoc :html html))
+          (bean/->js)
+          (utils/writeClipboard owner-window)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -1491,3 +1497,19 @@ Arg *stop: atom, reset to true to stop the loop"
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
+
+
+(defmacro concatv
+  "Vector version of concat. non-lazy"
+  [& args]
+  `(vec (concat ~@args)))
+
+(defmacro mapcatv
+  "Vector version of mapcat. non-lazy"
+  [f coll & colls]
+  `(vec (mapcat ~f ~coll ~@colls)))
+
+(defmacro removev
+  "Vector version of remove. non-lazy"
+  [pred coll]
+  `(vec (remove ~pred ~coll)))

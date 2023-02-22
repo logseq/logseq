@@ -1,33 +1,31 @@
 (ns ^:no-doc frontend.handler.export
-  (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
-            [cljs.pprint :as pprint]
-            [clojure.set :as s]
-            [clojure.string :as string]
-            [clojure.walk :as walk]
-            [datascript.core :as d]
-            [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.extensions.zip :as zip]
-            [frontend.external.roam-export :as roam-export]
-            [frontend.format :as f]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.format.protocol :as fp]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.modules.file.core :as outliner-file]
-            [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.publishing.html :as html]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.util.property :as property]
-            [goog.dom :as gdom]
-            [lambdaisland.glogi :as log]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [frontend.handler.notification :as notification])
+  (:require
+   ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+   [cljs.pprint :as pprint]
+   [clojure.set :as s]
+   [clojure.string :as string]
+   [clojure.walk :as walk]
+   [datascript.core :as d]
+   [frontend.config :as config]
+   [frontend.db :as db]
+   [frontend.extensions.zip :as zip]
+   [frontend.external.roam-export :as roam-export]
+   [frontend.format.mldoc :as mldoc]
+   [frontend.handler.notification :as notification]
+   [frontend.mobile.util :as mobile-util]
+   [frontend.modules.file.core :as outliner-file]
+   [frontend.modules.outliner.tree :as outliner-tree]
+   [frontend.publishing.html :as html]
+   [frontend.state :as state]
+   [frontend.util :as util]
+   [frontend.util.property :as property]
+   [goog.dom :as gdom]
+   [lambdaisland.glogi :as log]
+   [logseq.graph-parser.mldoc :as gp-mldoc]
+   [logseq.graph-parser.property :as gp-property]
+   [logseq.graph-parser.util.block-ref :as block-ref]
+   [logseq.graph-parser.util.page-ref :as page-ref]
+   [promesa.core :as p])
   (:import
    [goog.string StringBuffer]))
 
@@ -63,13 +61,6 @@
    (outliner-tree/blocks->vec-tree (str root-block-uuid))
    (outliner-file/tree->file-content {:init-level 1})))
 
-(defn- get-block-content
-  [block]
-  (->
-   [block]
-   (outliner-tree/blocks->vec-tree (str (:block/uuid block)))
-   (outliner-file/tree->file-content {:init-level 1})))
-
 (defn download-file!
   [file-path]
   (when-let [repo (state/get-current-repo)]
@@ -82,7 +73,8 @@
         (.setAttribute anchor "download" file-path)
         (.click anchor)))))
 
-(defn export-repo-as-html!
+(defn download-repo-as-html!
+  "download public pages as html"
   [repo]
   (when-let [db (db/get-db repo)]
     (let [[db asset-filenames]           (if (state/all-pages-public?)
@@ -143,16 +135,6 @@
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
 
-(defn get-md-file-contents
-  [repo]
-  #_:clj-kondo/ignore
-  (filter (fn [[path _]]
-            (let [path (string/lower-case path)]
-              (re-find #"\.(?:md|markdown)$" path)))
-          (get-file-contents repo {:init-level 1
-                                   :heading-to-list? true})))
-
-
 (defn- get-embed-pages-from-ast [ast]
   (let [result (transient #{})]
     (doseq [item ast]
@@ -168,9 +150,9 @@
                         (let [arguments (:arguments (second i))
                               page-ref (first arguments)
                               page-name (-> page-ref
-                                          (subs 2)
-                                          (#(subs % 0 (- (count %) 2)))
-                                          (string/lower-case))]
+                                            (subs 2)
+                                            (#(subs % 0 (- (count %) 2)))
+                                            (string/lower-case))]
                           (conj! result page-name)
                           i)
                         :else
@@ -248,15 +230,6 @@
      :embed-blocks (s/union embed-blocks-1 embed-blocks-2 embed-blocks*)
      :block-refs (s/union block-refs-1 block-refs-2 block-refs*)}))
 
-(defn get-blocks-page&block-refs [repo block-uuids embed-pages embed-blocks block-refs]
-  (let [[embed-pages embed-blocks block-refs]
-        (reduce (fn [[embed-pages embed-blocks block-refs] block-uuid]
-                  (let [result (get-block-page&block-refs repo block-uuid embed-pages embed-blocks block-refs)]
-                    [(:embed-pages result) (:embed-blocks result) (:block-refs result)]))
-                [embed-pages embed-blocks block-refs] block-uuids)]
-    {:embed-pages embed-pages
-     :embed-blocks embed-blocks
-     :block-refs block-refs}))
 
 (defn get-page-page&block-refs [repo page-name embed-pages embed-blocks block-refs]
   (let [page-name* (util/page-name-sanity-lc page-name)
@@ -292,136 +265,18 @@
      :embed-blocks (s/union embed-blocks-1 embed-blocks-2 embed-blocks*)
      :block-refs (s/union block-refs-1 block-refs-2 block-refs*)}))
 
-(defn- get-export-references [repo {:keys [embed-pages embed-blocks block-refs]}]
-  (let [embed-blocks-and-contents
-        (mapv (fn [id]
-                (let [id-s (str id)
-                      id (uuid id-s)]
-                  [id-s
-                   [(get-blocks-contents repo id)
-                    (get-block-content (db/pull [:block/uuid id]))]]))
-              (s/union embed-blocks block-refs))
-
-        embed-pages-and-contents
-        (mapv (fn [page-name] [page-name (get-page-content repo page-name)]) embed-pages)]
-    {:embed_blocks embed-blocks-and-contents
-     :embed_pages embed-pages-and-contents}))
-
-(defn- export-files-as-markdown [repo files heading-to-list?]
-  (->> files
-       (mapv (fn [{:keys [path content names format]}]
-               (when (first names)
-                 [path (fp/exportMarkdown f/mldoc-record content
-                                          (f/get-default-config format {:export-heading-to-list? heading-to-list?})
-                                          (js/JSON.stringify
-                                           (clj->js (get-export-references
-                                                     repo
-                                                     (get-page-page&block-refs repo (first names) #{} #{} #{})))))])))))
-
-(defn- export-files-as-opml [repo files]
-  (->> files
-       (mapv (fn [{:keys [path content names format]}]
-               (when (first names)
-                   (let [path
-                         (string/replace
-                          (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
-                     [path (fp/exportOPML f/mldoc-record content
-                                          (f/get-default-config format)
-                                          (first names)
-                                          (js/JSON.stringify
-                                           (clj->js (get-export-references
-                                                     repo
-                                                     (get-page-page&block-refs repo (first names) #{} #{} #{})))))]))))))
-
-(defn export-blocks-as-aux
-  [repo root-block-uuids auxf]
-  {:pre [(> (count root-block-uuids) 0)]}
-  (let [f #(get-export-references repo (get-blocks-page&block-refs repo % #{} #{} #{}))
-        root-blocks (mapv #(db/entity [:block/uuid %]) root-block-uuids)
-        blocks (mapcat #(db/get-block-and-children repo %) root-block-uuids)
-        refs (f (mapv #(str (:block/uuid %)) blocks))
-        contents (mapv #(get-blocks-contents repo %) root-block-uuids)
-        content (string/join "\n" (mapv string/trim-newline contents))
-        format (or (:block/format (first root-blocks)) (state/get-preferred-format))]
-    (auxf content format refs)))
-
-(defn export-blocks-as-opml
-  [repo root-block-uuids]
-  (export-blocks-as-aux repo root-block-uuids
-                        #(fp/exportOPML f/mldoc-record %1
-                                        (f/get-default-config %2)
-                                        "untitled"
-                                        (js/JSON.stringify (clj->js %3)))))
-
-(defn export-blocks-as-markdown
-  [repo root-block-uuids indent-style remove-options]
-  (export-blocks-as-aux repo root-block-uuids
-                        #(fp/exportMarkdown f/mldoc-record %1
-                                            (f/get-default-config
-                                             %2
-                                             {:export-md-indent-style indent-style
-                                              :export-md-remove-options remove-options})
-                                            (js/JSON.stringify (clj->js %3)))))
-(defn export-blocks-as-html
-  [repo root-block-uuids]
-  (export-blocks-as-aux repo root-block-uuids
-                        #(fp/toHtml f/mldoc-record %1
-                                    (f/get-default-config %2)
-                                    (js/JSON.stringify (clj->js %3)))))
-
-(defn- get-file-contents-with-suffix
-  [repo]
-  (let [db (db/get-db repo)
-        md-files (get-md-file-contents repo)]
-    (->>
-     md-files
-     (map (fn [[path content]] {:path path :content content
-                                :names (d/q '[:find [?n ?n2]
-                                              :in $ ?p
-                                              :where [?e :file/path ?p]
-                                              [?e2 :block/file ?e]
-                                              [?e2 :block/name ?n]
-                                              [?e2 :block/original-name ?n2]] db path)
-                                :format (gp-util/get-format path)})))))
-
 
 (defn- export-file-on-mobile [data path]
   (p/catch
-      (.writeFile Filesystem (clj->js {:path path
-                                       :data data
-                                       :encoding (.-UTF8 Encoding)
-                                       :recursive true}))
-      (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
+   (.writeFile Filesystem (clj->js {:path path
+                                    :data data
+                                    :encoding (.-UTF8 Encoding)
+                                    :recursive true}))
+   (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
     (fn [error]
-        (notification/show! "Export failed!" :error)
-        (log/error :export-file-failed error))))
+      (notification/show! "Export failed!" :error)
+      (log/error :export-file-failed error))))
 
-
-(defn export-repo-as-markdown!
-  [repo]
-  (when-let [files (get-file-contents-with-suffix repo)]
-    (let [heading-to-list? (state/export-heading-to-list?)
-          files
-          (export-files-as-markdown repo files heading-to-list?)
-          zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-markdown")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
-
-(defn export-repo-as-opml!
-  #_:clj-kondo/ignore
-  [repo]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [files (get-file-contents-with-suffix repo)]
-      (let [files (export-files-as-opml repo files)
-            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-               (when-let [anchor (gdom/getElement "export-as-opml")]
-                 (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-                 (.setAttribute anchor "download" (.-name zipfile))
-                 (.click anchor)))))))
 
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)
@@ -506,12 +361,12 @@
                             js/encodeURIComponent
                             (str "data:text/edn;charset=utf-8,"))
           filename (file-name repo :edn)]
-     (if (mobile-util/native-platform?)
-       (export-file-on-mobile edn-str filename)
-       (when-let [anchor (gdom/getElement "download-as-edn-v2")]
-         (.setAttribute anchor "href" data-str)
-         (.setAttribute anchor "download" filename)
-         (.click anchor))))))
+      (if (mobile-util/native-platform?)
+        (export-file-on-mobile edn-str filename)
+        (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+          (.setAttribute anchor "href" data-str)
+          (.setAttribute anchor "download" filename)
+          (.click anchor))))))
 
 (defn- nested-update-id
   [vec-tree]

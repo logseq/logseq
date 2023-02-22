@@ -191,7 +191,7 @@
     (keyword format)))
 
 (defn path->file-name
-  ;; Only for interal paths, as they are converted to POXIS already
+  ;; Only for internal paths, as they are converted to POXIS already
   ;; https://github.com/logseq/logseq/blob/48b8e54e0fdd8fbd2c5d25b7f1912efef8814714/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L32
   ;; Should be converted to POXIS first for external paths
   [path]

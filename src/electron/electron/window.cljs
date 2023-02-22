@@ -8,6 +8,7 @@
             ["path" :as path]
             ["url" :as URL]
             [electron.state :as state]
+            [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.string :as string]))
 
@@ -18,44 +19,51 @@
                          (str "file://" (path/join js/__dirname "index.html"))
                          (str "file://" (path/join js/__dirname "electron.html"))))
 
-(defn create-main-window
+(defn create-main-window!
   ([]
-   (create-main-window MAIN_WINDOW_ENTRY))
+   (create-main-window! MAIN_WINDOW_ENTRY nil))
   ([url]
+   (create-main-window! url nil))
+  ([url opts]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
-         win-opts (cond->
-                    {:width                (.-width win-state)
-                     :height               (.-height win-state)
-                     :frame                true
-                     :titleBarStyle        "hiddenInset"
-                     :trafficLightPosition {:x 16 :y 16}
-                     :autoHideMenuBar      (not mac?)
-                     :webPreferences
-                     {:plugins                 true ; pdf
-                      :nodeIntegration         false
-                      :nodeIntegrationInWorker false
-                      :sandbox                 false
-                      :webSecurity             (not dev?)
-                      :contextIsolation        true
-                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
-                      ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                      ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                      :enableBlinkFeatures     'OverlayScrollbars'
-                      :preload                 (path/join js/__dirname "js/preload.js")}}
-                    linux?
-                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
-         win (BrowserWindow. (clj->js win-opts))]
+         win-opts  (cond->
+                     {:width                (.-width win-state)
+                      :height               (.-height win-state)
+                      :frame                true
+                      :titleBarStyle        "hiddenInset"
+                      :trafficLightPosition {:x 16 :y 16}
+                      :autoHideMenuBar      (not mac?)
+                      :webPreferences
+                      {:plugins                 true        ; pdf
+                       :nodeIntegration         false
+                       :nodeIntegrationInWorker false
+                       :nativeWindowOpen        true
+                       :sandbox                 false
+                       :webSecurity             (not dev?)
+                       :contextIsolation        true
+                       :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
+                       ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
+                       ;; to use `scollbar-gutter` after the feature is implemented in browsers.
+                       :enableBlinkFeatures     'OverlayScrollbars'
+                       :preload                 (path/join js/__dirname "js/preload.js")}}
+
+                     (seq opts)
+                     (merge opts)
+
+                     linux?
+                     (assoc :icon (path/join js/__dirname "icons/logseq.png")))
+         win       (BrowserWindow. (clj->js win-opts))]
      (.manage win-state win)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
-                             (let [url (.-url details)
-                                   urlObj (js/URL. url)
-                                   origin (.-origin urlObj)
+                             (let [url            (.-url details)
+                                   urlObj         (js/URL. url)
+                                   origin         (.-origin urlObj)
                                    requestHeaders (.-requestHeaders details)]
                                (if (and
-                                     (.hasOwnProperty requestHeaders "referer")
-                                     (not-empty (.-referer requestHeaders)))
+                                    (.hasOwnProperty requestHeaders "referer")
+                                    (not-empty (.-referer requestHeaders)))
                                  (callback #js {:cancel         false
                                                 :requestHeaders requestHeaders})
                                  (do
@@ -121,8 +129,8 @@
   [^js win]
   (when win
     (let [web-contents (. win -webContents)
-          new-win-handler
-          (fn [e url]
+          open-external!
+          (fn [url]
             (let [url (if (string/starts-with? url "file:")
                         (utils/safe-decode-uri-component url) url)
                   url (if-not win32? (string/replace url "file://" "") url)]
@@ -132,8 +140,7 @@
                           (.join path (. app getAppPath) %))
                         ["index.html" "electron.html"])
                 (logger/info "pass-window" url)
-                (open-default-app! url open)))
-            (.preventDefault e))
+                (open-default-app! url open))))
 
           will-navigate-handler
           (fn [e url]
@@ -141,13 +148,42 @@
             (open-default-app! url open))
 
           context-menu-handler
-          (context-menu/setup-context-menu! win)]
+          (context-menu/setup-context-menu! win)
+
+          window-open-handler
+          (fn [^js details]
+            (let [url         (.-url details)
+                  fullscreen? (.isFullScreen win)
+                  features    (string/split (.-features details) ",")
+                  features    (when (seq features)
+                                (reduce (fn [a b]
+                                          (let [[k v] (string/split b "=")]
+                                            (if (string? v)
+                                              (assoc a (keyword k) (parse-long (string/trim v)))
+                                              a))) {} features))]
+              (-> (if (= url "about:blank")
+                    (merge {:action "allow"
+                            :overrideBrowserWindowOptions
+                            {:frame                true
+                             :titleBarStyle        "default"
+                             :trafficLightPosition {:x 16 :y 16}
+                             :autoHideMenuBar      (not mac?)
+                             :fullscreenable       (not fullscreen?)
+                             :webPreferences
+                             {:plugins          true
+                              :nodeIntegration  false
+                              :webSecurity      (not dev?)
+                              :preload          (path/join js/__dirname "js/preload.js")
+                              :nativeWindowOpen true}}}
+                           features)
+                    (do (open-external! url) {:action "deny"}))
+                  (bean/->js))))]
 
       (doto web-contents
-        (.on "new-window" new-win-handler)
         (.on "will-navigate" will-navigate-handler)
         (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "page-title-updated" #(.send web-contents "restore-zoom-level")))
+        (.on "page-title-updated" #(.send web-contents "restore-zoom-level"))
+        (.setWindowOpenHandler window-open-handler))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
@@ -157,7 +193,6 @@
       (fn []
         (doto web-contents
           (.off "context-menu" context-menu-handler)
-          (.off "new-window" new-win-handler)
           (.off "will-navigate" will-navigate-handler))
 
         (.off win "enter-full-screen")

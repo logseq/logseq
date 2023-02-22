@@ -5,7 +5,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
 
 /***
  * Test alias features
- * Test search refering features
+ * Test search referring features
  * Consider diacritics
  ***/
 
@@ -101,7 +101,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   // the target page will contains the content in
   //   alias_test_content_1,
   //   alias_test_content_2, and
-  //   alias_test_content_3 sequentialy, to validate the target page state
+  //   alias_test_content_3 sequentially, to validate the target page state
   await page.type('textarea >> nth=0', 'alias:: [[' + alias_name, {delay: 10})
   await page.keyboard.press('Enter', {delay: 200}) // Enter for finishing selection
   await page.keyboard.press('Enter', {delay: 200}) // double Enter for exit property editing
