@@ -828,7 +828,8 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (and (state/enable-journals? repo)
-               (not (state/loading-files? repo)))
+               (not (state/loading-files? repo))
+               (not (state/whiteboard-route?)))
       (state/set-today! (date/today))
       (when (or (config/local-db? repo)
                 (and (= "local" repo) (not (mobile-util/native-platform?))))
