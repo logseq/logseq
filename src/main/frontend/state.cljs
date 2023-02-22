@@ -207,6 +207,7 @@
      :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
+     :pdf/system-win?                       false
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
@@ -599,10 +600,6 @@ Similar to re-frame subscriptions"
    (and
     ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
-
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list? (sub-config)))))
 
 (defn enable-git-auto-push?
   [repo]

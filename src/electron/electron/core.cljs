@@ -228,42 +228,7 @@
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}
-                       {:role "editMenu"
-                        ;; https://github.com/electron/electron/blob/85f41d59aceabbdeee1fdec75770249c6335e73a/lib/browser/api/menu-item-roles.ts#L239-L276
-                        :submenu (concat
-                                  [{:label "Undo"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "undo")))
-                                    :accelerator "CommandOrControl+Z"}
-                                   {:label "Redo"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "redo")))
-                                    :accelerator "Shift+CommandOrControl+Z"}
-                                   {:type "separator"}
-                                   {:role "cut"}
-                                   {:label "Copy"
-                                    :click (fn []
-                                             (let [browser-window ^js/BrowserWindow @*win
-                                                   web-contents (.-webContents browser-window)]
-                                               (.send web-contents "invokeEditorHandler" "copy")))
-                                    :accelerator "CommandOrControl+C"}
-                                   {:role "paste"}]
-
-                                  (if mac?
-                                    [{:role "pasteAndMatchStyle"}
-                                     {:role "delete"}
-                                     {:role "selectAll"} ;; FIXME not work as expected
-                                     {:type "separator"}
-                                     {:label "Speech"
-                                      :submenu [{:role "startSpeaking"},
-                                                {:role "stopSpeaking"}]}]
-                                    [{:role "delete"}
-                                     {:type "separator"}
-                                     {:role "selectAll"}]))}
+                       {:role "editMenu"}
                        {:role "viewMenu"}
                        {:role "windowMenu"})
         ;; Windows has no about role
@@ -283,7 +248,7 @@
 
 (defn- setup-deeplink! []
   ;; Works for Deeplink v1.0.9
-  ;; :mainWindow is only used for handeling window restoring on second-instance,
+  ;; :mainWindow is only used for handling window restoring on second-instance,
   ;; But we already handle window restoring without deeplink.
   ;; https://github.com/glawson/electron-deeplink/blob/73d58edcde3d0e80b1819cd68a0c6e837a9c9258/src/index.ts#L150-L155
   (-> (Deeplink. #js
@@ -325,7 +290,7 @@
                (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
-                                     (logger/debug "window-all-closed" "Quiting...")
+                                     (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
@@ -335,7 +300,7 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
-                   ^js win (win/create-main-window)
+                   ^js win (win/create-main-window!)
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
@@ -377,7 +342,7 @@
                                       (let [_ (async/<! state/persistent-dbs-chan)]
                                         (if (or @win/*quitting? (not mac?))
                                           ;; MacOS: only cmd+q quitting will trigger actual closing
-                                          ;; otherwise, it's just hiding - don't do any actuall closing in that case
+                                          ;; otherwise, it's just hiding - don't do any actual closing in that case
                                           ;; except saving transit
                                           (when-let [win @*win]
                                             (when-let [dir (state/get-window-graph-path win)]
@@ -386,7 +351,7 @@
                                             (win/destroy-window! win)
                                             ;; FIXME: what happens when closing main window on Windows?
                                             (reset! *win nil))
-                                          ;; Just hiding - don't do any actuall closing operation
+                                          ;; Just hiding - don't do any actual closing operation
                                           (do (.preventDefault ^js/Event e)
                                               (if (and mac? (.isFullScreen win))
                                                 (do (.once win "leave-full-screen" #(.hide win))

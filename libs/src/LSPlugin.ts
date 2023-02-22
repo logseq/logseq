@@ -381,7 +381,7 @@ export interface IAppProxy {
   ) => Promise<void>
 
   /**
-   * Call external plugin command provided by models or registerd commands
+   * Call external plugin command provided by models or registered commands
    * @added 0.0.13
    * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
    * @param args

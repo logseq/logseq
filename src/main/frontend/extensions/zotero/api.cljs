@@ -35,15 +35,15 @@
     out))
 
 (defn parse-start [headers next-or-prev]
-  (let [inclue-text (case next-or-prev
-                      :next "rel=\"next\""
-                      :prev "rel=\"prev\"")
+  (let [include-text (case next-or-prev
+                       :next "rel=\"next\""
+                       :prev "rel=\"prev\"")
         links
         (str/split
          (:link (cske/transform-keys csk/->kebab-case-keyword headers)) ",")
         next-link   (->> links
-                       (filter (fn [l] (str/includes? l inclue-text)))
-                       first)]
+                         (filter (fn [l] (str/includes? l include-text)))
+                         first)]
     (when next-link
       (let [start    (str/index-of next-link "<")
             end      (str/last-index-of next-link ">;")

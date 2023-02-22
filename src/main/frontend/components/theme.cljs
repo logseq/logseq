@@ -1,5 +1,5 @@
 (ns frontend.components.theme
-  (:require [frontend.extensions.pdf.highlights :as pdf]
+  (:require [frontend.extensions.pdf.core :as pdf]
             [frontend.config :as config]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -73,7 +73,7 @@
                     ;; demo graph only
                     (and (= 1 (count repos)) (:example? (first repos))
                          (not (util/mobile?)))
-                    ;; not in publising mode
+                    ;; not in publishing mode
                     config/publishing?
                     ;; other graphs exists
                     (seq repos))
@@ -105,4 +105,4 @@
       :on-click on-click}
      child
 
-     (pdf/playground)]))
+     (pdf/default-embed-playground)]))
