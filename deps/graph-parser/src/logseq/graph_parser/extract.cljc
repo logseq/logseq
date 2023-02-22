@@ -138,9 +138,10 @@
           options' (-> options
                        (assoc :page-name page-name
                               :original-page-name page))
-          ;; base-diffblocks (gp-diff/db->diff-blocks db page-name) ;; TODO Junyi
-          ;; income-diffblocks (gp-diff/ast->diff-blocks ast content format options') ;; TODO Junyi
-          ;; _ (prn (gp-diff/diff base-diffblocks income-diffblocks)) ;; TODO Junyi
+          ;; base-diffblocks (gp-diff/db->diff-blocks db page-name)
+          ;; income-diffblocks (gp-diff/ast->diff-blocks ast content format options')
+          ;; diff-ops (gp-diff/diff base-diffblocks income-diffblocks)
+          ;; new-uuids (gp-diff/attachUUID diff-ops (map :uuid base-diffblocks))
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))

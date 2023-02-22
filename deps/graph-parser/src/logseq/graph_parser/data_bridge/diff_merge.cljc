@@ -2,8 +2,8 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require #?(:org.babashka/nbb ["./diff-merge.cjs$default" :refer [Merger Differ visualizeAsHTML]]
-               :default ["./diffmerge.js" :refer [Differ Merger visualizeAsHTML]])
+  (:require #?(:org.babashka/nbb ["./diff-merge.cjs$default" :refer [Merger Differ visualizeAsHTML attach_uuids]]
+               :default ["./diff-merge.js" :refer [Differ Merger visualizeAsHTML attach_uuids]])
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
@@ -31,6 +31,7 @@
 
 (defonce getHTML visualizeAsHTML)
 
+(defonce attachUUID attach_uuids)
 
 ;; Copy of db/sort-by-left
 (defn- sort-by-left

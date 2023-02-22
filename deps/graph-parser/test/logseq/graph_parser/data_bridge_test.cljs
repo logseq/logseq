@@ -1,5 +1,7 @@
 (ns logseq.graph-parser.data-bridge-test
   (:require [cljs.test :refer [deftest are]]
+            [logseq.db :as ldb]
+            [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.data-bridge.diff-merge :as gp-diff]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [cljs-bean.core :as bean]))
@@ -99,4 +101,85 @@
          :uuid nil}]]
      [[0 {:body "world"
          :level 4
-         :uuid nil}]]]))
+         :uuid nil}]]]
+         
+    "## hello
+\t- world
+\t  id:: 63e25526-3612-4fb1-8cf9-abcd12354abc
+\t\t- nice
+\t\t\t- nice
+\t\t\t- bingo
+\t\t\t- world"
+"## Halooooo
+\t- world
+\t\t- nice
+\t\t\t- nice
+\t\t\t- bingo
+\t\t\t- world"
+[[[-1 {:body "## hello"
+       :level 2
+       :uuid nil}]
+  [1  {:body "## Halooooo"
+       :level 2
+       :uuid nil}]
+  [1 {:body "world"
+      :level 2
+      :uuid nil}]]
+ [[-1 {:body "world\n  id:: 63e25526-3612-4fb1-8cf9-abcd12354abc"
+      :level 2
+      :uuid "63e25526-3612-4fb1-8cf9-abcd12354abc"}]]
+ [[0 {:body "nice"
+      :level 3
+      :uuid nil}]]
+ [[0 {:body "nice"
+      :level 4
+      :uuid nil}]]
+ [[0 {:body "bingo"
+      :level 4
+      :uuid nil}]]
+ [[0 {:body "world"
+      :level 4
+      :uuid nil}]]]))
+
+(deftest db->diffblocks
+  (let [conn (ldb/start-conn)]
+    (graph-parser/parse-file conn
+                             "foo.md"
+                             (str "- abc
+  id:: 11451400-0000-0000-0000-000000000000\n"
+                                  "- def
+  id:: 63246324-6324-6324-6324-632463246324\n")
+                             {})
+    (graph-parser/parse-file conn
+                             "bar.md"
+                             (str "- ghi
+  id:: 11451411-1111-1111-1111-111111111111\n"
+                                  "\t- jkl
+\t  id:: 63241234-1234-1234-1234-123412341234\n")
+                             {})
+    (are [page-name diff-blocks] (= (gp-diff/db->diff-blocks @conn page-name)
+                                    diff-blocks)
+      "foo"
+      [{:body "abc\nid:: 11451400-0000-0000-0000-000000000000" :uuid #uuid "11451400-0000-0000-0000-000000000000" :level 1}
+       {:body "def\nid:: 63246324-6324-6324-6324-632463246324" :uuid #uuid "63246324-6324-6324-6324-632463246324" :level 1}]
+      
+      "bar"
+      [{:body "ghi\nid:: 11451411-1111-1111-1111-111111111111" :uuid #uuid "11451411-1111-1111-1111-111111111111" :level 1}
+       {:body "jkl\nid:: 63241234-1234-1234-1234-123412341234" :uuid #uuid "63241234-1234-1234-1234-123412341234" :level 2}])
+    
+    (are [page-name text new-uuids] (= (let [old-blks (gp-diff/db->diff-blocks @conn page-name)
+                                             new-blks (text->diffblocks text)
+                                             diff-ops (gp-diff/diff old-blks new-blks)]
+                                         (bean/->clj (gp-diff/attachUUID diff-ops (bean/->js (map :uuid old-blks)) "NEW_ID")))
+                                       new-uuids)
+      "foo"
+      "- abc
+- def"
+      [#uuid "11451400-0000-0000-0000-000000000000"
+       "NEW_ID"]
+
+      "bar"
+      "- ghi
+\t- jkl"
+      [#uuid "11451411-1111-1111-1111-111111111111"
+       "NEW_ID"])))
