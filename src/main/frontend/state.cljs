@@ -278,7 +278,9 @@
      :graph/importing-state                 {}
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)})))
+     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
+     :whiteboard/last-persisted-at          {}
+     :whiteboard/pending-tx-data            {}})))
 
 ;; Block ast state
 ;; ===============
@@ -729,9 +731,13 @@ Similar to re-frame subscriptions"
     (get-in (get-route-match)
             [:path-params :name])))
 
+(defn whiteboard-route?
+  []
+  (= :whiteboard (get-current-route)))
+
 (defn get-current-whiteboard
   []
-  (when (= :whiteboard (get-current-route))
+  (when (whiteboard-route?)
     (get-in (get-route-match)
             [:path-params :name])))
 
@@ -1630,25 +1636,13 @@ Similar to re-frame subscriptions"
      ;; Is this a good idea to put whiteboard check here?
      (not (get-edit-input-id)))))
 
-(defn whiteboard-page-idle?
-  "Check if whiteboard page is idle.
-   - when current tool is select and idle
-     - and whiteboard page is updated longer than 1000 seconds
-   - when current tool is other tool and idle
-     - and whiteboard page is updated longer than 3000 seconds"
-  [repo whiteboard-page & {:keys [select-idle-ms tool-idle-ms]
-                           :or {select-idle-ms 1000
-                                tool-idle-ms 3000}}]
+(defn whiteboard-idle?
+  "Check if whiteboard is idle."
+  [repo]
   (when repo
-    (if-let [tldraw-app (active-tldraw-app)]
-      (let [last-time (:block/updated-at whiteboard-page)
-            now (util/time-ms)
-            elapsed (- now last-time)
-            select-idle (.. tldraw-app (isIn "select.idle"))
-            tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
-        (or (and select-idle (>= elapsed select-idle-ms))
-            (and (not select-idle) tool-idle (>= elapsed tool-idle-ms))))
-      true)))
+    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
+                              (- (util/time-ms) 10000)))
+        3000)))
 
 (defn set-nfs-refreshing!
   [value]

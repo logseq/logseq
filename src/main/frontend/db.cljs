@@ -105,7 +105,10 @@
   (let [job (js/setTimeout
              (fn []
                (if (and (state/input-idle? repo)
-                        (state/db-idle? repo))
+                        (state/db-idle? repo)
+                        ;; It's ok to not persist here since new changes
+                        ;; will be notified when restarting the app.
+                        (not (state/whiteboard-route?)))
                  (persist! repo)
                  ;; (state/set-db-persisted! repo true)
 

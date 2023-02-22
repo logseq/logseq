@@ -239,7 +239,7 @@
    :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}
 
-   :editor/redo                    {:binding ["shift+mod+z" "mod+y"]
+   :editor/redo                    {:binding ["mod+shift+z" "mod+y"]
                                     :fn      history/redo!}
 
    :editor/insert-link             {:binding "mod+l"
@@ -573,8 +573,6 @@
                           :editor/copy
                           :editor/copy-text
                           :editor/cut
-                          :editor/undo
-                          :editor/redo
                           :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
@@ -584,6 +582,8 @@
                           :editor/select-all-blocks
                           :editor/zoom-in
                           :editor/zoom-out
+                          :editor/undo
+                          :editor/redo
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
