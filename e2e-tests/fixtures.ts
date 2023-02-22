@@ -219,7 +219,7 @@ export const test = base.extend<LogseqFixtures>({
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
-        // scroll, for isVisble test
+        // scroll, for isVisible test
         await page.$eval(`.ls-block >> nth=${nth}`, (element) => {
           element.scrollIntoView();
         });

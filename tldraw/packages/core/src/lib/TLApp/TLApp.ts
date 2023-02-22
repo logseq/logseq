@@ -889,7 +889,7 @@ export class TLApp<
       !this.isInAny('select.translating', 'select.pinching') &&
       this.selectedShapes.size > 0 &&
       !this.selectedShapesArray.every(shape => shape.hideSelectionDetail) &&
-      false // FIXME: should we shoult the selection detail?
+      false // FIXME: should we show the selection detail?
     )
   }
 

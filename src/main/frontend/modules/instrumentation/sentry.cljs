@@ -18,8 +18,8 @@
    :environment (if config/dev? "development" "production")
    :initialScope {:tags
                   (merge
-                   (when (not-empty config/revison)
-                     {:revision config/revison})
+                   (when (not-empty config/revision)
+                     {:revision config/revision})
                    {:platform (cond
                                 (util/electron?) "electron"
                                 (mobile-util/native-platform?) "mobile"

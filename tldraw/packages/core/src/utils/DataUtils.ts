@@ -111,7 +111,7 @@ export function getFirstFromSet<T = unknown>(set: Set<T>): T {
 
 /**
  * Seeded random number generator, using [xorshift](https://en.wikipedia.org/wiki/Xorshift). The
- * result will always be betweeen -1 and 1.
+ * result will always be between -1 and 1.
  *
  * Adapted from [seedrandom](https://github.com/davidbau/seedrandom).
  */

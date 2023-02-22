@@ -13,6 +13,31 @@
     properties)
    user-config))
 
+(deftest test-fix-duplicate-id
+  (are [x y]
+      (let [result (gp-block/fix-duplicate-id x)]
+        (and (:uuid result)
+             (not= (:uuid x) (:uuid result))
+             (= (select-keys result
+                             [:properties :content :properties-text-values :properties-order]) y)))
+    {:properties {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :tags [], :format :markdown, :meta {:start_pos 51, :end_pos 101}, :macros [], :unordered true, :content "bar\nid:: 63f199bc-c737-459f-983d-84acfcda14fe", :properties-text-values {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :level 1, :uuid #uuid "63f199bc-c737-459f-983d-84acfcda14fe", :properties-order [:id]}
+    {:properties {},
+     :content "bar",
+     :properties-text-values {},
+     :properties-order []}
+
+    {:properties {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :tags [], :format :org, :meta {:start_pos 51, :end_pos 101}, :macros [], :unordered true, :content "bar\n:id: 63f199bc-c737-459f-983d-84acfcda14fe", :properties-text-values {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :level 1, :uuid #uuid "63f199bc-c737-459f-983d-84acfcda14fe", :properties-order [:id]}
+    {:properties {},
+     :content "bar",
+     :properties-text-values {},
+     :properties-order []}
+
+    {:properties {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :tags [], :format :markdown, :meta {:start_pos 51, :end_pos 101}, :macros [], :unordered true, :content "bar\n  \n  id:: 63f199bc-c737-459f-983d-84acfcda14fe\nblock body", :properties-text-values {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :level 1, :uuid #uuid "63f199bc-c737-459f-983d-84acfcda14fe", :properties-order [:id]}
+    {:properties {},
+     :content "bar\nblock body",
+     :properties-text-values {},
+     :properties-order []}))
+
 (deftest test-extract-properties
   (are [x y] (= (:properties (extract-properties x {})) y)
        ;; Built-in properties
