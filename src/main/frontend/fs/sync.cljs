@@ -10,7 +10,6 @@
                                                poll! timeout]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
-            [cljs.spec.alpha :as s]
             [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -23,6 +22,11 @@
             [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs.sync-schema :refer [diff-schema state-schema
+                                             sync-state-schema
+                                             sync-local->remote-all-files!-result-schema
+                                             sync-remote->local!-result-schema
+                                             sync-local->remote!-result-schema]]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
             [frontend.mobile.util :as mobile-util]
@@ -34,6 +38,7 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
+            [malli.core :as m]
             [medley.core :refer [dedupe-by]]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -65,104 +70,6 @@
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
 ;;       and re-produce a new same-file-delete diff.
 
-;;; ### specs
-(s/def ::state #{;; do following jobs when ::starting:
-                 ;; - wait seconds for file-change-events from file-watcher
-                 ;; - drop redundant file-change-events
-                 ;; - setup states in `frontend.state`
-                 ::starting
-                 ::need-password
-                 ::idle
-                 ;; sync local-changed files
-                 ::local->remote
-                 ;; sync remote latest-transactions
-                 ::remote->local
-                 ;; local->remote full sync
-                 ::local->remote-full-sync
-                 ;; remote->local full sync
-                 ::remote->local-full-sync
-                 ;; snapshot state when switching between apps on iOS
-                 ::pause
-                 ::stop})
-(s/def ::path string?)
-(s/def ::time t/date?)
-(s/def ::remote->local-type #{:delete :update
-                              ;; :rename=:delete+:update
-                              })
-(s/def ::current-syncing-graph-uuid (s/or :nil nil? :graph-uuid string?))
-(s/def ::recent-remote->local-file-item (s/keys :req-un [::remote->local-type ::checksum ::path]))
-(s/def ::current-local->remote-files (s/coll-of ::path :kind set?))
-(s/def ::current-remote->local-files (s/coll-of ::path :kind set?))
-(s/def ::recent-remote->local-files (s/coll-of ::recent-remote->local-file-item :kind set?))
-(s/def ::history-item (s/keys :req-un [::path ::time]))
-(s/def ::history (s/coll-of ::history-item :kind seq?))
-(s/def ::sync-state (s/keys :req-un [::current-syncing-graph-uuid
-                                     ::state
-                                     ::current-local->remote-files
-                                     ::current-remote->local-files
-                                     ::queued-local->remote-files
-                                     ;; Downloading files from remote will trigger filewatcher events,
-                                     ;; causes unreasonable information in the content of ::queued-local->remote-files,
-                                     ;; use ::recent-remote->local-files to filter such events
-                                     ::recent-remote->local-files
-                                     ::history]))
-
-;; diff
-(s/def ::TXId pos-int?)
-(s/def ::TXType #{"update_files" "delete_files" "rename_file"})
-(s/def ::TXContent-to-path string?)
-(s/def ::TXContent-from-path (s/or :some string? :none nil?))
-(s/def ::TXContent-checksum (s/or :some string? :none nil?))
-(s/def ::TXContent-item (s/tuple ::TXContent-to-path
-                                 ::TXContent-from-path
-                                 ::TXContent-checksum))
-(s/def ::TXContent (s/coll-of ::TXContent-item))
-(s/def ::diff (s/keys :req-un [::TXId ::TXType ::TXContent]))
-
-(s/def ::succ-map #(= {:succ true} %))
-(s/def ::unknown-map (comp some? :unknown))
-(s/def ::stop-map #(= {:stop true} %))
-(s/def ::pause-map #(= {:pause true} %))
-(s/def ::need-sync-remote #(= {:need-sync-remote true} %))
-(s/def ::graph-has-been-deleted #(= {:graph-has-been-deleted true} %))
-
-(s/def ::sync-local->remote!-result
-  (s/or :stop ::stop-map
-        :succ ::succ-map
-        :pause ::pause-map
-        :need-sync-remote ::need-sync-remote
-        :graph-has-been-deleted ::graph-has-been-deleted
-        :unknown ::unknown-map))
-
-(s/def ::sync-remote->local!-result
-  (s/or :succ ::succ-map
-        :need-remote->local-full-sync
-        #(= {:need-remote->local-full-sync true} %)
-        :stop ::stop-map
-        :pause ::pause-map
-        :unknown ::unknown-map))
-
-(s/def ::sync-local->remote-all-files!-result
-  (s/or :succ ::succ-map
-        :stop ::stop-map
-        :need-sync-remote ::need-sync-remote
-        :graph-has-been-deleted ::graph-has-been-deleted
-        :unknown ::unknown-map))
-
-;; sync-event type
-(s/def ::event #{:created-local-version-file
-                 :finished-local->remote
-                 :finished-remote->local
-                 :start
-                 :pause
-                 :resume
-                 :exception-decrypt-failed
-                 :remote->local-full-sync-failed
-                 :local->remote-full-sync-failed
-                 :get-remote-graph-failed
-                 :get-deletion-logs-failed})
-
-(s/def ::sync-event (s/keys :req-un [::event ::data]))
 
 (defonce download-batch-size 100)
 (defonce upload-batch-size 20)
@@ -584,7 +491,7 @@
 
 (defn- filepath+checksum->diff
   [index {:keys [relative-path checksum user-uuid graph-uuid]}]
-  {:post [(s/valid? ::diff %)]}
+  {:post [(util/validate diff-schema %)]}
   {:TXId (inc index)
    :TXType "update_files"
    :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
@@ -2123,10 +2030,10 @@
   [graph-uuid]
   (swap! *resume-state dissoc graph-uuid))
 
+(m/=> sync-state [:=> [:cat] sync-state-schema])
 (defn sync-state
   "create a new sync-state"
   []
-  {:post [(s/valid? ::sync-state %)]}
   {:current-syncing-graph-uuid  nil
    :state                       ::starting
    :full-local->remote-files    #{}
@@ -2139,66 +2046,65 @@
 
 (defn- sync-state--update-current-syncing-graph-uuid
   [sync-state graph-uuid]
-  {:pre  [(s/valid? ::sync-state sync-state)]
-   :post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (assoc sync-state :current-syncing-graph-uuid graph-uuid))
 
 (defn- sync-state--update-state
   [sync-state next-state]
-  {:pre  [(s/valid? ::state next-state)]
-   :post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (assoc sync-state :state next-state))
 
 (defn sync-state--add-current-remote->local-files
   [sync-state paths]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :current-remote->local-files into paths))
 
 (defn sync-state--add-current-local->remote-files
   [sync-state paths]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :current-local->remote-files into paths))
 
 (defn sync-state--add-queued-local->remote-files
   [sync-state event]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :queued-local->remote-files
           (fn [o event]
-            (->> (concat o [event])
-                 (util/distinct-by-last-wins (fn [e] (.-path e))))) event))
+            (->> (conj o event)
+                 seq
+                 (util/distinct-by-last-wins (fn [e] (.-path e)))
+                 set)) event))
 
 (defn sync-state--remove-queued-local->remote-files
   [sync-state event]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :queued-local->remote-files
           (fn [o event]
-            (remove #{event} o)) event))
+            (set (remove #{event} o))) event))
 
 (defn sync-state-reset-queued-local->remote-files
   [sync-state]
-  {:post [(s/valid? ::sync-state %)]}
-  (assoc sync-state :queued-local->remote-files nil))
+  {:post [(util/validate sync-state-schema %)]}
+  (assoc sync-state :queued-local->remote-files #{}))
 
 (defn sync-state--add-recent-remote->local-files
   [sync-state items]
-  {:pre [(s/valid? (s/coll-of ::recent-remote->local-file-item) items)]
-   :post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :recent-remote->local-files (partial apply conj) items))
 
 (defn sync-state--remove-recent-remote->local-files
   [sync-state items]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (update sync-state :recent-remote->local-files set/difference items))
 
-(defn sync-state-reset-full-local->remote-files
+(defn- sync-state-reset-full-local->remote-files
   [sync-state events]
-  {:post [(s/valid? ::sync-state %)]}
-  (assoc sync-state :full-local->remote-files events))
+  {:post [(util/validate sync-state-schema %)]}
+  (assoc sync-state :full-local->remote-files (set events)))
 
 (defn sync-state-reset-full-remote->local-files
   [sync-state events]
-  {:post [(s/valid? ::sync-state %)]}
-  (assoc sync-state :full-remote->local-files events))
+  {:post [(util/validate sync-state-schema %)]}
+  (assoc sync-state :full-remote->local-files (set events)))
 
 (defn- add-history-items
   [history paths now]
@@ -2214,7 +2120,7 @@
 
 (defn sync-state--remove-current-remote->local-files
   [sync-state paths add-history?]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (let [now (t/now)]
     (cond-> sync-state
       true         (update :current-remote->local-files set/difference paths)
@@ -2222,7 +2128,7 @@
 
 (defn sync-state--remove-current-local->remote-files
   [sync-state paths add-history?]
-  {:post [(s/valid? ::sync-state %)]}
+  {:post [(util/validate sync-state-schema %)]}
   (let [now (t/now)]
     (cond-> sync-state
       true         (update :current-local->remote-files set/difference paths)
@@ -2231,12 +2137,12 @@
 (defn sync-state--stopped?
   "Graph syncing is stopped"
   [sync-state]
-  {:pre [(s/valid? ::sync-state sync-state)]}
+  {:pre [(util/validate sync-state-schema sync-state)]}
   (= ::stop (:state sync-state)))
 
 (defn sync-state--valid-to-accept-filewatcher-event?
   [sync-state]
-  {:pre [(s/valid? ::sync-state sync-state)]}
+  {:pre [(util/validate sync-state-schema sync-state)]}
   (contains? #{::idle ::local->remote ::remote->local ::local->remote-full-sync ::remote->local-full-sync}
              (:state sync-state)))
 
@@ -2707,7 +2613,7 @@
                           {:succ true}
                           (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
                                 (<! (<sync-local->remote! this (first es-partitions)))]
-                            (s/assert ::sync-local->remote!-result r)
+                            (assert (util/validate sync-local->remote!-result-schema r))
                             (cond
                               succ
                               (recur (next es-partitions))
@@ -2730,7 +2636,7 @@
               private-remote->local-full-sync-chan private-pause-resume-chan]
   Object
   (schedule [this next-state args reason]
-    {:pre [(s/valid? ::state next-state)]}
+    {:pre [(util/validate state-schema next-state)]}
     (println "[SyncManager" graph-uuid "]"
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
@@ -2821,7 +2727,7 @@
     [this]
     (go
       (let [next-state (<! (<loop-ensure-pwd&keys graph-uuid (state/get-current-repo) *stopped?))]
-        (assert (s/valid? ::state next-state) next-state)
+        (assert (util/validate state-schema next-state))
         (when (= next-state ::idle)
           (<! (<ensure-set-env&keys graph-uuid *stopped?)))
         (if @*stopped?
@@ -2897,7 +2803,7 @@
     (go
       (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
             (<! (<sync-local->remote-all-files! local->remote-syncer))]
-        (s/assert ::sync-local->remote-all-files!-result r)
+        (assert (util/validate sync-local->remote-all-files!-result-schema r))
         (cond
           succ
           (do
@@ -2971,7 +2877,7 @@
         (let [origin-txid @*txid
               {:keys [succ unknown stop pause need-remote->local-full-sync] :as r}
               (<! (<sync-remote->local! remote->local-syncer))]
-          (s/assert ::sync-remote->local!-result r)
+          (assert (util/validate sync-remote->local!-result-schema r))
           (cond
             need-remote->local-full-sync
             (do (util/drain-chan ops-chan)
@@ -3022,7 +2928,7 @@
                 :else
                 (let [{:keys [succ need-sync-remote graph-has-been-deleted pause unknown stop] :as r}
                       (<! (<sync-local->remote! local->remote-syncer (first es-partitions)))]
-                  (s/assert ::sync-local->remote!-result r)
+                  (assert (util/validate sync-local->remote!-result-schema r))
                   (cond
                     succ
                     (recur (next es-partitions))

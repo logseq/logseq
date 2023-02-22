@@ -2,27 +2,24 @@
  {:unresolved-symbol {:exclude [(malli.core/=>)]},
   :type-mismatch
   {:namespaces
-   {frontend.util
-    {safe-re-find {:arities {2 {:args [:any :string], :ret :any}}},
-     check-password-strength
+   {frontend.fs.sync
+    {sync-state
      {:arities
-      {1
-       {:args [:string],
+      {0
+       {:args [],
         :ret
         {:op :keys,
          :req
-         {:contains :sequential,
-          :length :int,
-          :id :int,
-          :value :string},
-         :nilable true}}}},
-     uuid-string? {:arities {1 {:args [:string], :ret :boolean}}},
-     safe-parse-int {:arities {1 {:args [:any], :ret :int}}},
-     safe-sanitize-file-name
-     {:arities {1 {:args [:string], :ret :string}}},
-     safe-parse-float {:arities {1 {:args [:any], :ret :double}}}},
-    frontend.fs.sync
-    {<update-graphs-txid-only-txid!
+         {:full-local->remote-files :set,
+          :history :sequential,
+          :queued-local->remote-files :set,
+          :state :keyword,
+          :current-remote->local-files :set,
+          :current-local->remote-files :set,
+          :full-remote->local-files :set,
+          :recent-remote->local-files :set,
+          :current-syncing-graph-uuid :nilable/string}}}}},
+     <update-graphs-txid-only-txid!
      {:arities {2 {:args [:int :string], :ret :any}}},
      read-graphs-txid
      {:arities
@@ -48,5 +45,24 @@
            :work-dir :string}}
          :string],
         :ret :any}}}},
+    frontend.util
+    {safe-re-find {:arities {2 {:args [:any :string], :ret :any}}},
+     check-password-strength
+     {:arities
+      {1
+       {:args [:string],
+        :ret
+        {:op :keys,
+         :req
+         {:contains :sequential,
+          :length :int,
+          :id :int,
+          :value :string},
+         :nilable true}}}},
+     uuid-string? {:arities {1 {:args [:string], :ret :boolean}}},
+     safe-parse-int {:arities {1 {:args [:any], :ret :int}}},
+     safe-sanitize-file-name
+     {:arities {1 {:args [:string], :ret :string}}},
+     safe-parse-float {:arities {1 {:args [:any], :ret :double}}}},
     frontend.state
     {pub-event! {:arities {1 {:args [:vector], :ret :any}}}}}}}}
