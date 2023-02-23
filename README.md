@@ -52,6 +52,21 @@
             alt="latest release version"></a>
 </p>
 
+
+## Table of Contents
+
+  * [<g-emoji class="g-emoji" alias="thinking" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png">🤔</g-emoji> Why Logseq?](#-why-logseq)
+  * [<g-emoji class="g-emoji" alias="eyes" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f440.png">👀</g-emoji> How can I use it?](#-how-can-i-use-it)
+  * [<g-emoji class="g-emoji" alias="books" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f4da.png">📚</g-emoji> Learn more](#-learn-more)
+  * [🫶 Support Logseq Development](#-support-logseq-development)
+  * [<g-emoji class="g-emoji" alias="bulb" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f4a1.png">💡</g-emoji> Feature requests](#-feature-requests)
+  * [<g-emoji class="g-emoji" alias="electric_plug" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f50c.png">🔌</g-emoji> Plugin API](#-plugin-api)
+  * [<g-emoji class="g-emoji" alias="star2" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f31f.png">🌟</g-emoji> Contributing to Logseq](#-contributing-to-logseq)
+    * [<g-emoji class="g-emoji" alias="hammer_and_wrench" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f6e0.png">🛠️</g-emoji> Setting Up a Development Environment](#️-setting-up-a-development-environment)
+    * [<g-emoji class="g-emoji" alias="mortar_board" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f393.png">🎓</g-emoji> Good First Issues](#-good-first-issues)
+  * [<g-emoji class="g-emoji" alias="sparkles" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/2728.png">✨</g-emoji> Inspiration](#-inspiration)
+* [<g-emoji class="g-emoji" alias="pray" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f64f.png">🙏</g-emoji> Thank You](#-thank-you)
+
 ## 🤔 Why Logseq?
 
 Logseq is a **comprehensive platform for knowledge management** and collaboration that helps you stay connected with the most critical information. With support for multiple file formats, including **Markdown** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
