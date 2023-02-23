@@ -415,7 +415,7 @@ const handleCreatingShapes = async (
     }
     app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
-    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
+    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && fromDrop) {
       const source = app.selectedShapesArray[0]
       const target = app.getShapeById(allShapesToAdd[0].id!)!
       app.createNewLineBinding(source, target)
