@@ -29,8 +29,8 @@ import { LogseqContext, LogseqContextValue } from '../lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
-    new URL(url)
-    return true
+    const parsedUrl = new URL(url)
+    return parsedUrl.host && ['http:', 'https:'].includes(parsedUrl.protocol)
   } catch {
     return false
   }
@@ -272,7 +272,7 @@ const handleCreatingShapes = async (
   }
 
   async function tryCreateShapeFromURL(rawText: string) {
-    if (isValidURL(rawText) && !(shiftKey || fromDrop)) {
+    if (isValidURL(rawText) && !shiftKey) {
       if (YOUTUBE_REGEX.test(rawText)) {
         return [
           {
