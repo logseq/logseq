@@ -40,7 +40,7 @@
          [:div.icon-box.p-1.rounded.mb-3 (ui/icon "bug" {:style {:font-size ui/icon-size}})]
          [:div.text-xl.font-bold
           (t :page/something-went-wrong)]
-         [:div.mt-2.mb-2 :page/logseq-is-having-a-problem]
+         [:div.mt-2.mb-2 (t :page/logseq-is-having-a-problem)]
          [:div
           ;; TODO: Enable once multi-window case doesn't result in possible data loss
           #_[:div.flex.flex-row.justify-between.align-items.mb-2

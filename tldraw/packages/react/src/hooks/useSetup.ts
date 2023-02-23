@@ -26,7 +26,6 @@ export function useSetup<
   React.useLayoutEffect(() => {
     const unsubs: (() => void)[] = []
     if (!app) return
-    app.history.reset()
     if (typeof window !== undefined) {
       window['tlapps'] = window['tlapps'] || {}
       window['tlapps'][app.uuid] = app
