@@ -511,11 +511,6 @@
          (:db/id page-entity)
          :page))
 
-      (whiteboard-handler/inside-portal? (.-target e))
-      (whiteboard-handler/add-new-block-portal-shape!
-       page-name
-       (whiteboard-handler/closest-shape (.-target e)))
-
       whiteboard-page?
       (route-handler/redirect-to-whiteboard! page-name)
 
