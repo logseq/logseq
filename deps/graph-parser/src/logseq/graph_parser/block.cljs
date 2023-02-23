@@ -574,6 +574,7 @@
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
+                    (update :properties-text-values dissoc :collapsed)
                     (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
         block (assoc block

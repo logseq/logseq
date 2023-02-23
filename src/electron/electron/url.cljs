@@ -59,12 +59,12 @@
       (graph-identifier-error-handler graph-identifier))))
 
 (defn- x-callback-url-handler
-  "win - a window used for fallback (main window is prefered)"
+  "win - a window used for fallback (main window is preferred)"
   [^js win ^js/URL parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
       ;; url:     (string) Page url
-      ;; title:   (stirng) Page title
+      ;; title:   (string) Page title
       ;; content: (string) Highlighted text
       ;; page:    (string) Page name to insert to, use "TODAY" to insert to today page
       ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
