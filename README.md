@@ -88,9 +88,9 @@ Whether you're a student, a professional, or anyone who values a clear and organ
 
 To start using Logseq, follow these simple steps:
 
-1. [Download](https://github.com/logseq/logseq/releases/latest) the latest version of Logseq.
-2. Install Logseq on your device and launch the application.
-3. Start writing and organizing your notes, tasks, and ideas in Logseq.
+1. [Download](https://github.com/logseq/logseq/releases/latest) the latest version of Logseq
+2. Install Logseq on your device and launch the application
+3. Start writing ✍️
 
 That's it! You can now enjoy the benefits of using Logseq to streamline your workflow, manage your projects, and stay on top of your goals. Have fun! 🎉
 
