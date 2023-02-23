@@ -16,7 +16,7 @@
   (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
                "bb lint:carve"
                "bb lint:large-vars"
-               "bb lang:invalid-translations"
+               "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
     (shell cmd)))
