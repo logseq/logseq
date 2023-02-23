@@ -79,6 +79,8 @@ Whether you're a student, a professional, or anyone who values a clear and organ
 
 ![Image of Logseq](https://user-images.githubusercontent.com/25513724/220209160-e8ce0f69-5ef4-49d6-be4d-7aa91accbc5b.png)
 
+![Logseq-whiteboard](https://user-images.githubusercontent.com/25513724/220923032-02178ece-3a90-4cc0-9964-b7908c39639e.png)
+
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
             align="right"
