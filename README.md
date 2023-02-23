@@ -79,31 +79,6 @@ To start using Logseq, follow these simple steps:
 
 That's it! You can now enjoy the benefits of using Logseq to streamline your workflow, manage your projects, and stay on top of your goals. Have fun! 🎉
 
-> **Note**
->
-> Checkout our docs at [docs.logseq.com](https://docs.logseq.com/#/page/Contents)
-
-## 🫶 Support Logseq Development
-
-If you find Logseq useful and want to help us keep the project growing, please consider supporting our contributors on [Open Collective](https://opencollective.com/logseq). Your support shows our contributors that their efforts are appreciated and motivates them to continue their excellent work. Every contribution, no matter how small, helps us keep improving Logseq.
-
-## 🔌 Plugin API
-
-Logseq provides a plugin API that enables developers to create custom plugins and extend the functionality of Logseq. The plugin API documentation is available at [plugins-doc.logseq.com](https://plugins-doc.logseq.com/), where you can find everything needed to get started with plugin development.
-
-We value your feedback and suggestions on how to improve our documentation. Please do not hesitate to contact us with any comments or questions. Your input helps us to provide a better experience for our users and developers.
-
-Thank you for using Logseq, and we look forward to seeing what you create with our plugin API!
-
-## 💡 Feature requests
-
-We value your input on improving Logseq and making it more useful for you. If you have any ideas or feature requests, please share them in the [Logseq Forum: Feature
-Requests](https://discuss.logseq.com/new-topic?category=feature-requests) section.
-
-Your feedback helps us understand our users' needs and prioritize the features that matter most to you. We appreciate your time and effort in sharing your thoughts with us.
-
-We appreciate your support, and we look forward to hearing your ideas!
-
 ## 📚 Learn more
 
 - Website: [logseq.com](https://logseq.com)
@@ -116,6 +91,27 @@ We appreciate your support, and we look forward to hearing your ideas!
   - FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 - Discord: [discord.gg/logseq](https://discord.gg/logseq)
   - [中文 Discord](https://discord.gg/xYqcrXWymg)
+
+## 🫶 Support Logseq Development
+
+If you find Logseq useful and want to help us keep the project growing, please consider supporting our contributors on [Open Collective](https://opencollective.com/logseq). Your support shows our contributors that their efforts are appreciated and motivates them to continue their excellent work. Every contribution, no matter how small, helps us keep improving Logseq.
+
+## 💡 Feature requests
+
+We value your input on improving Logseq and making it more useful for you. If you have any ideas or feature requests, please share them in the [Logseq Forum: Feature
+Requests](https://discuss.logseq.com/new-topic?category=feature-requests) section.
+
+Your feedback helps us understand our users' needs and prioritize the features that matter most to you. We appreciate your time and effort in sharing your thoughts with us.
+
+We appreciate your support, and we look forward to hearing your ideas!
+
+## 🔌 Plugin API
+
+Logseq provides a plugin API that enables developers to create custom plugins and extend the functionality of Logseq. The plugin API documentation is available at [plugins-doc.logseq.com](https://plugins-doc.logseq.com/), where you can find everything needed to get started with plugin development.
+
+We value your feedback and suggestions on how to improve our documentation. Please do not hesitate to contact us with any comments or questions. Your input helps us to provide a better experience for our users and developers.
+
+Thank you for using Logseq, and we look forward to seeing what you create with our plugin API!
 
 ## 🌟 Contributing to Logseq
 
