@@ -105,17 +105,17 @@ const handleCreatingShapes = async (
     const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
     if (existingAsset) {
       return existingAsset as VideoImageAsset
-    } else {
-      // Create a new asset for this image
-      const asset: VideoImageAsset = {
-        id: uniqueId(),
-        type: isVideo ? 'video' : 'image',
-        src: url,
-        size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
-      }
-      return asset
     }
-  }
+
+    // Create a new asset for this image
+    const asset: VideoImageAsset = {
+      id: uniqueId(),
+      type: isVideo ? 'video' : 'image',
+      src: url,
+      size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
+    }
+    return asset
+}
 
   async function createAssetsFromFiles(files: File[]) {
     const tasks = files
