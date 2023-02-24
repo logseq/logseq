@@ -99,9 +99,16 @@
 ;;; ### configs ends
 
 ;;; graphs-txid
+;; save .graphs-txid.edn as map,
+;; for compatibility, we need to rename the original 'graphs-txid.edn' to '.graphs-txid.edn',
+;; 1. because filename startswith '.' are ignored by file-sync,
+;;    so '.graphs-txid.edn' won't be synced in previous version apps
+;; 2. renaming 'graphs-txid.edn' to '.graphs-txid.edn' is necessary
+;;    the previous version apps can not interpret the new content type
 
-;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
-(defonce ^:private graphs-txid (persist-var/persist-var nil "graphs-txid"))
+(defonce ^:private graphs-txid-legacy (persist-var/persist-var nil "graphs-txid"))
+(defonce ^:private graphs-txid (persist-var/persist-var nil ".graphs-txid"))
+(defonce ^:private graphs-txid-version "20230224")
 
 (defn ^:private uuid-string-schema
   ([]
@@ -120,18 +127,29 @@
    [:user-uuid (uuid-string-schema)]
    [:graph-uuid (uuid-string-schema)]
    [:txid :int]
-   [:work-dir :string]])
+   [:work-dir :string]
+   [:version {:optional true} :string]])
 
 (defn <load-graph-txid
+  "load graphs-txid. if graphs-txid-legacy is not empty, clean it."
   []
-  (persist-var/-load graphs-txid))
+  (p/do!
+   (persist-var/-load graphs-txid)
+   (persist-var/-load graphs-txid-legacy)
+   (when (some? @graphs-txid-legacy)
+     (prn :resert-legacy-graphs-txid-edn @graphs-txid-legacy)
+     (let [repo (state/get-current-repo)]
+       (p/do! (persist-var/-reset-value! graphs-txid-legacy nil repo)
+              (persist-var/-save graphs-txid-legacy)
+              (fs/unlink! repo (config/get-file-path repo "logseq/graphs-txid.edn") {}))))))
+
 
 (defn read-graphs-txid
   {:malli/schema [:=> [:cat] [:maybe graphs-txid-schema]]}
   []
   (let [r @graphs-txid]
     (cond
-      (nil? r) nil
+      (or (empty? r) (nil? r)) nil
       (vector? r)
       (let [[user-uuid graph-uuid txid] r]
         {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
@@ -152,17 +170,19 @@
   [txid repo]
   (let [m (read-graphs-txid)]
     (p->c
-     (p/let [_ (persist-var/-reset-value! graphs-txid (assoc m :txid txid) repo)
-             _ (persist-var/persist-save graphs-txid)]
-       (when (state/developer-mode?) (assert-local-txid<=remote-txid))))))
+     (p/do!
+      (persist-var/-reset-value! graphs-txid (assoc m :txid txid :version graphs-txid-version) repo)
+      (persist-var/persist-save graphs-txid)
+      (when (state/developer-mode?) (assert-local-txid<=remote-txid))))))
 
 (defn <update-graphs-txid-all-fields!
   {:malli/schema [:=> [:cat graphs-txid-schema :string] :any]}
   [m repo]
   (p->c
-   (p/let [_ (persist-var/-reset-value! graphs-txid m repo)
-           _ (persist-var/persist-save graphs-txid)]
-     (when (state/developer-mode?) (assert-local-txid<=remote-txid)))))
+   (p/do!
+    (persist-var/-reset-value! graphs-txid (assoc m :version graphs-txid-version) repo)
+    (persist-var/persist-save graphs-txid)
+    (when (state/developer-mode?) (assert-local-txid<=remote-txid)))))
 
 (defn clear-graphs-txid! [repo]
   (persist-var/-reset-value! graphs-txid nil repo)
