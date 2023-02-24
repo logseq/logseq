@@ -33,7 +33,7 @@
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
-    "Cut"
+    (t :content/cut)
     nil)
    (ui/menu-link
     {:key      "delete"
@@ -44,7 +44,7 @@
    (ui/menu-link
     {:key "copy"
      :on-click editor-handler/copy-selection-blocks}
-    "Copy"
+    (t :content/copy)
     nil)
    (ui/menu-link
     {:key "copy as"
@@ -236,7 +236,7 @@
           {:key      "Cut"
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
-          "Cut"
+          (t :content/cut)
           nil)
 
          (ui/menu-link
