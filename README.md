@@ -147,6 +147,7 @@ In addition to these guides, you can also find other helpful resources in the [d
 ### 🎓 Good First Issues
 
 We have compiled a list of [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) to help you get started. These are issues that are beginner-friendly and do not require advanced knowledge of the codebase. We encourage new contributors to start with these issues and gradually work their way up to more challenging tasks.
+We also have a project board to keep track of community contributions [Logseq - Develop Together 💪](https://github.com/orgs/logseq/projects/5?query=is%3Aopen+sort%3Aupdated-desc).
 
 Thank you for considering contributing to Logseq!
 
