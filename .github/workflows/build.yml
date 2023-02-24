@@ -114,7 +114,7 @@ jobs:
         run: bb lint:ns-docstrings 2>/dev/null
 
       - name: Lint invalid translation entries
-        run: bb lang:invalid-translations
+        run: bb lang:validate-translations
 
   e2e-test:
     runs-on: ubuntu-latest
