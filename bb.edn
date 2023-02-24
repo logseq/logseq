@@ -99,8 +99,8 @@
   lang:duplicates
   logseq.tasks.lang/list-duplicates
 
-  lang:invalid-translations
-  logseq.tasks.lang/invalid-translations
+  lang:validate-translations
+  logseq.tasks.lang/validate-translations
 
   file-sync:integration-tests
   logseq.tasks.file-sync/integration-tests}
