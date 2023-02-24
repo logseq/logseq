@@ -77,9 +77,9 @@ In addition to its core features, Logseq has a growing ecosystem of plugins and 
 
 Whether you're a student, a professional, or anyone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
 
-![Image of Logseq](https://user-images.githubusercontent.com/25513724/220209160-e8ce0f69-5ef4-49d6-be4d-7aa91accbc5b.png)
-
-![Logseq-whiteboard](https://user-images.githubusercontent.com/25513724/220923032-02178ece-3a90-4cc0-9964-b7908c39639e.png)
+![grey-text-demo](https://user-images.githubusercontent.com/25513724/221322606-f4190f8f-2df5-4bc3-ace3-ad881d804916.png)
+![grey-whiteboard-demo](https://user-images.githubusercontent.com/25513724/221322626-2fb4f597-44ab-4508-bccc-3316ee3c1f67.png)
+![adelaide-GRD-demo](https://user-images.githubusercontent.com/25513724/221322642-fc7063cd-4e51-47d4-832d-43cc90076992.png)
 
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
