@@ -214,7 +214,7 @@
           has-checked? (not-empty checked-page-names)]
       [:<>
        [:h1.select-none.flex.items-center.whiteboard-dashboard-title.title
-        [:div "All whiteboards"
+        [:div (t :all-whiteboards)
          [:span.opacity-50
           (str " · " total-whiteboards)]]
         [:div.flex-1]

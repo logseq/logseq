@@ -33,9 +33,9 @@ strings.csv
 
 .calva
 resources/electron.js
+.lsp/.cache
 .clj-kondo/.cache
 .clj-kondo/babashka/sci
-.lsp/
 /libs/dist/
 charlie/
 .vscode
