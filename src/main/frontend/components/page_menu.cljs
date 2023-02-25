@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.url :as url-util]
             [frontend.util.page :as page-util]
             [frontend.handler.shell :as shell]
             [frontend.mobile.util :as mobile-util]
