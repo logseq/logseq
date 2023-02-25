@@ -79,7 +79,8 @@ Whether you're a student, a professional, or anyone who values a clear and organ
 
 ![grey-text-demo](https://user-images.githubusercontent.com/25513724/221322606-f4190f8f-2df5-4bc3-ace3-ad881d804916.png)
 ![grey-whiteboard-demo](https://user-images.githubusercontent.com/25513724/221322626-2fb4f597-44ab-4508-bccc-3316ee3c1f67.png)
-![adelaide-GRD-demo](https://user-images.githubusercontent.com/25513724/221322642-fc7063cd-4e51-47d4-832d-43cc90076992.png)
+![adelaide-GRD-demo](https://user-images.githubusercontent.com/25513724/221323571-f4a3f25a-ddf2-4bde-a117-b1add6b72832.png)
+
 
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
@@ -196,13 +197,13 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
 </p>
 
+## 🫶 Backers
+
 <!-- JetBrains Logo -->
 <p align="center">
     <a href="https://jetbrains.com" alt="JetBrains">
         <img src="docs/assets/jetbrains.svg"/></a>
 </p>
-
-## 🫶 Backers
 
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
