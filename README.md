@@ -80,7 +80,7 @@ Whether you're a student, a professional, or anyone who values a clear and organ
 ![grey-text-demo](https://user-images.githubusercontent.com/25513724/221322606-f4190f8f-2df5-4bc3-ace3-ad881d804916.png)
 ![grey-whiteboard-demo](https://user-images.githubusercontent.com/25513724/221322626-2fb4f597-44ab-4508-bccc-3316ee3c1f67.png)
 ![adelaide-GRD-demo](https://user-images.githubusercontent.com/25513724/221353134-08237003-1de8-43fa-a7f2-68ed6befee91.png)
-![adelaide-pdf-demo](https://user-images.githubusercontent.com/25513724/221353150-893b8734-7b44-49dc-be2b-146f0efbfe9c.png)
+![adelaide-pdf-demo](https://user-images.githubusercontent.com/25513724/221353719-28dd812d-1c39-4e41-9f51-2cf61c78ca8b.png)
 
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
