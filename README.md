@@ -80,7 +80,8 @@ Whether you're a student, a professional, or anyone who values a clear and organ
 ![grey-text-demo](https://user-images.githubusercontent.com/25513724/221322606-f4190f8f-2df5-4bc3-ace3-ad881d804916.png)
 ![grey-whiteboard-demo](https://user-images.githubusercontent.com/25513724/221322626-2fb4f597-44ab-4508-bccc-3316ee3c1f67.png)
 ![adelaide-GRD-demo](https://user-images.githubusercontent.com/25513724/221353134-08237003-1de8-43fa-a7f2-68ed6befee91.png)
-![adelaide-pdf-demo](https://user-images.githubusercontent.com/25513724/221353719-28dd812d-1c39-4e41-9f51-2cf61c78ca8b.png)
+<!-- PDF Demo Video -->
+https://user-images.githubusercontent.com/25513724/221371537-f6a806d8-2e70-40eb-8962-e29152e3676d.mp4
 
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
@@ -99,16 +100,16 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
 
 ## 📚 Learn more
 
-- Website: [logseq.com](https://logseq.com)
-- Documentation: [docs.logseq.com](https://docs.logseq.com)
-  - FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
-- Blog: [blog.logseq.com](https://blog.logseq.com)
-  - Please visit our [About page](https://blog.logseq.com/about) for the latest updates.
-- Twitter: [@Logseq](https://twitter.com/logseq)
-- Forum: [discuss.logseq.com](https://discuss.logseq.com) - Where we answer questions, discuss workflows, and share tips
-  - FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
-- Discord: [discord.gg/logseq](https://discord.gg/logseq)
-  - [中文 Discord](https://discord.gg/xYqcrXWymg)
+* Website: [logseq.com](https://logseq.com)
+* Documentation: [docs.logseq.com](https://docs.logseq.com)
+  * FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
+* Blog: [blog.logseq.com](https://blog.logseq.com)
+  * Please visit our [About page](https://blog.logseq.com/about) for the latest updates.
+* Twitter: [@Logseq](https://twitter.com/logseq)
+* Forum: [discuss.logseq.com](https://discuss.logseq.com) - Where we answer questions, discuss workflows, and share tips
+  * FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
+* Discord: [discord.gg/logseq](https://discord.gg/logseq)
+  * [中文 Discord](https://discord.gg/xYqcrXWymg)
 
 ## 🫶 Support Logseq Development
 
@@ -162,12 +163,12 @@ Thank you to all those who inspire us, and we look forward to seeing what the Lo
 
 Logseq is also made possible by the following projects:
 
-- [Clojure & ClojureScript](https://clojure.org/) - A dynamic, functional, general-purpose programming language
-- [DataScript](https://github.com/tonsky/datascript) - An immutable database and Datalog query-engine for Clojure,
+* [Clojure & ClojureScript](https://clojure.org/) - A dynamic, functional, general-purpose programming language
+* [DataScript](https://github.com/tonsky/datascript) - An immutable database and Datalog query-engine for Clojure,
 ClojureScript and JS
-- [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document parser [maldoc](https://github.com/mldoc/mldoc)
-- [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for NodeJS and web browsers
-- [SCI](https://github.com/borkdude/sci) - A Small Clojure Interpreter
+* [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document parser [maldoc](https://github.com/mldoc/mldoc)
+* [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for NodeJS and web browsers
+* [SCI](https://github.com/borkdude/sci) - A Small Clojure Interpreter
 
 # 🙏 Thank You
 
@@ -199,15 +200,15 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
 
 ## 🫶 Backers
 
+<p align="center">
+    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
+</p>
+
 <!-- JetBrains Logo -->
 <p align="center">
     <a href="https://jetbrains.com" alt="JetBrains">
         <img src="docs/assets/jetbrains.svg"/></a>
-</p>
-
-<p align="center">
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
 </p>
 
 <!-- ProductHunt Review Button -->
