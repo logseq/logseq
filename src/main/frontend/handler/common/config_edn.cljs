@@ -42,18 +42,19 @@ nested keys or positional errors e.g. tuples"
   [path file-body schema]
   (let [parsed-body (try
                       (edn/read-string file-body)
-                      (catch :default x [::failed-to-read (ex-message x)]))]
+                      (catch :default x [::failed-to-read (ex-message x)]))
+        failed? (and (vector? parsed-body) (= ::failed-to-read (first parsed-body)))]
     (cond
       (nil? parsed-body)
       true
-      (and (= ::failed-to-read (first parsed-body)) (includes? (second parsed-body) "duplicate key"))
+      (and failed? (includes? (second parsed-body) "duplicate key"))
       (do
         (notification/show! (gstring/format "The file '%s' has duplicate keys. The key '%s' is assigned multiple times."
                                             path, (subs (second parsed-body) 36))
                             :error)
         false)
 
-      (= ::failed-to-read (first parsed-body))
+      failed?
       (do
 
         (notification/show! (gstring/format "Failed to read file '%s'. Make sure your config is wrapped
