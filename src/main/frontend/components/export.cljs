@@ -14,7 +14,7 @@
   []
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
-     [:h1.title "Export"]
+     [:h1.title (t :export)]
      [:ul.mr-1
       [:li.mb-4
        [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
