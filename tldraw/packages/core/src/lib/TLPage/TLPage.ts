@@ -92,7 +92,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @observable nonce = 0
 
   @action bump = () => {
-    this.nonce++
+    // this.nonce++
   }
 
   @action update(props: Partial<TLPageProps<S>>) {
