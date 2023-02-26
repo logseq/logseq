@@ -52,7 +52,6 @@
             alt="latest release version"></a>
 </p>
 
-
 ## Table of Contents
 
   * [<g-emoji class="g-emoji" alias="thinking" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png">🤔</g-emoji> Why Logseq?](#-why-logseq)
@@ -73,7 +72,7 @@ Logseq is a **comprehensive platform for knowledge management** and collaboratio
 
 [Logseq](https://logseq.com) stores your notes **locally** on your device in plain text files, ensuring that your data is **private** and **secure**. Logseq also strongly emphasizes [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes confidently.
 
-In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and **customization** options. Mobile apps are also available, providing access to most of the features of the desktop application.
+In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and **customization** options. A **Mobile app** is also available, providing access to most of the features of the desktop application.
 
 Whether you're a student, a professional, or anyone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
 
