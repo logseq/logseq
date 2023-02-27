@@ -879,13 +879,10 @@
     (js/window.apis.showItemInFolder file-path)
     (notification/show! "No file found" :warning)))
 
-(defn copy-page-url [] 
- (when-let [page-name (or
-                        (state/get-current-page)
-                        (state/get-current-whiteboard))]
-(let [page-name (util/page-name-sanity-lc page-name)
-          repo (state/sub :git/current-repo)
-          page (db/entity repo [:block/name page-name])
-          page-original-name (:block/original-name page)]
-  (util/copy-to-clipboard!
-   (url-util/get-logseq-graph-page-url nil repo page-original-name)))))
+(defn copy-page-url
+  ([] (copy-page-url (page-util/get-current-page-name)))
+  ([page-name]
+   (if page-name
+     (util/copy-to-clipboard!
+      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) page-name))
+     (notification/show! "No page found to copy" :warning))))

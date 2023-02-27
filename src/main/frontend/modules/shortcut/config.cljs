@@ -414,6 +414,7 @@
                                      :fn      page-handler/copy-current-file}
 
    :editor/copy-page-url            {:binding false
+                                     :inactive (not (util/electron?))
                                      :fn      page-handler/copy-page-url}
 
    :ui/toggle-wide-mode             {:binding "t w"

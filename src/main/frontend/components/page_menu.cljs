@@ -106,7 +106,7 @@
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click page-handler/copy-page-url}})
+             :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not contents?
             {:title   (t :page/delete)
