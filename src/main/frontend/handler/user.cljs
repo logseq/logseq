@@ -150,9 +150,9 @@
   (when-let [apply-tokens! (and code
                                 (fn [$]
                                   (set-tokens!
-                                    (or (:id_token $) (:idToken $))
-                                    (or (:access_token $) (:accessToken $))
-                                    (or (:refresh_token $) (:refreshToken $)))
+                                    (or (:id_token $) (:jwtToken (:idToken $)))
+                                    (or (:access_token $) (:jwtToken (:accessToken $)))
+                                    (or (:refresh_token $) (:token (:refreshToken $))))
                                   (state/pub-event! [:user/fetch-info-and-graphs])))]
     (let [set-loading! #(state/set-state! [:ui/loading? :login] %)]
       (set-loading! true)

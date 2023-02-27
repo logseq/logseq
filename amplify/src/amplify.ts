@@ -19,8 +19,8 @@ function setupAuthConfigure (config) {
         'profile',
         'aws.cognito.signin.user.admin'
       ],
-      'redirectSignIn': 'logseq://auth-callback',
-      'redirectSignOut': 'logseq://auth-callback',
+      'redirectSignIn': 'http://localhost:8080/auth_callback.html',
+      'redirectSignOut': 'http://localhost:8080/auth_callback.html',
       'responseType': 'code'
     },
     'federationTarget': 'COGNITO_USER_POOLS',

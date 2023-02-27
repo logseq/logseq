@@ -26,13 +26,19 @@
 
 (rum/defc user-pane
   [sign-out! user]
-  (when-let [session (:signInUserSession user)]
-    [:main
-     [:h1.text-3xl.mb-2.flex.justify-between
-      (str "Hi, " (:username user))
+  (let [session (:signInUserSession user)]
 
-      [:span (ui/button "Logout" :on-click sign-out!)]]
-     [:pre.text-sm.whitespace-pre-wrap (with-out-str (cljs.pprint/pprint session))]]))
+    (rum/use-effect!
+      #(user/login-callback session)
+      [])
+
+    (when session
+      [:main
+       [:h1.text-3xl.mb-2.flex.justify-between
+        (str "Hi, " (:username user))
+
+        [:span (ui/button "Logout" :on-click sign-out!)]]
+       [:pre.text-sm.whitespace-pre-wrap (with-out-str (cljs.pprint/pprint session))]])))
 
 (rum/defc page
   []
@@ -57,8 +63,6 @@
                                (catch js/Error e
                                  (js/console.error "Error: Amplify user payload:" e)))
                  user' (bean/->clj user)]
-
-             (user/login-callback (:signInUserSession user'))
              (user-pane sign-out! user')))))]))
 
 (defn open-login-modal!
