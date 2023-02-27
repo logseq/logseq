@@ -147,16 +147,24 @@
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
 (defn ^:export login-callback [code]
-  (state/set-state! [:ui/loading? :login] true)
-  (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
-                             {:with-credentials? false}))]
-      (if (= 200 (:status resp))
-        (-> resp
-            :body
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
-            (#(state/pub-event! [:user/fetch-info-and-graphs])))
-        (debug/pprint "login-callback" resp)))))
+  (when-let [apply-tokens! (and code
+                                (fn [$]
+                                  (set-tokens!
+                                    (or (:id_token $) (:idToken $))
+                                    (or (:access_token $) (:accessToken $))
+                                    (or (:refresh_token $) (:refreshToken $)))
+                                  (state/pub-event! [:user/fetch-info-and-graphs])))]
+    (let [set-loading! #(state/set-state! [:ui/loading? :login] %)]
+      (set-loading! true)
+      (if (string? code)
+        (go
+          (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
+                                   {:with-credentials? false}))]
+            (if (= 200 (:status resp))
+              (-> resp :body (apply-tokens!))
+              (debug/pprint "login-callback" resp))
+            (set-loading! false)))
+        (apply-tokens! code)))))
 
 (defn ^:export login-with-username-password-e2e
   [username password client-id client-secret]

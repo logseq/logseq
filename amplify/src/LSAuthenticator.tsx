@@ -3,6 +3,14 @@ import { Authenticator, CheckboxField, useAuthenticator } from '@aws-amplify/ui-
 export function LSAuthenticator ({ children }: any) {
   return (<div>
     <Authenticator
+      formFields={{
+        signUp: {
+          email: { order: 1 },
+          username: { order: 2 },
+          password: { order: 3 },
+          confirm_password: { order: 4 },
+        }
+      }}
       signUpAttributes={['email']}
       socialProviders={['google']}
       components={{

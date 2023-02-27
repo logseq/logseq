@@ -2,6 +2,7 @@
   (:require ["/frontend/amplify"]
             [rum.core :as rum]
             [frontend.rum :refer [adapt-class]]
+            [frontend.handler.user :as user]
             [cljs-bean.core :as bean]
             [frontend.ui :as ui]
             [frontend.state :as state]))
@@ -13,9 +14,9 @@
 (defn- setup-configure!
   []
   (setupAuthConfigure!
-    #js {:region                 "us-east-1",
-         :userPoolId             "us-east-1_ldvDmC9Fe",
-         :userPoolWebClientId    "41m82unjghlea984vjpk887qcr",
+    #js {:region                 "us-east-2",
+         :userPoolId             "us-east-2_kAqZcxIeM",
+         :userPoolWebClientId    "3ji1a0059hspovjq5fhed3uil8",
          :cookieStorage          #js {:domain   "localhost",
                                       :path     "/",
                                       :expires  365,
@@ -54,9 +55,11 @@
                  ^js user-proxy (.-user op)
                  ^js user (try (js/JSON.parse (js/JSON.stringify user-proxy))
                                (catch js/Error e
-                                 (js/console.error "Error: Amplify user payload:" e)))]
+                                 (js/console.error "Error: Amplify user payload:" e)))
+                 user' (bean/->clj user)]
 
-             (user-pane sign-out! (bean/->clj user))))))]))
+             (user/login-callback (:signInUserSession user'))
+             (user-pane sign-out! user')))))]))
 
 (defn open-login-modal!
   []
