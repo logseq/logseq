@@ -77,6 +77,22 @@ error if it detects an invalid query.
 Our translations can be configured incorrectly. We can catch some of these
 mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
 
+### Spell Checker
+
+We use [typos](https://github.com/crate-ci/typos) to spell check our source code.
+
+To install it locally and use it:
+
+```sh
+$ brew install typos-cli
+# Catch any errors
+$ typos
+# Fix errors
+$ typos -w
+```
+
+To configure it e.g. for dealing with false positives, see `typos.toml`.
+
 ## Testing
 
 We have unit, performance and end to end tests.

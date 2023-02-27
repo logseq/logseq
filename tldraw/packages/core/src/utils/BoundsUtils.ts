@@ -462,7 +462,7 @@ new box's aspect ratio matches the original aspect ratio.
 3. Rotation
 
 If the bounds are rotated, get a Vector from the rotated anchor
-corner in the inital bounds to the rotated anchor corner in the
+corner in the initial bounds to the rotated anchor corner in the
 result's bounds. Subtract this Vector from the result's corners,
 so that the two anchor points (initial and result) will be equal.
 */

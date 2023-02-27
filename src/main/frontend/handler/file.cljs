@@ -122,7 +122,7 @@
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
-                             skip-db-transact?]
+                             skip-db-transact? extracted-block-ids]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -133,7 +133,8 @@
     (when-not (and config-file? (not config-valid?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
-                  :skip-db-transact? skip-db-transact?}
+                  :skip-db-transact? skip-db-transact?
+                  :extracted-block-ids extracted-block-ids}
             result (if reset?
                      (do
                        (when-not skip-db-transact?
