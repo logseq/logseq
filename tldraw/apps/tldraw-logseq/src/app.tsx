@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { deepEqual, TLDocumentModel } from '@tldraw/core'
+import { TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -68,6 +68,7 @@ const BacklinksCount: LogseqContextValue['renderers']['BacklinksCount'] = props 
 const AppImpl = () => {
   const ref = React.useRef<HTMLDivElement>(null)
   const app = useApp()
+
   const components = React.useMemo(
     () => ({
       ContextBar,
@@ -98,9 +99,7 @@ const AppInner = ({
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
-      if (!deepEqual(app.serialized, model)) {
-        onPersist?.(app, info)
-      }
+       onPersist?.(app, info)
     },
     [model]
   )
