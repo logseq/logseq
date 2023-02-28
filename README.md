@@ -27,13 +27,13 @@
 <!-- social badges -->
 <p align="center">
     <a href="https://discuss.logseq.com">
-        <img src="https://img.shields.io/badge/forum-Logseq-blue.svg?&color=%2385c8c8&logo=discourse&logoColor=%2385c8c8&style=for-the-badge"
+        <img src="https://img.shields.io/badge/forum-Logseq-blue.svg?&color=%2385c8c8&logo=discourse&style=for-the-badge"
             alt="forum"></a>
     <a href="https://discord.gg/KpN4eHY">
-        <img src="https://img.shields.io/discord/725182569297215569?color=%2385c8c8&label=Discord&logo=discord&logoColor=%2385c8c8&style=for-the-badge"
+        <img src="https://img.shields.io/discord/725182569297215569?color=%2385c8c8&label=Discord&logo=discord&style=for-the-badge"
             alt="chat on Discord"></a>
     <a href="https://twitter.com/intent/follow?screen_name=logseq">
-        <img src="https://img.shields.io/twitter/follow/logseq?color=%2385c8c8&label=%40logseq&logo=twitter&logoColor=%2385c8c8&style=for-the-badge"
+        <img src="https://img.shields.io/twitter/follow/logseq?color=%2385c8c8&label=%40logseq&logo=twitter&style=for-the-badge"
             alt="follow on Twitter"></a>
 </p>
 
