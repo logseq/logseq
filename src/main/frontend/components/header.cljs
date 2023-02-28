@@ -165,10 +165,10 @@
 
     (when downloaded
       [:div.cp__header-tips
-       [:p (t :updater/new-version-install)
+       [:p (t ::updater-new-version-install)
         [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
-         (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
+         (svg/reload 16) [:strong (t ::updater-quit-and-install)]]]])))
 
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
   [{:keys [open-fn current-repo default-home new-block-mode]}]
@@ -253,7 +253,7 @@
          (ui/icon "folder-plus")
          (when-not config/mobile?
            [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-            (t :on-boarding/add-graph)])])
+            (t ::add-graph)])])
 
       (when config/publishing?
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}

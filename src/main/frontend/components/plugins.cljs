@@ -568,7 +568,7 @@
                [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
-               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t ::install-from-file.menu-title)]
                  :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
 
                (when (state/developer-mode?)
@@ -907,10 +907,10 @@
   < rum/reactive
   [plugins]
   [:div.cp__plugins-fom-file
-   [:h1.mb-4.text-2xl.p-1 (t :plugin.install-from-file/title)]
+   [:h1.mb-4.text-2xl.p-1 (t ::install-from-file.title)]
    (if (seq plugins)
      [:div
-      [:div.mb-2.text-xl (t :plugin.install-from-file/notice)]
+      [:div.mb-2.text-xl (t ::install-from-file.notice)]
       ;; lists
       [:ul
        (for [it (:install plugins)
@@ -928,7 +928,7 @@
                                (plugin-config-handler/replace-plugins plugins)
                                (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
      ;; all done
-     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
+     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t ::install-from-file.success))]])])
 
 (defn open-select-theme!
   []

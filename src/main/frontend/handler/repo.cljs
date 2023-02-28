@@ -346,10 +346,10 @@
              (state/set-current-repo! repo)
              (db/start-db-conn! repo)
              (when-not config/publishing?
-               (let [dummy-notes (t :tutorial/dummy-notes)]
+               (let [dummy-notes (t ::dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
              (when-not config/publishing?
-               (let [tutorial (t :tutorial/text)
+               (let [tutorial (t ::tutorial)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (repo-config-handler/create-config-file-if-not-exists repo)

@@ -41,7 +41,7 @@
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val]
           :or {limit 100
-               prompt-key :select/default-prompt
+               prompt-key ::default-prompt
                empty-placeholder (fn [_t] [:div])
                close-modal? true
                extract-fn :value}}]
@@ -86,7 +86,7 @@
   * :empty-placeholder (optional) - fn that returns hiccup html to render if no
     matched graphs found.
   * :prompt-key (optional) - dictionary keyword that prompts when components is
-    first open. Defaults to :select/default-prompt."
+    first open. Defaults to ::default-prompt."
   []
   {:graph-open
    {:items-fn (fn []
@@ -104,13 +104,13 @@
                                    (db/get-repo-path url)))
                          :id (config/get-repo-dir url)
                          :graph url}))))
-    :prompt-key :select.graph/prompt
+    :prompt-key ::graph-prompt
     :on-chosen #(state/pub-event! [:graph/switch (:graph %)])
     :empty-placeholder (fn [t]
                          [:div.px-4.py-2
-                          [:div.mb-2 (t :select.graph/empty-placeholder-description)]
+                          [:div.mb-2 (t ::graph-empty-placeholder-description)]
                           (ui/button
-                           (t :select.graph/add-graph)
+                           (t ::graph-add)
                            :href (rfe/href :repo-add)
                            :on-click state/close-modal!)])}
    :graph-remove

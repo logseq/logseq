@@ -13,36 +13,36 @@
   []
   [:div.help.cp__sidebar-help-docs
    (let [discourse-with-icon [:div.flex-row.inline-flex.items-center
-                              [:span.mr-1 (t :help/forum-community)]
+                              [:span.mr-1 (t ::forum-community)]
                               (ui/icon "message-circle" {:style {:font-size 20}})]
          list
-         [{:title "Usage"
+         [{:title (t ::usage-heading)
            :children [[[:a
                         {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))}
                         [:div.flex-row.inline-flex.items-center
-                         [:span.mr-1 (t :help/shortcuts)]
+                         [:span.mr-1 (t ::shortcuts)]
                          (ui/icon "command" {:style {:font-size 20}})]]]
-                      [(t :help/docs) "https://docs.logseq.com/"]
-                      [(t :help/start) "https://docs.logseq.com/#/page/tutorial"]
+                      [(t ::docs) "https://docs.logseq.com/"]
+                      [(t ::start) "https://docs.logseq.com/#/page/tutorial"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
 
-          {:title "Community"
-           :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
-                      [(t :help/blog) "https://blog.logseq.com"]
+          {:title (t ::community-heading)
+           :children [[(t ::awesome-logseq) "https://github.com/logseq/awesome-logseq"]
+                      [(t ::blog) "https://blog.logseq.com"]
                       [discourse-with-icon "https://discuss.logseq.com"]]}
 
-          {:title "Development"
-           :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
-                      [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
-                      [(t :help/feature) "https://discuss.logseq.com/c/feature-requests/"]
-                      [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
+          {:title (t ::development-heading)
+           :children [[(t ::roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+                      [(t ::bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
+                      [(t ::feature) "https://discuss.logseq.com/c/feature-requests/"]
+                      [(t ::changelog) "https://docs.logseq.com/#/page/changelog"]]}
 
-          {:title "About"
-           :children [[(t :help/about) "https://blog.logseq.com/about/"]]}
+          {:title (t ::about-heading)
+           :children [[(t ::about) "https://blog.logseq.com/about/"]]}
 
-          {:title "Terms"
-           :children [[(t :help/privacy) "https://blog.logseq.com/privacy-policy/"]
-                      [(t :help/terms) "https://blog.logseq.com/terms/"]]}]]
+          {:title (t ::terms-heading)
+           :children [[(t ::privacy) "https://blog.logseq.com/privacy-policy/"]
+                      [(t ::terms) "https://blog.logseq.com/terms/"]]}]]
 
 
 

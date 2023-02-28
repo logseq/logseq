@@ -200,11 +200,11 @@
         [:a {:key it :data-color it :data-action it} it])]
 
 
-     (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
+     (and id [:li.item {:data-action "ref"} (t ::copy-ref)])
 
-     (and (not area?) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+     (and (not area?) [:li.item {:data-action "copy"} (t ::copy-text)])
 
-     (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
+     (and id [:li.item {:data-action "link"} (t ::linked-ref)])
 
      (and id [:li.item {:data-action "del"} (t :delete)])
 

@@ -282,12 +282,12 @@
             [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
         (search-result-item {:name (if (model/whiteboard-page? data) "whiteboard" "page")
                              :extension? true
-                             :title (t (if (model/whiteboard-page? data) :search-item/whiteboard :search-item/page))}
+                             :title (t (if (model/whiteboard-page? data)::item-whiteboard ::item-page))}
                             (highlight-exact-query data search-q))]
 
        :file
        (search-result-item {:name "file"
-                            :title (t :search-item/file)}
+                            :title (t ::item-file)}
                            (highlight-exact-query data search-q))
 
        :block
@@ -300,7 +300,7 @@
              content' (if block (:block/content block) content)]
          [:span {:data-block-ref uuid}
           (search-result-item {:name "block"
-                               :title (t :search-item/block)
+                               :title (t ::item-block)
                                :extension? true}
 
                               (cond
@@ -321,7 +321,7 @@
              format (db/get-page-format page)]
          [:span {:data-block-ref uuid}
           (search-result-item {:name "page"
-                               :title (t :search-item/page)
+                               :title (t ::item-page)
                                :extension? true}
                               (if page
                                 (page-content-search-result-item repo uuid format snippet search-q search-mode)
@@ -389,7 +389,7 @@
                                                (search-handler/search (state/get-current-repo) search-q {:limit 1000
                                                                                                          :more? true})
                                                (search-handler/clear-search!)))}
-         (t :more)]])]))
+         (t ::more)]])]))
 
 (rum/defc recent-search-and-pages
   [in-page-search?]
@@ -573,8 +573,8 @@
         search-result (state/sub :search/more-result)]
     [:div#search.flex-1.flex
      [:div.inner
-      [:h1.title (t :search/result-for) [:i search-q]]
-      [:p.font-medium.tx-sm (str (count (:blocks search-result)) " " (t :search/items))]
+      [:h1.title (t ::result-for) [:i search-q]]
+      [:p.font-medium.tx-sm (str (count (:blocks search-result)) " " (t ::items))]
       [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
        (when-not (string/blank? search-q)
          (search-auto-complete search-result search-q true))]]]))

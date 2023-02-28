@@ -62,23 +62,23 @@
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+       [:h3#modal-headline.text-lg.leading-6.font-medium (t ::filter)]
        [:span.text-xs
-        "Click to include and shift-click to exclude. Click again to remove."]]]
+        (t ::filter-include-exclude)]]]
      (when (seq filters)
        [:div.cp__filters.mb-4.ml-2
         (when (seq includes)
           [:div.flex.flex-row.flex-wrap.center-items
-           [:div.mr-1.font-medium.py-1 "Includes: "]
+           [:div.mr-1.font-medium.py-1 (t ::includes)]
            (filtered-refs page-name filters filters-atom includes)])
         (when (seq excludes)
           [:div.flex.flex-row.flex-wrap
-           [:div.mr-1.font-medium.py-1 "Excludes: " ]
+           [:div.mr-1.font-medium.py-1 (t ::excludes)]
            (filtered-refs page-name filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
       [:input.cp__filters-input.w-full
-       {:placeholder (t :linked-references/filter-search)
+       {:placeholder (t ::filter-search)
         :auto-focus true
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
@@ -140,7 +140,7 @@
                         " Linked Reference"
                         (when (> total 1) "s"))]
       [:a.filter.fade-link
-       {:title "Filter"
+       {:title (t ::filter)
         :on-mouse-over (fn [_e]
                          (when @*collapsed? ; collapsed
                            ;; expand
@@ -282,10 +282,7 @@
          [:div.content.flex-1
           (ui/foldable
            [:h2.font-medium
-            (if @n-ref
-              (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
-                                                  "s"))
-              "Unlinked References")]
+            (t ::unlinked-references @n-ref)]
            (fn [] (unlinked-references-aux page-name n-ref))
            {:default-collapsed? true
             :title-trigger? true})]]))))

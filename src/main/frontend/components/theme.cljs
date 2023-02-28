@@ -61,7 +61,7 @@
     (rum/use-effect!
      #(let [db-restored? (false? db-restoring?)]
         (if db-restoring?
-          (util/set-title! (t :loading))
+          (util/set-title! (t ::loading))
           (when (or nfs-granted? db-restored?)
             (route-handler/update-page-title! route))))
      [nfs-granted? db-restoring? route])

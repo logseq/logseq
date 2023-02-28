@@ -314,16 +314,16 @@
   [:div.cp__whiteboard-welcome
    [:span.head-bg
 
-    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
+    [:strong (t ::closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
 
    [:h1.text-2xl.font-bold.flex-col.sm:flex-row
-    (t :on-boarding/welcome-whiteboard-modal-title)]
+    (t ::welcome-modal-title)]
 
-   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
+   [:p (t ::welcome-modal-description)]
 
    [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
+    (ui/button (t ::welcome-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t ::welcome--modal-start)
                :on-click (fn []
                            (config-handler/set-config! :feature/enable-whiteboards? true)
                            (quick-tour/ready

@@ -280,7 +280,7 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(defn theme-modes-row [t switch-theme system-theme? dark?]
+(defn theme-modes-row [t system-theme? dark?]
   (let [pick-theme [:ul.theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
@@ -288,7 +288,7 @@
                           :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
                     [:li {:on-click (partial state/use-theme-mode! "system")
                           :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
-    (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
+    (row-with-button-action {:left-label (t ::theme-mode)
                              :-for       "toggle_theme"
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
@@ -593,12 +593,11 @@
   (let [preferred-language (state/sub [:preferred-language])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
-        system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "light" "dark")]
+        system-theme? (state/sub :ui/system-theme?)]
     [:div.panel-wrap.is-general
      (version-row t version)
      (language-row t preferred-language)
-     (theme-modes-row t switch-theme system-theme? dark?)
+     (theme-modes-row t system-theme? dark?)
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

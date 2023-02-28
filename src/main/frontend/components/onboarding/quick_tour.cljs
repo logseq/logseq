@@ -155,8 +155,8 @@
 (defn- create-steps-whiteboard! [^js jsTour]
   [;; step 1
    {:id                "whiteboard-home"
-    :text              (h/render-html [:section [:h2  (t :on-boarding/tour-whiteboard-home "🖼")]
-                                       [:p (t :on-boarding/tour-whiteboard-home-description)]])
+    :text              (h/render-html [:section [:h2  (t ::whiteboard-home "🖼")]
+                                       [:p (t ::whiteboard-home-description)]])
     :attachTo          {:element ".nav-header .whiteboard" :on "right"}
     :beforeShowPromise (fn []
                          (when-not (state/sub :ui/left-sidebar-open?)
@@ -172,8 +172,8 @@
 
    ;; step 2
    {:id                "whiteboard-new"
-    :text              (h/render-html [:section [:h2 (t :on-boarding/tour-whiteboard-new "🆕️")]
-                                       [:p (t :on-boarding/tour-whiteboard-new-description)]])
+    :text              (h/render-html [:section [:h2 (t ::whiteboard-new "🆕️")]
+                                       [:p (t ::whiteboard-new-description)]])
     :beforeShowPromise (fn []
                          (route-handler/redirect-to-whiteboard-dashboard!)
                          (wait-target ".dashboard-create-card" 500))

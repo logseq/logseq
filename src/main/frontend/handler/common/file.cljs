@@ -38,7 +38,7 @@
                                    :file/path file-path}]))
 
         :else
-        (let [error (t :file/validate-existing-file-error current-file file-path)]
+        (let [error (t ::validate-existing-file-error current-file file-path)]
           (state/pub-event! [:notification/show
                              {:content error
                               :status :error

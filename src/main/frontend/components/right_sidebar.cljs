@@ -70,21 +70,21 @@
   [repo idx db-id block-type]
   (case block-type
     :contents
-    [(t :right-side-bar/contents)
+    [(t ::contents)
      (contents)]
 
     :help
-    [(t :right-side-bar/help) (onboarding/help)]
+    [(t ::help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/page-graph))
+    [(str (t ::page-graph))
      (page/page-graph)]
 
     :block-ref
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-       [(t :right-side-bar/block-ref)
+       [(t ::block-ref)
         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
@@ -117,7 +117,7 @@
         (slide/slide page-name)]])
 
     :shortcut-settings
-    [(t :help/shortcuts) (shortcut-settings)]
+    [(t ::shortcuts) (shortcut-settings)]
 
     ["" [:span]]))
 
@@ -236,7 +236,7 @@
     [:.resizer {:ref el-ref
                 :role "separator"
                 :aria-orientation "vertical"
-                :aria-label (t :right-side-bar/separator)
+                :aria-label (t ::resize-handler)
                 :aria-valuemin (* min-ratio 100)
                 :aria-valuemax (* max-ratio 100)
                 :tabIndex "0"
@@ -257,7 +257,7 @@
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "contents" :contents))}
-          (t :right-side-bar/contents)]]
+          (t ::contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
@@ -266,12 +266,12 @@
                                                             repo
                                                             page
                                                             :page-graph)))}
-          (t :right-side-bar/page-graph)]]
+          (t ::page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "help" :help))}
-          (t :right-side-bar/help)]]]
+          (t ::help)]]]
 
        (toggle)]
 

@@ -77,21 +77,21 @@
                (when (= theme it) (svg/check))])
             ["light", "warm", "dark"])]
       [:div.extensions__pdf-settings-item.toggle-input
-       [:label (t :pdf/toggle-dashed)]
+       [:label (t ::toggle-dashed)]
        (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input.is-between
-       [:label (t :pdf/hl-block-colored)]
+       [:label (t ::hl-block-colored)]
        (ui/toggle hl-block-colored? #(set-hl-block-colored? (not hl-block-colored?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
-        {:title    (t :pdf/doc-metadata)
+        {:title    (t ::doc-metadata)
          :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
                       (state/set-modal! (make-docinfo-in-modal ret)))}
 
         [:span.flex.items-center.justify-between.w-full
-         (t :pdf/doc-metadata)
+         (t ::doc-metadata)
          (svg/icon-info)]]]]]))
 
 (rum/defc docinfo-display
@@ -363,7 +363,7 @@
             [:strong "Page " page]]
 
            [:button
-            {:title    (t :pdf/linked-ref)
+            {:title    (t ::linked-ref)
              :on-click goto-ref!}
             (ui/icon "external-link")]]
 

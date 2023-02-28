@@ -34,9 +34,9 @@
       [:table.table-auto
        [:thead
         [:tr
-         [:th (t :file/name)]
+         [:th (t ::name)]
          (when-not mobile?
-           [:th (t :file/last-modified-at)])
+           [:th (t ::last-modified-at)])
          (when-not mobile?
            [:th ""])]]
        [:tbody
@@ -52,7 +52,7 @@
              (when-not mobile?
                [:td [:span.text-gray-500.text-sm
                      (if (zero? modified-at)
-                       (t :file/no-data)
+                       (t ::no-data)
                        (date/get-date-time-string
                         (t/to-default-time-zone (tc/to-date-time modified-at))))]])
 
@@ -105,7 +105,7 @@
      [:h1.title
       [:bdi (js/decodeURI path)]]
      (when original-name
-       [:div.text-sm.mb-4.ml-1 "Page: "
+       [:div.text-sm.mb-4.ml-1 (t ::page)
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                 :href (rfe/href :page {:name original-name})
                                 :on-click (fn [e]
@@ -122,7 +122,7 @@
        [:p.text-sm.ml-1.mb-4
         (svg/warning {:style {:width "1em"
                               :display "inline-block"}})
-        [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
+        [:span.ml-1 (t ::title-property-warning)]])
 
      (cond
        ;; image type
@@ -144,10 +144,10 @@
        ;; wait for content load
        (and format
             (contains? (gp-config/text-formats) format))
-       (ui/loading "Loading ...")
+       (ui/loading)
 
        :else
-       [:div (t :file/format-not-supported (name format))])]))
+       [:div (t ::format-not-supported (name format))])]))
 
 (rum/defcs file
   [state]

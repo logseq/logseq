@@ -42,7 +42,7 @@
      [:div.input-wrap
       [:input.cp__palette-input.w-full.h-full
        {:type        "text"
-        :placeholder (t :command-palette/prompt)
+        :placeholder (t ::prompt)
         :auto-focus  true
         :value       @input
         :on-change   (fn [e] (reset! input (util/evalue e)))}]]

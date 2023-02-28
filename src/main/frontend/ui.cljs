@@ -56,13 +56,13 @@
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
 (def block-background-colors
-  ["yellow"
-   "red"
-   "pink"
-   "green"
-   "blue"
-   "purple"
-   "gray"])
+  [::yellow
+   ::red
+   ::pink
+   ::green
+   ::blue
+   ::purple
+   ::gray])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -262,7 +262,7 @@
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto
-    (button (t :notification/clear-all)
+    (button (t ::notification-clear-all)
      :intent "logseq"
      :on-click (fn []
                  (notification/clear-all!)))]])
@@ -469,7 +469,7 @@
       [:a.fade-link.text-link.font-bold
        {:on-click on-load
         :class more-class}
-       (or more (t :page/earlier))]])])
+       (or more (t ::earlier))]])])
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
@@ -691,6 +691,7 @@
             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
+  ([] (loading (t ::loading)))
   ([content] (loading content nil))
   ([content opts]
    [:div.flex.flex-row.items-center.inline

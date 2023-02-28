@@ -59,6 +59,11 @@
   ;; so, in order to not watch out for it every time we bump a new version we better migrate to constants as soon as they appear in a prod build.
   ui-theme)
 
+(rum/defc toggle-mode-button
+  [label on? toggle-fns]
+  [:a.mr-2 {:on-click toggle-fns}
+   (t ::mode label) " ("[:span.uppercase (if on? (t ::on) (t ::off))]")" ])
+
 (rum/defcs draw-inner < rum/reactive
   (rum/local 800 ::draw-width)
   (rum/local true ::zen-mode?)
@@ -83,17 +88,13 @@
     (when data
       [:div.overflow-hidden {:on-mouse-down (fn [e] (util/stop e))}
        [:div.my-1 {:style {:font-size 10}}
-        [:a.mr-2 {:on-click ui-handler/toggle-wide-mode!}
-         (util/format "Wide Mode (%s)" (if wide-mode? "ON" "OFF"))]
-        [:a.mr-2 {:on-click #(swap! *zen-mode? not)}
-         (util/format "Zen Mode (%s)" (if @*zen-mode? "ON" "OFF"))]
-        [:a.mr-2 {:on-click #(swap! *view-mode? not)}
-         (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]
-        [:a.mr-2 {:on-click #(swap! *grid-mode? not)}
-         (util/format "Grid Mode (%s)" (if @*grid-mode? "ON" "OFF"))]
+        (toggle-mode-button (t ::wide) wide-mode? ui-handler/toggle-wide-mode!)
+        (toggle-mode-button (t ::zen) @*zen-mode? #(swap! *zen-mode? not))
+        (toggle-mode-button (t ::view) @*view-mode? #(swap! *view-mode? not))
+        (toggle-mode-button (t ::grid) @*grid-mode? #(swap! *grid-mode? not))
         [:a.mr-2 {:on-click #(when-let [block (db/pull [:block/uuid block-uuid])]
                                (editor-handler/edit-block! block :max block-uuid))}
-         "Edit Block"]]
+         (t ::edit-block)]]
        [:div.draw-wrap
         {:on-mouse-down (fn [e]
                           (util/stop e)
@@ -148,8 +149,7 @@
     (when (:file option)
       (cond
         db-restoring?
-        [:div.ls-center
-         (ui/loading (t :loading))]
+        [:div.ls-center (ui/loading)]
 
         (false? loading?)
         (draw-inner data option)

@@ -3123,7 +3123,7 @@
     true
 
     :else
-    (do (notification/show! (t :file-sync/other-user-graph) :warning false)
+    (do (notification/show! (t ::other-user-graph) :warning false)
         false)))
 
 (defn <check-remote-graph-exists
@@ -3143,7 +3143,7 @@
                    (#(contains? % local-graph-uuid)))))]
 
       (when-not result
-        (notification/show! (t :file-sync/graph-deleted) :warning false))
+        (notification/show! (t ::graph-deleted) :warning false))
       result)))
 
 (defn sync-off?

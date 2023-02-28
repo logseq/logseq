@@ -136,7 +136,7 @@
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
     (ui/icon "star" {:size 16})
-    [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+    [:span.flex-1.ml-2 (string/upper-case (t ::nav-favorites))]]
 
    {:class "favorites"
     :edit-fn
@@ -161,7 +161,7 @@
    [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
     (ui/icon "history" {:size 16})
     [:span.flex-1.ml-2
-     (string/upper-case (t :left-side-bar/nav-recent-pages))]]
+     (string/upper-case (t ::nav-recent-pages))]]
 
    {:class "recent"}
 
@@ -195,7 +195,7 @@
                    (srs/update-cards-due-count!)
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
-     [:span.flex-1 (t :right-side-bar/flashcards)]
+     [:span.flex-1 (t ::flashcards)]
      (when (and num (not (zero? num)))
        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
@@ -240,9 +240,9 @@
       {:on-click toggle-fn}
       [:<>
        (ui/icon "plus" {:font? "true"})
-       [:span.mx-1 (t :left-side-bar/create)]]])
+       [:span.mx-1 (t ::create)]]])
    (->>
-    [{:title (t :left-side-bar/new-page)
+    [{:title (t ::new-page)
       :class "new-page-link"
       :shortcut (ui/keyboard-shortcut-from-config :go/search)
       :options {:on-click #(do (close-sidebar-on-mobile!)
@@ -250,7 +250,7 @@
       :icon (ui/type-icon {:name "new-page"
                            :class "highlight"
                            :extension? true})}
-     {:title (t :left-side-bar/new-whiteboard)
+     {:title (t ::new-whiteboard)
       :class "new-whiteboard-link"
       :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
       :options {:on-click #(do (close-sidebar-on-mobile!)
@@ -359,7 +359,7 @@
               {:class            "journals-nav"
                :active           (and (not srs-open?)
                                       (or (= route-name :all-journals) (= route-name :home)))
-               :title            (t :left-side-bar/journals)
+               :title            (t ::journals)
                :on-click-handler (fn [e]
                                    (if (gobj/get e "shiftKey")
                                      (route-handler/sidebar-journals!)
@@ -369,7 +369,7 @@
          (when enable-whiteboards?
            (sidebar-item
             {:class           "whiteboard"
-             :title           (t :right-side-bar/whiteboards)
+             :title           (t ::whiteboards)
              :href            (rfe/href :whiteboards)
              :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
              :icon            "whiteboard"
@@ -381,14 +381,14 @@
 
          (sidebar-item
           {:class  "graph-view-nav"
-           :title  (t :right-side-bar/graph-view)
+           :title  (t ::graph-view)
            :href   (rfe/href :graph)
            :active (and (not srs-open?) (= route-name :graph))
            :icon   "hierarchy"})
 
          (sidebar-item
           {:class  "all-pages-nav"
-           :title  (t :right-side-bar/all-pages)
+           :title  (t ::all-pages)
            :href   (rfe/href :all-pages)
            :active (and (not srs-open?) (= route-name :all-pages))
            :icon   "files"})]]
@@ -410,7 +410,7 @@
                                (state/toggle-left-sidebar!))
                           (state/pub-event! [:go/search]))}
              (ui/icon "circle-plus" {:style {:font-size 20}})
-             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
+             [:span.flex-1 (t ::new-page)]]))]]]
      [:span.shade-mask
       (cond-> {:on-click close-fn}
         (number? offset-ratio)
@@ -538,7 +538,7 @@
          db-restoring?
          [:div.mt-20
           [:div.ls-center
-           (ui/loading (t :loading))]]
+           (ui/loading)]]
 
          :else
          [:div
@@ -771,7 +771,7 @@
         :on-key-up (fn [e]
                      (when (= (.-key e) "Enter")
                        (ui/focus-element (ui/main-node))))}
-       (t :accessibility/skip-to-main-content)]
+       (t ::skip-to-main-content)]
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}

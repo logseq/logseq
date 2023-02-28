@@ -186,7 +186,7 @@
          (for [query queries]
            (rum/with-key
              (ui/catch-error
-              (ui/component-error "Failed default query:" {:content (pr-str query)})
+              (ui/component-error (t ::failed-default-query) {:content (pr-str query)})
               (component-block/custom-query {:attr {:class "mt-10"}
                                              :editor-box editor/box
                                              :page page} query))
@@ -199,7 +199,7 @@
       [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
-         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
+         [:h2.font-bold.opacity-50 (t ::tagged-with tag)]
          [:ul.mt-2
           (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
@@ -218,8 +218,8 @@
                      (let [new-page-name (string/trim @*title-value)]
                        (ui/make-confirm-modal
                         {:title         (if (collide?)
-                                          (str "Page “" @*title-value "” already exists, merge to it?")
-                                          (str "Do you really want to change the page name to “" new-page-name "”?"))
+                                          (t ::mege-existsing-page @*title-value)
+                                          (t ::merge-confirmation new-page-name))
                          :on-confirm    (fn [_e {:keys [close-fn]}]
                                           (close-fn)
                                           (page-handler/rename! (or title page-name) @*title-value)
@@ -233,7 +233,7 @@
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
                        (reset! *edit? false)
-                       (when-not untitled? (notification/show! "Illegal page name, can not rename!" :warning)))
+                       (when-not untitled? (notification/show! (t ::illigal-page-name) :warning)))
         blur-fn (fn [e]
                   (when (gp-util/wrapped-by-quotes? @*title-value)
                     (swap! *title-value gp-util/unquote-string)
@@ -246,10 +246,10 @@
                     (rollback-fn)
 
                     (and (collide?) whiteboard-page?)
-                    (notification/show! (str "Page “" @*title-value "” already exists!") :error)
+                    (notification/show! (t ::page-already-exists @*title-value) :error)
 
                     (and (date/valid-journal-title? @*title-value) whiteboard-page?)
-                    (notification/show! (str "Whiteboard page cannot be renamed with journal titles!") :error)
+                    (notification/show! (t ::whiteboard-to-journal-title-error) :error)
 
                     untitled?
                     (page-handler/rename! (or title page-name) @*title-value)
@@ -537,7 +537,7 @@
       [:div.shadow-xl.rounded-sm
        [:ul
         (graph-filter-section
-         [:span.font-medium "Nodes"]
+         [:span.font-medium (t ::graph-nodes)]
          (fn [open?]
            (filter-expand-area
             open?
@@ -575,7 +575,7 @@
                                (set-setting! :journal? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Orphan pages"]
+               [:span (t ::graph-filter-orphan-pages)]
                [:div.mt-1
                 (ui/toggle orphan-pages?
                            (fn []
@@ -584,7 +584,7 @@
                                (set-setting! :orphan-pages? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Built-in pages"]
+               [:span (t ::graph-filter-built-in-pages)]
                [:div.mt-1
                 (ui/toggle builtin-pages?
                            (fn []
@@ -593,7 +593,7 @@
                                (set-setting! :builtin-pages? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Excluded pages"]
+               [:span (t ::graph-filter-excluded-pages)]
                [:div.mt-1
                 (ui/toggle excluded-pages?
                            (fn []
@@ -616,10 +616,10 @@
                                                       (reset! *focus-nodes [])
                                                       (reset! *n-hops nil)
                                                       (state/clear-search-filters!))}
-               "Reset Graph"]]]))
+               (t ::graph-reset)]]]))
          {})
         (graph-filter-section
-         [:span.font-medium "Search"]
+         [:span.font-medium (t ::graph-search)]
          (fn [open?]
            (filter-expand-area
             open?
@@ -633,9 +633,9 @@
                     svg/close]])
 
                 [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                 "Clear All"]]
+                 (t ::graph-filter-clear-all)]]
                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                "Click to search"])]))
+                (t ::graph-click-to-search)])]))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
@@ -715,7 +715,7 @@
    (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
   [:div.sidebar-item.flex-col
              [:div.flex.items-center.justify-between.mb-0
-              [:span (t :right-side-bar/show-journals)]
+              [:span (t ::show-journals)]
               [:div.mt-1
                (ui/toggle show-journals-in-page-graph? ;my-val;
                            (fn []
@@ -798,17 +798,17 @@
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (if orphaned-pages?
-          (str (t :remove-orphaned-pages) "?")
-          (t :page/delete-confirmation))]]]
+          (t ::remove-orphaned-pages-confirmation)
+          (t ::delete-confirmation))]]]
 
      [:table.table-auto.cp__all_pages_table.mt-4
       [:thead
        [:tr.opacity-70
         [:th [:span "#"]]
-        [:th [:span (t :block/name)]]
-        [:th [:span (t :page/backlinks)]]
-        (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
-        (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
+        [:th [:span (t ::block-name)]]
+        [:th [:span (t ::backlinks)]]
+        (when-not orphaned-pages? [:th [:span (t ::created-at)]])
+        (when-not orphaned-pages? [:th [:span (t ::updated-at)]])]]
 
       [:tbody
        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
@@ -817,8 +817,8 @@
           [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
                      (component-block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]
-          (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
-          (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
+          (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) (t ::unknown-date))]])
+          (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) (t ::unknown-date))]])])]]
 
      [:div.pt-6.flex.justify-end
 
@@ -834,7 +834,7 @@
                     (close-fn)
                     (doseq [page-name (map :block/name pages)]
                       (page-handler/delete! page-name #()))
-                    (notification/show! (str (t :tips/all-done) "!") :success)
+                    (notification/show! (t ::all-done) :success)
                     (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
@@ -857,12 +857,12 @@
          {:on-click #(on-change 1)}
          (ui/icon "chevrons-left")]
         [:a.fade-link.flex.items-center {:on-click #(on-change prev-page)}
-         (ui/icon "caret-left") (t :paginates/prev)]])
+         (ui/icon "caret-left") (t ::pagination-prev)]])
      [:div.px-2
       [:span (str current "/" total-pages)]]
      (when has-next?
        [[:a.fade-link.flex.items-center {:on-click #(on-change next-page)}
-         (t :paginates/next) (ui/icon "caret-right")]
+         (t ::pagination-next) (ui/icon "caret-right")]
         [:a.fade-link.flex
          {:on-click #(on-change total-pages)}
          (ui/icon "chevrons-right")]])]))
@@ -929,7 +929,7 @@
     [:div.flex-1.cp__all_pages
      [:h1.title (t :all-pages)]
 
-     [:div.text-sm.ml-1.opacity-70.mb-4 (t :paginates/pages total-items)]
+     [:div.text-sm.ml-1.opacity-70.mb-4 (t ::pagination-pages total-items)]
 
      (when current-repo
 
@@ -1001,7 +1001,7 @@
              [(ui/button (ui/icon "search")
                          :on-click search-fn
                          :small? true)
-              [:input.form-input {:placeholder   (t :search/page-names)
+              [:input.form-input {:placeholder   (t ::search-page-names)
                                   :on-key-up     (fn [^js e]
                                                    (let [^js target (.-target e)]
                                                      (if (string/blank? (.-value target))
@@ -1019,7 +1019,7 @@
          [:div.r.flex.items-center.justify-between
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-whiteboards) " ?")]
+            {:html  [:small (t ::show-whiteboards)]
              :arrow true}
             [:a.button.whiteboard
              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
@@ -1027,7 +1027,7 @@
              (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-journals) " ?")]
+            {:html  [:small (t ::show-journals)]
              :arrow true}
             [:a.button.journal
              {:class    (util/classnames [{:active (boolean @*journal?)}])
@@ -1045,7 +1045,7 @@
              [:a.button.fade-link
               {:on-click toggle-fn}
               (ui/icon "dots" {:size ui/icon-size})])
-           [{:title (t :remove-orphaned-pages)
+           [{:title (t ::remove-orphaned-pages)
              :options {:on-click (fn []
                                    (let [orphaned-pages (model/get-orphaned-pages {})
                                          orphaned-pages? (seq orphaned-pages)]
@@ -1056,7 +1056,7 @@
                                          #(do
                                             (reset! *checks nil)
                                             (refresh-pages))))
-                                       (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
+                                       (notification/show! (t ::no-orphaned-pages) :success))))}
              :icon (ui/icon "file-x")}
             {:title (t :all-files)
              :options {:href (rfe/href :all-files)}
@@ -1076,11 +1076,11 @@
                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
                            :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
-           (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
+           (sortable-title (t ::block-name) :block/name *sort-by-item *desc?)
            (when-not mobile?
-             [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
-              (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
-              (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
+             [(sortable-title (t ::backlinks) :block/backlinks *sort-by-item *desc?)
+              (sortable-title (t ::created-at) :block/created-at *sort-by-item *desc?)
+              (sortable-title (t ::updated-at) :block/updated-at *sort-by-item *desc?)])]]
 
          [:tbody
           (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
@@ -1109,10 +1109,10 @@
                  [[:td.backlinks [:span backlinks]]
                   [:td.created-at [:span (if created-at
                                            (date/int->local-time-2 created-at)
-                                           "Unknown")]]
+                                           (t ::unknown-date))]]
                   [:td.updated-at [:span (if updated-at
                                            (date/int->local-time-2 updated-at)
-                                           "Unknown")]]])]))]]
+                                           (t ::unknown-date))]]])]))]]
 
         [:div.flex.justify-end.py-4
          (pagination :current @*current-page

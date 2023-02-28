@@ -23,8 +23,7 @@
   [page-name]
   (page-handler/delete! page-name
                         (fn []
-                          (notification/show! (str "Page " page-name " was deleted successfully!")
-                                              :success)))
+                          (notification/show! (t ::page-deleted-successfully) :success)))
   (state/close-modal!)
   (route-handler/redirect-to-home!))
 
@@ -38,7 +37,7 @@
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
-        (t :page/delete-confirmation)]]]
+        (t ::delete-confirmation)]]]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -81,8 +80,8 @@
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
-                      (t :page/unfavorite)
-                      (t :page/add-to-favorites))
+                      (t ::unfavorite)
+                      (t ::add-to-favorites))
            :options {:on-click
                      (fn []
                        (if favorited?
@@ -90,7 +89,7 @@
                          (page-handler/favorite-page! page-original-name)))}}
 
           (when (or (util/electron?) file-sync-graph-uuid)
-            {:title   (t :page/version-history)
+            {:title   (t ::version-history)
              :options {:on-click
                        (fn []
                          (cond
@@ -106,17 +105,17 @@
 
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
-            {:title   (t :page/copy-page-url)
+            {:title   (t ::copy-page-url)
              :options {:on-click #(util/copy-to-clipboard!
                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
-            {:title   (t :page/delete)
+            {:title   (t ::delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
           (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
-            {:title (t :page/presentation-mode)
+            {:title (t ::presentation-mode)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
                                     repo
@@ -128,9 +127,9 @@
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
           (when file-path
-            [{:title   (t :page/open-in-finder)
+            [{:title   (t ::open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-             {:title   (t :page/open-with-default-app)
+             {:title   (t ::open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
 
           (when (state/get-current-page)
@@ -140,7 +139,7 @@
                                      (export/export-blocks (:block/name page))))}})
 
           (when (util/electron?)
-            {:title   (t (if public? :page/make-private :page/make-public))
+            {:title   (t (if public? :make-private ::make-public))
              :options {:on-click
                        (fn []
                          (page-handler/update-public-attribute!
@@ -150,7 +149,7 @@
 
           (when (and (util/electron?) file-path
                      (not (file-sync-handler/synced-file-graph? repo)))
-            {:title   (t :page/open-backup-directory)
+            {:title   (t ::open-backup-directory)
              :options {:on-click
                        (fn []
                          (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})

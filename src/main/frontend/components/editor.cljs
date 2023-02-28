@@ -185,7 +185,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
+      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t ::block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))

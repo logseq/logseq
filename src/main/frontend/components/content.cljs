@@ -142,10 +142,10 @@
           [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
            (for [color ui/block-background-colors]
              [:a.shadow-sm
-              {:title (t (keyword "color" color))
+              {:title (t color)
                :on-click (fn [_e]
-                           (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
+                           (editor-handler/set-block-property! block-id "background-color" (name color)))}
+              [:div.heading-bg {:style {:background-color (str "var(--color-" (name color) "-500)")}}]])
            [:a.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]
