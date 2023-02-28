@@ -33,7 +33,7 @@
       [])
 
     (when session
-      [:main
+      [:main.max-w-screen-sm.p-6
        [:h1.text-3xl.mb-2.flex.justify-between
         (str "Hi, " (:username user))
 
