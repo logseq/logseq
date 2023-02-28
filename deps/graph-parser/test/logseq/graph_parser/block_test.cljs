@@ -1,6 +1,10 @@
 (ns logseq.graph-parser.block-test
   (:require [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser :as graph-parser]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [datascript.core :as d]
             [cljs.test :refer [deftest are testing is]]))
 
 (defn- extract-properties
@@ -105,3 +109,55 @@
              [["tags" "[[foo]], [[bar]]"] ["background-color" "#008000"]]
                                          {:property-pages/enabled? true})))
         "Only editable linkable built-in properties have page-refs in property values")))
+
+(defn find-block-for-content
+  [db content]
+  (->> (d/q '[:find (pull ?b [* {:block/refs [:block/uuid]}])
+              :in $ ?content
+              :where [?b :block/content ?content]]
+            db
+            content)
+       (map first)
+       first))
+
+(deftest refs-from-block-refs
+  (let [conn (ldb/start-conn)
+        id "63f528da-284a-45d1-ac9c-5d6a7435f6b4"
+        block (str "A block\nid:: " id)
+        block-ref-via-content (str "Link to " (block-ref/->block-ref id))
+        block-ref-via-block-properties (str "B block\nref:: " (block-ref/->block-ref id))
+        body (str "- " block "\n- " block-ref-via-content "\n- " block-ref-via-block-properties)]
+    (graph-parser/parse-file conn "foo.md" body {})
+
+    (testing "Block refs in blocks"
+      (is (= [{:block/uuid (uuid id)}]
+             (:block/refs (find-block-for-content @conn block-ref-via-content)))
+          "Block that links to a block via paragraph content has correct block ref")
+
+      (is (contains?
+           (set (:block/refs (find-block-for-content @conn block-ref-via-block-properties)))
+           {:block/uuid (uuid id)})
+          "Block that links to a block via block properties has correct block ref"))
+
+    (testing "Block refs in pre-block"
+      (let [block-ref-via-page-properties (str "page-ref:: " (block-ref/->block-ref id))]
+        (graph-parser/parse-file conn "foo2.md" block-ref-via-page-properties {})
+        (is (contains?
+             (set (:block/refs (find-block-for-content @conn block-ref-via-page-properties)))
+             {:block/uuid (uuid id)})
+            "Block that links to a block via page properties has correct block ref")))))
+
+(deftest timestamp-blocks
+  (let [conn (ldb/start-conn)
+        deadline-block "do something\nDEADLINE: <2023-02-21 Tue>"
+        scheduled-block "do something else\nSCHEDULED: <2023-02-20 Mon>"
+        body (str "- " deadline-block "\n- " scheduled-block)]
+    (graph-parser/parse-file conn "foo.md" body {})
+
+    (is (= 20230220
+           (:block/scheduled (find-block-for-content @conn scheduled-block)))
+        "Scheduled block has correct block attribute and value")
+
+    (is (= 20230221
+           (:block/deadline (find-block-for-content @conn deadline-block)))
+        "Deadline block has correct block attribute and value")))

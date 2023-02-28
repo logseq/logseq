@@ -310,7 +310,7 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options
- ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page nil}
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
