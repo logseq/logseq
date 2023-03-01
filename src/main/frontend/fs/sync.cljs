@@ -116,11 +116,11 @@
   ([desc]
    [:string {:desc desc :min 36 :max 36}]))
 
-;; (def ^:private graphs-txid-schema-legacy
-;;   [:tuple
-;;    (uuid-string-schema "user-uuid")
-;;    (uuid-string-schema "graph-uuid")
-;;    [:int {:desc "txid"}]])
+(def ^:private graphs-txid-schema-legacy
+  [:tuple
+   (uuid-string-schema "user-uuid")
+   (uuid-string-schema "graph-uuid")
+   [:int {:desc "txid"}]])
 
 (def ^:private graphs-txid-schema
   [:map {:closed true}
@@ -148,7 +148,7 @@
    (cond
      ;; empty .graphs-txid.edn & some graphs-txid-legacy
      ;; do migration
-     (and (some? @graphs-txid-legacy)
+     (and (m/validate graphs-txid-schema-legacy @graphs-txid-legacy)
           (empty? @graphs-txid))
      (let [[user-uuid graph-uuid txid] @graphs-txid-legacy]
        (reset! graphs-txid
