@@ -201,7 +201,7 @@
                                 #(do
                                    ;;(if theme (select-a-plugin-theme id))
                                    (notification/show!
-                                    (str (t ::update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                    (str (t ::update) (t ::plugins) ": " name " - " (.-version (.-options pl))) :success)
                                    (state/consume-updates-coming-plugin payload true))))
 
                              (do                            ;; register new
@@ -209,7 +209,7 @@
                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (notification/show!
-                                (str (t ::installed) (t :plugins) ": " name) :success)))))
+                                (str (t ::installed) (t ::plugins) ": " name) :success)))))
 
                        :error
                        (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))

@@ -138,7 +138,7 @@
    (ui/button
     [:span.flex.items-center
      (ui/icon "puzzle")
-     (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
+     (t ::plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
@@ -1013,11 +1013,11 @@
                                  (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
                              false)}})
     [{:hr true}
-     {:title   (t :plugins)
+     {:title   (t ::plugins)
       :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                 :class "extra-item mt-2"}
       :icon    (ui/icon "apps")}
-     {:title   (t :settings)
+     {:title   (t ::settings)
       :options {:on-click #(plugin-handler/goto-plugins-settings!)
                 :class "extra-item"}
       :icon    (ui/icon "adjustments")}])
@@ -1077,7 +1077,7 @@
     [:div.cp__plugins-page
      {:ref       *el-ref
       :tab-index "-1"}
-     [:h1 (t :plugins)]
+     [:h1 (t ::plugins)]
      (security-warning)
 
      [:hr.my-4]
@@ -1109,7 +1109,7 @@
 
     [:div.cp__plugins-settings.cp__settings-main
      [:header
-      [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
+      [:h1.title (ui/icon "puzzle") (str " " (or title (t ::settings-of-plugins)))]]
 
      [:div.cp__settings-inner.md:flex
       {:class (util/classnames [{:no-aside (not nav?)}])}

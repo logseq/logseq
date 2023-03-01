@@ -254,7 +254,9 @@
         :frontend.components.encryption/submit "Submit"
         :frontend.ui/cancel "Cancel"
         :frontend.extensions.pdf.toolbar/close "Close"
-        :delete "Delete"
+        :frontend.components.page/delete "Delete"
+        :frontend.components.whiteboard/delete "Delete"
+        :frontend.extensions.pdf.core/delete "Delete"
         :frontend.components.plugins/save "Save"
         :frontend.components.plugins/type "Type"
         :frontend.components.plugins/host "Host"
@@ -272,7 +274,9 @@
         :frontend.components.search/link-whiteboard-or-block "Link whiteboard/page/block"
         :frontend.components.search/page-search "Search in the current page"
         :frontend.components.search/graph-search "Search graph"
-        :new-page "New page"
+        :frontend.components.editor/new-page "New page"
+        :frontend.components.search/new-page "New page"
+        :frontend.handler.page/new-page "New page"
         :frontend.components.search/new-whiteboard "New whiteboard"
         :frontend.components.repo/new-graph "Add new graph"
         :frontend.components.header/graph "Graph"
@@ -300,9 +304,14 @@
         :frontend.components.page/remove-orphaned-pages "Remove orphaned pages"
         :frontend.components.page/remove-orphaned-pages-confirmation "Remove orphaned pages?"
         :frontend.handler.route/all-journals "All journals"
-        :settings "Settings"
-        :settings-of-plugins "Plugins"
-        :plugins "Plugins"
+        :frontend.components.settings/settings "Settings"
+        :frontend.components.plugins/settings "Settings"
+        :frontend.components.header/settings "Settings"
+        :frontend.components.settings/settings-of-plugins "Plugins"
+        :frontend.components.plugins/settings-of-plugins "Plugins"
+        :frontend.components.header/plugins "Plugins"
+        :frontend.components.plugins/plugins "Plugins"
+        :frontend.handler.plugin/plugins "Plugins"
         :frontend.components.plugins/themes "Themes"
         :frontend.components.header/themes "Themes"
         :frontend.components.settings/relaunch-confirm-to-work "Should relaunch app to make it work. Do you want to restart it now?"
@@ -358,10 +367,10 @@
         :frontend.components.plugins/contribute "Write and submit new plugin"
         :frontend.handler.plugin/up-to-date "It's up to date"
         :frontend.handler.ui/custom-js-alert "Found the custom.js file, is it allowed to execute? (If you don't understand the content of this file, it is recommended not to allow execution, which has certain security risks.)"
-        :frontend.components.plugins/install-from-file.menu-title "Install from plugins.edn"
-        :frontend.components.plugins/install-from-file.title "Install plugins from plugins.edn"
-        :frontend.components.plugins/install-from-file.notice "The following plugins will replace your plugins:"
-        :frontend.components.plugins/install-from-file.success "All plugins installed!"
+        :frontend.components.plugins/install-from-file-menu-title "Install from plugins.edn"
+        :frontend.components.plugins/install-from-file-title "Install plugins from plugins.edn"
+        :frontend.components.plugins/install-from-file-notice "The following plugins will replace your plugins:"
+        :frontend.components.plugins/install-from-file-success "All plugins installed!"
         :frontend.extensions.pdf.core/copy-ref "Copy ref"
         :frontend.extensions.pdf.core/copy-text "Copy text"
         :frontend.extensions.pdf.core/linked-ref "Linked references"
@@ -392,7 +401,6 @@
         :frontend.extensions.excalidraw/edit-block "Edit Block"
         :electron.listener/link-block-id-error "Open link failed. Block-id `{1}` doesn't exist in the graph."
         :electron.listener/link-file-error "Open link failed. File `{1}` doesn't exist in the graph."}
-
    :de {:all-files "Alle Dateien"
         :frontend.handler.route/all-journals "Alle Journale"
         :all-pages "Alle Seiten"
@@ -402,7 +410,9 @@
         :frontend.ui/cancel "Abbrechen"
         :frontend.extensions.pdf.toolbar/close "Schließen"
         :frontend.components.shortcut/code "Quelltext"
-        :delete "Löschen"
+        :frontend.components.page/delete "Löschen"
+        :frontend.components.whiteboard/delete "Löschen"
+        :frontend.extensions.pdf.core/delete "Löschen"
         :frontend.components.header/discourse-title "Unser Forum!"
         :frontend.components.file/download "Herunterladen"
         :frontend.components.export/export "Exportieren"
@@ -432,13 +442,17 @@
         :frontend.components.settings/logout "Ausloggen"
         :frontend.components.search/more "Mehr"
         :frontend.components.repo/new-graph "Neuen Graphen hinzufügen"
-        :new-page "Neue Seite"
+        :frontend.components.editor/new-page "Neue Seite"
+        :frontend.components.search/new-page "Neue Seite"
+        :frontend.handler.page/new-page "Neue Seite"
         :frontend.components.search/new-whiteboard "Neues Whiteboard"
         :frontend.components.repo/open-a-directory "Öffne ein lokales Verzeichnis"
         :frontend.components.repo/open-new-window "Neues Fenster"
         :frontend.components.search/page-search "In der aktuellen Seite suchen"
         :frontend.components.sidebar/parsing-files "Dateien analysieren"
-        :plugins "Plugins"
+        :frontend.components.header/plugins "Plugins"
+        :frontend.components.plugins/plugins "Plugins"
+        :frontend.handler.plugin/plugins "Plugins"
         :frontend.components.plugins/port "Port"
         :frontend.components.repo/re-index "Neu indizieren"
         :frontend.components.repo/re-index-detail "Graph neu aufbauen"
@@ -450,8 +464,11 @@
         :frontend.components.page/remove-orphaned-pages "Verweiste Seiten entfernen"
         :frontend.components.plugins/save "Speichern"
         :frontend.components.search/search "Suchen oder Seite erstellen"
-        :settings "Einstellungen"
-        :settings-of-plugins "Plugins"
+        :frontend.components.settings/settings "Einstellungen"
+        :frontend.components.plugins/settings "Einstellungen"
+        :frontend.components.header/settings "Einstellungen"
+        :frontend.components.settings/settings-of-plugins "Plugins"
+        :frontend.components.plugins/settings-of-plugins "Plugins"
         :frontend.components.shortcut/strikethrough "Durchstreichung"
         :frontend.components.encryption/submit "Senden"
         :frontend.handler.events/sync-from-local-changes-detected "Aktualisieren erkennt und verarbeitet Dateien, die auf Ihrer Festplatte geändert wurden und vom aktuellen Inhalt der Logseq-Seite abweichen. Fortfahren?"
@@ -462,9 +479,7 @@
         :frontend.components.plugins/type "Typ"
         :untitled "Ohne Titel"
         :frontend.ui/yes "Ja"
-
         :frontend.components.sidebar/skip-to-main-content "Skip to main content"
-
         :frontend.components.block/confirm-delete "Bild wirklich löschen?"
         :frontend.components.block/copy "Bild kopieren"
         :frontend.components.block/delete "Bild löschen"
@@ -472,9 +487,7 @@
         :frontend.components.block/open-in-browser "Bild im Browser öffnen"
         :frontend.components.block/physical-delete "Datei ebenfalls entfernen (Achtung: die Datei kann nicht wiederhergestellt werden)"
         :frontend.components.block/show-in-folder "Bild im Ordner anzeigen"
-
         :frontend.components.page/:block-name "Seitenname"
-
         :frontend.ui/gray "Grau"
         :frontend.ui/red "Rot"
         :frontend.ui/yellow "Gelb"
@@ -482,27 +495,21 @@
         :frontend.ui/blue "Blau"
         :frontend.ui/purple "Violett"
         :frontend.ui/pink "Rosa"
-
         :frontend.components.command-palette/prompt "Befehl eingeben"
-
         :frontend.components.content/click-to-edit "Klicken zum bearbeiten"
         :frontend.components.content/copy "Kopieren"
         :frontend.components.content/cut "Ausschneiden"
         :frontend.components.content/copy-block-emebed "Blockeinbettung kopieren"
         :frontend.components.content/copy-block-ref "Blockreferenz kopieren"
         :frontend.components.content/open-in-sidebar "In Seitenleiste öffnen"
-
         :frontend.components.editor/block-search "Nach einem Block suchen"
-
         :frontend.fs.sync/graph-deleted "Der aktuelle Remote-Graph wurde gelöscht"
         :frontend.fs.sync/other-user-graph "Aktueller lokaler Graph ist an den Remote-Graph des anderen Benutzers gebunden. Kann also nicht mit der Synchronisierung beginnen."
-
         :frontend.components.file/format-not-supported "Format .{1} wird nicht unterstützt."
         :frontend.components.file/last-modified-at "Zuletzt geändert am"
         :frontend.components.file/name "Dateinamen"
         :frontend.components.file/no-data "Keine Daten"
         :frontend.handler.common.file/validate-existing-file-error "Seite existiert bereits mit einer anderen Datei: {1}, aktuelle Datei: {2}. Bitte behalten Sie nur eine davon und indizieren Sie Ihren Graphen neu."
-
         :frontend.components.conversion/all-action "Alle Aktionen anwenden!"
         :frontend.components.conversion/apply-rename "Anwenden des Vorgangs zur Datei-Umbenennung"
         :frontend.components.conversion/close-panel "Das Panel schließen"
@@ -528,7 +535,6 @@
         :frontend.components.conversion/select-format "(Entwicklermodus-Option, gefährlich!) Dateinamenformat auswählen"
         :frontend.components.conversion/suggest-rename "Aktion erforderlich: "
         :frontend.components.conversion/unreachable-title "Warnung! Der Seitenname wird unter dem aktuellen Dateinamenformat zu {1}, es sei denn, die Eigenschaft `title::` wird manuell gesetzt"
-
         :frontend.components.repo/all-graphs "Alle Graphen"
         :frontend.components.repo/local-graphs "Lokale Graphen"
         :frontend.handler.events/graph-persist "Logseq synchronisiert gerade den internen Status, bitte warten Sie einige Sekunden."
@@ -537,7 +543,6 @@
         :frontend.handler.events/graph-save "Speichern..."
         :frontend.handler.events/graph-save-error "Speichern fehlgeschlagen"
         :frontend.handler.events/graph-save-success "Erfolgreich gespeichert"
-
         :frontend.components.sidebar/help-shortcut-title "Hier klicken, um Tastenkombinationen und weitere Tipps zu sehen"
         :frontend.components.onboarding/about "Über Logseq"
         :frontend.components.onboarding/awesome-logseq "Awesome Logseq"
@@ -565,18 +570,14 @@
         :frontend.components.onboarding/start "Einstieg"
         :frontend.components.onboarding/terms "Nutzungsbedingungen"
         :frontend.components.shortcut/open-link-in-sidebar "Link in Seitenleiste öffnen"
-
         :frontend.components.sidebar/create "Erstellen"
         :frontend.components.sidebar/journals "Journale"
         :frontend.components.sidebar/nav-favorites "Favoriten"
         :frontend.components.sidebar/nav-recent-pages "Neuste"
         :frontend.components.sidebar/new-page "Neue Seite"
         :frontend.components.sidebar/new-whiteboard "Neues Whiteboard"
-
         :frontend.components.reference/filter-search "Suche in verknüpften Seiten"
-
         :frontend.ui/notification-clear-all "Alles löschen"
-
         :frontend.components.widgets/add-graph "Graph hinzufügen"
         :frontend.components.header/add-graph "Graph hinzufügen"
         :frontend.components.whiteboard/closed-feature "{1} geschlossen"
@@ -595,7 +596,6 @@
         :frontend.components.whiteboard/welcome-modal-description "Whiteboards sind ein großartiges Werkzeug für Brainstorming und Organisation. Jetzt können Sie jeden Ihrer Gedanken aus der Wissensdatenbank oder neue Gedanken nebeneinander auf einer räumlichen Leinwand platzieren, um sie zu verbinden, zu assoziieren und auf neue Weise zu verstehen."
         :frontend.components.whiteboard/welcome-modal-skip "Überspringen"
         :frontend.components.whiteboard/welcome-modal-start "Whiteboarding beginnen"
-
         :frontend.components.page-menu/add-to-favorites "Zu Favoriten hinzufügen"
         :frontend.components.page/backlinks "Backlinks"
         :frontend.components.page-menu/copy-page-url "Seiten-URL kopieren"
@@ -615,11 +615,9 @@
         :frontend.components.page-menu/unfavorite "Seite aus Favoriten entfernen"
         :frontend.components.page/updated-at "Aktualisiert am"
         :frontend.components.page-menu/version-history "Seitenverlauf anzeigen"
-
         :frontend.components.page/pagination-next "Weiter"
         :frontend.components.page/pagination-pages "Total {1} Seiten"
         :frontend.components.page/pagination-prev "Zurück"
-
         :frontend.extensions.pdf.core/copy-ref "Referenz kopieren"
         :frontend.extensions.pdf.core/copy-text "Text kopieren"
         :frontend.extensions.pdf.toolbar/doc-metadata "Metadaten des Dokuments"
@@ -627,7 +625,6 @@
         :frontend.extensions.pdf.core/linked-ref "Verlinkte Referenzen"
         :frontend.extensions.pdf.toolbar/linked-ref "Verlinkte Referenzen"
         :frontend.extensions.pdf.toolbar/toggle-dashed "Dashed style for area highlight"
-
         :frontend.components.plugins/all "Alle"
         :frontend.components.plugins/check-all-updates "Alle Updates überprüfen"
         :frontend.components.plugins/check-update "Update überprüfen"
@@ -659,12 +656,10 @@
         :frontend.components.plugins/update-available "Update verfügbar"
         :frontend.components.plugins/updating "Aktualisiere"
         :frontend.handler.plugin/up-to-date "Es ist auf dem neuesten Stand"
-
-        :frontend.components.plugins/install-from-file.menu-title "Aus plugins.edn installieren"
-        :frontend.components.plugins/install-from-file.title "Plugins aus plugins.edn installieren"
-        :frontend.components.plugins/install-from-file.notice "Die folgenden Plugins werden Ihre Plugins ersetzen:"
-        :frontend.components.plugins/install-from-file.success "Alle Plugins installiert!"
-
+        :frontend.components.plugins/install-from-file-menu-title "Aus plugins.edn installieren"
+        :frontend.components.plugins/install-from-file-title "Plugins aus plugins.edn installieren"
+        :frontend.components.plugins/install-from-file-notice "Die folgenden Plugins werden Ihre Plugins ersetzen:"
+        :frontend.components.plugins/install-from-file-success "Alle Plugins installiert!"
         :frontend.components.sidebar/all-pages "Alle Seiten"
         :frontend.components.right-sidebar/lock-ref "Blockreferenz"
         :frontend.components.right-sidebar/contents "Inhalt"
@@ -675,23 +670,18 @@
         :frontend.components.right-sidebar/resize-handler "Griff zur Größenänderung der rechten Seitenleiste"
         :frontend.components.settings/theme-mode "Thema wechseln"
         :frontend.components.sidebar/whiteboards "Whiteboards"
-
         :frontend.components.search/items "Einträge"
         :frontend.components.page/search-page-names "In Seitennamen suchen"
         :frontend.components.search/search-publishing "Suchen"
         :frontend.components.search/result-for "Suchergebnisse für"
-
         :frontend.components.search/item-block "Block"
         :frontend.components.search/item-file "Datei"
         :frontend.components.search/item-page "Seite"
         :frontend.components.search/item-whiteboard "Whiteboard"
-
         :frontend.components.select/default-prompt "Wählen Sie einen"
-
         :frontend.components.select/graph-add "Ja, weiteren Graphen hinzufügen"
         :frontend.components.select/graph-empty-placeholder-description "Keine übereinstimmenden Graphen. Möchten Sie einen weiteren hinzufügen?"
         :frontend.components.select/graph-prompt "Einen Graphen auswählen"
-
         :frontend.components.settings/alpha-features "Alpha-Funktionen"
         :frontend.components.settings/auto-updater "Automatisches Update"
         :frontend.components.settings/beta-features "Beta-Funktionen"
@@ -749,17 +739,13 @@
         :frontend.components.settings/tab-editor "Editor"
         :frontend.components.settings/tab-general "Allgemein"
         :frontend.components.settings/tab-version-control "Versionskontrolle"
-
         :frontend.components.page/all-done "Alles erledigt!"
-
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                               :default "dummy-notes-en.md")
         :frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-en.md")
                                            :default "tutorial-en.md")
-
         :frontend.components.header/updater-new-version-install "Eine neue Version wurde heruntergeladen."
         :frontend.components.header/updater-quit-and-install "Neu starten, um zu installieren"
-
         :frontend.components.search/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"}
    :nl {:all-files "Alle bestanden"
         :frontend.components.repo/all-graphs "Alle grafieken"
@@ -769,7 +755,9 @@
         :frontend.ui/cancel "Annuleren"
         :frontend.extensions.pdf.toolbar/close "Sluiten"
         :frontend.components.shortcut/code "Code"
-        :delete "Verwijderen"
+        :frontend.components.page/delete "Verwijderen"
+        :frontend.components.whiteboard/delete "Verwijderen"
+        :frontend.extensions.pdf.core/delete "Verwijderen"
         :frontend.components.header/discourse-title "Ons forum!"
         :frontend.components.file/download "Downloaden"
         :frontend.components.export/export "Exporteren"
@@ -798,12 +786,16 @@
         :frontend.components.settings/logout "Uitloggen"
         :frontend.components.search/more "Meer"
         :frontend.components.repo/new-graph "Nieuwe grafiek toevoegen"
-        :new-page "Nieuwe pagina"
+        :frontend.components.editor/new-page "Nieuwe pagina"
+        :frontend.components.search/new-page "Nieuwe pagina"
+        :frontend.handler.page/new-page "Nieuwe pagina"
         :frontend.components.repo/open-a-directory "Open een lokale map"
         :frontend.components.repo/open-new-window "Nieuwe venster"
         :frontend.components.search/page-search "Zoek in de huidige pagina"
         :frontend.components.sidebar/parsing-files "Bestanden analyseren"
-        :plugins "Plugins"
+        :frontend.components.header/plugins "Plugins"
+        :frontend.components.plugins/plugins "Plugins"
+        :frontend.handler.plugin/plugins "Plugins"
         :frontend.components.plugins/port "Poort"
         :frontend.components.repo/re-index "Herindexeren"
         :frontend.components.repo/re-index-detail "Grafiek herbouwen"
@@ -814,8 +806,11 @@
         :frontend.components.page/remove-orphaned-pages "Verwijder gelinkte pagina's"
         :frontend.components.plugins/save "Opslaan"
         :frontend.components.search/search "Zoek of maak pagina"
-        :settings "Instellingen"
-        :settings-of-plugins "Plugin instellingen"
+        :frontend.components.settings/settings "Instellingen"
+        :frontend.components.plugins/settings "Instellingen"
+        :frontend.components.header/settings "Instellingen"
+        :frontend.components.settings/settings-of-plugins "Plugin instellingen"
+        :frontend.components.plugins/settings-of-plugins "Plugin instellingen"
         :frontend.components.shortcut/strikethrough "Doorgestreept"
         :frontend.components.encryption/submit "Verzenden"
         :frontend.handler.events/sync-from-local-changes-detected "ReBijwerkenfresh detecteert en verwerkt bestanden die op uw schijf zijn gewijzigd en die afwijken van de eigenlijke inhoud van de Logseq pagina. Verder?"
@@ -825,36 +820,28 @@
         :frontend.components.header/themes "Thema's"
         :frontend.components.plugins/type "Type"
         :frontend.ui/yes "Ja"
-
         :frontend.components.block/confirm-delete "Weet u zeker dat u dit wilt verwijderen afbeelding?"
         :frontend.components.block/physical-delete "Verwijder het bestand ook (let op dat het niet hersteld kan worden)"
-
         :frontend.components.page/:block-name "Pagina naam"
-
         :frontend.components.command-palette/prompt "Type een commando"
-
         :frontend.components.content/click-to-edit "Klik om te bewerken"
         :frontend.components.content/copy "Kopieer"
         :frontend.components.content/cut "Knip"
         :frontend.components.content/copy-block-emebed "Kopieer blok embed"
         :frontend.components.content/copy-block-ref "Kopieer blok ref"
         :frontend.components.content/open-in-sidebar "Open in zijbalk"
-
         :frontend.components.editor/block-search "Zoek voor een blok"
         :frontend.components.file/format-not-supported "Formaat .{1} wordt niet ondersteund."
         :frontend.components.file/last-modified-at "Laatst aangepast op"
         :frontend.components.file/name "Bestandsnaam"
         :frontend.components.file/no-data "Geen gegevens"
-
         :frontend.fs.sync/graph-deleted "Het huidige remote grafiek is verwijderd"
         :frontend.fs.sync/other-user-graph "De huidige lokale grafiek is gebonden aan de remote grafiek van de andere gebruiker. Dus kan de synchronisatie niet starten."
-
         :frontend.handler.events/graph-persist "Logseq is de interne status aan het synchroniseren, wacht alstublieft enkele seconden."
         :frontend.handler.events/graph-persist-error "Interne status sync mislukt."
         :frontend.handler.events/graph-save "Opslaan..."
         :frontend.handler.events/graph-save-error "Opslaan mislukt"
         :frontend.handler.events/graph-save-success "Opslaan succesvol"
-
         :frontend.components.onboarding/about "Over Logseq"
         :frontend.components.onboarding/awesome-logseq "Awesome Logseq"
         :frontend.components.shortcut/block-content-autocomplete "Blokinhoud (brontekst, citaten, zoekopdrachten, enz.) autocomplete"
@@ -881,14 +868,11 @@
         :frontend.components.onboarding/start "Aan de slag"
         :frontend.components.onboarding/terms "Voorwaarden"
         :frontend.components.shortcut/open-link-in-sidebar "Open link in zijbalk"
-
         :frontend.components.sidebar/journals "Journalen"
         :frontend.components.sidebar/nav-favorites "Favorieten"
         :frontend.components.sidebar/nav-recent-pages "Recent"
         :frontend.components.sidebar/new-page "Nieuwe pagina"
-
         :frontend.components.reference/filter-search "Zoeken in gelinkte pagina's"
-
         :frontend.components.widgets/add-graph "Grafiek toevoegen"
         :frontend.components.header/add-graph "Grafiek toevoegen"
         :frontend.components.widgets/demo-graph "Dit is een demo grafiek, wijzigingen worden niet opgeslagen totdat u een lokale map opent."
@@ -898,7 +882,6 @@
         :frontend.components.widgets/new-graph-desc-4 "/pages - bewaart de andere pagina's"
         :frontend.components.widgets/new-graph-desc-5 "/logseq - bewaart configuratie, custom.css, en wat metadata."
         :frontend.components.widgets/open-local-dir "Open een lokale map"
-
         :frontend.components.page-menu/add-to-favorites "Voeg aan favorieten toe"
         :frontend.components.page/backlinks "Back-Links"
         :frontend.components.page-menu/copy-page-url "Kopieer pagina URL"
@@ -917,17 +900,14 @@
         :frontend.components.page-menu/unfavorite "Pagina uit favorieten verwijderen"
         :frontend.components.page/updated-at "Bijgewerkt op"
         :frontend.components.page-menu/version-history "Controleer pagina geschiedenis"
-
         :frontend.components.page/pagination-next "Volgende"
         :frontend.components.page/pagination-pages "Totaal {1} pagina's"
         :frontend.components.page/pagination-prev "Vorige"
-
         :frontend.extensions.pdf.core/copy-ref "Kopieer ref"
         :frontend.extensions.pdf.core/copy-text "Kopieer tekst"
         :frontend.extensions.pdf.core/linked-ref "Gekoppelde referenties"
         :frontend.extensions.pdf.toolbar/linked-ref "Gekoppelde referenties"
         :frontend.extensions.pdf.toolbar/toggle-dashed "Gestippelde stijl voor gebiedsmarkering"
-
         :frontend.components.plugins/all "Alle"
         :frontend.components.plugins/check-all-updates "Check alle updates"
         :frontend.components.plugins/check-update "Check update"
@@ -959,7 +939,6 @@
         :frontend.handler.plugin/update "Update"
         :frontend.components.plugins/update-available "Update beschikbaar"
         :frontend.components.plugins/updating "Bijwerken"
-
         :frontend.components.sidebar/all-pages "Alle pagina's"
         :frontend.components.right-sidebar/lock-ref "Blok verwijzingen"
         :frontend.components.right-sidebar/contents "Inhoud"
@@ -968,7 +947,6 @@
         :frontend.components.right-sidebar/help "Help"
         :frontend.components.right-sidebar/page-graph "Pagina grafiek"
         :frontend.components.settings/theme-mode "Thema modes"
-
         :frontend.components.search/items "items"
         :frontend.components.page/search-page-names "Zoek paginanamen"
         :frontend.components.search/search-publishing "Zoek"
@@ -977,7 +955,6 @@
         :frontend.components.select/graph-add "Ja, voeg nog een grafiek toe"
         :frontend.components.select/graph-empty-placeholder-description "Geen overeenkomende grafieken. Wilt u er een toevoegen?"
         :frontend.components.select/graph-prompt "Selecteer een grafiek"
-
         :frontend.components.settings/auto-updater "Auto updater"
         :frontend.components.settings/clear "Verwijder"
         :frontend.components.settings/clear-cache "Cache wissen"
@@ -995,7 +972,6 @@
         :frontend.components.settings/edit-export-css "Bewerk export.css"
         :frontend.components.settings/enable-all-pages-public "Alle pagina's openbaar bij publiceren"
         :frontend.components.settings/enable-block-time "Tijdstempel voor blokken inschakelen"
-
         :frontend.components.settings/enable-flashcards "Flashcards"
         :frontend.components.settings/enable-journals "Journaals"
         :frontend.components.settings/enable-shortcut-tooltip "Snelkoppeling tooltip inschakelen"
@@ -1019,14 +995,11 @@
         :frontend.components.settings/tab-editor "Editor"
         :frontend.components.settings/tab-general "Algemeen"
         :frontend.components.settings/tab-version-control "Versiebeheer"
-
         :frontend.components.page/all-done "Alles klaar!"
-
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                               :default "dummy-notes-en.md")
         :frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-en.md")
                                            :default "tutorial-en.md")
-
         :frontend.components.header/updater-new-version-install "Een nieuwe versie is gedownload."
         :frontend.components.header/updater-quit-and-install "Herstart om te installeren"}
    :fr {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-fr.md")
@@ -1051,7 +1024,6 @@
         :frontend.components.shortcut/reference-autocomplete "Autocomplétion des références à une Page"
         :frontend.components.shortcut/block-reference "Référence à un Bloc"
         :frontend.components.shortcut/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
-
         :frontend.components.shortcut/context-menu "Menu contextuel"
         :frontend.components.shortcut/markdown-syntax "Syntaxe Markdown"
         :frontend.components.shortcut/org-mode-syntax "Syntaxe Org mode"
@@ -1102,13 +1074,17 @@
         :frontend.components.export/export-json "Exporter au format JSON"
         :frontend.components.search/search-publishing "Rechercher"
         :frontend.components.search/search "Rechercher ou Créer la Page"
-        :new-page "Nouvelle page"
+        :frontend.components.editor/new-page "Nouvelle page"
+        :frontend.components.search/new-page "Nouvelle page"
+        :frontend.handler.page/new-page "Nouvelle page"
         :frontend.components.header/graph "Graphe"
         :frontend.handler.route/graph "Graphe"
         :all-pages "Toutes les pages"
         :all-files "Tous les fichiers"
         :frontend.handler.route/all-journals "Tous les journaux"
-        :settings "Préférences"
+        :frontend.components.settings/settings "Préférences"
+        :frontend.components.plugins/settings "Préférences"
+        :frontend.components.header/settings "Préférences"
         :frontend.components.header/import "Importer"
         :frontend.components.header/join-community "Rejoindre la communauté"
         :frontend.ui/loading "Chargement en cours"
@@ -1122,7 +1098,9 @@
         :frontend.components.whiteboard/all-whiteboards "Tous les tableaux blancs"
         :frontend.components.content/auto-heading "Titres automatiques"
         :frontend.extensions.pdf.toolbar/close "Fermer"
-        :delete "Effacer"
+        :frontend.components.page/delete "Effacer"
+        :frontend.components.whiteboard/delete "Effacer"
+        :frontend.extensions.pdf.core/delete "Effacer"
         :frontend.components.header/discourse-title "Notre forum !"
         :frontend.components.export/export "Exporter"
         :frontend.components.export/export-edn "Exporter vers EDN"
@@ -1146,7 +1124,9 @@
         :frontend.components.repo/open-a-directory "Ouvrir un dossier local"
         :frontend.components.repo/open-new-window "Nouvelle fenêtre"
         :frontend.components.search/page-search "Chercher dans la page en cours"
-        :plugins "Extensions"
+        :frontend.components.header/plugins "Extensions"
+        :frontend.components.plugins/plugins "Extensions"
+        :frontend.handler.plugin/plugins "Extensions"
         :frontend.components.plugins/port "Port"
         :frontend.components.repo/re-index-detail "Reconstruire le graphe"
         :frontend.handler.events/re-index-discard-unsaved-changes-warning "La réindexation va effacer le graphe actuel, puis l'indéxer à nouveau. Ceci risque de vous faire perdre le travail non sauvegardé. Continuer ?"
@@ -1155,7 +1135,8 @@
         :frontend.components.content/remove-heading "Retirer les entêtes"
         :frontend.components.page/remove-orphaned-pages "Supprimer les pages orphelines"
         :frontend.components.plugins/save "Sauver"
-        :settings-of-plugins "Extensions"
+        :frontend.components.settings/settings-of-plugins "Extensions"
+        :frontend.components.plugins/settings-of-plugins "Extensions"
         :frontend.handler.events/sync-from-local-changes-detected "Le rafraîchissement va mettre à jour le contenu de Logseq en fonction des modifications réalisées sur les fichiers locaux. Voulez-vous continuer ?"
         :frontend.components.repo/sync-from-local-files "Rafraîchir"
         :frontend.components.repo/sync-from-local-files-detail "Importer les changements depuis les fichiers locaux"
@@ -1285,10 +1266,10 @@
         :frontend.handler.plugin/update "Mettre à jour"
         :frontend.components.plugins/update-available "Mise à jour disponible"
         :frontend.components.plugins/updating "Mise à jour en cours"
-        :frontend.components.plugins/install-from-file.menu-title "Installer depuis plugins.edn"
-        :frontend.components.plugins/install-from-file.notice "Les extensions suivantes vont remplacer vos extensions :"
-        :frontend.components.plugins/install-from-file.success "Toutes les extensions sont installées !"
-        :frontend.components.plugins/install-from-file.title "Installer des extensions depuis plugins.edn"
+        :frontend.components.plugins/install-from-file-menu-title "Installer depuis plugins.edn"
+        :frontend.components.plugins/install-from-file-notice "Les extensions suivantes vont remplacer vos extensions :"
+        :frontend.components.plugins/install-from-file-success "Toutes les extensions sont installées !"
+        :frontend.components.plugins/install-from-file-title "Installer des extensions depuis plugins.edn"
         :frontend.components.right-sidebar/page-graph "Graphe de la page"
         :frontend.components.right-sidebar/resize-handler "Poignée de redimensionnement de la barre latérale droite"
         :frontend.components.sidebar/whiteboards "Tableaux blancs"
@@ -1354,7 +1335,6 @@
         :frontend.components.header/updater-new-version-install "Une nouvelle version a été téléchargée."
         :frontend.components.header/updater-quit-and-install "Relancez pour installer"
         :frontend.components.search/link-whiteboard-or-block "Lier un tablau blanc/page/bloc"
-
         :frontend.handler.common.file/validate-existing-file-error "La page existe déjà avec un autre fichier: {1}, fichier actuel: {2}. Veuillez n'en garder qu'un et réindexer votre graphique."
         :frontend.ui/notification-clear-all "Tout effacer"
         :frontend.components.whiteboard/closed-feature "Fermé {1}"
@@ -1368,7 +1348,6 @@
         :frontend.components.whiteboard/welcome-modal-title "Un nouveau cadre pour vos pensées."
         :frontend.components.settings/clear-cache-warning "Vider le cache supprimera les graphiques ouverts. Vous perdrez les modifications non enregistrées."
         :frontend.components.settings/disable-sentry-desc "Logseq ne collectera jamais votre base de données de graphes locale ni ne vendra vos données."}
-
    :zh-CN {:frontend.components.sidebar/skip-to-main-content "跳转到主内容"
            :frontend.components.widgets/demo-graph "这是一份图谱的示例，在上面做的修改不会被保存，除非打开本地文件夹"
            :frontend.components.widgets/add-graph "添加图谱"
@@ -1583,7 +1562,9 @@
            :frontend.components.search/search "搜索或者创建新页面"
            :frontend.components.search/page-search "在当前页面搜索"
            :frontend.components.search/graph-search "搜索图谱"
-           :new-page "新页面"
+           :frontend.components.editor/new-page "新页面"
+           :frontend.components.search/new-page "新页面"
+           :frontend.handler.page/new-page "新页面"
            :frontend.components.header/graph "图谱"
            :frontend.handler.route/graph "图谱"
            :frontend.handler.events/graph-persist "打开新窗口前，Logseq正在同步内部状态，请等待片刻。"
@@ -1599,9 +1580,14 @@
            :all-pages "所有页面"
            :all-files "所有文件"
            :frontend.components.page/remove-orphaned-pages "删除空页面"
-           :settings "设置"
-           :settings-of-plugins "插件设置"
-           :plugins "插件"
+           :frontend.components.settings/settings "设置"
+           :frontend.components.plugins/settings "设置"
+           :frontend.components.header/settings "设置"
+           :frontend.components.settings/settings-of-plugins "插件设置"
+           :frontend.components.plugins/settings-of-plugins "插件设置"
+           :frontend.components.header/plugins "插件"
+           :frontend.components.plugins/plugins "插件"
+           :frontend.handler.plugin/plugins "插件"
            :frontend.components.plugins/themes "主题"
            :frontend.components.header/themes "主题"
            :frontend.components.settings/relaunch-confirm-to-work "如果希望立刻生效, 请重启应用。是否现在重启？"
@@ -1611,7 +1597,9 @@
            :frontend.components.sidebar/help-shortcut-title "点此查看快捷方式和更多有用帮助"
            :frontend.ui/loading "加载中"
            :frontend.extensions.pdf.toolbar/close "关闭"
-           :delete "删除"
+           :frontend.components.page/delete "删除"
+           :frontend.components.whiteboard/delete "删除"
+           :frontend.extensions.pdf.core/delete "删除"
            :frontend.components.plugins/save "保存"
            :frontend.components.plugins/type "类型"
            :frontend.components.plugins/host "主机"
@@ -1630,7 +1618,6 @@
            :frontend.components.repo/open-a-directory "打开本地文件夹"
            :frontend.components.search/new-whiteboard "新建白板"
            :frontend.components.whiteboard/all-whiteboards "所有白板"
-
            :frontend.components.plugins/installed "已安装"
            :frontend.handler.plugin/installed "已安装"
            :frontend.components.plugins/not-installed "未安装"
@@ -1661,7 +1648,6 @@
            :frontend.components.plugins/unpacked-tips "用于开发目的或者从本地磁盘载入可信的社区插件。"
            :frontend.handler.plugin/up-to-date "已经是最新了"
            :frontend.handler.ui/custom-js-alert "发现 custom.js 自定义脚本，是否允许执行？（如果您对该文件的内容不了解 或 来源不可靠，建议不要允许执行）"
-
            :frontend.extensions.pdf.core/copy-ref "复制引用"
            :frontend.extensions.pdf.core/copy-text "复制文本"
            :frontend.extensions.pdf.core/linked-ref "转到注解"
@@ -1669,13 +1655,11 @@
            :frontend.extensions.pdf.toolbar/toggle-dashed "区域选取为虚线"
            :frontend.extensions.pdf.toolbar/hl-block-colored "颜色标识高亮块"
            :frontend.extensions.pdf.toolbar/doc-metadata "查看文档元数据"
-
            :frontend.components.block/open-in-browser "在浏览器打开"
            :frontend.components.block/show-in-folder "在文件夹中显示图片"
            :frontend.components.block/copy "复制图片"
            :frontend.components.block/delete "删除图片"
            :frontend.components.block/maximize "最大化显示图片"
-
            :frontend.ui/blue "蓝色"
            :frontend.ui/gray "灰色"
            :frontend.ui/green "绿色"
@@ -1683,25 +1667,17 @@
            :frontend.ui/purple "紫色"
            :frontend.ui/red "红色"
            :frontend.ui/yellow "黄色"
-
            :frontend.components.search/link-whiteboard-or-block "链接白板/页面/块"
-
            :frontend.components.header/updater-new-version-install "新版本已经准备就绪，重启应用即可更新。"
            :frontend.components.header/updater-quit-and-install "现在安装"
-
            :frontend.components.page/pagination-pages "共计 {1} 页面"
            :frontend.components.page/pagination-prev "上一页"
            :frontend.components.page/pagination-next "下一页"
-
            :frontend.components.page/all-done "处理完成"
-
            :frontend.components.command-palette/prompt "输入指令"
-
            :frontend.fs.sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
            :frontend.fs.sync/graph-deleted "当前远程图谱已经删除"
-
            :frontend.ui/notification-clear-all "清除全部通知"}
-
    :zh-Hant {:frontend.components.widgets/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :frontend.components.widgets/add-graph "Add a graph"
              :frontend.components.header/add-graph "Add a graph"
@@ -1736,7 +1712,9 @@
              :frontend.components.shortcut/strikethrough "刪除線"
              :frontend.components.shortcut/code "代碼"
              :frontend.extensions.pdf.toolbar/close "關閉"
-             :delete "删除"
+             :frontend.components.page/delete "删除"
+             :frontend.components.whiteboard/delete "删除"
+             :frontend.extensions.pdf.core/delete "删除"
              :frontend.components.right-sidebar/help "幫助"
              :frontend.components.settings/theme-mode "主題模式"
              :frontend.components.right-sidebar/contents "目錄"
@@ -1783,15 +1761,18 @@
              :frontend.components.export/export-json "以 JSON 格式導出"
              :frontend.components.export/export-markdown "以 Markdown 格式導出"
              :frontend.components.export/export-opml "以 OPML 格式導出"
-
              :frontend.components.search/search-publishing "搜索"
              :frontend.components.search/search "搜索或者創建新頁面"
-             :new-page "新頁面"
+             :frontend.components.editor/new-page "新頁面"
+             :frontend.components.search/new-page "新頁面"
+             :frontend.handler.page/new-page "新頁面"
              :frontend.components.header/graph "圖譜"
              :frontend.handler.route/graph "圖譜"
              :all-pages "所有頁面"
              :all-files "所有文件"
-             :settings "設置"
+             :frontend.components.settings/settings "設置"
+             :frontend.components.plugins/settings "設置"
+             :frontend.components.header/settings "設置"
              :frontend.components.header/import "導入"
              :frontend.components.header/join-community "加入社區"
              :frontend.components.sidebar/help-shortcut-title "點此查看快捷方式和更多有用幫助"
@@ -1801,15 +1782,12 @@
              :frontend.components.file/download "下載"
              :frontend.components.settings/language "語言"
              :frontend.components.content/remove-background "去除背景"
-
              :frontend.extensions.pdf.core/copy-ref "復製引用"
              :frontend.extensions.pdf.core/copy-text "復製文本"
              :frontend.extensions.pdf.core/linked-ref "轉到註解"
              :frontend.extensions.pdf.toolbar/linked-ref "轉到註解"
-
              :frontend.fs.sync/other-user-graph "當前本地 graph 綁定到其他用戶的遠程 graph 上。因此無法啟動同步。"
              :frontend.fs.sync/graph-deleted "當前遠程 graph 已被刪除"}
-
    :af {:frontend.components.widgets/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
         :frontend.components.widgets/add-graph "Add a graph"
         :frontend.components.header/add-graph "Add a graph"
@@ -1882,12 +1860,16 @@
         :frontend.components.repo/re-index "Herindekseer"
         :frontend.components.export/export-json "Uitvoer as JSON"
         :frontend.components.search/search "Soek"
-        :new-page "Nuwe bladsy"
+        :frontend.components.editor/new-page "Nuwe bladsy"
+        :frontend.components.search/new-page "Nuwe bladsy"
+        :frontend.handler.page/new-page "Nuwe bladsy"
         :frontend.components.header/graph "Grafiek"
         :frontend.handler.route/graph "Grafiek"
         :all-pages "Alle blaaie"
         :all-files "Alle lêers"
-        :settings "Verstellings"
+        :frontend.components.settings/settings "Verstellings"
+        :frontend.components.plugins/settings "Verstellings"
+        :frontend.components.header/settings "Verstellings"
         :frontend.components.header/import "Invoer"
         :frontend.components.header/join-community "Sluit by die gemeenskap aan"
         :frontend.components.sidebar/help-shortcut-title "Kliek op die kortpad en ander wenke"
@@ -1896,10 +1878,8 @@
         :frontend.components.sidebar/loading-files "Laai lêers"
         :frontend.components.file/download "Laai af"
         :frontend.components.settings/language "Taal"
-
         :frontend.fs.sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."
         :frontend.fs.sync/graph-deleted "Huidige afstandgrafiek is geskrap"}
-
    :es {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-es.md")
                                            :default "tutorial-es.md")
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-es.md")
@@ -1971,7 +1951,6 @@
         :frontend.components.page-menu/make-private "Hacer privada"
         :frontend.components.page-menu/delete "Eliminar página"
         :frontend.components.page-menu/add-to-favorites "Añadir a Favoritos"
-
         :frontend.components.page/:block-name "Nombre de página"
         :frontend.ui/earlier "Anteriormente"
         :frontend.components.page-menu/copy-page-url "Copiar URL de la página"
@@ -2062,7 +2041,9 @@
         :frontend.components.encryption/submit "Enviar"
         :frontend.ui/cancel "Cancelar"
         :frontend.extensions.pdf.toolbar/close "Cerrar"
-        :delete "Eliminar"
+        :frontend.components.page/delete "Eliminar"
+        :frontend.components.whiteboard/delete "Eliminar"
+        :frontend.extensions.pdf.core/delete "Eliminar"
         :frontend.components.plugins/save "Guardar"
         :frontend.components.plugins/type "Tipo"
         :frontend.components.plugins/host "Servidor"
@@ -2079,7 +2060,9 @@
         :frontend.components.search/search "Buscar o Crear Página"
         :frontend.components.search/page-search "Buscar en la página actual"
         :frontend.components.search/graph-search "Buscar grafo"
-        :new-page "Nueva página"
+        :frontend.components.editor/new-page "Nueva página"
+        :frontend.components.search/new-page "Nueva página"
+        :frontend.handler.page/new-page "Nueva página"
         :frontend.components.repo/new-graph "Añadir nuevo grafo"
         :frontend.components.header/graph "Grafo"
         :frontend.handler.route/graph "Grafo"
@@ -2102,9 +2085,14 @@
         :all-files "Lista de archivos"
         :frontend.components.page/remove-orphaned-pages "Eliminar páginas huérfanas"
         :frontend.handler.route/all-journals "Lista de diarios"
-        :settings "Opciones"
-        :settings-of-plugins "Opciones de Extensiones"
-        :plugins "Extensiones"
+        :frontend.components.settings/settings "Opciones"
+        :frontend.components.plugins/settings "Opciones"
+        :frontend.components.header/settings "Opciones"
+        :frontend.components.settings/settings-of-plugins "Opciones de Extensiones"
+        :frontend.components.plugins/settings-of-plugins "Opciones de Extensiones"
+        :frontend.components.header/plugins "Extensiones"
+        :frontend.components.plugins/plugins "Extensiones"
+        :frontend.handler.plugin/plugins "Extensiones"
         :frontend.components.plugins/themes "Temas"
         :frontend.components.header/themes "Temas"
         :frontend.components.settings/relaunch-confirm-to-work "Debe relanzar la aplicación para hacer que funcione. ¿Desea reiniciarla ahora?"
@@ -2172,7 +2160,6 @@
         :frontend.components.select/graph-add "Sí, añadir otro grafo"
         :frontend.fs.sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"
         :frontend.fs.sync/graph-deleted "El gráfico remoto actual se ha eliminado"}
-
    :nb-NO {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-no.md")
                                               :default "tutorial-no.md")
            :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-no.md")
@@ -2306,7 +2293,9 @@
            :frontend.components.encryption/submit "Send inn"
            :frontend.ui/cancel "Avbryt"
            :frontend.extensions.pdf.toolbar/close "Lukk"
-           :delete "Slett"
+           :frontend.components.page/delete "Slett"
+           :frontend.components.whiteboard/delete "Slett"
+           :frontend.extensions.pdf.core/delete "Slett"
            :frontend.components.repo/re-index "Indekser på nytt"
            :frontend.components.repo/re-index-detail "Bygg grafen på nytt"
            :frontend.components.repo/open-new-window "Nytt vindu"
@@ -2316,7 +2305,9 @@
            :frontend.components.search/search "Søk eller Opprett Side"
            :frontend.components.search/page-search "Søk i denne siden"
            :frontend.components.search/graph-search "Søk graf"
-           :new-page "Ny side"
+           :frontend.components.editor/new-page "Ny side"
+           :frontend.components.search/new-page "Ny side"
+           :frontend.handler.page/new-page "Ny side"
            :frontend.components.repo/new-graph "Legg til ny graf"
            :frontend.components.header/graph "Graf"
            :frontend.handler.route/graph "Grafo"
@@ -2333,8 +2324,12 @@
            :all-files "Alle filer"
            :frontend.components.page/remove-orphaned-pages "Fjern foreldreløse sider"
            :frontend.handler.route/all-journals "Alle dagbøker"
-           :settings "Innstillinger"
-           :plugins "Utvidelser"
+           :frontend.components.settings/settings "Innstillinger"
+           :frontend.components.plugins/settings "Innstillinger"
+           :frontend.components.header/settings "Innstillinger"
+           :frontend.components.header/plugins "Utvidelser"
+           :frontend.components.plugins/plugins "Utvidelser"
+           :frontend.handler.plugin/plugins "Utvidelser"
            :frontend.components.plugins/themes "Tema"
            :frontend.components.header/themes "Tema"
            :frontend.components.settings/relaunch-confirm-to-work "Appen må startes på nytt for at dette skal virke. Vil du starte på nytt nå?"
@@ -2351,9 +2346,7 @@
            :frontend.components.settings/language "Språk"
            :frontend.components.content/remove-background "Fjern bakgrunn"
            :frontend.components.repo/open-a-directory "Åpne en lokal mappe"
-
            :frontend.components.shortcut/shortcut-page-title "Tastatursnarveier"
-
            :frontend.components.plugins/installed "Installert"
            :frontend.handler.plugin/installed "Installert"
            :frontend.components.plugins/installing "Innstallerer"
@@ -2384,28 +2377,22 @@
            :frontend.components.plugins/contribute "Skriv og send inn en ny utvidelse"
            :frontend.handler.plugin/up-to-date "Den er oppdatert"
            :frontend.handler.ui/custom-js-alert "Fant custom.js fil, får den lov til å kjøre? (Hvis du ikke forstår innholdet i denne filen er det anbefalt å ikke la den kjøre. Dette kan ha sikkerhetsrisiko.)"
-
            :frontend.extensions.pdf.core/copy-ref "Kopier ref"
            :frontend.extensions.pdf.core/copy-text "Kopier tekst"
            :frontend.extensions.pdf.core/linked-ref "Lenkede referanser"
            :frontend.extensions.pdf.toolbar/linked-ref "Lenkede referanser"
            :frontend.extensions.pdf.toolbar/toggle-dashed "Stiplet stil for utheving av område"
-
            :frontend.components.header/updater-new-version-install "En ny versjon er lastet ned. Start applikasjonen på nytt for å installere."
            :frontend.components.header/updater-quit-and-install "Start på nytt for å installere"
-
            :frontend.components.page/pagination-pages "Totalt {1} sider"
            :frontend.components.page/pagination-prev "Forrige"
            :frontend.components.page/pagination-next "Neste"
-
            :frontend.components.page/all-done "Alt ferdig!"
-
            :frontend.components.command-palette/prompt "Skriv en kommando"
            :frontend.components.select/default-prompt "Velg en"
            :frontend.components.select/graph-prompt "Velg en graf"
            :frontend.components.select/graph-empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :frontend.components.select/graph-add "Ja, legg til en ny graf"
-
            :frontend.fs.sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjerngraf. Kan ikke begynne å synkronisere."
            :frontend.fs.sync/graph-deleted "Nåværende fjerngraf er slettet"
            :frontend.components.plugins/host "Vert"
@@ -2413,7 +2400,8 @@
            :frontend.handler.events/re-index-discard-unsaved-changes-warning "Reindeksering vil forkaste nåværende graf, og deretter prosessere alle filene på nytt slik de er på disk akkurat nå. Du vil miste ulagrede endringer, og det kan ta litt tid. Forsette?"
            :frontend.handler.events/re-index-multiple-windows-warning "Du må lukke de andre vinduene før du kan reindeksere denne grafen"
            :frontend.components.plugins/save "Lagrer..."
-           :settings-of-plugins "Innstillinger for utvidelser"
+           :frontend.components.settings/settings-of-plugins "Innstillinger for utvidelser"
+           :frontend.components.plugins/settings-of-plugins "Innstillinger for utvidelser"
            :frontend.handler.events/sync-from-local-changes-detected "Oppfrisk oppdager og prosesserer filer på disk som er modifiserte og avviker fra sideinnholdet som vises i Logseq. Fortsett?"
            :frontend.components.plugins/type "Type"
            :frontend.handler.events/graph-persist "Logeq synkroniserer intern status, vennligst vent i flere sekunder."
@@ -2439,7 +2427,6 @@
            :frontend.components.block/open-in-browser "Åpne bilde i nettleser"
            :frontend.components.block/show-in-folder "Vis bilde i mappe"
            :frontend.components.reference/filter-search "Søk i lenkede referanser"}
-
    :pt-BR {:frontend.components.widgets/demo-graph "Esse é um grafo de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
            :frontend.components.widgets/add-graph "Adicionar grafo"
            :frontend.components.header/add-graph "Adicionar grafo"
@@ -2549,13 +2536,17 @@
            :frontend.components.encryption/submit "Submeter"
            :frontend.ui/cancel "Cancelar"
            :frontend.extensions.pdf.toolbar/close "Fechar"
-           :delete "Excluir"
+           :frontend.components.page/delete "Excluir"
+           :frontend.components.whiteboard/delete "Excluir"
+           :frontend.extensions.pdf.core/delete "Excluir"
            :frontend.components.repo/re-index "Re-indexar"
            :frontend.components.search/search-publishing "Pesquisar"
            :frontend.components.search/search "Pesquisar ou Criar Página"
            :frontend.components.search/page-search "Pesquisar na página atual"
            :frontend.components.search/graph-search "Pesquisar grafo"
-           :new-page "Nova página"
+           :frontend.components.editor/new-page "Nova página"
+           :frontend.components.search/new-page "Nova página"
+           :frontend.handler.page/new-page "Nova página"
            :frontend.components.repo/new-graph "Adicionar novo grafo"
            :frontend.components.header/graph "Grafo"
            :frontend.handler.route/graph "Grafo"
@@ -2571,8 +2562,12 @@
            :all-pages "Todas as páginas"
            :all-files "Todos os arquivos"
            :frontend.handler.route/all-journals "Todos os diários"
-           :settings "Configurações"
-           :plugins "Plugins"
+           :frontend.components.settings/settings "Configurações"
+           :frontend.components.plugins/settings "Configurações"
+           :frontend.components.header/settings "Configurações"
+           :frontend.components.header/plugins "Plugins"
+           :frontend.components.plugins/plugins "Plugins"
+           :frontend.handler.plugin/plugins "Plugins"
            :frontend.components.plugins/themes "Temas"
            :frontend.components.header/themes "Tema"
            :frontend.components.settings/relaunch-confirm-to-work "Deve reiniciar a aplicação para fazê-lo funcionar. Quer reiniciar agora?"
@@ -2591,9 +2586,7 @@
            :frontend.components.repo/re-index-detail "Re-indexar grafo"
            :frontend.components.repo/open-a-directory "Abrir uma pasta local"
            :frontend.components.repo/open-new-window "Nova janela"
-
            :frontend.components.shortcut/shortcut-page-title "Atalhos de teclado"
-
            :frontend.extensions.pdf.core/copy-ref "Copiar referência"
            :frontend.extensions.pdf.core/copy-text "Copiar texto"
            :frontend.extensions.pdf.core/linked-ref "Referências ligadas"
@@ -2614,7 +2607,6 @@
            :frontend.components.plugins/check-update "Verificar atualização"
            :frontend.components.plugins/contribute "Crie e envie um novo plugin"
            :frontend.handler.ui/custom-js-alert "Arquivo custom.js encontrado, deseja habilitar sua execução? (A execução deste arquivo pode trazer riscos, se você não conhece o conteúdo do arquivo é recomendado que você não ative esta opção.)"
-
            :frontend.components.plugins/delete-alert "Certeza que deseja excluir o plugin? [{1}]?"
            :frontend.components.plugins/disabled "Desabilitado"
            :frontend.components.plugins/downloads "Baixados"
@@ -2664,7 +2656,8 @@
            :frontend.components.plugins/type "Tipo"
            :frontend.components.plugins/host "Host"
            :frontend.components.plugins/port "Porta"
-           :settings-of-plugins "Configurações de Plugin"
+           :frontend.components.settings/settings-of-plugins "Configurações de Plugin"
+           :frontend.components.plugins/settings-of-plugins "Configurações de Plugin"
            :frontend.handler.events/graph-persist "O Logseq está sincronizando seu status interno, aguarde alguns segundos."
            :frontend.handler.events/graph-persist-error "Falha na sincronização do status interno."
            :frontend.handler.events/graph-save "Salvando..."
@@ -2673,10 +2666,8 @@
            :frontend.components.settings/plugin-system "Sistema de Plugins"
            :frontend.components.settings/network-proxy "Proxy de Rede"
            :frontend.components.plugins/network-proxy "Nettverksproxy"
-
            :frontend.fs.sync/other-user-graph "O grafo local atual está ligado ao grafo remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
            :frontend.fs.sync/graph-deleted "O grafo remoto atual foi excluído"
-
            :frontend.components.page-menu/copy-page-url "Copiar URL da página"
            :frontend.components.plugins/not-installed "Não instalado"
            :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
@@ -2686,13 +2677,11 @@
            :frontend.components.settings/edit-export-css "Editar export.css"
            :frontend.components.settings/enable-flashcards "Flashcards"
            :frontend.components.settings/export-theme "Exportar Tema"
-
            :frontend.components.header/discourse-title "Nosso fórum!"
            :frontend.components.onboarding.setups/importing "Importando"
            :frontend.components.block/copy "Copiar imagem"
            :frontend.components.block/delete "Excluir imagem"
            :frontend.components.block/maximize "Expandir imagem"
-
            :frontend.components.block/open-in-browser "Abrir imagem no navegador"
            :frontend.components.block/show-in-folder "Mostrar imagem na pasta"
            :frontend.components.repo/all-graphs "Todos os grafos"
@@ -2759,10 +2748,10 @@
            :frontend.components.page/show-whiteboards "Mostrar quadros brancos"
            :frontend.extensions.pdf.toolbar/doc-metadata "Metadados do documento"
            :frontend.extensions.pdf.toolbar/hl-block-colored "Rótulo colorido para bloco de destaque"
-           :frontend.components.plugins/install-from-file.menu-title "Instalar de plugins.edn"
-           :frontend.components.plugins/install-from-file.notice "Os seguintes plugins substituirão seus plugins:"
-           :frontend.components.plugins/install-from-file.success "Todos os plugins instalados"
-           :frontend.components.plugins/install-from-file.title "Instalar plugins de plugins.edn"
+           :frontend.components.plugins/install-from-file-menu-title "Instalar de plugins.edn"
+           :frontend.components.plugins/install-from-file-notice "Os seguintes plugins substituirão seus plugins:"
+           :frontend.components.plugins/install-from-file-success "Todos os plugins instalados"
+           :frontend.components.plugins/install-from-file-title "Instalar plugins de plugins.edn"
            :frontend.components.right-sidebar/resize-handler "Manipulador de redimensionamento da barra lateral direita"
            :frontend.components.sidebar/whiteboards "Quadros brancos"
            :frontend.components.search/item-block "Bloco"
@@ -2782,7 +2771,6 @@
            :frontend.components.settings/preferred-pasting-file "Arquivo preferência para colar"
            :frontend.components.settings/tab-assets "Recursos"
            :frontend.components.search/link-whiteboard-or-block "Vincular quadro branco/página/bloco"}
-
    :pt-PT {:frontend.components.sidebar/skip-to-main-content "Ir para o conteúdo principal"
            :frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-en.md")
                                               :default "tutorial-en.md")
@@ -2993,7 +2981,9 @@
            :frontend.components.encryption/submit "Submeter"
            :frontend.ui/cancel "Cancelar"
            :frontend.extensions.pdf.toolbar/close "Fechar"
-           :delete "Apagar"
+           :frontend.components.page/delete "Apagar"
+           :frontend.components.whiteboard/delete "Apagar"
+           :frontend.extensions.pdf.core/delete "Apagar"
            :frontend.components.plugins/save "Guardar"
            :frontend.components.plugins/type "Tipo"
            :frontend.components.plugins/host "Host"
@@ -3006,13 +2996,14 @@
            :frontend.components.repo/sync-from-local-files "Atualizar"
            :frontend.components.repo/sync-from-local-files-detail "Importar alterações de ficheiros locais"
            :frontend.handler.events/sync-from-local-changes-detected "Atualizar detetará e processará ficheiros modificados no seu disco que tenham divergido do conteúdo da página Logseq atual. Continuar?"
-
            :frontend.components.search/search-publishing "Pesquisar"
            :frontend.components.search/search "Pesquisar ou Criar Página"
            :frontend.components.search/link-whiteboard-or-block "Vincular quadro/página/bloco"
            :frontend.components.search/page-search "Pesquisar na página atual"
            :frontend.components.search/graph-search "Pesquisar no grafo"
-           :new-page "Nova página"
+           :frontend.components.editor/new-page "Nova página"
+           :frontend.components.search/new-page "Nova página"
+           :frontend.handler.page/new-page "Nova página"
            :frontend.components.search/new-whiteboard "Novo quadro branco"
            :frontend.components.repo/new-graph "Adicionar novo grafo"
            :frontend.components.header/graph "Grafo"
@@ -3039,9 +3030,14 @@
            :all-files "Todos os ficheiros"
            :frontend.components.page/remove-orphaned-pages "Remover páginas órfãs"
            :frontend.handler.route/all-journals "Todas as págs. diárias"
-           :settings "Definições"
-           :settings-of-plugins "Plugins"
-           :plugins "Plugins"
+           :frontend.components.settings/settings "Definições"
+           :frontend.components.plugins/settings "Definições"
+           :frontend.components.header/settings "Definições"
+           :frontend.components.settings/settings-of-plugins "Plugins"
+           :frontend.components.plugins/settings-of-plugins "Plugins"
+           :frontend.components.header/plugins "Plugins"
+           :frontend.components.plugins/plugins "Plugins"
+           :frontend.handler.plugin/plugins "Plugins"
            :frontend.components.plugins/themes "Temas"
            :frontend.components.header/themes "Temas"
            :frontend.components.settings/relaunch-confirm-to-work "A aplicação deve ser reiniciada para que funcione corretamente. Quer reiniciar agora?"
@@ -3063,9 +3059,7 @@
            :frontend.components.content/heading "Título {1}"
            :frontend.components.content/auto-heading "Título automático"
            :frontend.components.repo/open-a-directory "Abrir uma pasta local"
-
            :frontend.components.shortcut/shortcut-page-title "Atalhos de teclado"
-
            :frontend.components.plugins/installed "Instalado"
            :frontend.handler.plugin/installed "Instalado"
            :frontend.components.plugins/not-installed "Não instalado"
@@ -3097,11 +3091,10 @@
            :frontend.components.plugins/contribute "Escreva e submeta um novo plugin"
            :frontend.handler.plugin/up-to-date "Está atualizado"
            :frontend.handler.ui/custom-js-alert "Ficheiro custom.js encontrado, quer executá-lo? (Se não compreender o conteúdo do ficheiro, é melhor não executá-lo, pois há certos riscos de segurança ao fazê-lo.)"
-           :frontend.components.plugins/install-from-file.menu-title "Instalar a partir de plugins.edn"
-           :frontend.components.plugins/install-from-file.title "Instalar plugins a partir de plugins.edn"
-           :frontend.components.plugins/install-from-file.notice "Os seguintes plugins irão substituir os seus plugins:"
-           :frontend.components.plugins/install-from-file.success "Todos os plugins foram instalados!"
-
+           :frontend.components.plugins/install-from-file-menu-title "Instalar a partir de plugins.edn"
+           :frontend.components.plugins/install-from-file-title "Instalar plugins a partir de plugins.edn"
+           :frontend.components.plugins/install-from-file-notice "Os seguintes plugins irão substituir os seus plugins:"
+           :frontend.components.plugins/install-from-file-success "Todos os plugins foram instalados!"
            :frontend.extensions.pdf.core/copy-ref "Copiar referência"
            :frontend.extensions.pdf.core/copy-text "Copiar texto"
            :frontend.extensions.pdf.core/linked-ref "Referências ligadas"
@@ -3109,27 +3102,20 @@
            :frontend.extensions.pdf.toolbar/toggle-dashed "Estilo tracejado para realce de área"
            :frontend.extensions.pdf.toolbar/hl-block-colored "Rótulo colorido para bloco de destaque"
            :frontend.extensions.pdf.toolbar/doc-metadata "Metadados do documento"
-
            :frontend.components.header/updater-new-version-install "Uma nova versão foi descarregada."
            :frontend.components.header/updater-quit-and-install "Reiniciar para instalar"
-
            :frontend.components.page/pagination-pages "{1} págs. no total"
            :frontend.components.page/pagination-prev "Ant."
            :frontend.components.page/pagination-next "Próx."
-
            :frontend.components.page/all-done "Tudo feito!"
-
            :frontend.components.command-palette/prompt "Introduza um comando"
            :frontend.components.select/default-prompt "Selecione um"
            :frontend.components.select/graph-prompt "Selecione um grafo"
            :frontend.components.select/graph-empty-placeholder-description "Sem grafos correspondentes. Quer adicionar outro?"
            :frontend.components.select/graph-add "Sim, adicionar outro grafo"
-
            :frontend.fs.sync/other-user-graph "O grafo local atual está ligado ao grafo remoto de outro utilizador. Portanto, a sincronização não pode ser iniciada."
            :frontend.fs.sync/graph-deleted "O grafo remoto atual foi apagado"
-
            :frontend.ui/notification-clear-all "Limpar tudo"}
-
    :ru {:frontend.components.widgets/demo-graph "Это демонстрационный граф, изменения не будут сохранены, пока вы не откроете локальный файл."
         :frontend.components.widgets/add-graph "Добавить новый граф"
         :frontend.components.header/add-graph "Добавить новый граф"
@@ -3217,7 +3203,8 @@
         :frontend.components.content/copy-block-emebed "Копировать встроенный блок"
         :frontend.components.content/open-in-sidebar "Открыть в боковой панели"
         :frontend.components.content/click-to-edit "Нажмите для редактирования"
-        :settings-of-plugins "Настройки расширений"
+        :frontend.components.settings/settings-of-plugins "Настройки расширений"
+        :frontend.components.plugins/settings-of-plugins "Настройки расширений"
         :frontend.components.settings/custom-global-configuration "Глобальные настройки пользователя"
         :frontend.components.settings/edit-global-config-edn "Редактировать глобальный config.edn"
         :frontend.components.settings/edit-config-edn "Редактировать config.edn"
@@ -3264,7 +3251,9 @@
         :frontend.components.encryption/submit "Подтвердить"
         :frontend.ui/cancel "Отмена"
         :frontend.extensions.pdf.toolbar/close "Закрыть"
-        :delete "Удалить"
+        :frontend.components.page/delete "Удалить"
+        :frontend.components.whiteboard/delete "Удалить"
+        :frontend.extensions.pdf.core/delete "Удалить"
         :frontend.components.plugins/save "Сохранить"
         :frontend.components.plugins/host "Хост"
         :frontend.components.plugins/port "Порт"
@@ -3281,7 +3270,9 @@
         :frontend.components.search/search "Искать или создать страницу"
         :frontend.components.search/page-search "Искать на текущей странице"
         :frontend.components.search/graph-search "Искать граф"
-        :new-page "Новая страница"
+        :frontend.components.editor/new-page "Новая страница"
+        :frontend.components.search/new-page "Новая страница"
+        :frontend.handler.page/new-page "Новая страница"
         :frontend.components.repo/new-graph "Добавить новый граф"
         :frontend.components.header/graph "Граф"
         :frontend.handler.route/graph "Граф"
@@ -3304,8 +3295,12 @@
         :all-files "Все файлы"
         :frontend.components.page/remove-orphaned-pages "Удалить страницы без родителя"
         :frontend.handler.route/all-journals "Все журналы"
-        :settings "Настройки"
-        :plugins "Расширения"
+        :frontend.components.settings/settings "Настройки"
+        :frontend.components.plugins/settings "Настройки"
+        :frontend.components.header/settings "Настройки"
+        :frontend.components.header/plugins "Расширения"
+        :frontend.components.plugins/plugins "Расширения"
+        :frontend.handler.plugin/plugins "Расширения"
         :frontend.components.plugins/themes "Темы"
         :frontend.components.header/themes "Темы"
         :frontend.components.settings/relaunch-confirm-to-work "Необходимо перезапустить приложение. Сделать это сейчас?"
@@ -3323,9 +3318,7 @@
         :frontend.components.settings/language "Язык"
         :frontend.components.content/remove-background "Удалить фон"
         :frontend.components.repo/open-a-directory "Открыть локальную папку"
-
         :frontend.components.shortcut/shortcut-page-title "Горячие клавиши"
-
         :frontend.components.plugins/all "Все"
         :frontend.components.plugins/check-all-updates "Проверить все обновления"
         :frontend.components.plugins/check-update "Проверить обновления"
@@ -3357,35 +3350,25 @@
         :frontend.components.plugins/title "Название"
         :frontend.handler.plugin/up-to-date "Обновлено"
         :frontend.handler.ui/custom-js-alert "Найден файл custom.js, выполнить его? (Если вы не понимаете содержимое этого файла, рекомендуем не разрешать выполнение, т.к. это несет риски безопасности.)"
-
         :frontend.extensions.pdf.core/copy-ref "Копировать ссылку"
         :frontend.extensions.pdf.core/copy-text "Копировать текст"
         :frontend.extensions.pdf.core/linked-ref "Связанные ссылки"
         :frontend.extensions.pdf.toolbar/linked-ref "Связанные ссылки"
         :frontend.extensions.pdf.toolbar/toggle-dashed "Пунктир для выделения области"
-
         :frontend.components.header/updater-new-version-install "Новая версия загружена. Перезапустите приложения для завершения обновления."
         :frontend.components.header/updater-quit-and-install "Перезапустить для установки"
-
         :frontend.components.page-menu/copy-page-url "Копировать URL страницы"
-
         :frontend.components.page/pagination-pages "Всего {1} стр."
         :frontend.components.page/pagination-prev "Предыдушая"
         :frontend.components.page/pagination-next "Следующая"
-
         :frontend.components.page/all-done "Все сделано!"
-
         :frontend.components.command-palette/prompt "Наберите команду"
-
-
         :frontend.components.select/graph-add "Да, добавить другой граф"
         :frontend.components.select/graph-empty-placeholder-description "Нет подходящих графов. Вы хотите добавить другой?"
         :frontend.components.select/graph-prompt "Выберите граф"
         :frontend.components.select/default-prompt "Выберите"
-
         :frontend.fs.sync/other-user-graph "Текущий локальный граф привязан к внешнему графу другого пользователя. Поэтому нельзя начать синхронизацию."
         :frontend.fs.sync/graph-deleted "Текущий внешний граф был удален"}
-
    :ja {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-ja.md")
                                            :default "tutorial-ja.md")
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-ja.md")
@@ -3524,7 +3507,9 @@
         :frontend.components.encryption/submit "投稿"
         :frontend.ui/cancel "キャンセル"
         :frontend.extensions.pdf.toolbar/close "閉じる"
-        :delete "削除"
+        :frontend.components.page/delete "削除"
+        :frontend.components.whiteboard/delete "削除"
+        :frontend.extensions.pdf.core/delete "削除"
         :frontend.components.plugins/save "保存"
         :frontend.components.plugins/type "種別"
         :frontend.components.plugins/host "ホスト"
@@ -3541,7 +3526,9 @@
         :frontend.components.search/search "検索／新規ページ名"
         :frontend.components.search/page-search "現在のページを検索"
         :frontend.components.search/graph-search "グラフを検索"
-        :new-page "新規ページ"
+        :frontend.components.editor/new-page "新規ページ"
+        :frontend.components.search/new-page "新規ページ"
+        :frontend.handler.page/new-page "新規ページ"
         :frontend.components.repo/new-graph "新規グラフを追加"
         :frontend.components.header/graph "グラフ"
         :frontend.handler.route/graph "グラフ"
@@ -3566,9 +3553,14 @@
         :all-files "全ファイル"
         :frontend.components.page/remove-orphaned-pages "孤立ページを削除"
         :frontend.handler.route/all-journals "全日誌"
-        :settings "設定"
-        :settings-of-plugins "プラグイン設定"
-        :plugins "プラグイン"
+        :frontend.components.settings/settings "設定"
+        :frontend.components.plugins/settings "設定"
+        :frontend.components.header/settings "設定"
+        :frontend.components.settings/settings-of-plugins "プラグイン設定"
+        :frontend.components.plugins/settings-of-plugins "プラグイン設定"
+        :frontend.components.header/plugins "プラグイン"
+        :frontend.components.plugins/plugins "プラグイン"
+        :frontend.handler.plugin/plugins "プラグイン"
         :frontend.components.plugins/themes "テーマ"
         :frontend.components.header/themes "テーマ"
         :frontend.components.settings/relaunch-confirm-to-work "動作させるには再起動が必要です。いますぐ再起動しますか？"
@@ -3588,9 +3580,7 @@
         :frontend.components.content/heading "見出し {1}"
         :frontend.components.content/auto-heading "自動見出し"
         :frontend.components.repo/open-a-directory "ローカルディレクトリを開く"
-
         :frontend.components.shortcut/shortcut-page-title "キーボードショートカット"
-
         :frontend.components.plugins/installed "インストール済"
         :frontend.handler.plugin/installed "インストール済"
         :frontend.components.plugins/not-installed "未インストール"
@@ -3622,31 +3612,24 @@
         :frontend.components.plugins/contribute "新規プラグインの作成とサブミット"
         :frontend.handler.plugin/up-to-date "最新の状態です"
         :frontend.handler.ui/custom-js-alert "custom.js ファイルを見つけました。実行を許可しますか？ （もしあなたがこのファイルの内容を理解していない場合、セキュリティのリスクがあるため許可しないことをお勧めします。）"
-
         :frontend.extensions.pdf.core/copy-ref "参照をコピー"
         :frontend.extensions.pdf.core/copy-text "テキストをコピー"
         :frontend.extensions.pdf.core/linked-ref "リンクありの参照元"
         :frontend.extensions.pdf.toolbar/linked-ref "リンクありの参照元"
         :frontend.extensions.pdf.toolbar/toggle-dashed "破線で Area highlight"
-
         :frontend.components.header/updater-new-version-install "新しいバージョンがダウンロードされました。"
         :frontend.components.header/updater-quit-and-install "インストールのためアプリを再起動してください。"
-
         :frontend.components.page/pagination-pages "全 {1} ページ"
         :frontend.components.page/pagination-prev "前"
         :frontend.components.page/pagination-next "次"
-
         :frontend.components.page/all-done "All Done!"
-
         :frontend.components.command-palette/prompt "コマンドを入力"
         :frontend.components.select/default-prompt "選択してください"
         :frontend.components.select/graph-prompt "グラフを選んでください"
         :frontend.components.select/graph-empty-placeholder-description "マッチするグラフがありません。新しいグラフを追加しますか？"
         :frontend.components.select/graph-add "はい、新規グラフを追加します。"
-
         :frontend.fs.sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"
         :frontend.fs.sync/graph-deleted "現在のリモートグラフが削除されました"}
-
    :it {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-en.md")
                                            :default "tutorial-en.md")
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
@@ -3681,7 +3664,6 @@
         :frontend.components.shortcut/reference-autocomplete "Autocompletamente del riferimento di pagina"
         :frontend.components.shortcut/block-reference "Riferimento di blocco"
         :frontend.components.shortcut/open-link-in-sidebar "Apri il link nella barra laterale"
-
         :frontend.components.search/more "Altro"
         :frontend.components.search/result-for "Cerca i risultati per "
         :frontend.components.search/items "oggetti"
@@ -3780,7 +3762,9 @@
         :frontend.components.encryption/submit "Invia"
         :frontend.ui/cancel "Annulla"
         :frontend.extensions.pdf.toolbar/close "Chiudi"
-        :delete "Elimina"
+        :frontend.components.page/delete "Elimina"
+        :frontend.components.whiteboard/delete "Elimina"
+        :frontend.extensions.pdf.core/delete "Elimina"
         :frontend.components.plugins/save "Salva"
         :frontend.components.plugins/type "Tipo"
         :frontend.components.plugins/host "Host"
@@ -3793,12 +3777,13 @@
         :frontend.components.repo/sync-from-local-files "Ricarica"
         :frontend.components.repo/sync-from-local-files-detail "Importa cambiamenti da un file locale"
         :frontend.handler.events/sync-from-local-changes-detected "Il ricaricamento rileva ed elabora i file modificati sul disco e divergenti dal contenuto effettivo della pagina Logseq. Continuare?"
-
         :frontend.components.search/search-publishing "Cerca"
         :frontend.components.search/search "Cerca o crea una pagina"
         :frontend.components.search/page-search "Cerca nella pagina corrente"
         :frontend.components.search/graph-search "Cerca nel grafo"
-        :new-page "Nuova pagina"
+        :frontend.components.editor/new-page "Nuova pagina"
+        :frontend.components.search/new-page "Nuova pagina"
+        :frontend.handler.page/new-page "Nuova pagina"
         :frontend.components.repo/new-graph "Aggiungi nuovo grafo"
         :frontend.components.header/graph "Grafo"
         :frontend.handler.route/graph "Grafo"
@@ -3821,9 +3806,14 @@
         :all-files "Tutti i file"
         :frontend.components.page/remove-orphaned-pages "Rimuovi pagine orfane"
         :frontend.handler.route/all-journals "Tutte le pagine di diario"
-        :settings "Impostazioni"
-        :settings-of-plugins "Impostazioni plugin"
-        :plugins "Plugin"
+        :frontend.components.settings/settings "Impostazioni"
+        :frontend.components.plugins/settings "Impostazioni"
+        :frontend.components.header/settings "Impostazioni"
+        :frontend.components.settings/settings-of-plugins "Impostazioni plugin"
+        :frontend.components.plugins/settings-of-plugins "Impostazioni plugin"
+        :frontend.components.header/plugins "Plugin"
+        :frontend.components.plugins/plugins "Plugin"
+        :frontend.handler.plugin/plugins "Plugin"
         :frontend.components.plugins/themes "Temi"
         :frontend.components.header/themes "Temi"
         :frontend.components.settings/relaunch-confirm-to-work "È necessario riavviare l'app per farla funzionare. Vuoi riavviarla ora?"
@@ -3840,9 +3830,7 @@
         :frontend.components.settings/language "Lingua"
         :frontend.components.content/remove-background "Rimuovi lo sfondo"
         :frontend.components.repo/open-a-directory "Apri una cartella locale"
-
         :frontend.components.shortcut/shortcut-page-title "Scorciatoie da tastiera"
-
         :frontend.components.plugins/installed "Installato"
         :frontend.handler.plugin/installed "Installato"
         :frontend.components.plugins/not-installed "Non installato"
@@ -3874,34 +3862,27 @@
         :frontend.components.plugins/contribute "Svilupppa e sottoponici un nuovo plugin"
         :frontend.handler.plugin/up-to-date "È aggiornato"
         :frontend.handler.ui/custom-js-alert "Trovato il file custom.js, è consentito eseguirlo? (Se non si comprende il contenuto di questo file, si consiglia di non consentire l'esecuzione, che presenta alcuni rischi per la sicurezza.)"
-
         :frontend.extensions.pdf.core/copy-ref "Copia riferimenti"
         :frontend.extensions.pdf.core/copy-text "Copia testo"
         :frontend.extensions.pdf.core/linked-ref "Riferimenti collegati"
         :frontend.extensions.pdf.toolbar/linked-ref "Riferimenti collegati"
         :frontend.extensions.pdf.toolbar/toggle-dashed "Stile tratteggiato per evidenziare l'area"
-
         :frontend.components.header/updater-new-version-install "Una nuova versione è stata scaricata."
         :frontend.components.header/updater-quit-and-install "Riavvia per installarla"
-
         :frontend.components.page/pagination-pages "Totale {1} pagine"
         :frontend.components.page/pagination-prev "Precedente"
         :frontend.components.page/pagination-next "Successivo"
-
         :frontend.components.page/all-done "Completato!"
-
         :frontend.components.command-palette/prompt "Digita un comando"
         :frontend.components.select/default-prompt "Selezionane uno"
         :frontend.components.select/graph-prompt "Seleziona un grafo"
         :frontend.components.select/graph-empty-placeholder-description "Non ci sono grafi corrispondenti. Vuoi aggiungerne uno nuovo?"
         :frontend.components.select/graph-add "Sì, aggiungi un nuovo grafo"
-
         :frontend.fs.sync/other-user-graph "Il grafo locale attuale è associato al grafo remoto di un altro utente. Non è quindi possibile avviare la sincronizzazione."
         :frontend.fs.sync/graph-deleted "Il grafo attuale è stato eliminato"
         :frontend.components.settings/edit-export-css "Modificare export.css"
         :frontend.components.settings/enable-flashcards "Flashcard"
         :frontend.components.settings/export-theme "Esporta tema"}
-
    :tr {:frontend.components.sidebar/skip-to-main-content "Ana içeriğe geç"
         :frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-tr.md")
                                            :default "tutorial-tr.md")
@@ -4114,7 +4095,9 @@
         :frontend.components.encryption/submit "Onayla"
         :frontend.ui/cancel "İptal"
         :frontend.extensions.pdf.toolbar/close "Kapat"
-        :delete "Sil"
+        :frontend.components.page/delete "Sil"
+        :frontend.components.whiteboard/delete "Sil"
+        :frontend.extensions.pdf.core/delete "Sil"
         :frontend.components.plugins/save "Kaydet"
         :frontend.components.plugins/type "Tür"
         :frontend.components.plugins/host "Ana Bilgisayar"
@@ -4127,13 +4110,14 @@
         :frontend.components.repo/sync-from-local-files "Yenile"
         :frontend.components.repo/sync-from-local-files-detail "Yerel dosyalardan değişiklikleri içeri aktarın"
         :frontend.handler.events/sync-from-local-changes-detected "Yenile, diskinizde değiştirilen ve gerçek Logseq sayfa içeriğinden ayrılan dosyaları algılar ve işler. Devam edilsin mi?"
-
         :frontend.components.search/search-publishing "Ara"
         :frontend.components.search/search "Ara veya sayfa oluştur"
         :frontend.components.search/link-whiteboard-or-block "Beyaz tahta/sayfa/blok bağlantısı"
         :frontend.components.search/page-search "Geçerli sayfada ara"
         :frontend.components.search/graph-search "Grafta ara"
-        :new-page "Yeni sayfa"
+        :frontend.components.editor/new-page "Yeni sayfa"
+        :frontend.components.search/new-page "Yeni sayfa"
+        :frontend.handler.page/new-page "Yeni sayfa"
         :frontend.components.search/new-whiteboard "Yeni beyaz tahta"
         :frontend.components.repo/new-graph "Yeni graf ekle"
         :frontend.components.header/graph "Graf"
@@ -4160,9 +4144,14 @@
         :all-files "Tüm dosyalar"
         :frontend.components.page/remove-orphaned-pages "Yalnız bırakılmış sayfaları kaldır"
         :frontend.handler.route/all-journals "Bütün günlükler"
-        :settings "Ayarlar"
-        :settings-of-plugins "Eklenti ayarları"
-        :plugins "Eklentiler"
+        :frontend.components.settings/settings "Ayarlar"
+        :frontend.components.plugins/settings "Ayarlar"
+        :frontend.components.header/settings "Ayarlar"
+        :frontend.components.settings/settings-of-plugins "Eklenti ayarları"
+        :frontend.components.plugins/settings-of-plugins "Eklenti ayarları"
+        :frontend.components.header/plugins "Eklentiler"
+        :frontend.components.plugins/plugins "Eklentiler"
+        :frontend.handler.plugin/plugins "Eklentiler"
         :frontend.components.plugins/themes "Temalar"
         :frontend.components.header/themes "Temalar"
         :frontend.components.settings/relaunch-confirm-to-work "Çalışması için uygulama yeniden başlatılmalı. Şimdi yeniden başlatmak istiyor musunuz?"
@@ -4184,9 +4173,7 @@
         :frontend.components.content/heading "Başlık {1}"
         :frontend.components.content/auto-heading "Otomatik başlık"
         :frontend.components.repo/open-a-directory "Yerel bir dizin aç"
-
         :frontend.components.shortcut/shortcut-page-title "Klavye kısayolları"
-
         :frontend.components.plugins/installed "Yüklü"
         :frontend.handler.plugin/installed "Yüklü"
         :frontend.components.plugins/not-installed "Yüklü olmayan"
@@ -4218,11 +4205,10 @@
         :frontend.components.plugins/contribute "Yeni eklenti yaz ve gönder"
         :frontend.handler.plugin/up-to-date "Güncel"
         :frontend.handler.ui/custom-js-alert "custom.js dosyası bulundu, çalıştırılmasına izin veriliyor mu? (Bu dosyanın içeriğini anlamadıysanız, belirli güvenlik riskleri olduğu için çalıştırmaya izin vermemeniz önerilir.)"
-        :frontend.components.plugins/install-from-file.menu-title "plugins.edn dosyasından yükle"
-        :frontend.components.plugins/install-from-file.title "Eklentileri plugins.edn dosyasından yükle"
-        :frontend.components.plugins/install-from-file.notice "Aşağıdaki eklentiler yüklü olan eklentilerinizin yerini alacak:"
-        :frontend.components.plugins/install-from-file.success "Tüm eklentiler yüklendi!"
-
+        :frontend.components.plugins/install-from-file-menu-title "plugins.edn dosyasından yükle"
+        :frontend.components.plugins/install-from-file-title "Eklentileri plugins.edn dosyasından yükle"
+        :frontend.components.plugins/install-from-file-notice "Aşağıdaki eklentiler yüklü olan eklentilerinizin yerini alacak:"
+        :frontend.components.plugins/install-from-file-success "Tüm eklentiler yüklendi!"
         :frontend.extensions.pdf.core/copy-ref "Referansı kopyala"
         :frontend.extensions.pdf.core/copy-text "Metni kopyala"
         :frontend.extensions.pdf.core/linked-ref "Bağlantılı referans"
@@ -4230,27 +4216,20 @@
         :frontend.extensions.pdf.toolbar/toggle-dashed "Alan vurgusu için çizgili stil"
         :frontend.extensions.pdf.toolbar/hl-block-colored "Vurgulu blok için renkli etiket"
         :frontend.extensions.pdf.toolbar/doc-metadata "Belge meta verileri"
-
         :frontend.components.header/updater-new-version-install "Yeni bir sürüm indirildi."
         :frontend.components.header/updater-quit-and-install "Yüklemek için yeniden başlatın"
-
         :frontend.components.page/pagination-pages "Toplam {1} sayfa"
         :frontend.components.page/pagination-prev "Önceki"
         :frontend.components.page/pagination-next "Sonraki"
-
         :frontend.components.page/all-done "Tamamlandı!"
-
         :frontend.components.command-palette/prompt "Bir komut yazın"
         :frontend.components.select/default-prompt "Birini seçin"
         :frontend.components.select/graph-prompt "Bir graf seçin"
         :frontend.components.select/graph-empty-placeholder-description "Eşleşen graf yok. Bir tane daha eklemek ister misin?"
         :frontend.components.select/graph-add "Evet, başka bir graf ekle"
-
         :frontend.fs.sync/other-user-graph "Geçerli yerel graf, diğer kullanıcının uzak grafına bağlıdır. Bu yüzden senkronizasyon başlatılamıyor."
         :frontend.fs.sync/graph-deleted "Geçerli uzak graf silindi"
-
         :frontend.ui/notification-clear-all "Tümünü temizle"}
-
    :ko {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-ko.md")
                                            :default "tutorial-ko.md")
         :frontend.handler.repo/dummy-notes #?(:cljs (rc/inline "dummy-notes-ko.md")
@@ -4384,7 +4363,9 @@
         :frontend.components.encryption/submit "제출"
         :frontend.ui/cancel "취소"
         :frontend.extensions.pdf.toolbar/close "닫기"
-        :delete "삭제"
+        :frontend.components.page/delete "삭제"
+        :frontend.components.whiteboard/delete "삭제"
+        :frontend.extensions.pdf.core/delete "삭제"
         :frontend.components.plugins/save "저장"
         :frontend.components.plugins/type "타입"
         :frontend.components.plugins/host "호스트"
@@ -4397,12 +4378,13 @@
         :frontend.components.repo/sync-from-local-files "새로고침"
         :frontend.components.repo/sync-from-local-files-detail "로컬 파일로부터 변경 사항 불러오기"
         :frontend.handler.events/sync-from-local-changes-detected "그래프를 새로 고치면 로컬 디스크에서 Logseq과는 다르게 변경된 파일들을 감지하고 처리합니다. 계속하시겠습니까?"
-
         :frontend.components.search/search-publishing "검색"
         :frontend.components.search/search "페이지를 검색하거나 생성"
         :frontend.components.search/page-search "현재 페이지에서 검색"
         :frontend.components.search/graph-search "그래프 검색"
-        :new-page "새 페이지"
+        :frontend.components.editor/new-page "새 페이지"
+        :frontend.components.search/new-page "새 페이지"
+        :frontend.handler.page/new-page "새 페이지"
         :frontend.components.repo/new-graph "새 그래프"
         :frontend.components.header/graph "그래프"
         :frontend.handler.route/graph "그래프"
@@ -4425,9 +4407,14 @@
         :all-files "모든 파일"
         :frontend.components.page/remove-orphaned-pages "고립된 페이지 삭제"
         :frontend.handler.route/all-journals "모든 일지"
-        :settings "설정"
-        :settings-of-plugins "플러그인 설정"
-        :plugins "플러그인"
+        :frontend.components.settings/settings "설정"
+        :frontend.components.plugins/settings "설정"
+        :frontend.components.header/settings "설정"
+        :frontend.components.settings/settings-of-plugins "플러그인 설정"
+        :frontend.components.plugins/settings-of-plugins "플러그인 설정"
+        :frontend.components.header/plugins "플러그인"
+        :frontend.components.plugins/plugins "플러그인"
+        :frontend.handler.plugin/plugins "플러그인"
         :frontend.components.plugins/themes "테마"
         :frontend.components.header/themes "테마"
         :frontend.components.settings/relaunch-confirm-to-work "완료하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?"
@@ -4444,9 +4431,7 @@
         :frontend.components.settings/language "언어"
         :frontend.components.content/remove-background "배경 제거"
         :frontend.components.repo/open-a-directory "로컬 디렉토리 열기"
-
         :frontend.components.shortcut/shortcut-page-title "키보드 단축키"
-
         :frontend.components.plugins/installed "설치됨"
         :frontend.handler.plugin/installed "설치됨"
         :frontend.components.plugins/not-installed "설치되지 않음"
@@ -4478,28 +4463,22 @@
         :frontend.components.plugins/contribute "새 플러그인을 만들고 기여하기"
         :frontend.handler.plugin/up-to-date "최신 상태입니다."
         :frontend.handler.ui/custom-js-alert "custom.js 파일을 감지했습니다. 실행을 허용하겠습니까? (파일의 내용을 이해하지 못한다면 보안과 안전 상의 이유로 실행하지 않는 것이 권장됩니다."
-
         :frontend.extensions.pdf.core/copy-ref "레퍼런스 복사하기"
         :frontend.extensions.pdf.core/copy-text "텍스트 복사하기"
         :frontend.extensions.pdf.core/linked-ref "링크된 레퍼런스"
         :frontend.extensions.pdf.toolbar/linked-ref "링크된 레퍼런스"
         :frontend.extensions.pdf.toolbar/toggle-dashed "영역 하이라이트를 위해 Dashed style 사용"
-
         :frontend.components.header/updater-new-version-install "새 버전이 다운로드되었습니다."
         :frontend.components.header/updater-quit-and-install "다시 시작하여 설치하십시오."
-
         :frontend.components.page/pagination-pages "총 {1} 페이지"
         :frontend.components.page/pagination-prev "이전"
         :frontend.components.page/pagination-next "다음"
-
         :frontend.components.page/all-done "모두 완료"
-
         :frontend.components.command-palette/prompt "커맨드를 입력하십시오"
         :frontend.components.select/default-prompt "하나를 선택하십시오"
         :frontend.components.select/graph-prompt "그래프를 선택하십시오."
         :frontend.components.select/graph-empty-placeholder-description "일치하는 그래프가 없습니다. 새로 추가하시겠습니까?"
         :frontend.components.select/graph-add "네, 새 그래프를 추가합니다"
-
         :frontend.fs.sync/other-user-graph "현재 로컬 그래프가 다른 유저의 리모트 그래프와 충돌합니다. 동기화를 시작할 수 없습니다."
         :frontend.fs.sync/graph-deleted "현재 리모트 그래프를 삭제했습니다."}
    :pl {:frontend.handler.repo/tutorial #?(:cljs (rc/inline "tutorial-pl.md")
@@ -4638,7 +4617,9 @@
         :frontend.components.encryption/submit "Wyślij"
         :frontend.ui/cancel "Anuluj"
         :frontend.extensions.pdf.toolbar/close "Zamknij"
-        :delete "Usuń"
+        :frontend.components.page/delete "Usuń"
+        :frontend.components.whiteboard/delete "Usuń"
+        :frontend.extensions.pdf.core/delete "Usuń"
         :frontend.components.plugins/save "Zapisz"
         :frontend.components.plugins/type "Typ"
         :frontend.components.repo/re-index "Indeksuj ponownie"
@@ -4649,12 +4630,13 @@
         :frontend.components.repo/sync-from-local-files "Odśwież"
         :frontend.components.repo/sync-from-local-files-detail "Importuj zmiany z lokalnych plików"
         :frontend.handler.events/sync-from-local-changes-detected "Funkcja Odśwież wykrywa i procesuje pliki zmienione na dysku. Wszystkie pliki różniące się od tych w Logseq zostaną ponownie wczytane. Kontynuować?"
-
         :frontend.components.search/search-publishing "Szukaj"
         :frontend.components.search/search "Wyszukaj lub stwórz stronę"
         :frontend.components.search/page-search "Wyszukaj na stronie"
         :frontend.components.search/graph-search "Przeszukaj graf"
-        :new-page "Nowa strona"
+        :frontend.components.editor/new-page "Nowa strona"
+        :frontend.components.search/new-page "Nowa strona"
+        :frontend.handler.page/new-page "Nowa strona"
         :frontend.components.repo/new-graph "Dodaj nowy graf"
         :frontend.components.header/graph "Graf"
         :frontend.handler.route/graph "Graf"
@@ -4680,9 +4662,14 @@
         :all-files "Wszystkie pliki"
         :frontend.components.page/remove-orphaned-pages "Usuń strony bez powiązań"
         :frontend.handler.route/all-journals "Wszystkie dzienniki"
-        :settings "Ustawienia"
-        :settings-of-plugins "Ustawienia pluginu"
-        :plugins "Pluginy"
+        :frontend.components.settings/settings "Ustawienia"
+        :frontend.components.plugins/settings "Ustawienia"
+        :frontend.components.header/settings "Ustawienia"
+        :frontend.components.settings/settings-of-plugins "Ustawienia pluginu"
+        :frontend.components.plugins/settings-of-plugins "Ustawienia pluginu"
+        :frontend.components.header/plugins "Pluginy"
+        :frontend.components.plugins/plugins "Pluginy"
+        :frontend.handler.plugin/plugins "Pluginy"
         :frontend.components.plugins/themes "Motywy graficzne"
         :frontend.components.header/themes "Motywy graficzne"
         :frontend.components.settings/relaunch-confirm-to-work "Aby wprowadzić zmiany, aplikacja musi zostać uruchomiona ponownie. Zrobić to teraz?"
@@ -4731,28 +4718,22 @@
         :frontend.components.plugins/contribute "Napisz i prześlij nowy plugin"
         :frontend.handler.plugin/up-to-date "Wszystko jest aktualne"
         :frontend.handler.ui/custom-js-alert "Wykryto plik custom.js, czy chcesz go wykonać? Ze względów bezpieczeństwa, nie rekomendujemy wykonywania tego pliku, jeżeli nie znasz jego zawartości."
-
         :frontend.extensions.pdf.core/copy-ref "Kopiuj ref"
         :frontend.extensions.pdf.core/copy-text "Kopiuj tekst"
         :frontend.extensions.pdf.core/linked-ref "Połączone odwołania"
         :frontend.extensions.pdf.toolbar/linked-ref "Połączone odwołania"
         :frontend.extensions.pdf.toolbar/toggle-dashed "Styl kreskowany dla podświetlenia obszaru"
-
         :frontend.components.header/updater-new-version-install "Nowa wersja została ściągnięta."
         :frontend.components.header/updater-quit-and-install "Uruchom ponownie, aby zainstalować"
-
         :frontend.components.page/pagination-pages "{1} wszystkich stron"
         :frontend.components.page/pagination-prev "← Poprzednia"
         :frontend.components.page/pagination-next "Następna →"
-
         :frontend.components.page/all-done "Wszystko zrobione!"
-
         :frontend.components.command-palette/prompt "Wprowadź komendę"
         :frontend.components.select/default-prompt "Wybierz jeden"
         :frontend.components.select/graph-prompt "Wybierz graf"
         :frontend.components.select/graph-empty-placeholder-description "Brak pasujących grafów. Chcesz dodać nowy?"
         :frontend.components.select/graph-add "Tak, dodaj nowy graf"
-
         :frontend.fs.sync/other-user-graph "Obecny lokalny graf jest przypisany do zdalnego grafu innego użytkownika. Nie można rozpocząć synchronizacji."
         :frontend.fs.sync/graph-deleted "Obecny zdalny graf został usunięty"}
    :sk {:frontend.components.sidebar/skip-to-main-content               "Preskočiť na hlavný obsah"
@@ -4960,7 +4941,9 @@
         :frontend.components.encryption/submit                                           "Odoslať"
         :frontend.ui/cancel                                           "Zrušiť"
         :frontend.extensions.pdf.toolbar/close                                            "Zavrieť"
-        :delete                                           "Odstrániť"
+        :frontend.components.page/delete                                           "Odstrániť"
+        :frontend.components.whiteboard/delete "Odstrániť"
+        :frontend.extensions.pdf.core/delete "Odstrániť"
         :frontend.components.plugins/save                                             "Uložiť"
         :frontend.components.plugins/type                                             "Typ"
         :frontend.components.repo/re-index                                         "Preindexovať"
@@ -4971,13 +4954,14 @@
         :frontend.components.repo/sync-from-local-files                            "Obnoviť"
         :frontend.components.repo/sync-from-local-files-detail                     "Importovať zmeny z lokálnych súborov"
         :frontend.handler.events/sync-from-local-changes-detected                 "Obnovenie detekuje a spracuje upravené súbory na vašom disku, ktoré sa líšia od aktuálneho obsahu Logseq stránky. Chcete pokračovať?"
-
         :frontend.components.search/search-publishing                                "Vyhľadávanie"
         :frontend.components.search/search                                           "Vyhľadať alebo vytvoriť stránku"
         :frontend.components.search/link-whiteboard-or-block              "Prepojiť tabuľu/stránku/blok"
         :frontend.components.search/page-search                                      "Hľadať na aktuálnej stránke"
         :frontend.components.search/graph-search                                     "Hľadať v grafe"
-        :new-page                                         "Nová stránka"
+        :frontend.components.editor/new-page "Nová stránka"
+        :frontend.components.search/new-page "Nová stránka"
+        :frontend.handler.page/new-page "Nová stránka"
         :frontend.components.search/new-whiteboard                                   "Nová tabuľa"
         :frontend.components.repo/new-graph                                        "Pridať nový graf"
         :frontend.components.header/graph                                            "Graf"
@@ -5003,9 +4987,14 @@
         :all-files                                        "Všetky súbory"
         :frontend.components.page/remove-orphaned-pages                            "Odstrániť osamotené stránky"
         :frontend.handler.route/all-journals                                     "Všetky denníky"
-        :settings                                         "Nastavenia"
-        :settings-of-plugins                              "Doplnky"
-        :plugins                                          "Doplnky"
+        :frontend.components.settings/settings "Nastavenia"
+        :frontend.components.plugins/settings "Nastavenia"
+        :frontend.components.header/settings "Nastavenia"
+        :frontend.components.settings/settings-of-plugins "Doplnky"
+        :frontend.components.plugins/settings-of-plugins "Doplnky"
+        :frontend.components.header/plugins "Doplnky"
+        :frontend.components.plugins/plugins "Doplnky"
+        :frontend.handler.plugin/plugins "Doplnky"
         :frontend.components.plugins/themes                                           "Motívy"
         :frontend.components.header/themes "Motívy"
         :frontend.components.settings/relaunch-confirm-to-work                         "Aby aplikácia fungovala, mala byť reštartovaná. Chcete ju reštartovať teraz?"
@@ -5027,9 +5016,7 @@
         :frontend.components.content/heading                                          "Nadpis {1}"
         :frontend.components.content/auto-heading                                     "Automatický nadpis"
         :frontend.components.repo/open-a-directory                                 "Otvoriť lokálny adresár"
-
         :frontend.components.shortcut/shortcut-page-title                         "Klávesové skratky"
-
         :frontend.components.plugins/installed                                 "Nainštalované"
         :frontend.handler.plugin/installed "Nainštalované"
         :frontend.components.plugins/not-installed                             "Nenainštalované"
@@ -5061,11 +5048,10 @@
         :frontend.components.plugins/contribute                                "Vytvorte a odošlite nový doplnok"
         :frontend.handler.plugin/up-to-date                                "Je nainštalovaná najnovšia verzia"
         :frontend.handler.ui/custom-js-alert                           "Našiel sa súbor custom.js, je povolené jeho spustenie? (Ak nerozumiete obsahu tohto súboru, odporúčame nepovoliť jeho spustenie, ktoré má určité bezpečnostné riziká.)"
-        :frontend.components.plugins/install-from-file.menu-title              "Inštalovať z plugins.edn"
-        :frontend.components.plugins/install-from-file.title                   "Inštalovať doplnky z plugins.edn"
-        :frontend.components.plugins/install-from-file.notice                  "Nasledujúce doplnky nahradia vaše doplnky:"
-        :frontend.components.plugins/install-from-file.success                 "Všetky doplnky nainštalované!"
-
+        :frontend.components.plugins/install-from-file-menu-title              "Inštalovať z plugins.edn"
+        :frontend.components.plugins/install-from-file-title                   "Inštalovať doplnky z plugins.edn"
+        :frontend.components.plugins/install-from-file-notice                  "Nasledujúce doplnky nahradia vaše doplnky:"
+        :frontend.components.plugins/install-from-file-success                 "Všetky doplnky nainštalované!"
         :frontend.extensions.pdf.core/copy-ref                                     "Kopírovať referenciu"
         :frontend.extensions.pdf.core/copy-text                                    "Kopírovať text"
         :frontend.extensions.pdf.core/linked-ref                                   "Prepojené referencie"
@@ -5073,25 +5059,19 @@
         :frontend.extensions.pdf.toolbar/toggle-dashed                                "Prerušovaný štýl pre zvýraznenie oblasti"
         :frontend.extensions.pdf.toolbar/hl-block-colored                             "Farebný štítok pre zvýraznený blok"
         :frontend.extensions.pdf.toolbar/doc-metadata                                 "Metadáta dokumentu"
-
         :frontend.components.header/updater-new-version-install                      "Bola stiahnutá nová verzia."
         :frontend.components.header/updater-quit-and-install                         "Reštartovať a nainštalovať"
-
         :frontend.components.page/pagination-pages                                  "Celkovo {1} strán"
         :frontend.components.page/pagination-prev                                   "Predchádzajúca"
         :frontend.components.page/pagination-next                                   "Ďalšia"
-
         :frontend.components.page/all-done                                    "Hotovo!"
-
         :frontend.components.command-palette/prompt                           "Zadať príkaz"
         :frontend.components.select/default-prompt                            "Vybrať jeden"
         :frontend.components.select/graph-prompt                              "Vybrať graf"
         :frontend.components.select/graph-empty-placeholder-description       "Žiadne zodpovedajúce grafy. Chcete pridať ďalší?"
         :frontend.components.select/graph-add                           "Áno, pridať ďalší graf"
-
         :frontend.fs.sync/other-user-graph                       "Aktuálny lokálny graf je prepojený so vzdialeným grafom iného používateľa. Nie je možné spustiť synchronizáciu.."
         :frontend.fs.sync/graph-deleted                          "Aktuálny vzdialený graf bol odstránený."
-
         :frontend.ui/notification-clear-all                           "Zmazať všetko"}
    :tongue/fallback :en})
 

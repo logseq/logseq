@@ -459,7 +459,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       (t :settings)
+       (t ::settings)
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
@@ -789,7 +789,7 @@
 
     [:div#settings.cp__settings-main
      [:header
-      [:h1.title (t :settings)]]
+      [:h1.title (t ::settings)]]
 
      [:div.cp__settings-inner
 
@@ -812,7 +812,7 @@
                                                                                              :style {:margin-left 2}})]
 
                (when plugins-of-settings
-                 [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
+                 [:plugins-setting "plugins" (t ::settings-of-plugins) (ui/icon "puzzle")])]]
 
           (when label
             [:li.settings-menu-item

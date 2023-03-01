@@ -88,12 +88,12 @@
         (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
-         {:title (t :settings)
+         {:title (t ::settings)
           :options {:on-click state/open-settings!}
           :icon (ui/icon "settings")})
 
        (when config/lsp-enabled?
-         {:title (t :plugins)
+         {:title (t ::plugins)
           :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
           :icon (ui/icon "apps")})
 

@@ -976,7 +976,7 @@
          [:div.l.flex.items-center
           [:div.actions-wrap
            (ui/button
-            [(ui/icon "trash" {:style {:font-size 15}}) (t :delete)]
+            [(ui/icon "trash" {:style {:font-size 15}}) (t ::delete)]
             :on-click (fn []
                         (let [selected (filter (fn [[_ v]] v) @*checks)
                               selected (and (seq selected)

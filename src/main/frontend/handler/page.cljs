@@ -789,7 +789,7 @@
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
-              prefix (str (t :new-page) ": ")
+              prefix (str (t ::new-page) ": ")
               chosen (if (string/starts-with? chosen prefix) ;; FIXME: What if a page named "New page: XXX"?
                        (string/replace-first chosen prefix "")
                        chosen)
@@ -811,7 +811,7 @@
                                            :command :page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
-        (let [prefix (str (t :new-page) ": ")
+        (let [prefix (str (t ::new-page) ": ")
               chosen (if (string/starts-with? chosen prefix)
                        (string/replace-first chosen prefix "")
                        chosen)

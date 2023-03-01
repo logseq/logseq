@@ -128,7 +128,7 @@
                                 nil
 
                                 (empty? matched-pages)
-                                (cons (str (t :new-page) ": " q) matched-pages)
+                                (cons (str (t ::new-page) ": " q) matched-pages)
 
                                ;; reorder, shortest and starts-with first.
                                 :else
@@ -139,8 +139,8 @@
                                                      matched-pages)]
                                   (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
                                     (cons (first matched-pages)
-                                          (cons  (str (t :new-page) ": " q) (rest matched-pages)))
-                                    (cons (str (t :new-page) ": " q) matched-pages))))]
+                                          (cons  (str (t ::new-page) ": " q) (rest matched-pages)))
+                                    (cons (str (t ::new-page) ": " q) matched-pages))))]
             (ui/auto-complete
              matched-pages
              {:on-chosen   (page-handler/on-chosen-handler input id q pos format)

@@ -229,7 +229,7 @@
                                  false route-handler/redirect-to-whiteboard-dashboard!)))}
            [:span.flex.gap-2.items-center
             [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
-            (t :delete)
+            (t ::delete)
             [:span.opacity-50
              (str " · " (count checked-page-names))]]])]
        [:div

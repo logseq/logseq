@@ -270,7 +270,7 @@
        [:b search-q]
 
        :new-page
-       (create-item-render "new-page" (t :new-page) (str "\"" (string/trim search-q) "\""))
+       (create-item-render "new-page" (t ::new-page) (str "\"" (string/trim search-q) "\""))
 
        :new-whiteboard
        (create-item-render "new-whiteboard" (t ::new-whiteboard) (str "\"" (string/trim search-q) "\""))

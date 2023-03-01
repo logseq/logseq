@@ -3,7 +3,6 @@
   application. The ns dependencies for this ns must be small since it is used
   throughout the application."
   (:require [frontend.dicts :as dicts]
-            [clojure.string :as string]
             [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [tongue.core :as tongue]
             [frontend.state :as state]))
@@ -17,8 +16,6 @@
 (defn t
   [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))]
-    (when (string/includes? (apply translate preferred-language args) "Missing ")
-      (js/console.log (first args)))
     (apply translate preferred-language args)))
 
 (defn- fetch-local-language []
