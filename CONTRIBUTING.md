@@ -20,14 +20,28 @@ Please read and follow our [Code of Conduct][coc].
 
 ## <a name="how-can-i-help"></a> How can I help?
 
-There are many ways you can help:
+There are many ways you can help. Here are some ways to help without coding:
 
 - You can be help others on [Discord][discord] or [Reddit](https://www.reddit.com/r/logseq).
 - You can [contribute to the official docs](https://github.com/logseq/docs/blob/master/CONTRIBUTING.md).
 - You can confirm bugs on the [issue tracker][issue-tracker] and mention reproducible steps. It helps the core team to get more reports so we can fix the highest priority bugs.
 - You can contribute [translations][translations] with a [pull request](#submit-pr).
-- You can contribute code with a [pull request](#submit-pr). See [our Project board](https://github.com/orgs/logseq/projects/5/views/1?pane=info) and [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) for ideas.
-- You can extend Logseq with [plugins](https://docs.logseq.com/#/page/Plugins) to share functionality that our community can benefit from.
+
+For ways to help with coding, read the next section.
+
+### <a name="code-contributions"></a> Code Contributions
+
+For contributors who want to help with coding, we have a list of [good first
+issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+to help you get started. These are issues that are beginner-friendly and do not
+require advanced knowledge of the codebase. We encourage new contributors to
+start with these issues and gradually work their way up to more challenging
+tasks. We also have a project board to keep track of community contributions
+[Logseq - Develop Together
+💪](https://github.com/orgs/logseq/projects/5?query=is%3Aopen+sort%3Aupdated-desc).
+Another way to help with coding is by extending Logseq with
+[plugins](https://docs.logseq.com/#/page/Plugins) and submit them to the [marketplace](https://github.com/logseq/marketplace) so that the
+whole community can benefit.
 
 ## <a name="question"></a> Got a Question or a Problem?
 
@@ -124,7 +138,8 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 
 * To run Logseq locally, see [this doc](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md) or [this doc for windows](https://github.com/logseq/logseq/blob/master/docs/develop-logseq-on-windows.md).
 * To contribute to translations, please read our [translation contribution guidelines][translations].
-* See [this doc](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md) to understand best practices on this project.
+* See [our development practices doc](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md) to learn how we develop.
+* See [the overview doc](CODEBASE_OVERVIEW.md) to get an overview of the codebase.
 
 ### <a name="cla"></a> Sign the CLA
 
