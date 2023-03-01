@@ -103,13 +103,13 @@
     :repo-add
     "Add another repo"
     :graph
-    (t :graph)
+    (t ::graph)
     :all-files
     (t :all-files)
     :all-pages
     (t :all-pages)
     :all-journals
-    (t :all-journals)
+    (t ::all-journals)
     :file
     (str "File " (:path path-params))
     :new-page

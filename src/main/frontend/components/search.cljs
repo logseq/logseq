@@ -273,7 +273,7 @@
        (create-item-render "new-page" (t :new-page) (str "\"" (string/trim search-q) "\""))
 
        :new-whiteboard
-       (create-item-render "new-whiteboard" (t :new-whiteboard) (str "\"" (string/trim search-q) "\""))
+       (create-item-render "new-whiteboard" (t ::new-whiteboard) (str "\"" (string/trim search-q) "\""))
 
        :page
        [:span {:data-page-ref data}
@@ -471,13 +471,13 @@
   [search-mode]
   (cond
     config/publishing?
-    (t :search/publishing)
+    (t ::search-publishing)
 
     (= search-mode :whiteboard/link)
-    (t :whiteboard/link-whiteboard-or-block)
+    (t ::link-whiteboard-or-block)
 
     :else
-    (t :search)))
+    (t ::search)))
 
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
@@ -504,9 +504,9 @@
         :auto-focus    true
         :placeholder   (case search-mode
                          :graph
-                         (t :graph-search)
+                         (t ::graph-search)
                          :page
-                         (t :page-search)
+                         (t ::page-search)
                          (default-placeholder search-mode))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q

@@ -561,7 +561,7 @@
          {:on-click #(if in-system-window?
                        (pdf-windows/exit-pdf-in-system-window! false)
                        (state/set-current-pdf! nil))}
-         (t :close)]]]
+         (t ::close)]]]
 
       ;; contents outline
       (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)

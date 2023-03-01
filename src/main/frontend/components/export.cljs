@@ -14,30 +14,30 @@
   []
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
-     [:h1.title (t :export)]
+     [:h1.title (t ::export)]
      [:ul.mr-1
       [:li.mb-4
        [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
-        (t :export-edn)]]
+        (t ::export-edn)]]
       [:li.mb-4
        [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
-        (t :export-json)]]
+        (t ::export-json)]]
       (when (util/electron?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-          (t :export-public-pages)]])
+          (t ::export-public-pages)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]])
+          (t ::export-markdown)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
-          (t :export-opml)]])
+          (t ::export-opml)]])
       (when-not (mobile-util/native-platform?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-          (t :export-roam-json)]])]
+          (t ::export-roam-json)]])]
      [:a#download-as-edn-v2.hidden]
      [:a#download-as-json-v2.hidden]
      [:a#download-as-roam-json.hidden]

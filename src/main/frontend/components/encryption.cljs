@@ -221,9 +221,9 @@
            [:span "You will still be able to access the local version of your graph."]]]])]
 
      [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3
-      (ui/button (t :cancel) :background "gray" :disabled loading? :class "opacity-60" :on-click cancel-handler)
+      (ui/button (t :frontend.ui/cancel) :background "gray" :disabled loading? :class "opacity-60" :on-click cancel-handler)
       (ui/button [:span.inline-flex.items-center.leading-none
-                  [:span (t :submit)]
+                  [:span (t ::submit)]
                   (when loading?
                     [:span.ml-1 (ui/loading "" {:class "w-4 h-4"})])]
 

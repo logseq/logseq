@@ -79,7 +79,7 @@
         *themes (::themes state)]
     [:div.cp__themes-installed
      {:tab-index -1}
-     [:h1.mb-4.text-2xl.p-1 (t :themes)]
+     [:h1.mb-4.text-2xl.p-1 (t ::themes)]
      (map-indexed
       (fn [idx opt]
         (let [current-selected? (:selected opt)
@@ -145,7 +145,7 @@
    (ui/button
     [:span.flex.items-center
      (ui/icon "palette")
-     (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
+     (t ::themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -208,11 +208,11 @@
                                    :installing installing-or-updating?}])
       :on-click #(plugin-common-handler/install-marketplace-plugin item)}
      (if installed?
-       (t :plugin/installed)
+       (t ::installed)
        (if installing-or-updating?
          [:span.flex.items-center [:small svg/loading]
-          (t :plugin/installing)]
-         (t :plugin/install)))]]])
+          (t ::installing)]
+         (t ::install)))]]])
 
 (rum/defc card-ctls-of-installed < rum/static
   [id name url sponsors unpacked? disabled?
@@ -223,18 +223,18 @@
     [:div.de
      [:strong (ui/icon "settings")]
      [:ul.menu-list
-      [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
-      [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+      [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t ::open-settings)]
+      [:li {:on-click #(js/apis.openPath url)} (t ::open-package)]
       [:li {:on-click
             #(let [confirm-fn
                    (ui/make-confirm-modal
-                    {:title      (t :plugin/delete-alert name)
+                    {:title      (t ::delete-alert name)
                      :on-confirm (fn [_ {:keys [close-fn]}]
                                    (close-fn)
                                    (plugin-common-handler/unregister-plugin id)
                                    (plugin-config-handler/remove-plugin id))})]
                (state/set-sub-modal! confirm-fn {:center? true}))}
-       (t :plugin/uninstall)]]]
+       (t ::uninstall)]]]
 
     (when (seq sponsors)
       [:div.de.sponsors
@@ -250,7 +250,7 @@
     (when (and unpacked? (not disabled?))
       [:a.btn
        {:on-click #(js-invoke js/LSPluginCore "reload" id)}
-       (t :plugin/reload)])
+       (t ::reload)])
 
     (when (not unpacked?)
       [:div.updates-actions
@@ -262,10 +262,10 @@
                        (fn [^js e] (notification/show! (.toString e) :error))))}
 
         (if installing-or-updating?
-          (t :plugin/updating)
+          (t ::updating)
           (if new-version
-            (str (t :plugin/update) " 👉 " new-version)
-            (t :plugin/check-update)))]])
+            (str (t ::update) " 👉 " new-version)
+            (t ::check-update)))]])
 
     (ui/toggle (not disabled?)
                (fn []
@@ -300,7 +300,7 @@
         svg/folder)
 
       (when (and (not market?) unpacked?)
-        [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+        [:span.flex.justify-center.text-xs.text-error.pt-2 (t ::unpacked)])]
 
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
@@ -370,7 +370,7 @@
 (rum/defc panel-tab-developer
   []
   (ui/button
-   (t :plugin/contribute)
+   (str "✨ " (t ::contribute))
    :href "https://github.com/logseq/marketplace"
    :class "contribute"
    :intent "logseq"
@@ -384,9 +384,9 @@
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-panel
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:h1.mb-2.text-2xl.font-bold (t ::network-proxy)]
      [:div.p-2
-      [:p [:label [:strong (t :type)]
+      [:p [:label [:strong (t ::type)]
            (ui/select [{:label "System" :value "system" :selected (= type "system")}
                        {:label "Direct" :value "direct" :selected (= type "direct")}
                        {:label "HTTP"   :value "http"   :selected (= type "http")}
@@ -395,7 +395,7 @@
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :host)]
+        [:strong (t ::host)]
         [:input.form-input.is-small
          {:value     (:host opts)
           :disabled  disabled?
@@ -404,7 +404,7 @@
 
        [:label
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :port)]
+        [:strong (t ::port)]
         [:input.form-input.is-small
          {:value     (:port opts) :type "number" :min 1 :max 65535
           :disabled  disabled?
@@ -441,7 +441,7 @@
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
-       (ui/button (t :save)
+       (ui/button (t ::save)
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
@@ -460,11 +460,11 @@
 
       (when (and develop-mode? (not market?))
         [:div
-         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
+         (ui/tippy {:html  [:div (t ::unpacked-tips)]
                     :arrow true}
                    (ui/button
                     [:span.flex.items-center
-                     (ui/icon "upload") (t :plugin/load-unpacked)]
+                     (ui/icon "upload") (t ::load-unpacked)]
                     :intent "logseq"
                     :class "load-unpacked"
                     :on-click plugin-handler/load-unpacked-plugin))
@@ -495,35 +495,35 @@
             :intent "link"))
 
          (if market?
-           [{:title   (t :plugin/all)
+           [{:title   (t ::all)
              :options {:on-click #(reset! *filter-by :default)}
              :icon    (ui/icon (aim-icon :default))}
 
-            {:title   (t :plugin/installed)
+            {:title   (t ::installed)
              :options {:on-click #(reset! *filter-by :installed)}
              :icon    (ui/icon (aim-icon :installed))}
 
-            {:title   (t :plugin/not-installed)
+            {:title   (t ::not-installed)
              :options {:on-click #(reset! *filter-by :not-installed)}
              :icon    (ui/icon (aim-icon :not-installed))}]
 
-           [{:title   (t :plugin/all)
+           [{:title   (t ::all)
              :options {:on-click #(reset! *filter-by :default)}
              :icon    (ui/icon (aim-icon :default))}
 
-            {:title   (t :plugin/enabled)
+            {:title   (t ::enabled)
              :options {:on-click #(reset! *filter-by :enabled)}
              :icon    (ui/icon (aim-icon :enabled))}
 
-            {:title   (t :plugin/disabled)
+            {:title   (t ::disabled)
              :options {:on-click #(reset! *filter-by :disabled)}
              :icon    (ui/icon (aim-icon :disabled))}
 
-            {:title   (t :plugin/unpacked)
+            {:title   (t ::unpacked)
              :options {:on-click #(reset! *filter-by :unpacked)}
              :icon    (ui/icon (aim-icon :unpacked))}
 
-            {:title   (t :plugin/update-available)
+            {:title   (t ::update-available)
              :options {:on-click #(reset! *filter-by :update-available)}
              :icon    (ui/icon (aim-icon :update-available))}])
          nil))
@@ -537,15 +537,15 @@
             :on-click toggle-fn
             :intent "link"))
          (let [aim-icon #(if (= sort-by %) "check" "circle")]
-           [{:title   (t :plugin/downloads)
+           [{:title   (t ::downloads)
              :options {:on-click #(reset! *sort-by :downloads)}
              :icon    (ui/icon (aim-icon :downloads))}
 
-            {:title   (t :plugin/stars)
+            {:title   (t ::stars)
              :options {:on-click #(reset! *sort-by :stars)}
              :icon    (ui/icon (aim-icon :stars))}
 
-            {:title   (str (t :plugin/title) " (A - Z)")
+            {:title   (str (t ::title) " (A - Z)")
              :options {:on-click #(reset! *sort-by :letters)}
              :icon    (ui/icon (aim-icon :letters))}])
          {}))
@@ -560,12 +560,12 @@
           :intent "link"))
 
        (concat (if market?
-                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t ::refresh-lists)]
                    :options {:on-click #(reload-market-fn)}}]
-                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t ::check-all-updates)]
                    :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
 
-               [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
+               [{:title   [:span.flex.items-center (ui/icon "world") (t ::network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
                [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t ::install-from-file.menu-title)]
@@ -923,7 +923,7 @@
 
       ;; actions
       [:div.pt-5
-       (ui/button [:span (t :plugin/install)]
+       (ui/button [:span (t ::install)]
                   :on-click #(do
                                (plugin-config-handler/replace-plugins plugins)
                                (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
@@ -1084,11 +1084,11 @@
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
-       (ui/button [:span.it (t :plugin/installed)]
+       (ui/button [:span.it (t ::installed)]
                   :on-click #(set-active! :installed)
                   :intent "logseq" :class (if-not market? "active" ""))
 
-       (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
+       (ui/button [:span.mk (svg/apps 16) (t ::marketplace)]
                   :on-click #(set-active! :marketplace)
                   :intent "logseq" :class (if market? "active" ""))]]
 

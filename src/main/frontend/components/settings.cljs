@@ -156,32 +156,32 @@
 
 (defn edit-config-edn []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-configuration)
-     :button-label (t :settings-page/edit-config-edn)
+    {:left-label   (t ::custom-configuration)
+     :button-label (t ::edit-config-edn)
      :href         (rfe/href :file {:path (config/get-repo-config-path)})
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "config_edn"}))
 
 (defn edit-global-config-edn []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-global-configuration)
-     :button-label (t :settings-page/edit-global-config-edn)
+    {:left-label   (t ::custom-global-configuration)
+     :button-label (t ::edit-global-config-edn)
      :href         (rfe/href :file {:path (global-config-handler/global-config-path)})
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "global_config_edn"}))
 
 (defn edit-custom-css []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-theme)
-     :button-label (t :settings-page/edit-custom-css)
+    {:left-label   (t ::custom-theme)
+     :button-label (t ::edit-custom-css)
      :href         (rfe/href :file {:path (config/get-custom-css-path)})
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "customize_css"}))
 
 (defn edit-export-css []
   (row-with-button-action
-   {:left-label   (t :settings-page/export-theme)
-    :button-label (t :settings-page/edit-export-css)
+   {:left-label   (t ::export-theme)
+    :button-label (t ::edit-export-css)
     :href         (rfe/href :file {:path (config/get-export-css-path)})
     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
     :-for         "customize_css"}))
@@ -190,7 +190,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "show_brackets"}
-    (t :settings-page/show-brackets)]
+    (t ::show-brackets)]
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle show-brackets?
@@ -205,7 +205,7 @@
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/spell-checker)]
+      (t ::spell-checker)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -213,7 +213,7 @@
          (fn []
            (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
            (p/then (ipc/ipc :userAppCfgs :spell-check (not enabled?))
-                   #(when (js/confirm (t :relaunch-confirm-to-work))
+                   #(when (js/confirm (t ::relaunch-confirm-to-work))
                       (js/logseq.api.relaunch))))
          true)]]]))
 
@@ -222,7 +222,7 @@
   (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-switcher-label)]
+      (t ::git-switcher-label)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -237,7 +237,7 @@
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-delay)]
+      (t ::git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
       [:div.max-w-lg.rounded-md.sm:max-w-xs
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -260,7 +260,7 @@
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
-            (t :settings-page/auto-updater)
+            (t ::auto-updater)
             enabled?
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
@@ -276,7 +276,7 @@
                   (let [lang-code (name (:value language))
                         lang-label (:label language)]
                     [:option {:key lang-code :value lang-code} lang-label]))]]
-    (row-with-button-action {:left-label (t :language)
+    (row-with-button-action {:left-label (t ::language)
                              :-for       "preferred_language"
                              :action     action})))
 
@@ -297,7 +297,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_format"}
-    (t :settings-page/preferred-file-format)]
+    (t ::preferred-file-format)]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -314,8 +314,8 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
+    (t ::custom-date-format)
+    (ui/tippy {:html        (t ::custom-date-format-warning)
                :class       "tippy-hover ml-2"
                :interactive true
                :disabled    false}
@@ -340,7 +340,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_workflow"}
-    (t :settings-page/preferred-workflow)]
+    (t ::preferred-workflow)]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -357,7 +357,7 @@
 
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
-          [(t :settings-page/preferred-outdenting)
+          [(t ::preferred-outdenting)
            (ui/tippy {:html        (outdenting-hint)
                       :class       "tippy-hover ml-2"
                       :interactive true
@@ -368,33 +368,33 @@
 
 (defn showing-full-blocks [t show-full-blocks?]
   (toggle "show_full_blocks"
-          (t :settings-page/show-full-blocks)
+          (t ::show-full-blocks)
           show-full-blocks?
           config-handler/toggle-show-full-blocks!))
 
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
-          (t :settings-page/preferred-pasting-file)
+          (t ::preferred-pasting-file)
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
-          (t :settings-page/enable-tooltip)
+          (t ::enable-tooltip)
           enable-tooltip?
           (fn []
             (config-handler/toggle-ui-enable-tooltip!))))
 
 (defn shortcut-tooltip-row [t enable-shortcut-tooltip?]
   (toggle "enable_tooltip"
-          (t :settings-page/enable-shortcut-tooltip)
+          (t ::enable-shortcut-tooltip)
           enable-shortcut-tooltip?
           (fn []
             (state/toggle-shortcut-tooltip!))))
 
 (defn timetracking-row [t enable-timetracking?]
   (toggle "enable_timetracking"
-          (t :settings-page/enable-timetracking)
+          (t ::enable-timetracking)
           enable-timetracking?
           #(let [value (not enable-timetracking?)]
              (config-handler/set-config! :feature/enable-timetracking? value))))
@@ -420,7 +420,7 @@
 
 (defn journal-row [enable-journals?]
   (toggle "enable_journals"
-          (t :settings-page/enable-journals)
+          (t ::enable-journals)
           enable-journals?
           (fn []
             (let [value (not enable-journals?)]
@@ -428,7 +428,7 @@
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
-          (t :settings-page/enable-all-pages-public)
+          (t ::enable-all-pages-public)
           enable-all-pages-public?
           (fn []
             (let [value (not enable-all-pages-public?)]
@@ -436,7 +436,7 @@
 
 ;; (defn enable-block-timestamps-row [t enable-block-timestamps?]
 ;;   (toggle "block timestamps"
-;;           (t :settings-page/enable-block-time)
+;;           (t ::enable-block-time)
 ;;           enable-block-timestamps?
 ;;           (fn []
 ;;             (let [value (not enable-block-timestamps?)]
@@ -444,8 +444,8 @@
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
-    {:left-label   (t :settings-page/customize-shortcuts)
-     :button-label (t :settings-page/shortcut-settings)
+    {:left-label   (t ::customize-shortcuts)
+     :button-label (t ::shortcut-settings)
      :on-click      (fn []
                       (state/close-settings!)
                       (route-handler/redirect! {:to :shortcut-setting}))
@@ -478,31 +478,31 @@
 
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
-          (t :settings-page/disable-sentry)
+          (t ::disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
                    (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
+          [:span.text-sm.opacity-50 (t ::disable-sentry-desc)]))
 
 (defn clear-cache-row [t]
-  (row-with-button-action {:left-label   (t :settings-page/clear-cache)
-                           :button-label (t :settings-page/clear)
+  (row-with-button-action {:left-label   (t ::clear-cache)
+                           :button-label (t ::clear)
                            :on-click     handler/clear-cache!
                            :-for         "clear_cache"}))
 
 (defn version-row [t version]
-  (row-with-button-action {:left-label (t :settings-page/current-version)
+  (row-with-button-action {:left-label (t ::current-version)
                            :action     (app-updater version)
                            :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
-          (t :settings-page/developer-mode)
+          (t ::developer-mode)
           developer-mode?
           (fn []
             (let [mode (not developer-mode?)]
               (state/set-developer-mode! mode)))
-          [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
+          [:div.text-sm.opacity-50 (t ::developer-mode-desc)]))
 
 (rum/defc plugin-enabled-switcher
   [t]
@@ -517,9 +517,7 @@
        [:div.relative.opacity-70
         [:span.absolute.whitespace-nowrap
          {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-           :small? true :intent "logseq")]])]))
+         (assets/restart-button)]])]))
 
 (rum/defc http-server-enabled-switcher
   [t]
@@ -534,9 +532,7 @@
        [:div.relative.opacity-70
         [:span.absolute.whitespace-nowrap
          {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-                    :small? true :intent "logseq")]])]))
+         (assets/restart-button)]])]))
 
 (rum/defc flashcards-enabled-switcher
   [enable-flashcards?]
@@ -562,7 +558,7 @@
 
 (defn plugin-system-switcher-row []
   (row-with-button-action
-   {:left-label (t :settings-page/plugin-system)
+   {:left-label (t ::plugin-system)
     :action (plugin-enabled-switcher t)}))
 
 (defn http-server-switcher-row []
@@ -572,18 +568,18 @@
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
-   {:left-label (t :settings-page/enable-flashcards)
+   {:left-label (t ::enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
-   {:left-label (t :settings-page/network-proxy)
+   {:left-label (t ::network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
 (defn filename-format-row []
   (row-with-button-action
-   {:left-label (t :settings-page/filename-format)
-    :button-label (t :settings-page/edit-setting)
+   {:left-label (t ::filename-format)
+    :button-label (t ::edit-setting)
     :on-click #(state/set-sub-modal!
                 (fn [_] (conversion-component/files-breaking-changed))
                 {:id :filename-format-panel :center? true})}))
@@ -656,7 +652,7 @@
 
    (ui/admonition
      :warning
-     [:p (t :settings-page/git-confirm)])])
+     [:p (t ::git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]
@@ -673,7 +669,7 @@
 
      (ui/admonition
        :warning
-       [:p (t :settings-page/clear-cache-warning)])]))
+       [:p (t ::clear-cache-warning)])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -684,7 +680,7 @@
 
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/sync)
+   {:left-label (t ::sync)
     :action (sync-enabled-switcher enabled?)}))
 
 (rum/defc whiteboards-enabled-switcher
@@ -698,7 +694,7 @@
 
 (defn whiteboards-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/enable-whiteboards)
+   {:left-label (t ::enable-whiteboards)
     :action (whiteboards-enabled-switcher enabled?)}))
 
 (rum/defc settings-features < rum/reactive
@@ -715,7 +711,7 @@
        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
         [:label.block.text-sm.font-medium.leading-5.opacity-70
          {:for "default page"}
-         (t :settings-page/home-default-page)]
+         (t ::home-default-page)]
         [:div.mt-1.sm:mt-0.sm:col-span-2
          [:div.max-w-lg.rounded-md.sm:max-w-xs
           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -736,21 +732,21 @@
         (if logged-in?
           [:div
            (user-handler/email)
-           [:p (ui/button (t :logout) {:class "p-1"
+           [:p (ui/button (t ::logout) {:class "p-1"
                                        :icon "logout"
                                        :on-click user-handler/logout})]]
           [:div
-           (ui/button (t :login) {:class "p-1"
+           (ui/button (t ::login) {:class "p-1"
                                   :icon "login"
                                   :on-click (fn []
                                               (state/close-settings!)
                                               (js/window.open config/LOGIN-URL))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
+           [:p.text-sm.opacity-50 (t ::login-prompt)]])])
 
      (when-not web-platform?
        [:<>
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t ::beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
@@ -766,7 +762,7 @@
      ;;   [:<>
      ;;    [:hr]
      ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
+     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t ::alpha-features)]]
      ;;    [:div.flex.flex-col.gap-4
      ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
      ;;     ;; features
@@ -800,19 +796,19 @@
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
-               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
+              [[:general "general" (t ::tab-general) (ui/icon "adjustments")]
+               [:editor "editor" (t ::tab-editor) (ui/icon "writing")]
 
                (when (and
                       (util/electron?)
                       (not (file-sync-handler/synced-file-graph? current-repo)))
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+                 [:git "git" (t ::tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)
-               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+               ;;   [:assets "assets" (t ::tab-assets) (ui/icon "box")])
 
-               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
+               [:advanced "advanced" (t ::tab-advanced) (ui/icon "bulb")]
+               [:features "features" (t ::tab-features) (ui/icon "app-feature" {:extension? true
                                                                                              :style {:margin-left 2}})]
 
                (when plugins-of-settings

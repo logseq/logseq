@@ -120,7 +120,7 @@
                                   (reset! *solid-format @*target-format)
                                   (reset! *switch-disabled? true)))
         [:hr]])
-     [:h1.title (t :settings-page/filename-format)]
+     [:h1.title (t ::filename-format)]
      [:div.rounded-md.opacity-70
       [:p (t ::filename-desc-1)]
       [:p (t ::filename-desc-2)]

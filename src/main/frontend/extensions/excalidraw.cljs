@@ -62,7 +62,7 @@
 (rum/defc toggle-mode-button
   [label on? toggle-fns]
   [:a.mr-2 {:on-click toggle-fns}
-   (t ::mode label) " ("[:span.uppercase (if on? (t ::on) (t ::off))]")" ])
+   label " ("[:span.uppercase (if on? (t ::on) (t ::off))]")" ])
 
 (rum/defcs draw-inner < rum/reactive
   (rum/local 800 ::draw-width)
@@ -88,10 +88,10 @@
     (when data
       [:div.overflow-hidden {:on-mouse-down (fn [e] (util/stop e))}
        [:div.my-1 {:style {:font-size 10}}
-        (toggle-mode-button (t ::wide) wide-mode? ui-handler/toggle-wide-mode!)
-        (toggle-mode-button (t ::zen) @*zen-mode? #(swap! *zen-mode? not))
-        (toggle-mode-button (t ::view) @*view-mode? #(swap! *view-mode? not))
-        (toggle-mode-button (t ::grid) @*grid-mode? #(swap! *grid-mode? not))
+        (toggle-mode-button (t ::wide-mode) wide-mode? ui-handler/toggle-wide-mode!)
+        (toggle-mode-button (t ::zen-mode) @*zen-mode? #(swap! *zen-mode? not))
+        (toggle-mode-button (t ::view-mode) @*view-mode? #(swap! *view-mode? not))
+        (toggle-mode-button (t ::grid-mode) @*grid-mode? #(swap! *grid-mode? not))
         [:a.mr-2 {:on-click #(when-let [block (db/pull [:block/uuid block-uuid])]
                                (editor-handler/edit-block! block :max block-uuid))}
          (t ::edit-block)]]

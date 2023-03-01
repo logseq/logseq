@@ -47,7 +47,7 @@
                   logged?
                   (not sync-enabled?))
       [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-       [:span (t :login)]
+       [:span (t ::login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))
 
@@ -98,34 +98,34 @@
           :icon (ui/icon "apps")})
 
        (when config/lsp-enabled?
-         {:title (t :themes)
+         {:title (t ::themes)
           :options {:on-click #(plugins/open-select-theme!)}
           :icon (ui/icon "palette")})
 
        (when current-repo
-         {:title (t :export-graph)
+         {:title (t ::export-graph)
           :options {:on-click #(state/set-modal! export/export)}
           :icon (ui/icon "database-export")})
 
        (when (and current-repo (state/enable-editing?))
-         {:title (t :import)
+         {:title (t ::import)
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
        {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :join-community)]]
+                [:span (t ::join-community)]]
         :options {:href "https://discuss.logseq.com"
-                  :title (t :discourse-title)
+                  :title (t ::discourse-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
 
        {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :help/bug)]]
+                [:span (t ::bug)]]
         :options {:href (rfe/href :bug-report)}
         :icon (ui/icon "bug")}
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (str (t :logout) " (" (user-handler/email) ")")
+         {:title (t ::logout (user-handler/email))
           :options {:on-click #(user-handler/logout)}
           :icon  (ui/icon "logout")})]
       (concat page-menu-and-hr)
@@ -257,7 +257,7 @@
 
       (when config/publishing?
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-         (t :graph)])
+         (t ::graph)])
 
       (dropdown-menu {:t            t
                       :current-repo current-repo

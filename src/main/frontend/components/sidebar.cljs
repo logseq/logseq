@@ -566,7 +566,7 @@
                            (gp-util/safe-decode-uri-component file-basename)
                            file-basename)
         left-label [:div.flex.flex-row.font-bold
-                    (t :parsing-files)
+                    (t ::parsing-files)
                     [:div.hidden.md:flex.flex-row
                      [:span.mr-1 ": "]
                      [:div.text-ellipsis-wrapper {:style {:max-width 300}}
@@ -622,7 +622,7 @@
          (route-handler/redirect! {:to :all-pages})
 
          loading-files?
-         (ui/loading (t :loading-files))
+         (ui/loading (t ::loading-files))
 
          (seq latest-journals)
          (journal/journals latest-journals)
@@ -692,7 +692,7 @@
   (when-not (state/sub :ui/sidebar-open?)
     [:div.cp__sidebar-help-btn
      [:div.inner
-      {:title    (t :help-shortcut-title)
+      {:title    (t ::help-shortcut-title)
        :on-click (fn []
                    (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
       "?"]]))

@@ -281,7 +281,7 @@
        [:span.actions
         (when-not config/publishing?
           [:button.asset-action-btn.px-1
-           {:title         (t :asset/copy)
+           {:title         (t :frontend.components.block/copy)
             :tabIndex      "-1"
             :on-mouse-down util/stop
             :on-click      (fn [e]
@@ -291,7 +291,7 @@
            (ui/icon "copy")])
 
         [:button.asset-action-btn.px-1
-         {:title         (t :asset/maximize)
+         {:title         (t :frontend.components.block/maximize)
           :tabIndex      "-1"
           :on-mouse-down util/stop
           :on-click      open-lightbox}

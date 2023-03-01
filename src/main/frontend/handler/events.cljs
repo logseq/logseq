@@ -161,14 +161,22 @@
        (when-let [dir-name (config/get-repo-dir graph)]
          (fs/watch-dir! dir-name))))))
 
+(defn notify-graph-persist
+  []
+  (notification/show!
+   (ui/loading (t ::graph-persist))
+   :warning))
+
+(defn notify-graph-persist-error
+  []
+  (notification/show!
+   (t ::graph-persist-error)
+   :error))
+
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
-  {:before     #(notification/show!
-                 (ui/loading (t :graph/persist))
-                 :warning)
-   :on-error   #(notification/show!
-                 (t :graph/persist-error)
-                 :error)})
+  {:before     #(notify-graph-persist)
+   :on-error   #(notify-graph-persist-error)})
 
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
@@ -248,15 +256,15 @@
 (defmethod handle :graph/save [_]
   (repo-handler/persist-db! (state/get-current-repo)
                             {:before     #(notification/show!
-                                           (ui/loading (t :graph/save))
+                                           (ui/loading (t ::save))
                                            :warning)
                              :on-success #(do
                                             (notification/clear-all!)
                                             (notification/show!
-                                             (t :graph/save-success)
+                                             (t ::save-success)
                                              :success))
                              :on-error   #(notification/show!
-                                           (t :graph/save-error)
+                                           (t ::save-error)
                                            :error)}))
 
 (defn get-local-repo
@@ -631,9 +639,9 @@
   (handle
    [:modal/show
     [:div {:style {:max-width 700}}
-     [:p (t :sync-from-local-changes-detected)]
+     [:p (t ::sync-from-local-changes-detected)]
      (ui/button
-      (t :yes)
+      (t :frontend.ui/yes)
       :autoFocus "on"
       :class "ui__modal-enter"
       :large? true
@@ -676,14 +684,14 @@
      [:modal/show
       [:div
        (when (not (nil? ui)) ui)
-       [:p (t :re-index-multiple-windows-warning)]]])
+       [:p (t ::re-index-multiple-windows-warning)]]])
     (handle
      [:modal/show
       [:div {:style {:max-width 700}}
        (when (not (nil? ui)) ui)
        [:p (t :re-index-discard-unsaved-changes-warning)]
        (ui/button
-         (t :yes)
+         (t :frontend.ui/yes)
          :autoFocus "on"
          :class "ui__modal-enter"
          :large? true

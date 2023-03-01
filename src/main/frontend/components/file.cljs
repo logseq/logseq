@@ -60,7 +60,7 @@
                [:td [:a.text-sm
                      {:on-click (fn [_e]
                                   (export-handler/download-file! file))}
-                     [:span (t :download)]]])]))]])))
+                     [:span (t ::download)]]])]))]])))
 
 (rum/defc files
   []

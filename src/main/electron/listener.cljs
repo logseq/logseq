@@ -17,6 +17,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
+            [frontend.handler.events :as events]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [promesa.core :as p]))
@@ -26,9 +27,7 @@
   []
   ;; only persist current db!
   ;; TODO rename the function and event to persist-db
-  (repo-handler/persist-db! {:before     #(notification/show!
-                                           (ui/loading (t :graph/persist))
-                                           :warning)
+  (repo-handler/persist-db! {:before     #(events/notify-graph-persist)
                              :on-success #(ipc/ipc "persistent-dbs-saved")
                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
@@ -104,12 +103,12 @@
                            block-id
                            (if (db-model/get-block-by-uuid block-id)
                              (route-handler/redirect-to-page! block-id)
-                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
+                             (notification/show! (::link-block-id-error block-id) :error false))
 
                            file
                            (if-let [db-page-name (db-model/get-file-page file false)]
                              (route-handler/redirect-to-page! db-page-name)
-                             (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
+                             (notification/show! (t ::link-file-error file) :error false))))))
 
   (js/window.apis.on "dbsync"
                      (fn [data]
@@ -124,15 +123,11 @@
                      ;; fire back "broadcastPersistGraphDone" on done
                      (fn [data]
                        (let [repo (bean/->clj data)
-                             before-f #(notification/show!
-                                        (ui/loading (t :graph/persist))
-                                        :warning)
+                             before-f #(events/notify-graph-persist)
                              after-f #(ipc/ipc "broadcastPersistGraphDone")
                              error-f (fn []
                                        (after-f)
-                                       (notification/show!
-                                        (t :graph/persist-error)
-                                        :error))
+                                       (events/notify-graph-persist-error))
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]

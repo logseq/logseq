@@ -565,7 +565,7 @@
               ;;      (set-setting! :layout value))
               ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2
-               [:span (t :settings-page/enable-journals)]
+               [:span (t ::graph-filter-journals)]
                ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?
@@ -824,12 +824,12 @@
 
       [:span.pr-2
        (ui/button
-         (t :cancel)
+         (t :frontend.ui/cancel)
          :intent "logseq"
          :on-click close-fn)]
 
       (ui/button
-        (t :yes)
+        (t :frontend.ui/yes)
         :on-click (fn []
                     (close-fn)
                     (doseq [page-name (map :block/name pages)]

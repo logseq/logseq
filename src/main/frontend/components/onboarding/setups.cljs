@@ -208,7 +208,7 @@
   (if (state/sub :graph/importing)
     (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
           left-label [:div.flex.flex-row.font-bold
-                      (t :importing)
+                      (t ::importing)
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}

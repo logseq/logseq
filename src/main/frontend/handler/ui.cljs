@@ -141,7 +141,7 @@
     (let [k (str "ls-js-allowed-" href)
           execed #(swap! *js-execed conj href)
           execed? (contains? @*js-execed href)
-          ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
+          ask-allow #(let [r (js/confirm (t ::custom-js-alert))]
                        (if r
                          (storage/set k (js/Date.now))
                          (storage/set k false))

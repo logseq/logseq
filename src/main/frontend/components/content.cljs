@@ -147,7 +147,7 @@
                            (editor-handler/set-block-property! block-id "background-color" (name color)))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" (name color) "-500)")}}]])
            [:a.shadow-sm
-            {:title    (t :remove-background)
+            {:title    (t ::remove-background)
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
             [:div.heading-bg.remove "-"]]]]
@@ -159,7 +159,7 @@
               ""
               :disabled (= heading i)
               :icon (str "h-" i)
-              :title (t :heading i)
+              :title (t ::heading i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
@@ -171,7 +171,7 @@
             :disabled (= heading true)
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (t :auto-heading)
+            :title (t ::auto-heading)
             :on-click (fn [_e]
                         (editor-handler/set-heading! block-id format true))
             :intent "link"
@@ -182,7 +182,7 @@
             :disabled (not heading)
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (t :remove-heading)
+            :title (t ::remove-heading)
             :on-click (fn [_e]
                         (editor-handler/remove-heading! block-id format))
             :intent "link"

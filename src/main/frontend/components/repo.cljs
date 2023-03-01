@@ -101,12 +101,12 @@
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     (if (seq repos)
       [:div#graphs
-       [:h1.title (t :graph/all-graphs)]
+       [:h1.title (t ::all-graphs)]
 
        [:div.pl-1.content.mt-3
 
         [:div
-         [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
+         [:h2.text-lg.font-medium.my-4 (str (t ::local-graphs) ":")]
          (when (seq local-graphs)
            (repos-inner local-graphs))
 
@@ -115,14 +115,14 @@
                     (mobile-util/native-platform?))
             [:div.mr-8
              (ui/button
-               (t :open-a-directory)
+               (t ::open-a-directory)
                :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
-            [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+            [:h2.text-lg.font-medium.my-4 (str (t ::remote-graphs) ":")]
             [:div
              (ui/button
               [:span.flex.items-center "Refresh"
@@ -167,11 +167,11 @@
                                       (mobile-util/native-platform?))
                                   ;; Disable refresh temporally for nfs
                                   (not util/nfs?))
-                         {:title (t :sync-from-local-files)
-                          :hover-detail (t :sync-from-local-files-detail)
+                         {:title (t ::sync-from-local-files)
+                          :hover-detail (t ::sync-from-local-files-detail)
                           :options {:on-click #(state/pub-event! [:graph/ask-for-re-fresh])}}))
-        reindex-link {:title        (t :re-index)
-                      :hover-detail (t :re-index-detail)
+        reindex-link {:title        (t ::re-index)
+                      :hover-detail (t ::re-index-detail)
                       :options (cond->
                                 {:on-click
                                  (fn []
@@ -179,15 +179,15 @@
         new-window-link (when (and (util/electron?)
                                    ;; New Window button in menu bar of macOS is available.
                                    (not util/mac?))
-                          {:title        (t :open-new-window)
+                          {:title        (t ::open-new-window)
                            :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
               (if (or (nfs-handler/supported?) (mobile-util/native-platform?)) 
-                {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
-                {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
-              {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
+                {:title (t ::new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
+                {:title (t ::new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
+              {:title (t ::all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link
               new-window-link])

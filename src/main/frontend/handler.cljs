@@ -167,7 +167,7 @@
                       (string/includes? % "logseq_local_/")) nfs-dbs))
       (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
                                (ui/button
-                                (t :settings-page/clear-cache)
+                                (t ::clear-cache)
                                 :class    "ui__modal-enter"
                                 :class    "text-sm p-1"
                                 :on-click clear-cache!)] :error false)

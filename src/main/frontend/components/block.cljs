@@ -313,7 +313,7 @@
           ;; the image path bar
           (when (util/electron?)
             [:button.asset-action-btn.text-left
-             {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+             {:title (t (if local? ::show-in-folder :asset/open-in-browser))
               :tabIndex "-1"
               :on-mouse-down util/stop
               :on-click (fn [e]
@@ -324,15 +324,15 @@
              image-src])
           [:.flex
            [:button.asset-action-btn
-            {:title (t :asset/delete)
+            {:title (t ::delete)
              :tabIndex "-1"
              :on-mouse-down util/stop
              :on-click
              (fn [e]
                (when-let [block-id (:block/uuid config)]
                  (let [confirm-fn (ui/make-confirm-modal
-                                   {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                    :sub-title     (if local? :asset/physical-delete "")
+                                   {:title         (t ::confirm-delete)
+                                    :sub-title     (if local? ::physical-delete "")
                                     :sub-checkbox? local?
                                     :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
                                                      (close-fn)
@@ -349,7 +349,7 @@
             (ui/icon "trash")]
 
            [:button.asset-action-btn
-            {:title         (t :asset/copy)
+            {:title         (t ::copy)
              :tabIndex      "-1"
              :on-mouse-down util/stop
              :on-click      (fn [e]
@@ -359,7 +359,7 @@
             (ui/icon "copy")]
 
            [:button.asset-action-btn
-            {:title (t :asset/maximize)
+            {:title (t ::maximize)
              :tabIndex "-1"
              :on-mouse-down util/stop
              :on-click open-lightbox}
