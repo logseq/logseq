@@ -130,18 +130,36 @@
    [:work-dir :string]
    [:version {:optional true} :string]])
 
+(defn- remove-graphs-txid-legacy
+  []
+  (when (some? @graphs-txid-legacy)
+    (prn :remove-legacy-graphs-txid-edn @graphs-txid-legacy)
+    (let [repo (state/get-current-repo)]
+      (p/do! (persist-var/-reset-value! graphs-txid-legacy nil repo)
+             (persist-var/-save graphs-txid-legacy)
+             (fs/unlink! repo (config/get-file-path repo "logseq/graphs-txid.edn") {})))))
+
 (defn <load-graph-txid
   "load graphs-txid. if graphs-txid-legacy is not empty, clean it."
   []
   (p/do!
    (persist-var/-load graphs-txid)
    (persist-var/-load graphs-txid-legacy)
-   (when (some? @graphs-txid-legacy)
-     (prn :resert-legacy-graphs-txid-edn @graphs-txid-legacy)
-     (let [repo (state/get-current-repo)]
-       (p/do! (persist-var/-reset-value! graphs-txid-legacy nil repo)
-              (persist-var/-save graphs-txid-legacy)
-              (fs/unlink! repo (config/get-file-path repo "logseq/graphs-txid.edn") {}))))))
+   (cond
+     ;; empty .graphs-txid.edn & some graphs-txid-legacy
+     ;; do migration
+     (and (some? @graphs-txid-legacy)
+          (empty? @graphs-txid))
+     (let [[user-uuid graph-uuid txid] @graphs-txid-legacy]
+       (reset! graphs-txid
+               {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
+                :work-dir (config/get-repo-dir (state/get-current-repo))})
+       (remove-graphs-txid-legacy))
+
+     ;; just remove the legacy graphs-txid.edn if (some? @graphs-txid)
+     (and (some? @graphs-txid-legacy)
+          (some? @graphs-txid))
+     (remove-graphs-txid-legacy))))
 
 
 (defn read-graphs-txid

@@ -51,7 +51,8 @@
                              (swap! *value (fn [o]
                                              (-> o
                                                  (assoc-in [repo :loaded?] true)
-                                                 (assoc-in [repo :value] value)))))))
+                                                 (assoc-in [repo :value] value))))
+                             (get *value repo))))
                 (p/catch (fn [e]
                            (println (util/format "load persist-var failed: %s: %s" (load-path location) e))))))))))
   (-loaded? [_]
