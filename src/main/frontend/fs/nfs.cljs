@@ -65,7 +65,7 @@
     (let [parts (->> (string/split dir "/")
                      (remove string/blank?))
           root (->> (butlast parts)
-                    (string/join "/"))
+                    util/string-join-path)
           new-dir (last parts)
           root-handle (str "handle/" root)]
       (->
@@ -132,7 +132,7 @@
           basename (last parts)
           sub-dir (->> (butlast parts)
                        (remove string/blank?)
-                       (string/join "/"))
+                       util/string-join-path)
           sub-dir-handle-path (str "handle/"
                                    (subs dir 1)
                                    (when sub-dir
@@ -208,7 +208,7 @@
                        (remove string/blank?))
             dir (str "/" (first parts))
             new-path (->> (rest parts)
-                          (string/join "/"))
+                          util/string-join-path)
             handle (idb/get-item (str "handle" old-path))
             file (.getFile handle)
             content (.text file)

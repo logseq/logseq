@@ -162,7 +162,7 @@
     (when current-file
       (let [parts (string/split current-file #"/")
             parts-2 (string/split path #"/")
-            current-dir (string/join "/" (drop-last 1 parts))]
+            current-dir (util/string-join-path (drop-last 1 parts))]
         (cond
           (if util/win32? (utils/win32 path) (util/starts-with? path "/"))
           path
@@ -187,7 +187,7 @@
                                    parts
                                    (rest col)))))
                 parts (remove #(string/blank? %) parts)]
-            (string/join "/" (reverse parts))))))))
+            (util/string-join-path (reverse parts))))))))
 
 (rum/defcs asset-loader
   < rum/reactive

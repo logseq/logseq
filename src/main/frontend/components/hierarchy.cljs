@@ -55,7 +55,7 @@
              (for [[idx page] (medley/indexed namespace)]
                (when (and (string? page) page)
                  (let [full-page (->> (take (inc idx) namespace)
-                                      (string/join "/"))]
+                                      util/string-join-path)]
                    (block/page-reference false
                                          full-page
                                          {}
