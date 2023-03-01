@@ -322,7 +322,7 @@
     (if (and (< 2 (count parts))
              (= 36 (count (parts 0)))
              (= 36 (count (parts 1))))
-      (string/join "/" (drop 2 parts))
+      (util/string-join-path (drop 2 parts))
       path)))
 
 (defprotocol IRelativePath
@@ -531,7 +531,7 @@
   {:post [(s/valid? ::diff %)]}
   {:TXId (inc index)
    :TXType "update_files"
-   :TXContent [[(string/join "/" [user-uuid graph-uuid relative-path]) nil checksum]]})
+   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
 
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.

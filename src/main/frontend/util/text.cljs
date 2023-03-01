@@ -145,6 +145,6 @@
     (let [parts (->> (string/split path #"/")
                      (take-last 2))]
       (-> (if (not= (first parts) "0")
-            (string/join "/" parts)
+            (util/string-join-path parts)
             (last parts))
           js/decodeURI))))
