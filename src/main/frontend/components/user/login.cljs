@@ -13,16 +13,13 @@
 
 (defn- setup-configure!
   []
+  (.setLanguage js/LSAmplify.I18n (:preferred-language @state/state))
   (setupAuthConfigure!
-    #js {:region                 "us-east-2",
-         :userPoolId             "us-east-2_kAqZcxIeM",
-         :userPoolWebClientId    "3ji1a0059hspovjq5fhed3uil8",
-         :cookieStorage          #js {:domain   "localhost",
-                                      :path     "/",
-                                      :expires  365,
-                                      :sameSite "strict",
-                                      :secure   true},
-         :authenticationFlowType "USER_SRP_AUTH"}))
+    #js {:region              "us-east-2",
+         :userPoolId          "us-east-2_kAqZcxIeM",
+         :userPoolWebClientId "1qi1uijg8b6ra70nejvbptis0q"
+         :identityPoolId      "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5"
+         :oauthDomain         "logseq-test2.auth.us-east-2.amazoncognito.com"}))
 
 (rum/defc user-pane
   [sign-out! user]

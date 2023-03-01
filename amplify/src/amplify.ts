@@ -1,17 +1,61 @@
 import '@aws-amplify/ui-react/styles.css'
-import { Amplify, Auth, Hub } from 'aws-amplify'
+import { Amplify, Auth, Hub, I18n } from 'aws-amplify'
 import { LSAuthenticator } from './LSAuthenticator'
+import { dict } from 'aws-amplify-react/lib-esm/AmplifyI18n'
 
-function setupAuthConfigure (config) {
+// fix i18n
+dict.zh['Reset Password'] = '重置密码'
+dict.zh['Enter your username'] = '请输入用户名'
+dict.zh['Enter your email'] = '请输入邮箱'
+dict.zh['Enter your password'] = '请输入密码'
+dict.zh['Confirm Password'] = '确认密码'
+dict.zh['Please confirm your Password'] = '请确认密码'
+
+const fixesMapping = {
+  'Sign Up': ['Sign up', 'Create Account'],
+  'Sign In': ['Sign in'],
+  'Sign Out': 'Sign out',
+  'Send Code': 'Send code',
+  'Forgot Password': ['Forgot your password?'],
+  'Enter your email': ['Enter your Email'],
+  'Enter your password': ['Enter your Password'],
+  'Enter your username': ['Enter your Username']
+}
+
+Object.keys(dict).forEach((k) => {
+  const target = dict[k]
+  Object.entries(fixesMapping).forEach(([k1, v1]) => {
+    if (target?.hasOwnProperty(k1)) {
+      const vs = Array.isArray(v1) ? v1 : [v1]
+      vs.forEach(it => {
+        target[it] = target[k1]
+      })
+    }
+  })
+})
+
+I18n.putVocabularies(dict)
+
+function setupAuthConfigure(config) {
+
+  const {
+    region,
+    userPoolId,
+    userPoolWebClientId,
+    identityPoolId,
+    oauthDomain,
+    oauthProviders
+  } = config
+
   Amplify.configure({
-    'aws_project_region': 'us-east-2',
-    'aws_cognito_identity_pool_id': 'us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5',
-    'aws_cognito_region': 'us-east-2',
-    'aws_user_pools_id': 'us-east-2_kAqZcxIeM',
-    'aws_user_pools_web_client_id': '1qi1uijg8b6ra70nejvbptis0q',
+    'aws_project_region': region,
+    'aws_cognito_identity_pool_id': identityPoolId,
+    'aws_cognito_region': region,
+    'aws_user_pools_id': userPoolId,
+    'aws_user_pools_web_client_id': userPoolWebClientId,
     'authenticationFlowType': 'USER_SRP_AUTH',
     'oauth': {
-      'domain': 'logseq-test2.auth.us-east-2.amazoncognito.com',
+      'domain': oauthDomain,
       'scope': [
         'phone',
         'email',
@@ -24,7 +68,7 @@ function setupAuthConfigure (config) {
       'responseType': 'code'
     },
     'federationTarget': 'COGNITO_USER_POOLS',
-    'aws_cognito_social_providers': [
+    'aws_cognito_social_providers': oauthProviders || [
       'GOOGLE'
     ],
     'aws_cognito_signup_attributes': [
@@ -44,5 +88,5 @@ function setupAuthConfigure (config) {
 window.LSAmplify = {
   setupAuthConfigure,
   LSAuthenticator,
-  Auth, Amplify, Hub
+  Auth, Amplify, Hub, I18n
 }

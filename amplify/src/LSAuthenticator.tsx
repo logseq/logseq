@@ -1,6 +1,6 @@
 import { Authenticator, CheckboxField, useAuthenticator } from '@aws-amplify/ui-react'
 
-export function LSAuthenticator ({ children }: any) {
+export function LSAuthenticator({ children }: any) {
   return (<div>
     <Authenticator
       formFields={{
@@ -11,11 +11,12 @@ export function LSAuthenticator ({ children }: any) {
           confirm_password: { order: 4 },
         }
       }}
+      loginMechanisms={['email']}
       signUpAttributes={['email']}
       socialProviders={['google']}
       components={{
         SignUp: {
-          FormFields () {
+          FormFields() {
             const { validationErrors } = useAuthenticator()
 
             return (
@@ -37,7 +38,7 @@ export function LSAuthenticator ({ children }: any) {
         },
       }}
       services={{
-        async validateCustomSignUp (formData) {
+        async validateCustomSignUp(formData) {
           if (formData.hasOwnProperty('acknowledgement') && !formData.acknowledgement) {
             return {
               acknowledgement: 'You must agree to the Terms & Conditions',
