@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.url :as url-util]
             [frontend.util.page :as page-util]
             [frontend.handler.shell :as shell]
             [frontend.mobile.util :as mobile-util]
@@ -107,8 +106,7 @@
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click #(util/copy-to-clipboard!
-                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+             :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not contents?
             {:title   (t :page/delete)

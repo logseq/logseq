@@ -6,12 +6,11 @@ module.exports = {
     icon: './icons/logseq_big_sur.icns',
     protocols: [
       {
-        "protocol":"logseq",
-        "name":"logseq",
-        "schemes":"logseq"
+        "protocol": "logseq",
+        "name": "logseq",
+        "schemes": "logseq"
       }
     ],
-    /*
     osxSign: {
       identity: 'Developer ID Application: Tiansheng Qin',
       'hardened-runtime': true,
@@ -24,7 +23,6 @@ module.exports = {
       appleIdPassword: process.env['APPLE_ID_PASSWORD'],
       ascProvider: process.env['APPLE_ASC_PROVIDER']
     },
-    */
   },
   makers: [
     {

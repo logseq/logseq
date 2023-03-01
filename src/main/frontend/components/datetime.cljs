@@ -132,7 +132,7 @@
 
      [:p.mt-4
       (ui/button "Submit"
-        :on-click on-submit)]]))
+                 :on-click on-submit)]]))
 
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
@@ -161,7 +161,7 @@
          (util/stop e)
          (let [date (t/to-default-time-zone date)
                journal (date/journal-name date)]
-           ;; deadline-or-schedule? is handled in on-sumbit, not here
+           ;; deadline-or-schedule? is handled in on-submit, not here
            (when-not deadline-or-schedule?
                ;; similar to page reference
              (editor-handler/insert-command! dom-id

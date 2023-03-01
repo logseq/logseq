@@ -58,6 +58,13 @@
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
 
+(defn string-join-path
+  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
+  https://github.com/logseq/logseq/pull/8679"
+  [parts]
+  (string/join "/" parts))
+
+
 #?(:cljs
    (defn safe-re-find
      {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
@@ -1034,7 +1041,7 @@
   (let [parts (string/split path "/")
         basename (last parts)
         dir (->> (butlast parts)
-                 (string/join "/"))]
+                 string-join-path)]
     [dir basename]))
 
 (defn get-relative-path
@@ -1050,7 +1057,7 @@
             ["."])
           parts-2
           [another-file-name])
-         (string/join "/"))))
+         string-join-path)))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -1260,14 +1267,15 @@
 #?(:cljs
    (defn- get-dom-top
      [node]
-     (gobj/get (.getBoundingClientRect node) "top")))
+     (when node
+       (gobj/get (.getBoundingClientRect node) "top"))))
 
 #?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
-           elements)))
+           (remove nil? elements))))
 
 #?(:cljs
    (defn calc-delta-rect-offset

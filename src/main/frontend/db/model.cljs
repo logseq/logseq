@@ -1336,24 +1336,6 @@ independent of format as format specific heading characters are stripped"
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))
 
-(defn get-block-references-count
-  [block-uuid]
-  (when-let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (let [block (db-utils/entity [:block/uuid block-uuid])
-            query-result (->> (react/q repo [:frontend.db.react/refs
-                                             (:db/id block)]
-                                       {}
-                                       '[:find [(pull ?ref-block ?block-attrs) ...]
-                                         :in $ ?block-uuid ?block-attrs
-                                         :where
-                                         [?block :block/uuid ?block-uuid]
-                                         [?ref-block :block/refs ?block]]
-                                       block-uuid
-                                       block-attrs)
-                              react)]
-        (count query-result)))))
-
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
@@ -1761,11 +1743,19 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-whiteboards
   [repo]
-  (->> (d/q
-        '[:find [(pull ?page [:block/name
-                              :block/created-at
-                              :block/updated-at]) ...]
-          :where
-          [?page :block/name]
-          [?page :block/type "whiteboard"]]
-        (conn/get-db repo))))
+  (d/q
+    '[:find [(pull ?page [:block/name
+                          :block/created-at
+                          :block/updated-at]) ...]
+      :where
+      [?page :block/name]
+      [?page :block/type "whiteboard"]]
+    (conn/get-db repo)))
+
+(defn get-whiteboard-id-nonces
+  [repo page-name]
+  (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+       (filter #(:logseq.tldraw.shape (:block/properties %)))
+       (map (fn [{:block/keys [uuid properties]}]
+              {:id (str uuid)
+               :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))

@@ -11,7 +11,8 @@
             [frontend.components.settings :as settings]
             [frontend.rum :refer [use-mounted]]
             [frontend.storage :as storage]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc container
   [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
@@ -60,7 +61,7 @@
     (rum/use-effect!
      #(let [db-restored? (false? db-restoring?)]
         (if db-restoring?
-          (util/set-title! "Loading")
+          (util/set-title! (t :loading))
           (when (or nfs-granted? db-restored?)
             (route-handler/update-page-title! route))))
      [nfs-granted? db-restoring? route])
@@ -73,7 +74,7 @@
                     ;; demo graph only
                     (and (= 1 (count repos)) (:example? (first repos))
                          (not (util/mobile?)))
-                    ;; not in publising mode
+                    ;; not in publishing mode
                     config/publishing?
                     ;; other graphs exists
                     (seq repos))
