@@ -194,7 +194,7 @@
         ext (last (string/split (last result) "."))
         new-file (str new-file-name-body "." ext)
         parts (concat (butlast result) [new-file])]
-    (string/join "/" parts)))
+    (util/string-join-path parts)))
 
 (defn rename-file!
   "emit file-rename events to :file/rename-event-chan
