@@ -183,4 +183,3 @@
           (if-not running?
             (string/upper-case (or (:status server-state) "stopped"))
             [:a.hover:underline {:href href} href])]]})]))
-
