@@ -125,8 +125,8 @@
   (sync/remove-all-pwd!)
   (file-sync-handler/reset-user-state!))
 
-(defmethod handle :user/login [[_]]
-  (if-not util/electron?
+(defmethod handle :user/login [[_ host-ui?]]
+  (if (or host-ui? (not util/electron?))
     (js/window.open config/LOGIN-URL)
     (login/open-login-modal!)))
 
