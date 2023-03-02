@@ -6,6 +6,7 @@
             [goog.string :as gstring]
             [malli.core :as m]
             [malli.error :as me]
+            [reitit.frontend.easy :as rfe]
             [lambdaisland.glogi :as log]))
 
 (defn- humanize-more
@@ -79,7 +80,7 @@ in {}. Also make sure that the characters '( { [' have their corresponding closi
   (let [body (try (edn/read-string content)
                (catch :default _ ::failed-to-detect))
         warnings {:editor/command-trigger
-                  "will no longer be supported soon. Please use '/' and report bugs on it."}]
+                  "Will no longer be supported soon. Please use '/' and report bugs on it."}]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")
@@ -89,11 +90,11 @@ in {}. Also make sure that the characters '( { [' have their corresponding closi
 
       :else
       (when-let [deprecations (seq (keep #(when (body (key %)) %) warnings))]
-        (notification/show! (gstring/format "The file '%s' has the following deprecations:\n%s"
-                                            path
-                                            (->> deprecations
-                                                 (map (fn [[k v]]
-                                                        (str "- " k " " v)))
-                                                 (string/join "\n")))
+        (notification/show! [:div.mb-4
+                             [:.text-lg  "The file " [:a {:href (rfe/href :file {:path path})} path] " has the following deprecations:"]
+                             (map (fn [[k v]]
+                                    [:dl.mt-4.mb-0
+                                     [:dt [:strong (str k)]]
+                                     [:dd v]]) deprecations)]
                             :warning
                             false)))))
