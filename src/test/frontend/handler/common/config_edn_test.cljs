@@ -14,6 +14,13 @@
              (config-edn-common-handler/validate-config-edn "config.edn" config-body schema)))
       (str @error-message))))
 
+(defn- deprecation-warnings-for
+  [config-body]
+  (let [error-message (atom nil)]
+    (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))]
+      (config-edn-common-handler/detect-deprecations "config.edn" config-body)
+      (str @error-message))))
+
 (deftest validate-config-edn
   (testing "Valid cases"
     (is (= true
@@ -47,3 +54,12 @@
       (is (string/includes?
            (validation-config-error-for "{:start-of-week 7\n:start-of-week 8}" schema)
            "The key ':start-of-week' is assigned multiple times")))))
+
+(deftest detect-deprecations
+  (is (string/includes?
+       (deprecation-warnings-for "{:preferred-workflow :todo :editor/command-trigger \",\"}")
+       ":editor/command-trigger will")
+      "Warning when there is a deprecation")
+
+  (is (= "" (deprecation-warnings-for "{:preferred-workflow :todo}"))
+      "No warning when there is no deprecation"))

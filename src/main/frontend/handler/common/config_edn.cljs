@@ -5,7 +5,8 @@
             [frontend.handler.notification :as notification]
             [goog.string :as gstring]
             [malli.core :as m]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [lambdaisland.glogi :as log]))
 
 (defn- humanize-more
   "Make error maps from me/humanize more readable for users. Doesn't try to handle
@@ -71,3 +72,28 @@ in {}. Also make sure that the characters '( { [' have their corresponding closi
         false)
       :else
       (validate-config-map parsed-body schema path))))
+
+(defn detect-deprecations
+  "Detects config keys that will or have been deprecated"
+  [path content]
+  (let [body (try (edn/read-string content)
+               (catch :default _ ::failed-to-detect))
+        warnings {:editor/command-trigger
+                  "will no longer be supported soon. Please use '/' and report bugs on it."}]
+    (cond
+      (= body ::failed-to-detect)
+      (log/info :msg "Skip deprecation check since config is not valid edn")
+
+      (not (map? body))
+      (log/info :msg "Skip deprecation check since config is not a map")
+
+      :else
+      (when-let [deprecations (seq (keep #(when (body (key %)) %) warnings))]
+        (notification/show! (gstring/format "The file '%s' has the following deprecations:\n%s"
+                                            path
+                                            (->> deprecations
+                                                 (map (fn [[k v]]
+                                                        (str "- " k " " v)))
+                                                 (string/join "\n")))
+                            :warning
+                            false)))))
