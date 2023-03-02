@@ -718,7 +718,6 @@ button.tl-select-input-trigger {
   left: 0;
   overscroll-behavior: none;
   opacity: 1;
-  overflow: hidden;
   user-select: text;
   transform-origin: top left;
 
@@ -758,6 +757,10 @@ button.tl-select-input-trigger {
   .block-content {
     white-space: nowrap;
   }
+}
+
+.tl-logseq-cp-container-bg {
+  border-radius: 8px;
 }
 
 .tl-type-tag {
