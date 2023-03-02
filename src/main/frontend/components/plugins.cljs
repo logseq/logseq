@@ -1177,7 +1177,7 @@
 
 (defn open-plugins-modal!
   []
-  (state/set-sub-modal!
+  (state/set-modal!
    (fn [_close!]
      (plugins-page))
    {:label "plugins-dashboard"}))
