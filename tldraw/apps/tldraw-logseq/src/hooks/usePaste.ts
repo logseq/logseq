@@ -253,8 +253,7 @@ const handleCreatingShapes = async (
       const text = rawText.trim()
       return tryCreateShapeHelper(
         tryCreateShapeFromURL,
-        tryCreateShapeFromIframeString,
-        tryCreateLogseqPortalShapesFromUUID
+        tryCreateShapeFromIframeString
       )(text)
     }
 

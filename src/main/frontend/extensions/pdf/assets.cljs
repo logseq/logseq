@@ -25,10 +25,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(defn hls-file?
-  [filename]
-  (and filename (string? filename) (string/starts-with? filename "hls__")))
-
 (defn inflate-asset
   [original-path]
   (let [filename  (util/node-path.basename original-path)
