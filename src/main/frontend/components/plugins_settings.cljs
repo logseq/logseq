@@ -85,7 +85,7 @@
   [:div.heading-item
    {:data-key key}
    [:h2 title]
-   [:small.pl-1.flex-1 description]])
+   [:small description]])
 
 (rum/defc settings-container
   [schema ^js pl]
