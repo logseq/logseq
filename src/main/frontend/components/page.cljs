@@ -217,7 +217,7 @@
                      (let [new-page-name (string/trim @*title-value)]
                        (ui/make-confirm-modal
                         {:title         (if (collide?)
-                                          (t ::mege-existsing-page @*title-value)
+                                          (t ::merge-existing-page @*title-value)
                                           (t ::merge-confirmation new-page-name))
                          :on-confirm    (fn [_e {:keys [close-fn]}]
                                           (close-fn)
@@ -232,7 +232,7 @@
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
                        (reset! *edit? false)
-                       (when-not untitled? (notification/show! (t ::illigal-page-name) :warning)))
+                       (when-not untitled? (notification/show! (t ::illegal-page-name) :warning)))
         blur-fn (fn [e]
                   (when (gp-util/wrapped-by-quotes? @*title-value)
                     (swap! *title-value gp-util/unquote-string)
