@@ -66,7 +66,7 @@
   []
   [:div.flex-1.overflow-hidden
    [:h1.title
-    (t :all-files)]
+    (t ::all-files)]
    (files-all)
    ])
 

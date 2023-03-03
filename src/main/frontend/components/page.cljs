@@ -275,7 +275,7 @@
        :on-key-down   (fn [^js e]
                         (when (= (gobj/get e "key") "Enter")
                           (blur-fn e)))
-       :placeholder   (when untitled? (t :untitled))
+       :placeholder   (when untitled? (t ::untitled))
        :on-key-up     (fn [^js e]
                             ;; Esc
                         (when (= 27 (.-keyCode e))
@@ -334,7 +334,7 @@
           :data-ref   page-name
           :style      {:opacity (when @*edit? 0)}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-               untitled? [:span.opacity-50 (t :untitled)]
+               untitled? [:span.opacity-50 (t ::untitled)]
                :else title)]]])))
 
 (defn- page-mouse-over
@@ -926,7 +926,7 @@
                          (reset! *current-page 1))]
 
     [:div.flex-1.cp__all_pages
-     [:h1.title (t :all-pages)]
+     [:h1.title (t ::all-pages)]
 
      [:div.text-sm.ml-1.opacity-70.mb-4 (t ::pagination-pages total-items)]
 
@@ -1057,7 +1057,7 @@
                                             (refresh-pages))))
                                        (notification/show! (t ::no-orphaned-pages) :success))))}
              :icon (ui/icon "file-x")}
-            {:title (t :all-files)
+            {:title (t ::all-files)
              :options {:href (rfe/href :all-files)}
              :icon (ui/icon "files")}]
            {})]]

@@ -166,7 +166,7 @@
     [:div.flex.w-full.items-center
      [:div.dashboard-card-title-name.font-bold
       (if (model/untitled-page? page-name)
-        [:span.opacity-50 (t :untitled)]
+        [:span.opacity-50 (t ::untitled)]
         (get-page-display-name page-name))]
      [:div.flex-1]
      [:div.dashboard-card-checkbox

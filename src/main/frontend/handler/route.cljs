@@ -98,23 +98,23 @@
   [name path-params]
   (case name
     :home
-    "Logseq"
+    (t ::home)
     :repos
-    "Repos"
+    (t ::repos)
     :repo-add
-    "Add another repo"
+    (t ::repo-add)
     :graph
     (t ::graph)
     :all-files
-    (t :all-files)
+    (t ::all-files)
     :all-pages
-    (t :all-pages)
+    (t ::all-pages)
     :all-journals
     (t ::all-journals)
     :file
-    (str "File " (:path path-params))
+    (t ::file (:path path-params))
     :new-page
-    "Create a new page"
+    (t ::new-page)
     :page
     (let [name (:name path-params)
           block? (util/uuid-string? name)]
@@ -125,20 +125,20 @@
             (if (> (count content) 48)
               (str (subs content 0 48) "...")
               content))
-          "Page no longer exists!!")
+          (t ::page-no-longer-exists))
         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
           (or (util/get-page-original-name page)
               "Logseq"))))
     :tag
-    (str "#"  (:name path-params))
+    (str "#" (:name path-params))
     :diff
-    "Git diff"
+    (t ::diff)
     :draw
-    "Draw"
+    (t ::draw)
     :settings
-    "Settings"
+    (t ::settings)
     :import
-    "Import data into Logseq"
+    (t ::import)
     "Logseq"))
 
 (defn update-page-title!
