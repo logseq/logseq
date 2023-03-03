@@ -147,14 +147,17 @@
    (let [graphs-txid-map        (into {} graphs-txid)
          graphs-txid-legacy-map (into {} graphs-txid-legacy)
          merged                 (merge graphs-txid-legacy-map graphs-txid-map)
-         unified                (map (fn [[repo-url v]]
-                                       (if (vector? v)
-                                         (let [[user-uuid graph-uuid txid] v
-                                               work-dir (config/get-repo-dir repo-url)]
-                                           {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
-                                            :work-dir work-dir})
-                                         v))
-                                     merged)]
+         unified                (into
+                                 {}
+                                 (map (fn [[repo-url v]]
+                                        (if (vector? v)
+                                          (let [[user-uuid graph-uuid txid] v
+                                                work-dir (config/get-repo-dir repo-url)]
+                                            [repo-url
+                                             {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
+                                              :work-dir work-dir}])
+                                          [repo-url v]))
+                                      merged))]
      unified)))
 
 (defn <load-graph-txid
