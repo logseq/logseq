@@ -84,9 +84,9 @@ Keys with duplicate values found:
 
 ## Fix Mistakes
 
-Sometimes, we typo the translation key. If that happens, the github CI step of
-`bb lang:invalid-translations` will detect this error and helpfully show you
-what was typoed.
+Sometimes, we typo a translation key or forget to use it. If this happens,
+the github CI step of `bb lang:validate-translations` will detect these errors
+and tell you what's wrong.
 
 ## Add a Language
 

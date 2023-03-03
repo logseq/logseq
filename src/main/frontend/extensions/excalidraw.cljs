@@ -17,7 +17,8 @@
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.context.i18n :refer [t]]))
 
 (def excalidraw (r/adapt-class Excalidraw))
 
@@ -148,7 +149,7 @@
       (cond
         db-restoring?
         [:div.ls-center
-         (ui/loading "Loading")]
+         (ui/loading (t :loading))]
 
         (false? loading?)
         (draw-inner data option)

@@ -42,4 +42,8 @@
       (is (string/includes?
            (validation-config-error-for "{:start-of-week 7}" schema)
            "has the following errors")
-          (str "Invalid map for " file-type)))))
+          (str "Invalid map for " file-type))
+
+      (is (string/includes?
+           (validation-config-error-for "{:start-of-week 7\n:start-of-week 8}" schema)
+           "The key ':start-of-week' is assigned multiple times")))))
