@@ -196,11 +196,11 @@
        (vector? r)
        (let [[user-uuid graph-uuid txid] r]
          {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
-          :work-dir (config/get-repo-dir (state/get-current-repo))})
+          :work-dir (config/get-repo-dir repo-url)})
 
        (map? r)
        (if (nil? (:work-dir r))
-         (assoc r :work-dir (config/get-repo-dir (state/get-current-repo)))
+         (assoc r :work-dir (config/get-repo-dir repo-url))
          r)))))
 
 
