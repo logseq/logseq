@@ -542,8 +542,7 @@
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [^js e]
-                       (editor-handler/block->data-transfer! page-name e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
       :on-mouse-up (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
