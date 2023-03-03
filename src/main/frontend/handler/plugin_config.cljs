@@ -76,7 +76,6 @@ returns map of plugins to install and uninstall"
 
 (defn open-replace-plugins-modal
   []
-  (state/pub-event! [:go/plugins])
   (p/catch
    (p/let [edn-plugins* (fs/read-file "" (plugin-config-path))
            edn-plugins (edn/read-string edn-plugins*)]
