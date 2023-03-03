@@ -11,11 +11,11 @@
   (testing "dict/dicts.cljs translations"
     (state/set-preferred-language! :en)
     (is (= "About Logseq"
-           (i18n/t :help/about)))
+           (i18n/t :frontend.components.onboarding/about)))
 
     (state/set-preferred-language! :es)
     (is (= "Acerca de Logseq"
-           (i18n/t :help/about))))
+           (i18n/t :frontend.components.onboarding/about))))
 
   (testing "shortcut/dicts.cljs translations"
     (state/set-preferred-language! :en)
