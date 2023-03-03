@@ -65,7 +65,7 @@
 
 (rum/defc topic-card
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
-  [:div.topic-card.flex
+  [:button.w-full.topic-card.flex.text-left
    (merge
     {:key      key
      :on-click nav-fn!} opts)
@@ -118,7 +118,8 @@
 
     [:div.chapters-select.w-full
      [:a.select-trigger
-      {:on-click #(set-open? (not open?))}
+      {:on-click #(set-open? (not open?))
+       :tabIndex "0"}
       [:small "Current chapter"]
       [:strong (:title topic)]
       (if open?
@@ -129,7 +130,7 @@
         [:ul
          (for [c children]
            (when (not= (:key c) (:key topic))
-             [:li {:on-click #(on-select (:key c))} (:title c)]))])]]))
+             [:li [:a {:tabIndex "0" :on-click #(on-select (:key c))}] (:title c)]))])]]))
 
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state nav!]
@@ -221,9 +222,9 @@
      [:div.categories-list
       (let [categories (:children root)]
         (for [{:keys [key title children color] :as category} categories]
-          [:div.category-card
+          [:button.category-card.text-left
            {:key      key
-            :style    {:background-color (or color "#676767")}
+            :style    {:background-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
             :on-click #(nav-to-pane! [:topics category title] pane-state)}
            [:strong title]
            [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))]]))]]))
@@ -285,7 +286,7 @@
        {:style {:top 6 :left 7}}
        (ui/icon "search" {:size 12})]
 
-      [:input {:placeholder   "Search"
+      [:input {:placeholder   (t :handbook/search)
                :auto-focus    true
                :default-value q
                :on-change     #(set-q! (util/evalue %))
@@ -318,7 +319,7 @@
                :ref           *input-ref}]
 
       (when active?
-        [:span.icon.absolute.opacity-50.hover:opacity-80.select-none
+        [:button.icon.absolute.opacity-50.hover:opacity-80.select-none
          {:style    {:right 6 :top 7}
           :on-click #(do (reset-q!) (focus-q!))}
          (ui/icon "x" {:size 12})])]
@@ -430,7 +431,7 @@
        [:h1.text-lg.flex.items-center
         (if dashboard?
           [:span (t :handbook/title)]
-          [:span.active:opacity-80.flex.items-center.cursor-pointer
+          [:button.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
                                           (nil? (seq prev))
@@ -442,9 +443,9 @@
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
-          [:a.flex.items-center {:on-click #(force-nav-dashboard!)} (ui/icon "home")])
-        [:a.flex.items-center {:on-click #(nav-to-pane! [:settings nil "Settings"] active-pane0)} (ui/icon "settings")]
-        [:a.flex.items-center {:on-click #(state/toggle! :ui/handbooks-open?)}
+          [:a.flex.items-center {:aria-label (t :handbook/home) :tabIndex "0" :on-click #(force-nav-dashboard!)} (ui/icon "home")])
+        [:a.flex.items-center {:aria-label (t :handbook/settings) :tabIndex "0" :on-click #(nav-to-pane! [:settings nil "Settings"] active-pane0)} (ui/icon "settings")]
+        [:a.flex.items-center {:aria-label (t :handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
       (when (and (not settings?) (not handbooks-loaded?))
@@ -477,7 +478,7 @@
         [:p [:a.text-xs.text-gray-400.opacity-80
              {:href   "https://discord.com/invite/URphjhk"
               :target "_blank"}
-             "Join community for more help!"]]
+             (t :handbook/join-community)]]
 
         ;; TODO: how to get related topics?
         ;(when (= :topic-detail active-pane)

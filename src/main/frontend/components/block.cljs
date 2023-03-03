@@ -1920,9 +1920,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
-                                     (str "var(--ls-highlight-color-" bg-color ")")
-                                     bg-color)
+        {:style {:background-color (ui/->block-background-color bg-color)
                  :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
          :class "px-1 with-bg-color"}))
 

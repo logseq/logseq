@@ -64,6 +64,12 @@
    "purple"
    "gray"])
 
+(defn ->block-background-color
+ [color]
+ (if (some #{color} block-background-colors)
+   (str "var(--ls-highlight-color-" color ")")
+   color))
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]

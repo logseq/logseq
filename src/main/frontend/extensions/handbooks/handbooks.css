@@ -53,7 +53,7 @@
     }
 
     .topic-card, .link-card {
-      @apply text-sm p-2.5 rounded-lg cursor-pointer
+      @apply text-sm px-3 py-2.5 rounded-lg cursor-pointer
       mb-2 active:opacity-90;
 
       background-color: var(--ls-secondary-background-color);
@@ -66,11 +66,11 @@
       }
 
       > .l {
-        @apply w-[64px] h-[48px] bg-transparent rounded overflow-hidden;
+        @apply pr-2.5 w-[64px] h-[48px] bg-transparent rounded overflow-hidden;
       }
 
       > .r {
-        @apply pl-2.5 leading-none;
+        @apply leading-none;
 
         > strong {
           @apply font-semibold text-[14px] py-1.5;
@@ -87,7 +87,7 @@
     }
 
     .category-card {
-      @apply flex-col flex rounded px-3 py-3 text-gray-50
+      @apply flex-col flex rounded px-3 py-3
       active:opacity-90 cursor-pointer;
 
       > strong {
