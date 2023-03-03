@@ -41,7 +41,11 @@
     (p/let [dir (config/get-repo-dir repo-url)
             path (load-path location repo-url)
             file-exists? (fs/file-exists? dir path)]
-      (when file-exists?
+      (if-not file-exists?
+        (swap! *value (fn [o]
+                        (-> o
+                            (assoc-in [repo-url :load?] false)
+                            (assoc-in [repo-url :value] nil))))
         (-> (p/chain (fs/stat dir path)
                      (fn [stat]
                        (when stat
