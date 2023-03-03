@@ -526,41 +526,38 @@
                                                          (:GraphName graph))]
 
    (ui/button
-     "Open a local directory"
-     :class "block w-full py-4 mt-4"
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                   (page-handler/ls-dir-files!
-                    (fn [{:keys [url]}]
-                      (file-sync-handler/init-remote-graph url graph)
-                      (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+    "Open a local directory"
+    :class "block w-full py-4 mt-4"
+    :on-click #(do
+                 (state/close-modal!)
+                 (fs-sync/<sync-stop)
+                 (->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url graph)
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                    {:empty-dir?-or-pred
-                     (fn [ret]
-                       (let [empty-dir? (nil? (second ret))]
-                         (if-let [root (first ret)]
+                   {:empty-dir?-or-pred
+                    (fn [ret]
+                      (let [empty-dir? (nil? (second ret))]
+                        (if-let [root (first ret)]
 
                            ;; verify directory
-                           (-> (if empty-dir?
-                                 (p/resolved nil)
-                                 (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root)))
-
-                               (p/then (fn [^js info]
-                                         (when (and (not empty-dir?)
-                                                    (or (nil? info)
-                                                        (nil? (second info))
-                                                        (not= (second info) (:GraphUUID graph))))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (throw (js/Error. nil)))))))
+                          (-> (if empty-dir?
+                                (p/resolved nil)
+                                (fs-sync/read-graphs-txid (config/get-local-repo root)))
+                              (p/then (fn [^js info]
+                                        (when (and (not empty-dir?)
+                                                   (or (nil? info)
+                                                       (nil? (:graph-uuid info))
+                                                       (not= (:graph-uuid info) (:GraphUUID graph))))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (p/resolved nil)
+                                            (throw (js/Error. nil)))))))
 
                            ;; cancel pick a directory
-                           (throw (js/Error. nil)))))})
-                   (p/catch (fn [])))))
+                          (throw (js/Error. nil)))))})
+                  (p/catch (fn [])))))
 
    [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
     (ui/icon "alert-circle")

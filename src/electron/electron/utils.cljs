@@ -209,7 +209,7 @@
      (some #(string/includes? path (str "/" % "/"))
            ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
      (some #(string/ends-with? path %)
-           [".DS_Store" "logseq/graphs-txid.edn"])
+           [".DS_Store" "logseq/graphs-txid.edn" "logseq/.graphs-txid.edn"])
      ;; hidden directory or file
      (let [relpath (path/relative dir path)]
        (or (re-find #"/\.[^.]+" relpath)

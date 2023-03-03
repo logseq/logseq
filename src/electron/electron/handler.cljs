@@ -11,7 +11,6 @@
             ["os" :as os]
             ["path" :as path]
             [cljs-bean.core :as bean]
-            [cljs.reader :as reader]
             [clojure.core.async :as async]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
@@ -198,7 +197,7 @@
     (if path
       (try
         (p/resolved (bean/->js (get-files path)))
-        (catch js/Error e 
+        (catch js/Error e
           (do
             (utils/send-to-renderer window "notification" {:type "error"
                                                            :payload (str "Opening the specified directory failed.\n"
@@ -255,30 +254,6 @@
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
-
-(defn- read-txid-info!
-  [root]
-  (try
-    (let [txid-path (.join path root "logseq/graphs-txid.edn")]
-      (when (fs/existsSync txid-path)
-        (when-let [sync-meta (and (not (string/blank? root))
-                                  (.toString (.readFileSync fs txid-path)))]
-          (reader/read-string sync-meta))))
-    (catch :default e
-      (js/console.debug "[read txid meta] #" root (.-message e)))))
-
-(defmethod handle :inflateGraphsInfo [_win [_ graphs]]
-  (if (seq graphs)
-    (for [{:keys [root] :as graph} graphs]
-      (if-let [sync-meta (read-txid-info! root)]
-        (assoc graph
-               :sync-meta sync-meta
-               :GraphUUID (second sync-meta))
-        graph))
-    []))
-
-(defmethod handle :readGraphTxIdInfo [_win [_ root]]
-  (read-txid-info! root))
 
 (defn- get-graph-path
   [graph-name]

@@ -139,6 +139,24 @@
              (persist-var/-save graphs-txid-legacy)
              (fs/unlink! repo (config/get-file-path repo "logseq/graphs-txid.edn") {})))))
 
+(defn <load-graph-txid-by-repo-urls
+  [repo-urls]
+  (p/do!
+   (persist-var/load-by-repo-urls graphs-txid repo-urls)
+   (persist-var/load-by-repo-urls graphs-txid-legacy repo-urls)
+   (let [graphs-txid-map        (into {} graphs-txid)
+         graphs-txid-legacy-map (into {} graphs-txid-legacy)
+         merged                 (merge graphs-txid-legacy-map graphs-txid-map)
+         unified                (map (fn [[repo-url v]]
+                                       (if (vector? v)
+                                         (let [[user-uuid graph-uuid txid] v
+                                               work-dir (config/get-repo-dir repo-url)]
+                                           {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
+                                            :work-dir work-dir})
+                                         v))
+                                     merged)]
+     unified)))
+
 (defn <load-graph-txid
   "load graphs-txid. if graphs-txid-legacy is not empty, clean it."
   []
@@ -161,21 +179,27 @@
           (some? @graphs-txid))
      (remove-graphs-txid-legacy))))
 
-
 (defn read-graphs-txid
-  {:malli/schema [:=> [:cat] [:maybe graphs-txid-schema]]}
-  []
-  (let [r @graphs-txid]
-    (cond
-      (or (empty? r) (nil? r)) nil
-      (vector? r)
-      (let [[user-uuid graph-uuid txid] r]
-        {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
-         :work-dir (config/get-repo-dir (state/get-current-repo))})
-      (map? r)
-      (if (nil? (:work-dir r))
-        (assoc r :work-dir (config/get-repo-dir (state/get-current-repo)))
-        r))))
+  "Read current or `repo-url` repo graphs-txid"
+  {:malli/schema [:function
+                  [:=> [:cat] [:maybe graphs-txid-schema]]
+                  [:=> [:cat :string] [:maybe graphs-txid-schema]]]}
+  ([] (read-graphs-txid (state/get-current-repo)))
+  ([repo-url]
+   (let [r (get graphs-txid repo-url)]
+     (cond
+       (or (empty? r) (nil? r)) nil
+
+       (vector? r)
+       (let [[user-uuid graph-uuid txid] r]
+         {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
+          :work-dir (config/get-repo-dir (state/get-current-repo))})
+
+       (map? r)
+       (if (nil? (:work-dir r))
+         (assoc r :work-dir (config/get-repo-dir (state/get-current-repo)))
+         r)))))
+
 
 (defn- working-dir-changed?
   []

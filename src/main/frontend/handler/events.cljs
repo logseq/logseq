@@ -111,9 +111,9 @@
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
                   (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
+                                    (map? (:sync-meta %))
+                                    (util/uuid-string? (:user-uuid (:sync-meta %)))
+                                    (util/uuid-string? (:graph-uuid (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)

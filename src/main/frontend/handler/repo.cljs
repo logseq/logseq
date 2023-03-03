@@ -20,7 +20,6 @@
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.fs :as util-fs]
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
@@ -29,8 +28,8 @@
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
-            [frontend.mobile.util :as mobile-util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.fs.sync :as sync]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -444,6 +443,16 @@
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
 
+(defn- inflate-graphs-info
+  [nfs-dbs]
+  (p/let [repo-url->graphs-txid-map (sync/<load-graph-txid-by-repo-urls (mapv :url nfs-dbs))]
+    (for [{:keys [url] :as graph} nfs-dbs]
+      (if-let [graphs-txid (get repo-url->graphs-txid-map url)]
+        (assoc graph
+               :sync-meta graphs-txid
+               :GraphUUID (:graph-uuid graphs-txid))
+        graph))))
+
 (defn get-repos
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)
@@ -451,15 +460,7 @@
                          {:url db
                           :root (config/get-local-dir db)
                           :nfs? true}) nfs-dbs)
-          nfs-dbs (and (seq nfs-dbs)
-                       (cond (util/electron?)
-                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
-
-                             (mobile-util/native-platform?)
-                             (util-fs/inflate-graphs-info nfs-dbs)
-
-                             :else
-                             nil))
+          nfs-dbs (inflate-graphs-info nfs-dbs)
           nfs-dbs (seq (bean/->clj nfs-dbs))]
     (cond
       (seq nfs-dbs)
@@ -471,26 +472,28 @@
 
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
-  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
-                                         (assoc % :GraphUUID (second sync-meta)) %)
-                                   local-repos)
-                                 (some->> remote-repos
-                                          (map #(assoc % :remote? true)))))]
-    (let [repos' (group-by :GraphUUID repos')
-          repos'' (mapcat (fn [[k vs]]
-                            (if-not (nil? k)
-                              [(merge (first vs) (second vs))] vs))
-                          repos')]
-      (sort-by (fn [repo]
-                 (let [graph-name (or (:GraphName repo)
-                                      (last (string/split (:root repo) #"/")))]
-                   [(:remote? repo) (string/lower-case graph-name)])) repos''))))
+  (let [local-repos  (mapv (fn [repo] (if-let [sync-meta (:sync-meta repo)]
+                                        (assoc repo :GraphUUID (:graph-uuid sync-meta))
+                                        repo))
+                           local-repos)
+        remote-repos (mapv (fn [repo] (assoc repo :remote? true)) remote-repos)
+        repos        (->> (concat local-repos remote-repos)
+                          (group-by :GraphUUID)
+                          (mapcat (fn [[k vs]]
+                                    (if (some? k)
+                                      [(merge (first vs) (second vs))]
+                                      vs))))]
+    (sort-by (fn [repo]
+               (let [graph-name (or (:GraphName repo)
+                                    (last (string/split (:root repo) #"/")))]
+                 [(:remote? repo) (string/lower-case graph-name)]))
+             repos)))
 
 (defn get-detail-graph-info
   [url]
   (when-let [graphs (seq (and url (combine-local-&-remote-graphs
-                                    (state/get-repos)
-                                    (state/get-remote-graphs))))]
+                                   (state/get-repos)
+                                   (state/get-remote-graphs))))]
     (first (filter #(when-let [url' (:url %)]
                       (= url url')) graphs))))
 

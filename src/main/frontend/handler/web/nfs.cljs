@@ -24,7 +24,8 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs.sync :as sync]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -195,7 +196,7 @@
                                 (assoc file :file/content content))) markup-files))
                 (p/then (fn [result]
                           (p/let [files (map #(dissoc % :file/file) result)
-                                  graphs-txid-meta (util-fs/read-graphs-txid-info dir-name)
+                                  graphs-txid-meta (sync/read-graphs-txid (config/get-local-repo dir-name))
                                   graph-uuid (and (vector? graphs-txid-meta) (second graphs-txid-meta))]
                             (if-let [exists-graph (state/get-sync-graph-by-id graph-uuid)]
                               (state/pub-event!
