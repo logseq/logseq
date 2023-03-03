@@ -546,11 +546,10 @@
                           (-> (if empty-dir?
                                 (p/resolved nil)
                                 (fs-sync/read-graphs-txid (config/get-local-repo root)))
-                              (p/then (fn [^js info]
+                              (p/then (fn [{select-graph-uuid :graph-uuid}]
                                         (when (and (not empty-dir?)
-                                                   (or (nil? info)
-                                                       (nil? (:graph-uuid info))
-                                                       (not= (:graph-uuid info) (:GraphUUID graph))))
+                                                   (or (nil? select-graph-uuid)
+                                                       (not= select-graph-uuid (:GraphUUID graph))))
                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
                                             (p/resolved nil)
                                             (throw (js/Error. nil)))))))
