@@ -224,15 +224,15 @@
     (let [svg
           (case status
             :success
-            (icon "circle-check" {:class "text-green-500" :size "22"})
+            (icon "circle-check" {:class "text-success" :size "32"})
 
             :warning
-            (icon "alert-circle" {:class "text-yellow-500" :size "22"})
+            (icon "alert-circle" {:class "text-warning" :size "32"})
 
             :error
-            (icon "circle-x" {:class "text-red-500" :size "22"})
+            (icon "circle-x" {:class "text-error" :size "32"})
 
-            (icon "info-circle" {:class "text-indigo-500" :size "22"}))]
+            (icon "info-circle" {:class "text-indigo-500" :size "32"}))]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
