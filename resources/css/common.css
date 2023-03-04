@@ -32,8 +32,11 @@
 }
 
 @supports (font-variation-settings: normal) {
+  :root {
+    --ls-font-family: 'Inter var';
+  }
   html {
-    font-family: 'Inter var', sans-serif;
+    font-family: var(--ls-font-family), 'tabler-icons', sans-serif;
   }
 }
 
@@ -190,7 +193,7 @@ html[data-theme='light'] {
 }
 
 html:not(.is-native-android) {
-  font-family: var(--ls-font-family), sans-serif, system-ui,
+  font-family: var(--ls-font-family), 'tabler-icons', sans-serif, system-ui,
   -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
   Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
   Segoe UI Symbol !important;
