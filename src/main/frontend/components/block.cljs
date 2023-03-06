@@ -3030,25 +3030,31 @@
         result-atom (or (:query-atom state) (atom nil))
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
-        [full-text-search? query-atom] (if (:dsl-query? config)
-                                         (let [q (:query query)
-                                               form (safe-read-string q false)]
-                                           (cond
-                                             ;; Searches like 'foo' or 'foo bar' come back as symbols
-                                             ;; and are meant to go directly to full text search
-                                             (and (util/electron?) (symbol? form)) ; full-text search
-                                             [true
-                                              (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                                                (when (seq blocks)
-                                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                                    (reset! result-atom result))))]
+        *query-error (:query-error state)
+        _ (reset! *query-error nil)
+        [full-text-search? query-atom] (try
+                                         (if (:dsl-query? config)
+                                           (let [q (:query query)
+                                                 form (safe-read-string q false)]
+                                             (cond
+                                               ;; Searches like 'foo' or 'foo bar' come back as symbols
+                                               ;; and are meant to go directly to full text search
+                                               (and (util/electron?) (symbol? form)) ; full-text search
+                                               [true
+                                                (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                                  (when (seq blocks)
+                                                    (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                                      (reset! result-atom result))))]
 
-                                             (symbol? form)
-                                             [false (atom nil)]
+                                               (symbol? form)
+                                               [false (atom nil)]
 
-                                             :else
-                                             [false (query-dsl/query (state/get-current-repo) q)]))
-                                         [false (db/custom-query query {:current-block-uuid current-block-uuid})])
+                                               :else
+                                               [false (query-dsl/query (state/get-current-repo) q)]))
+                                           [false (db/custom-query query {:current-block-uuid current-block-uuid})])
+                                         (catch :default e
+                                           (reset! *query-error e)
+                                           [false (atom nil)]))
         query-atom (if (instance? Atom query-atom)
                      query-atom
                      result-atom)]
@@ -3084,7 +3090,8 @@
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
-  {:will-mount trigger-custom-query!
+  {:init (fn [state] (assoc state :query-error (atom nil)))
+   :will-mount trigger-custom-query!
    :will-update trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -3096,7 +3103,8 @@
                                           query))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
-  (let [dsl-query? (:dsl-query? config)
+  (let [*query-error (:query-error state)
+        dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         query-time (or (react/get-query-time query)
                        (react/get-query-time q))
@@ -3166,74 +3174,79 @@
                                    {:on-mouse-down (fn [e]
                                                      (util/stop e)
                                                      (trigger-custom-query! state))}))]]
-         (when-not (or collapsed? (:block/collapsed? current-block))
-           [:div
-            (when (and current-block (not view-f) (nil? table-view?))
-              [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-               (when-not page-list?
-                 [:div.flex.flex-row
-                  [:div.mr-2 [:span.text-sm "Table view"]]
-                  [:div {:style {:margin-top 5}}
-                   (ui/toggle table?
-                              (fn []
-                                (editor-handler/set-block-property! current-block-uuid
-                                                                    "query-table"
-                                                                    (not table?)))
-                              true)]])
+         (if @*query-error
+           (do
+             (log/error :exception @*query-error)
+             [:div.warning "Query failed: "
+              [:p (.-message @*query-error)]])
+           (when-not (or collapsed? (:block/collapsed? current-block))
+             [:div
+              (when (and current-block (not view-f) (nil? table-view?))
+                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
+                 (when-not page-list?
+                   [:div.flex.flex-row
+                    [:div.mr-2 [:span.text-sm "Table view"]]
+                    [:div {:style {:margin-top 5}}
+                     (ui/toggle table?
+                                (fn []
+                                  (editor-handler/set-block-property! current-block-uuid
+                                                                      "query-table"
+                                                                      (not table?)))
+                                true)]])
 
-               [:a.mx-2.block.fade-link
-                {:on-click (fn []
-                             (let [all-keys (query-table/get-keys result page-list?)]
-                               (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-                [:span.table-query-properties
-                 [:span.text-sm.mr-1 "Set properties"]
-                 svg/settings-sm]]])
-            (cond
-              (and (seq result) view-f)
-              (let [result (try
-                             (sci/call-fn view-f result)
-                             (catch :default error
-                               (log/error :custom-view-failed {:error error
-                                                               :result result})
-                               [:div "Custom view failed: "
-                                (str error)]))]
-                (util/hiccup-keywordize result))
+                 [:a.mx-2.block.fade-link
+                  {:on-click (fn []
+                               (let [all-keys (query-table/get-keys result page-list?)]
+                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                  [:span.table-query-properties
+                   [:span.text-sm.mr-1 "Set properties"]
+                   svg/settings-sm]]])
+              (cond
+                (and (seq result) view-f)
+                (let [result (try
+                               (sci/call-fn view-f result)
+                               (catch :default error
+                                 (log/error :custom-view-failed {:error error
+                                                                 :result result})
+                                 [:div "Custom view failed: "
+                                  (str error)]))]
+                  (util/hiccup-keywordize result))
 
-              page-list?
-              (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+                page-list?
+                (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
-              table?
-              (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+                table?
+                (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
-              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-              (->hiccup result (cond-> (assoc config
-                                              :custom-query? true
-                                              :dsl-query? dsl-query?
-                                              :query query
-                                              :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                                  breadcrumb-show?
-                                                                  true)
-                                              :group-by-page? blocks-grouped-by-page?
-                                              :ref? true)
-                                 children?
-                                 (assoc :ref? true))
-                        {:style {:margin-top "0.25rem"
-                                 :margin-left "0.25rem"}})
+                (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+                (->hiccup result (cond-> (assoc config
+                                                :custom-query? true
+                                                :dsl-query? dsl-query?
+                                                :query query
+                                                :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                                    breadcrumb-show?
+                                                                    true)
+                                                :group-by-page? blocks-grouped-by-page?
+                                                :ref? true)
+                                   children?
+                                   (assoc :ref? true))
+                          {:style {:margin-top "0.25rem"
+                                   :margin-left "0.25rem"}})
 
-              (seq result)
-              (let [result (->>
-                            (for [record result]
-                              (if (map? record)
-                                (str (util/pp-str record) "\n")
-                                record))
-                            (remove nil?))]
-                (when (seq result)
-                  [:ul
-                   (for [item result]
-                     [:li (str item)])]))
+                (seq result)
+                (let [result (->>
+                              (for [record result]
+                                (if (map? record)
+                                  (str (util/pp-str record) "\n")
+                                  record))
+                              (remove nil?))]
+                  (when (seq result)
+                    [:ul
+                     (for [item result]
+                       [:li (str item)])]))
 
-              :else
-              [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])]))))
+                :else
+                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]))]))))
 
 (rum/defc custom-query
   [config q]
