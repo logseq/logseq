@@ -340,9 +340,9 @@
      (let [kind (keyword (first clause))]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
-          [:div.text-4xl.mr-1.font-thin "{"]
+          [:div.text-4xl.mr-1.font-thin "("]
           (clauses-group *tree *find (conj loc 0) kind (rest clause))
-          [:div.text-4xl.ml-1.font-thin "}"]]
+          [:div.text-4xl.ml-1.font-thin ")"]]
          (clause-inner *tree *find loc clause)))]))
 
 (rum/defc clauses-group

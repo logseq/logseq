@@ -3177,7 +3177,7 @@
          (if @*query-error
            (do
              (log/error :exception @*query-error)
-             [:div.warning "Query failed: "
+             [:div.warning.my-1 "Query failed: "
               [:p (.-message @*query-error)]])
            (when-not (or collapsed? (:block/collapsed? current-block))
              [:div
