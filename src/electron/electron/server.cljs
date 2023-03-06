@@ -10,7 +10,8 @@
             [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
             [electron.logger :as logger]
-            [electron.configs :as cfgs]))
+            [electron.configs :as cfgs]
+            [electron.window :as window]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
@@ -37,7 +38,9 @@
 
 (defn load-state-to-renderer!
   ([] (load-state-to-renderer! @*state))
-  ([s] (utils/send-to-renderer @*win :syncAPIServerState s)))
+  ([s]
+   (doseq [^js w (window/get-all-windows)]
+     (utils/send-to-renderer w :syncAPIServerState s))))
 
 (defn set-config!
   [config]
@@ -114,7 +117,7 @@
 
 (defn close!
   []
-  (when (and @*server (= :running (:status @*state)))
+  (when (and @*server (contains? #{:running :error} (:status @*state)))
     (logger/debug "[server] closing ...")
     (set-status! :closing)
     (-> (.close @*server)

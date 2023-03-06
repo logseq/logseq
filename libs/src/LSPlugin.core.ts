@@ -911,11 +911,11 @@ class PluginLocal extends EventEmitter<'loaded'
     }
 
     try {
-      this._status = PluginLocalLoadStatus.UNLOADING
-
       const eventBeforeUnload = { unregister }
 
       if (this.loaded) {
+        this._status = PluginLocalLoadStatus.UNLOADING
+
         try {
           await this._caller?.callUserModel(
             AWAIT_LSPMSGFn(LSPMSG_BEFORE_UNLOAD),

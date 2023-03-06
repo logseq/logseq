@@ -122,9 +122,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   private parseShapesArg<S>(shapes: S[] | string[]) {
     if (typeof shapes[0] === 'string') {
       return this.shapes.filter(shape => (shapes as string[]).includes(shape.id))
-    } else {
-      return shapes as S[]
     }
+    return shapes as S[]
   }
 
   @action removeShapes(...shapes: S[] | string[]) {
