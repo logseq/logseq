@@ -89,6 +89,14 @@
     :else
     nil))
 
+(defn- detect-deprecations
+  [repo path content]
+  (when (or (= path (config/get-repo-config-path repo))
+            (and
+             (config/global-config-enabled?)
+             (= (path/dirname path) (global-config-handler/global-config-dir))))
+    (config-edn-common-handler/detect-deprecations path content)))
+
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
   that are not validated just return true"
@@ -129,6 +137,7 @@
                            skip-compare? false}}]
   (let [path (gp-util/path-normalize path)
         config-file? (string/ends-with? path config/config-file)
+        _ (when config-file? (detect-deprecations repo path content))
         config-valid? (and config-file? (validate-file repo path content))]
     (when-not (and config-file? (not config-valid?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
