@@ -3156,8 +3156,9 @@
                                                             (get-in config [:block :block/format] :markdown)
                                                             title)
                                :else title)]
-           [:span.opacity-60.text-sm.ml-2.results-count
-            (str (count result) " results")]]
+           (when-not (or collapsed? (:block/collapsed? current-block))
+             [:span.opacity-60.text-sm.ml-2.results-count
+              (str (count result) " results")])]
 
           ;;insert an "edit" button in the query view
           [:div.flex.items-center
@@ -3174,12 +3175,12 @@
                                    {:on-mouse-down (fn [e]
                                                      (util/stop e)
                                                      (trigger-custom-query! state))}))]]
-         (if @*query-error
-           (do
-             (log/error :exception @*query-error)
-             [:div.warning.my-1 "Query failed: "
-              [:p (.-message @*query-error)]])
-           (when-not (or collapsed? (:block/collapsed? current-block))
+         (when-not (or collapsed? (:block/collapsed? current-block))
+           (if @*query-error
+             (do
+               (log/error :exception @*query-error)
+               [:div.warning.my-1 "Query failed: "
+                [:p (.-message @*query-error)]])
              [:div
               (when (and current-block (not view-f) (nil? table-view?))
                 [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}

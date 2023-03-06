@@ -371,14 +371,6 @@
                           [:and [@tree]])]
     (clauses-group *tree *find [0] kind' clauses)))
 
-(rum/defc query-cp < rum/reactive
-  [*tree]
-  (when (and (seq @*tree)
-             (not= @*tree [:and]))
-    [:div
-     "Query: "
-     (str (query-builder/->dsl (rum/react *tree)))]))
-
 (rum/defcs builder <
   (rum/local nil ::find)
   {:init (fn [state]
@@ -429,5 +421,4 @@
      [:div.cp__query-builder-filter
       (page-block-selector *find)
       (clause-tree *tree *find)
-      (add-filter *find *tree [0] [])]
-     (query-cp *tree)]))
+      (add-filter *find *tree [0] [])]]))
