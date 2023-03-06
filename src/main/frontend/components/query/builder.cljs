@@ -276,8 +276,10 @@
       (= (keyword f) :between)
       (str "between: " (second (second clause)) " - " (second (last clause)))
 
-      (contains? #{:page :task} (keyword f))
-      (str "page: " (second (second clause)))
+      (contains? #{:page :task :todo} (keyword f))
+      (str (name f) ": " (if (vector? (second clause))
+                           (second (second clause))
+                           (second clause)))
 
       (= 2 (count clause))
       (str (name f) ": " (second clause))

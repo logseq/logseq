@@ -112,6 +112,10 @@
         (and (vector? f) (= :priority (keyword (first f))))
         [(symbol :priority) (symbol (second f))]
 
+        (and (vector? f) (= :task (keyword (first f))))
+        [(symbol :task) (symbol (second f))]
+
+
         (and (vector? f) (= :page-ref (keyword (first f))))
         (->page-ref (second f))
 
@@ -125,7 +129,7 @@
                   (last f))]
           (into [(symbol :property)] [(second f) l]))
 
-        (and (vector? f) (contains? #{:task :page :namespace :tags} (keyword (first f))))
+        (and (vector? f) (contains? #{:page :namespace :tags} (keyword (first f))))
         (into [(symbol (first f))] (map ->page-ref (rest f)))
 
         :else f))
