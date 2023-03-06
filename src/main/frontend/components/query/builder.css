@@ -14,4 +14,24 @@
         min-width: 36em;
         padding: 1em;
     }
+
+    .cp__select .input-wrap {
+        height: auto;
+    }
+
+    .cp__select .input-wrap input {
+        border: none;
+    }
+
+    .cp__select-input {
+        padding: 0.5em 1em;
+    }
+
+    a.query-clause {
+        color: var(--ls-primary-text-color);
+    }
+
+    a.query-clause:hover {
+        color: var(--ls-secondary-text-color);
+    }
 }

@@ -109,11 +109,12 @@
      :will-unmount (fn [state]
                      (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
                      state)}
-  [dropdown-state _close-fn content class]
+  [dropdown-state _close-fn content class style-opts]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
-     {:class (str class " "
+     {:style style-opts
+      :class (str class " "
                   (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
@@ -129,13 +130,13 @@
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)
         close-fn (:close-fn state)]
-    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
+    [:div.relative.ui__dropdown-trigger {:class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 (defn render-keyboard-shortcut [sequence]

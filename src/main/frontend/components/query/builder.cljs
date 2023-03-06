@@ -153,7 +153,7 @@
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         [:div.ml-2.mt-2
+         [:div
           (case @*mode
             "namespace"
             (let [items (sort (db-model/get-all-namespace-parents repo))]
@@ -290,11 +290,11 @@
   (ui/dropdown
    (fn [{:keys [toggle-fn]}]
      (if operator?
-       [:a.flex.text-sm {:on-click toggle-fn}
+       [:a.flex.text-sm.query-clause {:on-click toggle-fn}
         clause]
 
        [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border
-        [:a.flex {:on-click toggle-fn}
+        [:a.flex.query-clause {:on-click toggle-fn}
          (dsl-human-output clause)]]))
    (fn [{:keys [toggle-fn]}]
      [:div.p-4.flex.flex-col.gap-2
@@ -306,7 +306,7 @@
                        (toggle-fn))}
        "Delete (X)"]
 
-      [:div.font-medium.text-sm "Wrap with: "]
+      [:div.font-medium.text-sm "Wrap this filter with: "]
       [:div.flex.flex-row.gap-2
        (for [op query-builder/operators]
          (ui/button (string/upper-case (name op))
