@@ -241,14 +241,14 @@
 
              :else
              (reset! *mode value)))
-         {:input-default-placeholder "Add operator/filter"}))]))
+         {:input-default-placeholder "Add filter/operator"}))]))
 
 (rum/defc add-filter
   [*find *tree loc clause]
   (ui/dropdown
    (fn [{:keys [toggle-fn]}]
-     [:a.flex {:title "Add clause"
-               :on-click toggle-fn}
+     [:a.flex.add-filter {:title "Add clause"
+                          :on-click toggle-fn}
       (ui/icon "plus" {:style {:font-size 20}})])
    (fn [{:keys [toggle-fn]}]
      (picker *find *tree loc clause {:toggle-fn toggle-fn}))

@@ -1,5 +1,5 @@
 .cp__query-builder {
-    @apply grid auto-rows-max gap-2 mb-2;
+    @apply grid auto-rows-max gap-2;
 
     &-filter {
         @apply flex flex-row gap-2 items-center;
@@ -27,11 +27,11 @@
         padding: 0.5em 1em;
     }
 
-    a.query-clause {
+    a.query-clause, a.add-filter {
         color: var(--ls-primary-text-color);
     }
 
-    a.query-clause:hover {
+    a.query-clause:hover, a.add-filter {
         color: var(--ls-secondary-text-color);
     }
 }
