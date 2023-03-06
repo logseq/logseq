@@ -6,7 +6,7 @@
 #   https://github.com/actions/stale
 ---
 name: "Stale Issues Policy"
-on: # yamllint disable-line rule:truthy
+on:
   schedule:
     - cron: "0 0 * * *" # Run at 00:00 UTC every day
   workflow_dispatch:
@@ -41,10 +41,11 @@ jobs:
 
 
             Access additional [Logseq](https://logseq.com) 🚀 resources:
-              - **Forum**: https://discuss.logseq.com
-              - **Blog**: https://blog.logseq.com
+              - **Hub**: https://hub.logseq.com
               - **Docs**: https://docs.logseq.com
-              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
+              - **Blog**: https://blog.logseq.com
+              - **Forum**: https://discuss.logseq.com
+              - **Discord**: [Logseq Community Server](https://discord.gg/logseq)
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
@@ -71,10 +72,11 @@ jobs:
 
 
             Access additional [Logseq](https://logseq.com) 🚀 resources:
-              - **Forum**: https://discuss.logseq.com
-              - **Blog**: https://blog.logseq.com
+              - **Hub**: https://hub.logseq.com
               - **Docs**: https://docs.logseq.com
-              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
+              - **Blog**: https://blog.logseq.com
+              - **Forum**: https://discuss.logseq.com
+              - **Discord**: [Logseq Community Server](https://discord.gg/logseq)
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
@@ -96,8 +98,10 @@ jobs:
             Please search for an existing feature request before submitting a new one. note that this issue will be closed as feature requests are not accepted here on the issue tracker. We apologize for any inconvenience and hope to see you on our forum.
 
             Access additional [Logseq](https://logseq.com) 🚀 resources:
-              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
-              - **Blog**: https://blog.logseq.com
+              - **Hub**: https://hub.logseq.com
               - **Docs**: https://docs.logseq.com
+              - **Blog**: https://blog.logseq.com
+              - **Forum**: https://discuss.logseq.com
+              - **Discord**: [Logseq Community Server](https://discord.gg/logseq)
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
