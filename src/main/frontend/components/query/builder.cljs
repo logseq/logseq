@@ -268,7 +268,10 @@
       (str "# (second clause)")
 
       (= (keyword f) :property)
-      (str (name (second clause)) ": " (last clause))
+      (str (name (second clause)) ": "
+           (if (and (vector? (last clause)) (= :page-ref (first (last clause))))
+             (second (last clause))
+             (last clause)))
 
       (= (keyword f) :between)
       (str "between: " (second (second clause)) " - " (second (last clause)))

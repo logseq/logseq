@@ -118,6 +118,13 @@
         (and (vector? f) (= :between (keyword (first f))))
         (into [(symbol :between)] (map ->page-ref (rest f)))
 
+        ;; property key value
+        (and (vector? f) (= 3 (count f)) (= :property (keyword (first f))))
+        (let [l (if (page-ref/page-ref? (last f))
+                  (symbol (last f))
+                  (last f))]
+          (into [(symbol :property)] [(second f) l]))
+
         (and (vector? f) (contains? #{:task :page :namespace :tags} (keyword (first f))))
         (into [(symbol (first f))] (map ->page-ref (rest f)))
 
