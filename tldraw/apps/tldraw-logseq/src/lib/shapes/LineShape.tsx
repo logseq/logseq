@@ -77,7 +77,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     const labelSize =
       label || isEditing
         ? getTextLabelSize(
-            label,
+            label || "Enter text",
             { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
             6
           )

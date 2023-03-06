@@ -162,7 +162,7 @@
     (when current-file
       (let [parts (string/split current-file #"/")
             parts-2 (string/split path #"/")
-            current-dir (string/join "/" (drop-last 1 parts))]
+            current-dir (util/string-join-path (drop-last 1 parts))]
         (cond
           (if util/win32? (utils/win32 path) (util/starts-with? path "/"))
           path
@@ -187,7 +187,7 @@
                                    parts
                                    (rest col)))))
                 parts (remove #(string/blank? %) parts)]
-            (string/join "/" (reverse parts))))))))
+            (util/string-join-path (reverse parts))))))))
 
 (rum/defcs asset-loader
   < rum/reactive
@@ -511,11 +511,6 @@
          (:db/id page-entity)
          :page))
 
-      (whiteboard-handler/inside-portal? (.-target e))
-      (whiteboard-handler/add-new-block-portal-shape!
-       page-name
-       (whiteboard-handler/closest-shape (.-target e)))
-
       whiteboard-page?
       (route-handler/redirect-to-whiteboard! page-name)
 
@@ -546,7 +541,9 @@
                (str " page-property-key block-property")
                untitled? (str " opacity-50"))
       :data-ref page-name
-      :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+      :draggable true
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
+      :on-mouse-up (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
 

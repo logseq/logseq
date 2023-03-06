@@ -27,14 +27,14 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
 
   return (
     <SVGContainer>
-      <rect
+      {!app.editingShape && (<rect
         className="tl-bounds-fg"
         width={Math.max(width, 1)}
         height={Math.max(height, 1)}
         rx={borderRadius}
         ry={borderRadius}
         pointerEvents="none"
-      />
+      />)}
       <EdgeHandle
         x={targetSize * 2}
         y={0}
