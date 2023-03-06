@@ -97,20 +97,29 @@
         (let [x' (second x)]
           (replace-element q loc x'))))))
 
+(defn ->page-ref
+  [x]
+  (if (string? x)
+    (symbol (page-ref/->page-ref x))
+    (->page-ref (second x))))
+
 (defn ->dsl
   [col]
   (->>
    (walk/prewalk
     (fn [f]
       (cond
+        (and (vector? f) (= :priority (keyword (first f))))
+        [(symbol :priority) (symbol (second f))]
+
         (and (vector? f) (= :page-ref (keyword (first f))))
-        (symbol (util/format "[[%s]]" (second f)))
+        (->page-ref (second f))
 
         (and (vector? f) (= :between (keyword (first f))))
-        (into [(symbol :between)] (map symbol (rest f)))
+        (into [(symbol :between)] (map ->page-ref (rest f)))
 
         (and (vector? f) (contains? #{:task :page :namespace :tags} (keyword (first f))))
-        (into [(symbol (first f))] (map #(symbol (util/format "[[%s]]" %)) (rest f)))
+        (into [(symbol (first f))] (map ->page-ref (rest f)))
 
         :else f))
     col)

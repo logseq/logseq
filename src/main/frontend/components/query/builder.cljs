@@ -111,7 +111,7 @@
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc clause] :as opts}]
-  [:div {:on-mouse-down (fn [e] (util/stop-propagation e))}
+  [:div.between-date {:on-mouse-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))
@@ -271,7 +271,10 @@
       (str (name (second clause)) ": " (last clause))
 
       (= (keyword f) :between)
-      (str "between: " (second clause) " - " (last clause))
+      (str "between: " (second (second clause)) " - " (second (last clause)))
+
+      (contains? #{:page :task} (keyword f))
+      (str "page: " (second (second clause)))
 
       (= 2 (count clause))
       (str (name f) ": " (second clause))
