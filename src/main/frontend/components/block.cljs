@@ -575,6 +575,9 @@
                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                        page-name-in-block ;; page-name-in-block might be overridden (legacy))
 
+                       original-name
+                       (util/trim-safe original-name)
+
                        :else
                        (util/trim-safe page-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
