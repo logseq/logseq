@@ -102,11 +102,11 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   await page.mouse.down()
 
   await page.keyboard.type('https://logseq.com')
-  await page.keyboard.press(modKey + '+a')
-  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press(modKey + '+a', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
   await page.keyboard.press('Escape')
 
-  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press(modKey + '+v', { delay: 10 })
 
   await expect( page.locator('.logseq-tldraw .tl-iframe-container')).toHaveCount(1)
 })
@@ -120,11 +120,11 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   await page.mouse.down()
 
   await page.keyboard.type('https://twitter.com/logseq/status/1605224589046386689')
-  await page.keyboard.press(modKey + '+a')
-  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press(modKey + '+a', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
   await page.keyboard.press('Escape')
 
-  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press(modKey + '+v', { delay: 10 })
 
   await expect( page.locator('.logseq-tldraw .tl-tweet-container')).toHaveCount(1)
 })
@@ -138,11 +138,11 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   await page.mouse.down()
 
   await page.keyboard.type('https://www.youtube.com/watch?v=hz2BacySDXE')
-  await page.keyboard.press(modKey + '+a')
-  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press(modKey + '+a', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
   await page.keyboard.press('Escape')
 
-  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press(modKey + '+v', { delay: 10 })
 
   await expect( page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
 })
