@@ -184,7 +184,7 @@
                                             transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
-            (set! (.-state result-atom) (with-meta result {:query-time time}))
+            (set! (.-state result-atom) (util/safe-with-meta result {:query-time time}))
             (if disable-reactive?
               result-atom
               (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))

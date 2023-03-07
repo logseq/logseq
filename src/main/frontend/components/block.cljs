@@ -3069,10 +3069,9 @@
   (ui/tippy
    {:html  [:div
             [:p
-             (when (and query-time (> query-time 50))
-               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
-             (when full-text-search?
-               [:span "Full-text search results will not be refreshed automatically."])]
+             (if full-text-search?
+               [:span "Full-text search results will not be refreshed automatically."]
+               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
             [:p
              "Click the refresh button instead if you want to see the latest result."]]
     :interactive     true
@@ -3080,9 +3079,8 @@
                                   {:enabled           true
                                    :boundariesElement "viewport"}}}
     :arrow true}
-   [:a.control.fade-link.ml-1.inline-flex
-    {:style {:margin-top 7}
-     :on-mouse-down on-mouse-down}
+   [:a.fade-link.ml-1.flex
+    {:on-mouse-down on-mouse-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive db-mixins/query
@@ -3113,7 +3111,7 @@
                  transformed-query-result)
         _ (when (and query-result-atom
                      (nil? @query-result-atom))
-            (reset! query-result-atom (with-meta result (meta @query-atom))))
+            (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
@@ -3196,7 +3194,7 @@
         *query-result (if built-in?
                         (trigger-custom-query! state *query-error)
                         (::query-result state))
-        result @*query-result
+        result (rum/react *query-result)
         dsl-query? (:dsl-query? config)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -3260,7 +3258,7 @@
 
                  [:div.ml-1
                   (when (or full-text-search?
-                            (and query-time (> query-time 50)))
+                            (and query-time (> query-time 0)))
                     (query-refresh-button state query-time {:full-text-search? full-text-search?}))]])])
            (if built-in?
              (ui/foldable
