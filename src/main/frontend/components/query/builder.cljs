@@ -1,26 +1,19 @@
 (ns frontend.components.query.builder
   "DSL query builder."
   (:require [frontend.ui :as ui]
-            [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
             [frontend.components.select :as component-select]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.clock :as clock]
-            [frontend.util.property :as property]
-            [frontend.format.block :as block]
             [frontend.search :as search]
             [frontend.mixins :as mixins]
             [logseq.db.default :as db-default]
-            [medley.core :as medley]
             [rum.core :as rum]
-            [frontend.modules.outliner.tree :as tree]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]))
@@ -91,7 +84,7 @@
    :will-unmount (fn [state]
                    (swap! *between-dates dissoc (first (:rum/args state)))
                    state)}
-  [state id placeholder {:keys [auto-focus tree loc clause]}]
+  [state id placeholder {:keys [auto-focus]}]
   (let [*input-value (::input-value state)
         show? (= id (rum/react *shown-datepicker))]
     [:div.ml-4
@@ -111,7 +104,7 @@
 (rum/defcs between <
   (rum/local nil ::start)
   (rum/local nil ::end)
-  [state {:keys [tree loc clause] :as opts}]
+  [state {:keys [tree loc] :as opts}]
   [:div.between-date {:on-mouse-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
@@ -127,22 +120,22 @@
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
-(rum/defcs option-item < rum/reactive
-  {:init (fn [state]
-           (assoc state ::checked? (atom (first (:rum/args state)))))}
-  [state _checked? value on-click]
-  (let [*checked? (::checked? state)]
-    [:div.flex.flex-row.items-center
-     {:on-mouse-down (fn [e] (util/stop e)
-                       (swap! *checked? not)
-                       (on-click @*checked? value))}
-     (ui/checkbox {:checked (rum/react *checked?)})
-     value]))
+;; (rum/defcs option-item < rum/reactive
+;;   {:init (fn [state]
+;;            (assoc state ::checked? (atom (first (:rum/args state)))))}
+;;   [state _checked? value on-click]
+;;   (let [*checked? (::checked? state)]
+;;     [:div.flex.flex-row.items-center
+;;      {:on-mouse-down (fn [e] (util/stop e)
+;;                        (swap! *checked? not)
+;;                        (on-click @*checked? value))}
+;;      (ui/checkbox {:checked (rum/react *checked?)})
+;;      value]))
 
-(rum/defcs picker <
+(rum/defcs ^:large-vars/cleanup-todo picker <
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
-  [state *find *tree loc clause {:keys [toggle-fn] :as opts}]
+  [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
         repo (state/get-current-repo)
@@ -213,11 +206,7 @@
               (select pages
                 (fn [value]
                   (append-tree! *tree opts loc [:page-ref value]))
-                {}
-                ;; {:item-cp (fn [value]
-                ;;             (option-item false value (fn [checked? value]
-                ;;                                        (append-tree! *tree (assoc opts :toggle? false) loc [:page-ref value]))))}
-                ))
+                {}))
 
             "full-text-search"
             (search (fn [v] (append-tree! *tree opts loc v))
@@ -301,7 +290,7 @@
       (str (query-builder/->dsl clause)))))
 
 (rum/defc clause-inner
-  [*tree *find loc clause & {:keys [operator?]}]
+  [*tree loc clause & {:keys [operator?]}]
   (ui/dropdown
    (fn [{:keys [toggle-fn]}]
      (if operator?
@@ -358,7 +347,7 @@
           [:div.text-4xl.mr-1.font-thin "("]
           (clauses-group *tree *find (conj loc 0) kind (rest clause))
           [:div.text-4xl.ml-1.font-thin ")"]]
-         (clause-inner *tree *find loc clause)))]))
+         (clause-inner *tree loc clause)))]))
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
@@ -366,7 +355,7 @@
    (when-not (and (= loc [0])
                   (= kind :and)
                   (<= (count clauses) 1))
-     (clause-inner *tree *find loc
+     (clause-inner *tree loc
                    (string/upper-case (name kind))
                    :operator? true))
 
@@ -405,7 +394,7 @@
                  tree (query-builder/from-dsl query')
                  *tree (atom tree)
                  config (last (:rum/args state))]
-             (add-watch *tree :updated (fn [_ _ _old new]
+             (add-watch *tree :updated (fn [_ _ _old _new]
                                          (when-let [block (:block config)]
                                            (let [q (if (= [:and] @*tree)
                                                      ""
@@ -431,12 +420,12 @@
                                    nil)]
                    (when find-mode (reset! (::find state) find-mode))
                    state))}
-  [state query config]
+  [state _query _config]
   (let [*find (::find state)
         *tree (::tree state)]
     [:div.cp__query-builder
      [:div.cp__query-builder-filter
-      [:div.grid {:title "Query"}
+      [:div.grid {:title "Live query"}
        (ui/icon "search" {:style {:font-size 20}})]
       (clause-tree *tree *find)
       (add-filter *find *tree [0] [])]]))

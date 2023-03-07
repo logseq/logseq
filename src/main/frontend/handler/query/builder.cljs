@@ -1,7 +1,6 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [frontend.util :as util]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
@@ -9,9 +8,7 @@
 (def operators [:and :or :not])
 (def operators-set (set operators))
 (def page-filters [:all-tags :namespace :tags :property :sample])
-(def page-filters-set (set page-filters))
 (def block-filters [:page-ref :property :task :priority :page :full-text-search :between :sample])
-(def block-filters-set (set block-filters))
 
 (defn- vec-dissoc-item
   [vec idx]
@@ -68,7 +65,7 @@
     ;; default to AND operator
     [:and]))
 
-(defn- replace-element
+(defn replace-element
   [q loc x]
   {:pre [(vector? loc) (seq loc) (some? x)]}
   (if (= 1 (count loc))
@@ -86,7 +83,7 @@
       (let [x' [operator x]]
         (replace-element q loc x')))))
 
-(defn unwrap-operator
+#_(defn unwrap-operator
   [q loc]
   {:pre [(seq q) (seq loc)]}
   (if (and (= loc [0]) (operators-set (first q)))
