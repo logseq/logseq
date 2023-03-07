@@ -496,8 +496,12 @@
         margin: 12px 12px 6px;
         border-bottom: 1px solid var(--ls-border-color, #738694);
 
-        > h2 {
+        h2 {
           font-weight: bold;
+        }
+
+        small:empty {
+          display: none;
         }
       }
 
