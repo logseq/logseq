@@ -62,7 +62,9 @@ test('Search CJK', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustType('[[今日daytime进度条' + rand + ']] diacritic-block-1', { delay: 10 })
-  await page.keyboard.press(hotkeyOpenLink)
+  await page.waitForTimeout(500)
+  await page.keyboard.press(hotkeyOpenLink, { delay: 10 })
+  await page.waitForTimeout(500)
 
   const pageTitle = page.locator('.page-title').first()
   expect(await pageTitle.innerText()).toEqual('今日daytime进度条' + rand)
