@@ -88,6 +88,24 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
+test('copy/paste url to create an iFrame', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('t')
+  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.down()
+
+  await page.keyboard.type('https://logseq.com')
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press(modKey + '+v')
+
+  await expect( page.locator('.logseq-tldraw .tl-iframe-container')).toHaveCount(1)
+})
+
 test('cleanup the shapes', async ({ page }) => {
   await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press('Delete')
