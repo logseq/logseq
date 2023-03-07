@@ -1,11 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { modKey, lockClipboard } from './utils'
-import { UnlockFunction } from 'cross-process-lock';
-
-let unlock: UnlockFunction;
-test.beforeEach(async () => { unlock = await lockClipboard() });
-test.afterEach(async () => await unlock());
+import { modKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()

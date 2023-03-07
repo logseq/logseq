@@ -14,7 +14,6 @@
         "@types/gulp": "^4.0.7",
         "autoprefixer": "^10.4.13",
         "cross-env": "^7.0.3",
-        "cross-process-lock": "^2.1.0",
         "cssnano": "^5.1.13",
         "del": "^6.0.0",
         "gulp": "^4.0.2",
