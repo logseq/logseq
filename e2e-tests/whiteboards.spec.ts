@@ -100,6 +100,7 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   await page.keyboard.press('t')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
+  await page.waitForTimeout(100)
 
   await page.keyboard.type('https://logseq.com')
   await page.keyboard.press(modKey + '+a', { delay: 10 })
@@ -118,6 +119,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   await page.keyboard.press('t')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
+  await page.waitForTimeout(100)
 
   await page.keyboard.type('https://twitter.com/logseq/status/1605224589046386689')
   await page.keyboard.press(modKey + '+a', { delay: 10 })
@@ -136,6 +138,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   await page.keyboard.press('t')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
+  await page.waitForTimeout(100)
 
   await page.keyboard.type('https://www.youtube.com/watch?v=hz2BacySDXE')
   await page.keyboard.press(modKey + '+a', { delay: 10 })
