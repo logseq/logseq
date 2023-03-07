@@ -3030,10 +3030,15 @@
         result-atom (or (:query-atom state) (atom nil))
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
+        collapsed? (:block/collapsed? (db/entity [:block/uuid current-block-uuid]))
         *query-error (:query-error state)
         _ (reset! *query-error nil)
         [full-text-search? query-atom] (try
-                                         (if (:dsl-query? config)
+                                         (cond
+                                           collapsed?
+                                           [false (atom nil)]
+
+                                           (:dsl-query? config)
                                            (let [q (:query query)
                                                  form (safe-read-string q false)]
                                              (cond
@@ -3051,6 +3056,8 @@
 
                                                :else
                                                [false (query-dsl/query (state/get-current-repo) q)]))
+
+                                           :else
                                            [false (db/custom-query query {:current-block-uuid current-block-uuid})])
                                          (catch :default e
                                            (reset! *query-error e)
@@ -3143,7 +3150,8 @@
         built-in? (built-in-custom-query? title)
         page-list? (and (seq result)
                         (:block/name (first result)))
-        nested-query? (:custom-query? config)]
+        nested-query? (:custom-query? config)
+        collapsed?' (or collapsed? (:block/collapsed? current-block))]
     (if nested-query?
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
@@ -3154,37 +3162,39 @@
           [:div.flex.flex-1.flex-row
            (ui/icon "search" {:size 14})
            [:div.ml-1 "Live query"]]
-          (when-not (or collapsed? (:block/collapsed? current-block))
-            (when (> (count result) 0)
-              [:span.results-count
-               (str (count result) (if (> (count result) 1) " results" " result"))]))
-          (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
-            (if table?
-              [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                       :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                            "query-table"
-                                                                                            false))}
-               (ui/icon "list" {:style {:font-size 20}})]
-              [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                       :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                            "query-table"
-                                                                                            true))}
-               (ui/icon "table" {:style {:font-size 20}})]))
+          (when-not collapsed?'
+            [:div.flex.flex-row.items-center
+             (when (> (count result) 0)
+               [:span.results-count
+                (str (count result) (if (> (count result) 1) " results" " result"))])
 
-          [:a.flex.ml-1.fade-link
-           {:title "Setting properties"
-            :on-click (fn []
-                        (let [all-keys (query-table/get-keys result page-list?)]
-                          (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-           (ui/icon "settings" {:style {:font-size 20}})]
+             (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
+               (if table?
+                 [:a.flex.ml-1.fade-link {:title "Switch to list view"
+                                          :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                               "query-table"
+                                                                                               false))}
+                  (ui/icon "list" {:style {:font-size 20}})]
+                 [:a.flex.ml-1.fade-link {:title "Switch to table view"
+                                          :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                               "query-table"
+                                                                                               true))}
+                  (ui/icon "table" {:style {:font-size 20}})]))
 
-          [:div.ml-1
-           (when (or (:full-text-search? state)
-                     (and query-time (> query-time 80)))
-             (query-refresh-button state query-time
-                                   {:on-mouse-down (fn [e]
-                                                     (util/stop e)
-                                                     (trigger-custom-query! state))}))]]
+             [:a.flex.ml-1.fade-link
+              {:title "Setting properties"
+               :on-click (fn []
+                           (let [all-keys (query-table/get-keys result page-list?)]
+                             (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+              (ui/icon "settings" {:style {:font-size 20}})]
+
+             [:div.ml-1
+              (when (or (:full-text-search? state)
+                        (and query-time (> query-time 80)))
+                (query-refresh-button state query-time
+                                      {:on-mouse-down (fn [e]
+                                                        (util/stop e)
+                                                        (trigger-custom-query! state))}))]])]
 
          [:div.custom-query-title.flex.justify-between.w-full
           [:div.flex.items-center
@@ -3194,7 +3204,7 @@
                                                             (get-in config [:block :block/format] :markdown)
                                                             title)
                                :else title)]]]
-         (when-not (or collapsed? (:block/collapsed? current-block))
+         (when-not collapsed?'
            (if @*query-error
              (do
                (log/error :exception @*query-error)
