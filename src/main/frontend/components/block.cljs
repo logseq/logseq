@@ -3266,7 +3266,7 @@
 
                  [:div.ml-1
                   (when (or full-text-search?
-                            (and query-time (> query-time 0)))
+                            (and query-time (> query-time 50)))
                     (query-refresh-button state query-time {:full-text-search? full-text-search?}))]])])
            (if built-in?
              (ui/foldable
