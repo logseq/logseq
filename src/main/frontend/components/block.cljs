@@ -3024,14 +3024,13 @@
       (boolean (some #(= % title) (map :title queries))))))
 
 (defn- trigger-custom-query!
-  [state]
+  [state *query-error]
   (let [[config query _query-result] (:rum/args state)
         repo (state/get-current-repo)
         result-atom (or (:query-atom state) (atom nil))
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         collapsed? (:block/collapsed? (db/entity [:block/uuid current-block-uuid]))
-        *query-error (:query-error state)
         _ (reset! *query-error nil)
         query-atom (try
                      (cond
@@ -3087,17 +3086,17 @@
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive db-mixins/query
-  {:init (fn [state] (assoc state :query-error (atom nil)))}
   [state config {:keys [query children? breadcrumb-show?] :as q}
    {:keys [query-result-atom
+           query-error-atom
            current-block
            current-block-uuid
            table?
            dsl-query?
            page-list?
            view-f]}]
-  (let [*query-error (:query-error state)
-        query-atom (trigger-custom-query! state)
+  (let [*query-error query-error-atom
+        query-atom (trigger-custom-query! state *query-error)
         query-result (and query-atom (rum/react query-atom))
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
@@ -3112,7 +3111,8 @@
                      (dissoc result nil)
                      result))
                  transformed-query-result)
-        _ (when (nil? query-result-atom)
+        _ (when (and query-result-atom
+                     (nil? @query-result-atom))
             (reset! query-result-atom result))
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -3177,13 +3177,27 @@
          :else
          [:div.text-sm.mt-2.opacity-90 "No matched result"])])))
 
+(rum/defc query-title
+  [config title]
+  [:div.custom-query-title.flex.justify-between.w-full
+   [:span.title-text (cond
+                       (vector? title) title
+                       (string? title) (inline-text config
+                                                    (get-in config [:block :block/format] :markdown)
+                                                    title)
+                       :else title)]])
+
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   (rum/local nil ::query-result)
+  {:init (fn [state] (assoc state :query-error (atom nil)))}
   [state config {:keys [title query view collapsed? table-view?] :as q}]
-  (let [*query-result (::query-result state)
+  (let [*query-error (:query-error state)
+        built-in? (built-in-custom-query? title)
+        *query-result (if built-in?
+                        (trigger-custom-query! state *query-error)
+                        (::query-result state))
         result @*query-result
         dsl-query? (:dsl-query? config)
-        built-in? (built-in-custom-query? title)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
@@ -3204,59 +3218,61 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      (when-not built-in?
-        [:div.custom-query (get config :attr {})
-         [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
-          [:div.flex.flex-1.flex-row
-           (ui/icon "search" {:size 14})
-           [:div.ml-1 "Live query"]]
-          (when-not collapsed?'
-            [:div.flex.flex-row.items-center.fade-in
-             (when (> (count result) 0)
-               [:span.results-count
-                (str (count result) (if (> (count result) 1) " results" " result"))])
+      (when-not (and built-in? (empty? result))
+        (let [opts {:query-result-atom *query-result
+                    :query-error-atom *query-error
+                    :current-block current-block
+                    :dsl-query? dsl-query?
+                    :current-block-uuid current-block-uuid
+                    :table? table?
+                    :view-f view-f
+                    :page-list? page-list?}]
+          [:div.custom-query (get config :attr {})
+           (when-not built-in?
+             [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
+              [:div.flex.flex-1.flex-row
+               (ui/icon "search" {:size 14})
+               [:div.ml-1 "Live query"]]
+              (when-not collapsed?'
+                [:div.flex.flex-row.items-center.fade-in
+                 (when (> (count result) 0)
+                   [:span.results-count
+                    (str (count result) (if (> (count result) 1) " results" " result"))])
 
-             (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
-               (if table?
-                 [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                          :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                               "query-table"
-                                                                                               false))}
-                  (ui/icon "list" {:style {:font-size 20}})]
-                 [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                          :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                               "query-table"
-                                                                                               true))}
-                  (ui/icon "table" {:style {:font-size 20}})]))
+                 (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
+                   (if table?
+                     [:a.flex.ml-1.fade-link {:title "Switch to list view"
+                                              :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                                   "query-table"
+                                                                                                   false))}
+                      (ui/icon "list" {:style {:font-size 20}})]
+                     [:a.flex.ml-1.fade-link {:title "Switch to table view"
+                                              :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                                   "query-table"
+                                                                                                   true))}
+                      (ui/icon "table" {:style {:font-size 20}})]))
 
-             [:a.flex.ml-1.fade-link
-              {:title "Setting properties"
-               :on-click (fn []
-                           (let [all-keys (query-table/get-keys result page-list?)]
-                             (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-              (ui/icon "settings" {:style {:font-size 20}})]
+                 [:a.flex.ml-1.fade-link
+                  {:title "Setting properties"
+                   :on-click (fn []
+                               (let [all-keys (query-table/get-keys result page-list?)]
+                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                  (ui/icon "settings" {:style {:font-size 20}})]
 
-             [:div.ml-1
-              (when (or full-text-search?
-                        (and query-time (> query-time 50)))
-                (query-refresh-button state query-time {:full-text-search? full-text-search?}))]])]
-
-         [:div.custom-query-title.flex.justify-between.w-full
-          [:div.flex.items-center
-           [:span.title-text (cond
-                               (vector? title) title
-                               (string? title) (inline-text config
-                                                            (get-in config [:block :block/format] :markdown)
-                                                            title)
-                               :else title)]]]
-         (when-not collapsed?'
-           (custom-query-inner config q {:query-result-atom *query-result
-                                         :current-block current-block
-                                         :dsl-query? dsl-query?
-                                         :current-block-uuid current-block-uuid
-                                         :table? table?
-                                         :view-f view-f
-                                         :page-list? page-list?}))]))))
+                 [:div.ml-1
+                  (when (or full-text-search?
+                            (and query-time (> query-time 50)))
+                    (query-refresh-button state query-time {:full-text-search? full-text-search?}))]])])
+           (if built-in?
+             (ui/foldable
+              (query-title config title)
+              (fn []
+                (custom-query-inner config q opts))
+              {})
+             [:div
+              (query-title config title)
+              (when-not collapsed?'
+                (custom-query-inner config q opts))])])))))
 
 (rum/defc custom-query
   [config q]
