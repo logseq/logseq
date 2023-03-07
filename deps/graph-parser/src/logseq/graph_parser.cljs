@@ -74,7 +74,8 @@ Options available:
 
 * :new? - Boolean which indicates if this file already exists. Default is true.
 * :delete-blocks-fn - Optional fn which is called with the new page, file and existing block uuids
-  which may be referenced elsewhere.
+  which may be referenced elsewhere. Used to delete the existing blocks before saving the new ones.
+   Implemented in file-common-handler/validate-and-get-blocks-to-delete for IoC
 * :skip-db-transact? - Boolean which skips transacting in order to batch transactions. Default is false
 * :extract-options - Options map to pass to extract/extract"
   ([conn file content] (parse-file conn file content {}))
