@@ -88,7 +88,7 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
-test('copy/paste url to create an iFrame', async ({ page }) => {
+test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
@@ -106,7 +106,7 @@ test('copy/paste url to create an iFrame', async ({ page }) => {
   await expect( page.locator('.logseq-tldraw .tl-iframe-container')).toHaveCount(1)
 })
 
-test('copy/paste twitter status url to create a Tweet', async ({ page }) => {
+test('copy/paste twitter status url to create a Tweet shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
@@ -124,7 +124,7 @@ test('copy/paste twitter status url to create a Tweet', async ({ page }) => {
   await expect( page.locator('.logseq-tldraw .tl-tweet-container')).toHaveCount(1)
 })
 
-test('copy/paste youtube video url to create a Youtube embed', async ({ page }) => {
+test('copy/paste youtube video url to create a Youtube shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
