@@ -150,7 +150,7 @@
                        (assoc :page-name page-name
                               :original-page-name page))
           new-uuids (when db (extract-uuids format ast content options'))
-          blocks (->> (gp-block/extract-blocks ast content false format new-uuids options')
+          blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
           ref-pages (atom #{})

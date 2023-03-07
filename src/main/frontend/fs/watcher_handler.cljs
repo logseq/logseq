@@ -36,6 +36,7 @@
             (editor/set-block-property! block-id "id" block-id)))))))
 
 (defn- handle-add-and-change!
+  "backup? - whether to backup the previous content."
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.

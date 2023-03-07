@@ -408,20 +408,17 @@
       content
       (gp-property/->new-properties content))))
 
-(defn get-custom-id-or-new-id
+(defn get-custom-id
   "properties: the properties possibly containing custom-id (`:ID: or id::`)
-   dm-id: the id matched by diff-merge (optional)
    
-   The order of id selection:  :custom_id > :id > matched-id (diff-merge id) > new generate (squuid)"
-  [properties dm-id]
-  (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
-                               (get-in properties [:properties :custom_id])
-                               (get-in properties [:properties :id])
-                               dm-id)]
+   The order of id selection:  :custom_id > :id > matched-id (diff-merge id)"
+  [properties]
+  (when-let [custom-id (or (get-in properties [:properties :custom-id])
+                           (get-in properties [:properties :custom_id])
+                           (get-in properties [:properties :id]))]
         ;; guard against non-string custom-ids
-        (when-let [custom-id (and (string? custom-id) (string/trim custom-id))]
-          (some-> custom-id parse-uuid)))
-      (d/squuid)))
+    (when-let [custom-id (and (string? custom-id) (string/trim custom-id))]
+      (some-> custom-id parse-uuid))))
 
 (defn get-page-refs-from-properties
   [properties db date-formatter user-config]
@@ -505,9 +502,8 @@
     (mapv macro->block @*result)))
 
 (defn with-pre-block-if-exists
-  "blocks: ast with blocks
-   dm-id: the id matched by diff-merge (optional)"
-  [blocks body pre-block-properties encoded-content dm-id {:keys [supported-formats db date-formatter user-config]}]
+  "blocks: ast with blocks"
+  [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
@@ -518,7 +514,7 @@
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
                          {:keys [properties properties-order properties-text-values invalid-properties]} pre-block-properties
-                         id (get-custom-id-or-new-id {:properties properties} dm-id)
+                         id (get-custom-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
                                              (assoc user-config
@@ -553,13 +549,12 @@
     properties))
 
 (defn- construct-block
-  "dm-id: diff-merge resolved uuid for the block
-   return: the block sturcture -
+  "return: the block sturcture -
        :content - the content of the block
        :body    - the ast of the block
    "
-  [block properties timestamps body encoded-content format pos-meta with-id? dm-id {:keys [block-pattern supported-formats db date-formatter]}]
-  (let [id (get-custom-id-or-new-id properties dm-id)
+  [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
+  (let [id (get-custom-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
         block (second block)
@@ -616,7 +611,7 @@
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
                :extract-macros, :date-formatter :page-name and :db
                :page-name if provided, will be used to map block "
-  [blocks content with-id? format matched-uuids {:keys [user-config] :as options}]
+  [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         [blocks body pre-block-properties]
@@ -624,8 +619,7 @@
                blocks (reverse blocks)
                timestamps {}
                properties {}
-               body []
-               matched-uuids (reverse matched-uuids)]
+               body []]
           (if (seq blocks)
             (let [[block pos-meta] (first blocks)
                   ;; fix start_pos
@@ -637,25 +631,28 @@
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
                       timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) timestamps' properties body matched-uuids))
+                  (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
                 (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) timestamps properties body matched-uuids))
+                  (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? (first matched-uuids) options)
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
-                  (recur (conj headings block'') (rest blocks) {} {} [] (rest matched-uuids)))
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
-                (recur headings (rest blocks) timestamps properties (conj body block) matched-uuids)))
+                (recur headings (rest blocks) timestamps properties (conj body block))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body
              properties]))
-        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content (first matched-uuids) options)]
-    (map #(dissoc % :block/meta) result)))
+        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
+    (->> result
+         ;; TODO 230226 attach UUID according to diff-merge, or new generate one
+         (map #(assoc % :block/uuid ))
+     (map #(dissoc % :block/meta)))))
 
 (defn with-parent-and-left
   [page-id blocks]
