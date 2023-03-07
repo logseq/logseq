@@ -256,7 +256,7 @@
 
 (defn safe-read-string
   ([content]
-   (safe-read-string content {}))
+   (safe-read-string {} content))
   ([opts content]
    (try
      (reader/read-string opts content)
