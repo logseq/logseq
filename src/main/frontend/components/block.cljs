@@ -2852,7 +2852,14 @@
                                         (select-keys b2 compare-keys))
                                   (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                                         (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))}
+                      (boolean result)))
+   :will-unmount (fn [state]
+                   ;; restore root block's collapsed state
+                   (let [[config block] (:rum/args state)
+                         block-id (:block/uuid block)]
+                     (when (root-block? config block)
+                       (state/set-collapsed-block! block-id nil)))
+                   state)}
   [state config block]
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
@@ -3030,13 +3037,9 @@
         result-atom (or (:query-atom state) (atom nil))
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
-        collapsed? (:block/collapsed? (db/entity [:block/uuid current-block-uuid]))
         _ (reset! *query-error nil)
         query-atom (try
                      (cond
-                       collapsed?
-                       (atom nil)
-
                        (:dsl-query? config)
                        (let [q (:query query)
                              form (safe-read-string q false)]
@@ -3199,7 +3202,12 @@
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
-        collapsed?' (or collapsed? (:block/collapsed? current-block))
+        temp-collapsed? (state/sub-collapsed current-block-uuid)
+        collapsed?' (if (some? temp-collapsed?)
+                      temp-collapsed?
+                      (or
+                       collapsed?
+                       (:block/collapsed? current-block)))
         table? (or table-view?
                    (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
