@@ -1,13 +1,8 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, modKey, lockClipboard } from './utils'
+import { createRandomPage, enterNextBlock, modKey } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
-import { UnlockFunction } from 'cross-process-lock';
 import * as kb_events from './util/keyboard-events'
-
-let unlock: UnlockFunction;
-test.beforeEach(async () => { unlock = await lockClipboard() });
-test.afterEach(async () => await unlock());
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)

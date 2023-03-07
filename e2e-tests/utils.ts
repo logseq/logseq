@@ -3,8 +3,6 @@ import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
 import * as pathlib from 'path'
-import { lock, UnlockFunction } from 'cross-process-lock';
-import { writeFileSync, existsSync } from 'fs';
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -282,14 +280,3 @@ export async function getIsWebAPIClipboardSupported(page: Page): Promise<boolean
   // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
   return await queryPermission(page, "clipboard-write") && await doesClipboardItemExists(page)
 }
-
-// It should lock clipboard tests so that we can run one test at a time.
-// Copied from https://github.com/microsoft/playwright/issues/13097#issuecomment-1445271511
-export const lockClipboard = async (): Promise<UnlockFunction> => {
-  const name = 'tmp/clipboard'
-
-  if (!existsSync(name))
-    writeFileSync(name, '', 'utf8')
-
-  return await lock(name, { waitTimeout: 30000 })
-};
