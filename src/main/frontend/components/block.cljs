@@ -3150,6 +3150,42 @@
                "{{query hidden}}")]
       (when-not (and built-in? (empty? result))
         [:div.custom-query (get config :attr {})
+         [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
+          [:div.flex.flex-1.flex-row
+           (ui/icon "search" {:size 14})
+           [:div.ml-1 "Live query"]]
+          (when-not (or collapsed? (:block/collapsed? current-block))
+            (when (> (count result) 0)
+              [:span.results-count
+               (str (count result) (if (> (count result) 1) " results" " result"))]))
+          (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
+            (if table?
+              [:a.flex.ml-1.fade-link {:title "Switch to list view"
+                                       :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                            "query-table"
+                                                                                            false))}
+               (ui/icon "list" {:style {:font-size 20}})]
+              [:a.flex.ml-1.fade-link {:title "Switch to table view"
+                                       :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                                                                            "query-table"
+                                                                                            true))}
+               (ui/icon "table" {:style {:font-size 20}})]))
+
+          [:a.flex.ml-1.fade-link
+           {:title "Setting properties"
+            :on-click (fn []
+                        (let [all-keys (query-table/get-keys result page-list?)]
+                          (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+           (ui/icon "settings" {:style {:font-size 20}})]
+
+          [:div.ml-1
+           (when (or (:full-text-search? state)
+                     (and query-time (> query-time 80)))
+             (query-refresh-button state query-time
+                                   {:on-mouse-down (fn [e]
+                                                     (util/stop e)
+                                                     (trigger-custom-query! state))}))]]
+
          [:div.custom-query-title.flex.justify-between.w-full
           [:div.flex.items-center
            [:span.title-text (cond
@@ -3157,26 +3193,7 @@
                                (string? title) (inline-text config
                                                             (get-in config [:block :block/format] :markdown)
                                                             title)
-                               :else title)]
-           (when-not (or collapsed? (:block/collapsed? current-block))
-             [:span.opacity-60.text-sm.ml-2.results-count
-              (str (count result) " results")])]
-
-          ;;insert an "edit" button in the query view
-          [:div.flex.items-center
-           (when-not built-in?
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-              svg/edit])
-
-           (when (or (:full-text-search? state)
-                     (and query-time (> query-time 80)))
-             (query-refresh-button state query-time
-                                   {:on-mouse-down (fn [e]
-                                                     (util/stop e)
-                                                     (trigger-custom-query! state))}))]]
+                               :else title)]]]
          (when-not (or collapsed? (:block/collapsed? current-block))
            (if @*query-error
              (do
@@ -3184,26 +3201,7 @@
                [:div.warning.my-1 "Query failed: "
                 [:p (.-message @*query-error)]])
              [:div
-              (when (and current-block (not view-f) (nil? table-view?))
-                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-                 (when-not page-list?
-                   [:div.flex.flex-row
-                    [:div.mr-2 [:span.text-sm "Table view"]]
-                    [:div {:style {:margin-top 5}}
-                     (ui/toggle table?
-                                (fn []
-                                  (editor-handler/set-block-property! current-block-uuid
-                                                                      "query-table"
-                                                                      (not table?)))
-                                true)]])
 
-                 [:a.mx-2.block.fade-link
-                  {:on-click (fn []
-                               (let [all-keys (query-table/get-keys result page-list?)]
-                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-                  [:span.table-query-properties
-                   [:span.text-sm.mr-1 "Set properties"]
-                   svg/settings-sm]]])
               (cond
                 (and (seq result) view-f)
                 (let [result (try
@@ -3249,7 +3247,7 @@
                        [:li (str item)])]))
 
                 :else
-                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]))]))))
+                [:div.text-sm.mt-2.opacity-90 "No matched result"])]))]))))
 
 (rum/defc custom-query
   [config q]

@@ -351,7 +351,7 @@
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  [:div.flex.flex-row.gap-1.flex-wrap.items-center
+  [:div.flex.flex-row.gap-1.flex-wrap.items-center.text-sm
    (when-not (and (= loc [0])
                   (= kind :and)
                   (<= (count clauses) 1))
@@ -425,7 +425,5 @@
         *tree (::tree state)]
     [:div.cp__query-builder
      [:div.cp__query-builder-filter
-      [:div.grid {:title "Live query"}
-       (ui/icon "search" {:style {:font-size 20}})]
       (clause-tree *tree *find)
       (add-filter *find *tree [0] [])]]))
