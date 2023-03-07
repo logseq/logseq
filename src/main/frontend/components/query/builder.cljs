@@ -269,7 +269,9 @@
       (page-ref/->page-ref (second clause))
 
       (= (keyword f) :page-tags)
-      (str "#" (second (second clause)))
+      (if (string? (second clause))
+        (str "#" (second clause))
+        (str "#" (second (second clause))))
 
       (= (keyword f) :property)
       (str (name (second clause)) ": "
@@ -381,7 +383,9 @@
   (rum/local nil ::find)
   {:init (fn [state]
            (let [q-str (first (:rum/args state))
-                 query (gp-util/safe-read-string (query-dsl/pre-transform-query q-str))
+                 query (gp-util/safe-read-string
+                        query-dsl/custom-readers
+                        (query-dsl/pre-transform-query q-str))
                  query' (cond
                           (contains? #{'and 'or 'not} (first query))
                           query

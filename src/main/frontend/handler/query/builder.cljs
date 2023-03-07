@@ -119,6 +119,9 @@
         (and (vector? f) (= :page-ref (keyword (first f))))
         (->page-ref (second f))
 
+        (and (vector? f) (= :page-tags (keyword (first f))))
+        [(symbol :page-tags) (->page-ref (second f))]
+
         (and (vector? f) (= :between (keyword (first f))))
         (into [(symbol :between)] (map ->page-ref (rest f)))
 

@@ -466,7 +466,8 @@ Some bindings in this fn:
                                             (keyword (name x))
                                             x)))
                                    (string/join " ")
-                                   (util/format "(between %s)")))))))
+                                   (util/format "(between %s)"))))
+            (string/replace "#" "#tag "))))
 
 (defn- add-bindings!
   [form q]
@@ -506,14 +507,15 @@ Some bindings in this fn:
       :else
       q)))
 
+(def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
   [s]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
-          form (some-> s
-                       (pre-transform)
-                       (reader/read-string))
+          form (some->> s
+                        (pre-transform)
+                        (reader/read-string custom-readers))
           sort-by (atom nil)
           blocks? (atom nil)
           sample (atom nil)
