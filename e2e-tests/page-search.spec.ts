@@ -1,7 +1,7 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
 import { Block } from './types'
-import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
+import { modKey, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 
 /***
  * Test alias features
@@ -9,12 +9,8 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
  * Consider diacritics
  ***/
 
-let hotkeyOpenLink = 'Control+o'
-let hotkeyBack = 'Control+['
-if (IsMac) {
-  hotkeyOpenLink = 'Meta+o'
-  hotkeyBack = 'Meta+['
-}
+let hotkeyOpenLink = modKey + '+o'
+let hotkeyBack = modKey + '+['
 
 test('Search page and blocks (diacritics)', async ({ page, block }) => {
   const rand = randomString(20)
