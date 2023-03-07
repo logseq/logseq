@@ -3069,7 +3069,7 @@
   (ui/tippy
    {:html  [:div
             [:p
-             (when (and query-time (> query-time 80))
+             (when (and query-time (> query-time 50))
                [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
              (when full-text-search?
                [:span "Full-text search results will not be refreshed automatically."])]
@@ -3113,7 +3113,7 @@
                  transformed-query-result)
         _ (when (and query-result-atom
                      (nil? @query-result-atom))
-            (reset! query-result-atom result))
+            (reset! query-result-atom (with-meta result (meta @query-atom))))
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
@@ -3205,8 +3205,7 @@
         table? (or table-view?
                    (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
-        query-time (or (react/get-query-time query)
-                       (react/get-query-time q))
+        query-time (:query-time (meta @*query-result))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         page-list? (and (seq result)
