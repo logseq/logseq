@@ -193,7 +193,7 @@ export type TLSubscriptionEvent =
       event: 'drop'
       info: { dataTransfer: DataTransfer; point: number[] }
     }
-    | {
+  | {
       event: 'copy'
       info: TLCopyEventInfo
     }
