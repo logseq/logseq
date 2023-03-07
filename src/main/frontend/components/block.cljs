@@ -3163,7 +3163,7 @@
            (ui/icon "search" {:size 14})
            [:div.ml-1 "Live query"]]
           (when-not collapsed?'
-            [:div.flex.flex-row.items-center
+            [:div.flex.flex-row.items-center.fade-in
              (when (> (count result) 0)
                [:span.results-count
                 (str (count result) (if (> (count result) 1) " results" " result"))])
