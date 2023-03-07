@@ -560,15 +560,10 @@ export class TLApp<
 
       const shapeBlockRefs = this.selectedShapesArray.map(s => `((${s.props.id}))`).join(' ')
 
-      // FIXME: use `writeClipboard` in frontend.utils
-      navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          'text/plain': new Blob([shapeBlockRefs], {
-            type: 'text/plain',
-          }),
-        }),
-      ])
+      this.notify('copy', {
+        text: shapeBlockRefs,
+        html: tldrawString
+      })
     }
   }
 
