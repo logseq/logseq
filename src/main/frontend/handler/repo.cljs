@@ -141,8 +141,9 @@
                                      (merge {:new-graph? new-graph?
                                              :re-render-root? false
                                              :from-disk? true
-                                             :skip-db-transact? skip-db-transact?
-                                             :extracted-block-ids extracted-block-ids}
+                                             :skip-db-transact? skip-db-transact?}
+                                            ;; To avoid skipping the `:or` bounds for keyword destructuring
+                                            (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
                                             (when (some? verbose) {:verbose verbose}))))
     (state/set-parsing-state! (fn [m]
                                 (update m :finished inc)))
