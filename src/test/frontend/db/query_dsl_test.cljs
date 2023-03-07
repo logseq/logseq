@@ -541,10 +541,10 @@ created-at:: 1608968448116
     '[[foo]]
 
     '(and (not [[foo]]))
-    (not [[foo]])
+    '(not [[foo]])
 
     '(and (or (and [[foo]])))
-    [[foo]]
+    '[[foo]]
 
     '(not (or [[foo]]))
     '(not [[foo]])))
