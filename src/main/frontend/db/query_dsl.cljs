@@ -507,6 +507,20 @@ Some bindings in this fn:
       :else
       q)))
 
+(defn simplify-query
+  [query]
+  (if (string? query)
+    query
+    (walk/postwalk
+     (fn [f]
+       (if (and
+            (coll? f)
+            (contains? #{'and 'or} (first f))
+            (= 2 (count f)))
+         (second f)
+         f))
+     query)))
+
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
   [s]
@@ -519,6 +533,7 @@ Some bindings in this fn:
           sort-by (atom nil)
           blocks? (atom nil)
           sample (atom nil)
+          form (simplify-query form)
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?

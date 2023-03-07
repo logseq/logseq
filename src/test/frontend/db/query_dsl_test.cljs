@@ -529,6 +529,26 @@ created-at:: 1608968448116
            (->> (dsl-query "(and (page-property rating) (sort-by rating))")
                 (map #(get-in % [:block/properties :rating])))))))
 
+(deftest simplify-query
+  (are [x y] (= (query-dsl/simplify-query x) y)
+    '(and [[foo]])
+    '[[foo]]
+
+    '(and (and [[foo]]))
+    '[[foo]]
+
+    '(and (or [[foo]]))
+    '[[foo]]
+
+    '(and (not [[foo]]))
+    (not [[foo]])
+
+    '(and (or (and [[foo]])))
+    [[foo]]
+
+    '(not (or [[foo]]))
+    '(not [[foo]])))
+
 (comment
  (require '[clojure.pprint :as pprint])
  (test-helper/start-test-db!)
