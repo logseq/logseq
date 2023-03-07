@@ -192,7 +192,7 @@ export class TLApp<
         fn: () => {
           this.api.toggleGrid()
         },
-      }
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -562,7 +562,7 @@ export class TLApp<
 
       this.notify('copy', {
         text: shapeBlockRefs,
-        html: tldrawString
+        html: tldrawString,
       })
     }
   }

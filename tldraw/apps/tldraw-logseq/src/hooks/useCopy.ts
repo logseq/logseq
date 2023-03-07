@@ -5,7 +5,7 @@ import { LogseqContext } from '../lib/logseq-context'
 export function useCopy() {
   const { handlers } = React.useContext(LogseqContext)
 
-  return React.useCallback<TLReactCallbacks['onCopy']>((app, {text, html}) => {
+  return React.useCallback<TLReactCallbacks['onCopy']>((app, { text, html }) => {
     handlers.copyToClipboard(text, html)
   }, [])
 }

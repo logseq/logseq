@@ -101,7 +101,7 @@ const AppInner = ({
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
-       onPersist?.(app, info)
+      onPersist?.(app, info)
     },
     [model]
   )

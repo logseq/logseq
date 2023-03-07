@@ -55,7 +55,7 @@ export interface LogseqContextValue {
     makeAssetUrl: (relativeUrl: string) => string
     sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void
     redirectToPage: (uuidOrPageName: string) => void
-    copyToClipboard: (text:string, html: string) => void
+    copyToClipboard: (text: string, html: string) => void
   }
 }
 
