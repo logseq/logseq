@@ -22,7 +22,8 @@
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (rum/defc page-block-selector
   [*find]
@@ -264,8 +265,11 @@
       (string? clause)
       (str "search: " clause)
 
-      (= (keyword f) :tags)
-      (str "# (second clause)")
+      (= (keyword f) :page-ref)
+      (page-ref/->page-ref (second clause))
+
+      (= (keyword f) :page-tags)
+      (str "#" (second (second clause)))
 
       (= (keyword f) :property)
       (str (name (second clause)) ": "

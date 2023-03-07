@@ -3124,8 +3124,10 @@
                                  (boolean (:result-transform q))
                                  (and (string? query) (string/includes? query "(by-page false)")))
         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                 (-> (db-utils/group-by-page transformed-query-result)
-                     (dissoc nil))
+                 (let [result (db-utils/group-by-page transformed-query-result)]
+                   (if (map? result)
+                     (dissoc result nil)
+                     result))
                  transformed-query-result)
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
