@@ -34,4 +34,8 @@
     a.query-clause:hover, a.add-filter {
         color: var(--ls-secondary-text-color);
     }
+
+    .filter-item select {
+        border: none;
+    }
 }

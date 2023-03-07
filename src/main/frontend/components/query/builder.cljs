@@ -230,19 +230,26 @@
                              :clause clause}))
 
             nil)])
-       (select
-         (map name filters-and-ops)
-         (fn [value]
-           (cond
-             (= value "all-tags")
-             (append-tree! *tree opts loc [:all-page-tags])
+       [:div
+        (when-not @*find
+          [:div.flex.flex-row.items-center.p-2
+           [:div.ml-2 "Find: "]
+           (page-block-selector *find)])
+        (when-not @*find
+          [:hr.m-0])
+        (select
+          (map name filters-and-ops)
+          (fn [value]
+            (cond
+              (= value "all-tags")
+              (append-tree! *tree opts loc [:all-page-tags])
 
-             (operator? value)
-             (append-tree! *tree opts loc [(keyword value)])
+              (operator? value)
+              (append-tree! *tree opts loc [(keyword value)])
 
-             :else
-             (reset! *mode value)))
-         {:input-default-placeholder "Add filter/operator"}))]))
+              :else
+              (reset! *mode value)))
+          {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
   [*find *tree loc clause]
@@ -429,6 +436,7 @@
         *tree (::tree state)]
     [:div.cp__query-builder
      [:div.cp__query-builder-filter
-      (page-block-selector *find)
+      [:div.grid {:title "Query"}
+       (ui/icon "search" {:style {:font-size 20}})]
       (clause-tree *tree *find)
       (add-filter *find *tree [0] [])]]))
