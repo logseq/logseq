@@ -127,7 +127,6 @@
                                    (when original-content {:old-content original-content}))]
     (fs/write-file! repo path-dir path content write-file-options')))
 
-;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
                              skip-db-transact? extracted-block-ids]
@@ -136,10 +135,13 @@
                            from-disk? false
                            skip-compare? false}}]
   (let [path (gp-util/path-normalize path)
-        config-file? (string/ends-with? path config/config-file)
-        _ (when config-file? (detect-deprecations repo path content))
+        _ (prn ::alter-file path)
+        ;; _ (js/console.trace)
+        config-file? (= path "logseq/config.edn") ; (string/ends-with? path config/config-file)
+        _ (when config-file?
+            (detect-deprecations repo path content))
         config-valid? (and config-file? (validate-file repo path content))]
-    (when-not (and config-file? (not config-valid?)) ; non-config file or valid config
+    (when (or config-valid? (not config-file?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
                   :skip-db-transact? skip-db-transact?
@@ -149,9 +151,9 @@
                        (when-not skip-db-transact?
                          (when-let [page-id (db/get-file-page-id path)]
                            (db/transact! repo
-                             [[:db/retract page-id :block/alias]
-                              [:db/retract page-id :block/tags]]
-                             opts)))
+                                         [[:db/retract page-id :block/alias]
+                                          [:db/retract page-id :block/tags]]
+                                         opts)))
                        (file-common-handler/reset-file!
                         repo path content (merge opts
                                                  (when (some? verbose) {:verbose verbose}))))
@@ -161,34 +163,35 @@
               (when re-render-root? (ui-handler/re-render-root!))
 
               (cond
-                (= path (config/get-custom-css-path repo))
+                (= path "logseq/custom.css") ; (= path (config/get-custom-css-path repo))
                 (ui-handler/add-style-if-exists!)
 
-                (= path (config/get-repo-config-path repo))
+                (= path "logseq/config.edn") ; (= path (config/get-repo-config-path repo))
                 (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
                   (state/pub-event! [:shortcut/refresh]))
 
+                ;; FIXME: global config
                 (and (config/global-config-enabled?)
                      (= path (global-config-handler/global-config-path)))
                 (p/let [_ (global-config-handler/restore-global-config!)]
                   (state/pub-event! [:shortcut/refresh]))))
             (p/catch
-                (fn [error]
-                  (when (and (config/global-config-enabled?)
+             (fn [error]
+               (when (and (config/global-config-enabled?)
                              ;; Global-config not started correctly but don't
                              ;; know root cause yet
                              ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
-                             (global-config-handler/global-config-dir-exists?)
-                             (= path (global-config-handler/global-config-path)))
-                    (state/pub-event! [:notification/show
-                                       {:content (str "Failed to write to file " path)
-                                        :status :error}]))
+                          (global-config-handler/global-config-dir-exists?)
+                          (= path (global-config-handler/global-config-path)))
+                 (state/pub-event! [:notification/show
+                                    {:content (str "Failed to write to file " path)
+                                     :status :error}]))
 
-                  (println "Write file failed, path: " path ", content: " content)
-                  (log/error :write/failed error)
-                  (state/pub-event! [:capture-error
-                                     {:error error
-                                      :payload {:type :write-file/failed-for-alter-file}}]))))
+               (println "Write file failed, path: " path ", content: " content)
+               (log/error :write/failed error)
+               (state/pub-event! [:capture-error
+                                  {:error error
+                                   :payload {:type :write-file/failed-for-alter-file}}]))))
         result))))
 
 (defn set-file-content!

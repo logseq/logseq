@@ -50,14 +50,16 @@
   (graph-parser/get-blocks-to-delete db file-page file-path retain-uuid-blocks))
 
 (defn reset-file!
-  "Main fn for updating a db with the results of a parsed file"
-  ([repo-url file content]
-   (reset-file! repo-url file content {}))
-  ([repo-url file content {:keys [verbose] :as options}]
+  "Main fn for updating a db with the results of a parsed file.
+ "
+  ([repo-url file-path content]
+   (reset-file! repo-url file-path content {}))
+  ([repo-url file-path content {:keys [verbose] :as options}]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
          repo-dir (config/get-repo-dir repo-url)
-         file (cond
+         ;; use relpath
+         _ (comment cond
                 (and electron-local-repo?
                      util/win32?
                      (utils/win32 file))
@@ -73,18 +75,18 @@
 
                 :else
                 file)
-         file (gp-util/path-normalize file)
-         new? (nil? (db/entity [:file/path file]))
+         _ (prn ::reset-file file-path)
+         new? (nil? (db/entity [:file/path file-path]))
          options (merge (dissoc options :verbose)
                         {:new? new?
                          :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)
-                                            :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                            :block-pattern (config/get-block-pattern (gp-util/get-format file-path))
                                             :supported-formats (gp-config/supported-formats)
-                                            :uri-encoded? (boolean (mobile-util/native-platform?))
+                                           ;; :uri-encoded? (boolean (mobile-util/native-platform?))
                                             :filename-format (state/get-filename-format repo-url)
                                             :extracted-block-ids (:extracted-block-ids options)}
                                            (when (some? verbose) {:verbose verbose}))})]
-     (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
+     (:tx (graph-parser/parse-file (db/get-db repo-url false) file-path content options)))))

@@ -389,8 +389,8 @@
                #(js->clj % :keywordize-keys true))))
   (open-dir [_this dir _ok-handler]
     (open-dir dir))
-  (get-files [_this path-or-handle _ok-handler]
-    (readdir path-or-handle))
+  (list-files [_this dir _ok-handler]
+    (readdir dir))
   (watch-dir! [_this dir _options]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
