@@ -26,7 +26,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
@@ -3068,7 +3067,7 @@
       result-atom)))
 
 (rum/defc query-refresh-button
-  [state query-time {:keys [on-mouse-down full-text-search?]}]
+  [query-time {:keys [on-mouse-down full-text-search?]}]
   (ui/tippy
    {:html  [:div
             [:p
@@ -3267,7 +3266,10 @@
                  [:div.ml-1
                   (when (or full-text-search?
                             (and query-time (> query-time 50)))
-                    (query-refresh-button state query-time {:full-text-search? full-text-search?}))]])])
+                    (query-refresh-button query-time {:full-text-search? full-text-search?
+                                                      :on-mouse-down (fn [e]
+                                                                       (util/stop e)
+                                                                       (trigger-custom-query! state *query-error))}))]])])
            (if built-in?
              (ui/foldable
               (query-title config title)
