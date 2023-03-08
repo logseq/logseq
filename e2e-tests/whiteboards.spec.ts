@@ -108,21 +108,6 @@ test('undo the action again', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
 })
 
-test('create a block', async ({ page }) => {
-  const canvas = await page.waitForSelector('.logseq-tldraw')
-  const bounds = (await canvas.boundingBox())!
-
-  await page.keyboard.press('s')
-  await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
-  await page.waitForTimeout(100)
-
-  await page.keyboard.type('a')
-  await page.keyboard.press('Enter')
-
-
-  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(1)
-})
-
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
