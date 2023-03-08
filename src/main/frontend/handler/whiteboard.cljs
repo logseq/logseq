@@ -83,7 +83,7 @@
                            (util/time-ms))}))
 
 (defn- compute-tx
-  [^js app ^js tl-page new-id-nonces db-id-nonces page-name transact?]
+  [^js app ^js tl-page new-id-nonces db-id-nonces page-name replace?]
   (let [assets (js->clj-keywordize (.getCleanUpAssets app))
         new-shapes (.-shapes tl-page)
         shapes-index (map #(gobj/get % "id") new-shapes)
@@ -119,7 +119,8 @@
                            (map #(shape->block % page-name))
                            (map with-timestamps))
      :delete-blocks deleted-shapes-tx
-     :metadata {:whiteboard/transact? transact?
+     :metadata {:whiteboard/transact? true
+                :replace? replace?
                 :data {:page-name page-name
                        :deleted-shapes deleted-shapes
                        :new-shapes created-shapes
@@ -139,7 +140,7 @@
                       (set (->> (model/get-whiteboard-id-nonces repo page-name)
                                 (map #(update % :id str)))))
         {:keys [page-block upserted-blocks delete-blocks metadata]}
-        (compute-tx app tl-page new-id-nonces db-id-nonces page-name (not replace?))
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
         new-shapes (get-in metadata [:data :new-shapes])
         metadata' (cond
