@@ -10,6 +10,7 @@
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
+            [frontend.fs2.path :as fs2-path]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
@@ -19,6 +20,7 @@
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]))
 
 (defn- safe-api-call
@@ -48,7 +50,10 @@
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (safe-api-call "file-watcher"
                      (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)]
+                       (let [{:keys [type payload]} (bean/->clj data)
+                             path (gp-util/path-normalize (:path payload))
+                             dir (:dir payload)
+                             payload (assoc payload :path (fs2-path/relative-path dir path))]
                          (watcher-handler/handle-changed! type payload)
                          (when (file-sync-handler/enable-sync?)
                            (sync/file-watch-handler type payload)))))

@@ -125,9 +125,9 @@
                       whiteboard-page? (config/get-whiteboards-directory)
                       :else            (config/get-pages-directory))
             ext (if (= format "markdown") "md" format)
-            file-path (config/get-page-file-path repo sub-dir filename ext)
-            file {:file/path file-path}
-            tx [{:file/path file-path}
+            file-rpath (str sub-dir "/" filename "." ext) ;; FIXME: use path-join
+            file {:file/path file-rpath}
+            tx [{:file/path file-rpath}
                 {:block/name (:block/name page)
                  :block/file file}]]
         (db/transact! tx)

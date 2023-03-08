@@ -36,10 +36,10 @@
    uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
    filename-format - the format used to parse file name
    "
-  [file ast uri-encoded? filename-format]
+  [file-path ast uri-encoded? filename-format]
   ;; headline
   (let [ast  (map first ast)
-        file (if uri-encoded? (js/decodeURI file) file)]
+        file (if uri-encoded? (js/decodeURI file-path) file-path)]
     ;; check backward compatibility?
     (if (string/includes? file "pages/contents.")
       "Contents"
@@ -128,10 +128,9 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  "uri-encoded? - if is true, apply URL decode on the file path"
-  [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
+  [format ast properties file content {:keys [date-formatter db filename-format] :as options}]
   (try
-    (let [page (get-page-name file ast uri-encoded? filename-format)
+    (let [page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (assoc options :page-name page-name)
           blocks (->> (gp-block/extract-blocks ast content false format options')
@@ -185,15 +184,16 @@
 
 (defn extract
   "Extracts pages, blocks and ast from given file"
-  [file content {:keys [user-config verbose] :or {verbose true} :as options}]
+  [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
+  (prn ::extract file-path)
   (if (string/blank? content)
     []
-    (let [format (gp-util/get-format file)
-          _ (when verbose (println "Parsing start: " file))
+    (let [format (gp-util/get-format file-path)
+          _ (when verbose (println "Parsing start: " file-path))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        ))]
-      (when verbose (println "Parsing finished: " file))
+                                                               ))]
+      (when verbose (println "Parsing finished: " file-path))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
@@ -210,7 +210,7 @@
                                      (fn [v]
                                        (string/replace (or v "") "\\" "")))
                              properties)))
-            [pages blocks] (extract-pages-and-blocks format ast properties file content options)]
+            [pages blocks] (extract-pages-and-blocks format ast properties file-path content options)]
         {:pages pages
          :blocks blocks
          :ast ast}))))

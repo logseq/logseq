@@ -694,9 +694,8 @@
           (- (.-size item)))))))
 ;;; ### path-normalize
 (def path-normalize
-  (if (util/electron?)
-    gp-util/path-normalize
-    (partial capacitor-fs/normalize-file-protocol-path nil)))
+
+  gp-util/path-normalize)
 
 
 ;;; ### APIs

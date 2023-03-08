@@ -1,25 +1,26 @@
 (ns frontend.fs.watcher-handler
   "Main ns that handles file watching events from electron's main process"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs2.path :as fs2-path]
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.mobile.util :as mobile-util]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.util.fs :as fs-util]
             [frontend.util :as util]
-            [clojure.set :as set]))
+            [frontend.util.fs :as fs-util]
+            [lambdaisland.glogi :as log]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [promesa.core :as p]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -50,12 +51,9 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
+  (prn ::wather payload)
   (when dir
-    (let [path (gp-util/path-normalize path)
-          path (if (mobile-util/native-platform?)
-                 (capacitor-fs/normalize-file-protocol-path nil path)
-                 path)
-          ;; Global directory events don't know their originating repo so we rely
+    (let [;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
           repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           {:keys [mtime]} stat
@@ -124,6 +122,7 @@
                         (map first)
                         (filter #(string/starts-with? % (config/get-repo-dir graph))))]
       (p/let [files (fs/readdir dir :path-only? true)
+              files (map #(fs2-path/relative-path dir %) files)       ;; FIXME: readdir returns full paths
               files (remove #(fs-util/ignored-path? dir %) files)]
         (let [deleted-files (set/difference (set db-files) (set files))]
           (when (seq deleted-files)

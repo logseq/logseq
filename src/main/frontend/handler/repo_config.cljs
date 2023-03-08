@@ -44,7 +44,7 @@
     (p/let [_ (fs/mkdir-if-not-exists dir)]
            (let [default-content config/config-default-content
                   path (str app-dir "/" config/config-file)]
-             (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
+             (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir "logseq/config.edn" default-content)]
                     (when-not file-exists?
                       (file-common-handler/reset-file! repo-url path default-content)
                       (set-repo-config-state! repo-url default-content)))))))
