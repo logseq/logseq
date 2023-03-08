@@ -34,29 +34,30 @@
 (defn- fetch-release-asset
   [{:keys [repo theme]} url-suffix {:keys [response-transform]
                                     :or {response-transform identity}}]
-  (p/catch
-   (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
-           api #(str "https://api.github.com/repos/" repo "/" %)
-           endpoint (api url-suffix)
-           ^js res (fetch endpoint)
-           _ (debug "[Release URL] " endpoint "[Response Status/Text]" (.-status res) "-")
-           res (response-transform res)
-           res (.json res)
-           res (bean/->clj res)
-           version (:tag_name res)
-           asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
+  (-> (p/let [repo     (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+              api      #(str "https://api.github.com/repos/" repo "/" %)
+              endpoint (api url-suffix)
+              ^js res  (fetch endpoint {:headers {:Authorization "token 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"}})
+              _        (debug "[Release URL] " endpoint "[Response Status/Text]" (.-status res) "-")
+              res      (response-transform res)
+              res      (.json res)
+              res      (bean/->clj res)
+              version  (:tag_name res)
+              asset    (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
 
-          [(if (and (nil? asset) theme)
-             (if-let [zipball (:zipball_url res)]
-               zipball
-               (api "zipball"))
-             asset)
-           version
-           (:body res)])
 
-   (fn [^js e]
-     (debug e)
-     (throw (js/Error. [:release-channel-issue (.-message e)])))))
+        [(if (and (nil? asset) theme)
+           (if-let [zipball (:zipball_url res)]
+             zipball
+             (api "zipball"))
+           asset)
+         version
+         (:body res)])
+
+      (p/catch
+       (fn [^js e]
+         (debug e)
+         (throw (js/Error. [:release-channel-issue (.-message e)]))))))
 
 (defn fetch-latest-release-asset
   "Fetches latest release, normally when user clicks to install or update a plugin"
