@@ -175,7 +175,8 @@
        (reset! graphs-txid
                {:user-uuid user-uuid :graph-uuid graph-uuid :txid txid
                 :work-dir (config/get-repo-dir (state/get-current-repo))})
-       (remove-graphs-txid-legacy))
+       (remove-graphs-txid-legacy)
+       (persist-var/-save graphs-txid))
 
      ;; just remove the legacy graphs-txid.edn if (some? @graphs-txid)
      (and (some? @graphs-txid-legacy)
