@@ -81,11 +81,6 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
-(defn get-query-time
-  [q]
-  (let [k [(state/get-current-repo) :custom q]]
-    (get-in @query-state [k :query-time])))
-
 (defn kv
   [key value]
   {:db/id -1
