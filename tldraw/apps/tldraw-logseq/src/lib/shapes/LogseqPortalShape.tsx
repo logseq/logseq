@@ -293,6 +293,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const [loaded, setLoaded] = React.useState(false)
 
     React.useEffect(() => {
+      if (!this.initialHeightCalculated) {
+        setTimeout(() => {
+          this.onResetBounds()
+          app.persist(true)
+        })
+      }
+    }, [this.initialHeightCalculated])
+
+    React.useEffect(() => {
       setTimeout(function () {
         setLoaded(true)
       })
