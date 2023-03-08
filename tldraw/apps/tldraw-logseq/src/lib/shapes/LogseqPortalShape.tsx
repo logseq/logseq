@@ -146,20 +146,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
       if (!collapsed) {
-        // this will also persist the state, so we can skip persist call
-        await delay()
         this.onResetBounds()
       }
-      this.persist?.()
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
-      console.log(
-        collapsed,
-        collapsed ? this.getHeaderHeight() : this.props.collapsedHeight,
-        this.getHeaderHeight(),
-        this.props.collapsedHeight
-      )
       this.update({
         isAutoResizing: !collapsed,
         collapsed: collapsed,
@@ -167,6 +158,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
     }
+    this.persist?.()
   }
 
   @computed get scaleLevel() {
