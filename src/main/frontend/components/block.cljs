@@ -511,6 +511,11 @@
          (:db/id page-entity)
          :page))
 
+      (and (gobj/get e "altKey") (whiteboard-handler/inside-portal? (.-target e)))
+      (whiteboard-handler/add-new-block-portal-shape!
+       page-name
+       (whiteboard-handler/closest-shape (.-target e)))
+
       whiteboard-page?
       (route-handler/redirect-to-whiteboard! page-name)
 
@@ -884,7 +889,7 @@
                      (:db/id block)
                      :block-ref)
 
-                    (whiteboard-handler/inside-portal? (.-target e))
+                    (and (gobj/get e "altKey") (whiteboard-handler/inside-portal? (.-target e)))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
                      (whiteboard-handler/closest-shape (.-target e)))
