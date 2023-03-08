@@ -959,7 +959,7 @@
      [:div.lsp-hook-ui-slot
       (merge opts {:id            id
                    :ref           *el-ref
-                   :on-mouse-down (fn [e] (util/stop e))})])))
+                   :on-mouse-down (fn [e] (util/stop-propagation e))})])))
 
 (rum/defc hook-block-slot < rum/static
   [type block]
