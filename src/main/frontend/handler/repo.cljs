@@ -45,27 +45,27 @@
           contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
     (when-not contents-file-exist?
       (let [format (state/get-preferred-format)
-            path (str pages-dir "/contents."
-                      (config/get-file-extension format))
-            file-path (str "/" path)
+            ;;path (str pages-dir "/contents."
+            ;;          (config/get-file-extension format))
+            file-rpath (str "pages/" "contents." (config/get-file-extension format))
             default-content (case (name format)
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
         (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
-                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+                file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
-            (file-common-handler/reset-file! repo-url path default-content)))))))
+            (file-common-handler/reset-file! repo-url file-rpath default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         path (str config/app-name "/" config/custom-css-file)
-        file-path (str "/" path)
+        file-rpath path
         default-content ""]
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
         (file-common-handler/reset-file! repo-url path default-content)))))
 
@@ -133,8 +133,10 @@
 (defonce *file-tx (atom nil))
 
 (defn- parse-and-load-file!
+  "Accept: .md, .org, .edn, .css"
   [repo-url file {:keys [new-graph? verbose skip-db-transact? extracted-block-ids]
                   :or {skip-db-transact? true}}]
+  ;; (prn ::parse-and-load-file file)
   (try
     (reset! *file-tx
             (file-handler/alter-file repo-url
@@ -257,21 +259,52 @@
                    :or {re-render? true}}]
   (parse-files-and-create-default-files! repo-url files delete-files delete-blocks re-render? re-render-opts opts))
 
-(defn load-repo-to-db!
-  [repo-url {:keys [diffs nfs-files refresh? new-graph? empty-graph?]}]
+
+
+(defn load-new-repo-to-db!
+  "load graph files to db"
+  [repo-url {:keys [file-objs new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
+  (prn ::load---- file-objs repo-url)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
+  (let [repo-dir (config/get-local-dir repo-url)
+        _ (prn ::repo-dir repo-dir)
+        config (or (when-let [content (some-> (first (filter #(= "logseq/config.edn" (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
+        _ (prn ::repo-config config)
+        ;; NOTE: Use config while parsing. Make sure it's the current journal title format
+        ;; config should be loaded to state first
+        _ (state/set-config! repo-url config)
+        ;; remove :hidden files from file-objs, :hidden
+        file-objs (common-handler/remove-hidden-files file-objs config :file/path)]
+    (when (seq file-objs)
+      (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
+                                                       :empty-graph? empty-graph?}))))
+
+
+
+(defn load-repo-to-db!
+  [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
+  (spec/validate :repos/url repo-url)
+  (route-handler/redirect-to-home!)
+  (prn ::load---- file-objs)
+  (state/set-parsing-state! {:graph-loading? true})
+  (let [repo-dir (config/get-local-dir repo-url)
+        _ (prn ::repo-dir repo-dir)
+        config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) file-objs))
+                                              :file/content)]
+                     (repo-config-handler/read-repo-config content))
+                   (state/get-config repo-url))
+        _ (prn ::repo-config config)
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
-        nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
+        nfs-files (common-handler/remove-hidden-files file-objs config #(relate-path-fn % :file/path))
         diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
         load-contents (fn [files option]
                         (file-handler/load-files-contents!

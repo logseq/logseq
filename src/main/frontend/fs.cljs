@@ -13,6 +13,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.db :as db]
+            [frontend.fs2.path :as fs2-path]
             [clojure.string :as string]
             [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]
@@ -117,16 +118,16 @@
   (let [new-path (gp-util/path-normalize new-path)]
     (cond
                                         ; See https://github.com/isomorphic-git/lightning-fs/issues/41
-     (= old-path new-path)
-     (p/resolved nil)
+      (= old-path new-path)
+      (p/resolved nil)
 
-     :else
-     (let [[old-path new-path]
-           (map #(if (or (util/electron?) (mobile-util/native-platform?))
-                   %
-                   (str (config/get-repo-dir repo) "/" %))
-             [old-path new-path])]
-       (protocol/rename! (get-fs old-path) repo old-path new-path)))))
+      :else
+      (let [[old-path new-path]
+            (map #(if (or (util/electron?) (mobile-util/native-platform?))
+                    %
+                    (str (config/get-repo-dir repo) "/" %))
+                 [old-path new-path])]
+        (protocol/rename! (get-fs old-path) repo old-path new-path)))))
 
 (defn copy!
   [repo old-path new-path]
@@ -164,19 +165,36 @@
     (p/let [result (protocol/open-dir record dir ok-handler)]
       (if (or (util/electron?)
               (mobile-util/native-platform?))
-        (let [[dir & paths] (bean/->clj result)]
-          [(:path dir) paths])
+        (let [[dir & paths] result
+              _ (prn ::open-dir result)
+              dir (:path dir)
+              _ (prn ::open-dir dir)
+              files (mapv (fn [entry]
+                            (assoc entry :path (fs2-path/relative-path dir (:path entry))))
+                          paths)]
+          (prn :got files)
+          {:path dir :files files})
         result))))
 
-(defn get-files
+(defn list-files
+  "List all files in the directory, recursively.
+   {:path :files []}"
   [path-or-handle ok-handler]
-  (let [record (get-record)
-        electron? (util/electron?)
-        mobile? (mobile-util/native-platform?)]
-    (p/let [result (protocol/get-files record path-or-handle ok-handler)]
-      (if (or electron? mobile?)
-        (let [result (bean/->clj result)]
-          (if electron? (rest result) result))
+  (let [record (get-record)]
+    (when ok-handler
+      (js/console.warn "ok-handler not nil"))
+    (p/let [result (protocol/list-files record path-or-handle ok-handler)]
+      (prn :t result)
+      (if (or (util/electron?)
+              (mobile-util/native-platform?))
+        (let [[dir & paths] result
+              dir (:path dir)
+              files (mapv (fn [entry]
+                            (prn ::xx entry)
+                            (assoc entry :path (fs2-path/relative-path dir (:path entry))))
+                          paths)]
+          (prn :got files)
+          {:path dir :files files})
         result))))
 
 (defn watch-dir!
@@ -202,17 +220,13 @@
   ([repo dir path]
    (create-if-not-exists repo dir path ""))
   ([repo dir path initial-content]
-   (let [path (if (util/absolute-path? path) path
-                  (if (util/starts-with? path "/")
-                    path
-                    (str "/" path)))]
-     (->
-      (p/let [_stat (stat dir path)]
-        true)
-      (p/catch
-       (fn [_error]
-         (p/let [_ (write-file! repo dir path initial-content nil)]
-           false)))))))
+   (let []
+     (-> (p/let [_stat (stat dir path)]
+           true)
+         (p/catch
+          (fn [_error]
+            (p/let [_ (write-file! repo dir path initial-content nil)]
+              false)))))))
 
 (defn file-exists?
   [dir path]

@@ -195,8 +195,8 @@
                          (nfs-saved-handler repo path file)))
                      (do
                        (notification/show! (str "The file " path " already exists, please append the content if you need it.\n Unsaved content: \n" content)
-                                          :warning
-                                          false)
+                                           :warning
+                                           false)
                        (state/pub-event! [:file/alter repo path text]))))
                  (println "Error: directory handle not exists: " handle-path)))
              (p/catch (fn [error]
@@ -227,7 +227,7 @@
   (open-dir [_this _dir ok-handler]
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
-  (get-files [_this path-or-handle ok-handler]
+  (list-files [_this path-or-handle ok-handler]
     (utils/getFiles path-or-handle true ok-handler))
 
   (watch-dir! [_this _dir _options]
