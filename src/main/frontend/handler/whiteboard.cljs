@@ -119,7 +119,7 @@
                            (map #(shape->block % page-name))
                            (map with-timestamps))
      :delete-blocks deleted-shapes-tx
-     :metadata {:whiteboard/transact? true
+     :metadata {:whiteboard/transact? (not replace?)
                 :replace? replace?
                 :data {:page-name page-name
                        :deleted-shapes deleted-shapes
