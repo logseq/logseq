@@ -36,6 +36,14 @@
     (apply js-invoke (aget js/window.logseq "api") type args)
     (catch :default e (js/console.error e))))
 
+(defn markdown-to-html
+  [s]
+  (try
+    (if (string? s)
+      (js/window.marked s) s)
+    (catch js/Error e
+      (js/console.error e) s)))
+
 ;; state handlers
 (defonce central-endpoint "https://raw.githubusercontent.com/logseq/marketplace/master/")
 (defonce plugins-url (str central-endpoint "plugins.json"))
