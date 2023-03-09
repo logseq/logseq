@@ -9,6 +9,7 @@
             [frontend.commands :as commands]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
+            [frontend.handler.config :as handler-config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -138,10 +139,17 @@
        :me                      (state/get-me)}))))
 
 (def ^:export get_current_graph_configs
-  (fn []
+  (fn [& keys]
     (some-> (state/get-config)
-            (normalize-keyword-for-json)
+            (#(if (seq keys) (get-in % (map keyword keys)) %))
             (bean/->js))))
+
+(def ^:export set_current_graph_configs
+  (fn [^js configs]
+    (when-let [configs (bean/->clj configs)]
+      (when (map? configs)
+        (doseq [[k v] configs]
+          (handler-config/set-config! k v))))))
 
 (def ^:export get_current_graph_favorites
   (fn []
