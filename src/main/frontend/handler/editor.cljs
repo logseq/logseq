@@ -3037,12 +3037,8 @@
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
         (save-current-block!)
-        (if (= selected-start selected-end)
-          (copy-current-block-ref "ref")
-          (js/document.execCommand "copy")))
-
-      :else
-      (js/document.execCommand "copy"))))
+        (when (= selected-start selected-end)
+          (copy-current-block-ref "ref"))))))
 
 (defn shortcut-copy-text
   "shortcut copy action:

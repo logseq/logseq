@@ -844,8 +844,10 @@
        (when (= :completed (:status loader-state))
          (p/catch
           (when-not (:error hls-state)
-            (pdf-assets/persist-hls-data$
-             pdf-current (:latest-hls hls-state) (:extra hls-state)))
+            (p/do!
+              (p/delay 100)
+              (pdf-assets/persist-hls-data$
+                pdf-current (:latest-hls hls-state) (:extra hls-state))))
 
           ;; write hls file error
           (fn [e]

@@ -242,14 +242,6 @@ export function randomBoolean(): boolean {
   return Math.random() < 0.5;
 }
 
-export function systemModifier(shortcut: string): string {
-  if (IsMac) {
-    return shortcut.replace('Control', 'Meta')
-  } else {
-    return shortcut
-  }
-}
-
 export async function captureConsoleWithPrefix(page: Page, prefix: string, timeout: number = 3000): Promise<string> {
   return new Promise((resolve, reject) => {
     let console_handler = (msg: ConsoleMessage) => {
