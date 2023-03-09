@@ -116,7 +116,6 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-  (prn base segments)
   (if (is-file-url base)
     (apply url-join base segments)
     (apply path-join-internal base segments)))
@@ -148,14 +147,17 @@
 
 (defn trim-dir-prefix
   "Trim dir prefix from path"
-  [base sub]
-  (let [base (path-normalize base)
-        path (path-normalize sub)]
-    (if (string/starts-with? path base)
-      (string/replace (subs path (count base)) #"^/+", "")
+  [base-path sub-path]
+  (let [base-path (path-normalize base-path)
+        sub-path (path-normalize sub-path)
+        is-url? (is-file-url base-path)]
+    (if (string/starts-with? sub-path base-path)
+      (if is-url?
+        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+        (string/replace (subs sub-path (count base-path)) #"^/+", ""))
       (do
-        (js/console.error "unhandled trim-base" base path)
-        path))))
+        (js/console.error "unhandled trim-base" base-path sub-path)
+        sub-path))))
 
 
 (defn relative-path
@@ -163,19 +165,21 @@
    Works for both path and URL."
   [base-path sub-path]
   (let [base-path (path-normalize base-path)
-        is-url (is-file-url base-path)
-        sub-path (path-normalize sub-path)]
+        sub-path (path-normalize sub-path)
+        is-url? (is-file-url base-path)]
     (if (string/starts-with? sub-path base-path)
-      (string/replace (subs sub-path (count base-path)) #"^/+", "")
+      (trim-dir-prefix base-path sub-path) ;; FIXME(andelf): speedup
        ;; append as many .. 
       (let [base-segs (string/split base-path #"/" -1)
             path-segs (string/split sub-path #"/" -1)
             common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
             base-segs (drop (count common-segs) base-segs)
-            path-segs (drop (count common-segs) path-segs)
-            base-prefix (repeat (max 0 (dec (count base-segs))) "../")]
+            remain-segs (drop (count common-segs) path-segs)
+            base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
         #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
-        (str (concat base-prefix (string/join "/" path-segs)))))))
+        (if is-url?
+          (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
+          (str base-prefix (string/join "/" remain-segs)))))))
 
 
 (defn decoded-relative-uri
@@ -192,5 +196,5 @@
 (defn parent
   [path]
   ;; ugly but works
-  (path-normalize-internal (str path "/..")))
+  (path-normalize (str path "/..")))
 
