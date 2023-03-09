@@ -31,12 +31,12 @@
         (subvec vec idx)))
 
 (defn- vec-replace-item
-  [vec idx item]
+  [v idx item]
   (into (if (and (coll? item)
                  (not (operators-set (first item))))
-          (concat (subvec vec 0 idx) item)
-          (conj (subvec vec 0 idx) item))
-        (subvec vec (inc idx))))
+          (vec (concat (subvec v 0 idx) item))
+          (conj (subvec v 0 idx) item))
+        (subvec v (inc idx))))
 
 (defn add-element
   [q loc x]
@@ -141,7 +141,7 @@
 
         ;; property key value
         (and (vector? f) (= 3 (count f)) (= :property (keyword (first f))))
-        (let [l (if (page-ref/page-ref? (last f))
+        (let [l (if (page-ref/page-ref? (str (last f)))
                   (symbol (last f))
                   (last f))]
           (into [(symbol :property)] [(second f) l]))
@@ -180,21 +180,3 @@
 
        :else f))
    dsl-form))
-
-(comment
-  (def q [])
-
-  (-> (add-element q [0] :and)             ; [:and]
-      (add-element [1] [:page-ref "foo"])  ; [:and [:page-ref "foo"]]
-      (add-element [2] [:page-ref "bar"])  ; [:and [:page-ref "foo"] [:page-ref "bar"]]
-      (wrap-operator [1] :or)
-      (unwrap-operator [1])
-      )
-
-  (->dsl [:and [:page-ref "foo"] [:page-ref "bar"]])
-  ;; (and [[foo]] [[bar]])
-
-  (->dsl [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]])
-  ;; (and [[foo]] (or [[bar]] (:property :key :value)))
-
-  )
