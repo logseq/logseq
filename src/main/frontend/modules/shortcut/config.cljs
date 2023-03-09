@@ -10,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.ai :as ai-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.export :as export-handler]
@@ -281,6 +282,9 @@
    :go/electron-jump-to-the-previous {:binding ["shift+enter" "mod+shift+g"]
                                       :inactive (not (util/electron?))
                                       :fn      #(search-handler/loop-find-in-page! true)}
+
+   :go/ai-dialog                   {:binding "mod+j"
+                                    :fn      ai-handler/open-dialog!}
 
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
@@ -591,6 +595,7 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
+                          :go/ai-dialog
                           :go/electron-find-in-page
                           :go/electron-jump-to-the-next
                           :go/electron-jump-to-the-previous
@@ -660,6 +665,7 @@
     :editor/select-parent
     :go/search
     :go/search-in-page
+    :go/ai-dialog
     :go/electron-find-in-page
     :go/electron-jump-to-the-next
     :go/electron-jump-to-the-previous

@@ -274,6 +274,7 @@
 
      :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
+     :ui/ai-dialog                          nil
      :graph/importing                       nil
      :graph/importing-state                 {}
 
