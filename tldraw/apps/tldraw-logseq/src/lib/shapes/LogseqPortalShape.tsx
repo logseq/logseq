@@ -276,6 +276,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
     const { Page, Block } = renderers
+    const [loaded, setLoaded] = React.useState(false)
 
     React.useEffect(() => {
       if (this.props.isAutoResizing) {
@@ -285,12 +286,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           this.update({
             size: [this.props.size[0], newHeight],
           })
-          app.persist(true)
+
+          if (loaded) app.persist(true)
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
-
-    const [loaded, setLoaded] = React.useState(false)
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
