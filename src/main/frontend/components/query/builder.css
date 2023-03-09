@@ -2,7 +2,7 @@
     @apply grid auto-rows-max gap-2;
 
     &-filter {
-        @apply flex flex-row gap-2 items-center;
+        @apply flex flex-row items-center;
     }
 
     .cp__select-main {

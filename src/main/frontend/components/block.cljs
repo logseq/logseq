@@ -3112,8 +3112,7 @@
                      (dissoc result nil)
                      result))
                  transformed-query-result)
-        _ (when (and query-result-atom
-                     (nil? @query-result-atom))
+        _ (when query-result-atom
             (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -3174,6 +3173,10 @@
              [:ul
               (for [item result]
                 [:li (str item)])]))
+
+         (or (string/blank? query)
+             (= query "(and)"))
+         nil
 
          :else
          [:div.text-sm.mt-2.opacity-90 "No matched result"])])))
