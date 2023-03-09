@@ -474,14 +474,13 @@
             (str route-page-name "-refs"))])
 
        (when-not (or block? whiteboard?)
-         [:div
-          (when (not journal?)
-            (hierarchy/structures route-page-name))
+        (when (not journal?)
+          (hierarchy/structures route-page-name))
 
-          ;; TODO: or we can lazy load them
-          (when-not sidebar?
-            [:div {:key "page-unlinked-references"}
-             (reference/unlinked-references route-page-name)])])])))
+        ;; TODO: or we can lazy load them
+        (when-not sidebar?
+          [:div {:key "page-unlinked-references"}
+           (reference/unlinked-references route-page-name)]))])))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
