@@ -775,8 +775,8 @@
         (bean/->js blocks)))))
 
 (def ^:export get_page_blocks_tree
-  (fn [page-name]
-    (when-let [_ (db-model/get-page page-name)]
+  (fn [id-or-page-name]
+    (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
       (let [blocks (db-model/get-page-blocks-no-cache page-name)
             blocks (outliner-tree/blocks->vec-tree blocks page-name)
             blocks (normalize-keyword-for-json blocks)]
