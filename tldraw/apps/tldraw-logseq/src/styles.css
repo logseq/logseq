@@ -178,7 +178,6 @@ html[data-theme='light'] {
 }
 
 .tl-context-bar {
-  transition: transform 0.3s ease-out;
   gap: 8px;
   padding: 6px;
 
