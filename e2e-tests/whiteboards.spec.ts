@@ -88,24 +88,45 @@ test('draw a rectangle', async ({ page }) => {
   ).not.toHaveCount(0)
 })
 
-test('undo the action', async ({ page }) => {
+test('undo the rectangle action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
   await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
 })
 
-test('redo the action', async ({ page }) => {
-  await page.keyboard.press(modKey + '+Shift+z')
+test('create a block', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
 
-  await expect(
-    page.locator('.logseq-tldraw .tl-positioned-svg rect')
-  ).not.toHaveCount(0)
+  await page.keyboard.press('s')
+  await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
+  await page.waitForTimeout(100)
+
+  await page.keyboard.type('a')
+  await page.keyboard.press('Enter')
+
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(1)
 })
 
-test('undo the action again', async ({ page }) => {
+test('expand the block', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.click('.logseq-tldraw .tl-context-bar .tie-object-expanded ')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(1)
+})
+
+test('undo the expand action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
-  await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(0)
+})
+
+test('undo the block action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(0)
 })
 
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
@@ -174,14 +195,16 @@ test('cleanup the shapes', async ({ page }) => {
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.click('#tl-zoom-in')
+  await page.keyboard.press(`${modKey}++`)
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1500)
-  await page.click('#tl-zoom-out')
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
+  await page.keyboard.press(`${modKey}+-`)
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
