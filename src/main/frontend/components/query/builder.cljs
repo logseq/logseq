@@ -271,14 +271,20 @@
 
       (= (keyword f) :property)
       (str (name (second clause)) ": "
-           (if (and (vector? (last clause)) (= :page-ref (first (last clause))))
+           (cond
+             (and (vector? (last clause)) (= :page-ref (first (last clause))))
              (second (last clause))
+
+             (= 2 (count clause))
+             "*"
+
+             :else
              (last clause)))
 
       (= (keyword f) :between)
       (str "between: " (second (second clause)) " - " (second (last clause)))
 
-      (contains? #{:page :task :todo} (keyword f))
+      (contains? #{:page :task :todo :namespace} (keyword f))
       (str (name f) ": " (if (vector? (second clause))
                            (second (second clause))
                            (second clause)))
@@ -351,20 +357,25 @@
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  [:div.flex.flex-row.gap-1.flex-wrap.items-center.text-sm
-   (when-not (and (= loc [0])
-                  (= kind :and)
-                  (<= (count clauses) 1))
-     (clause-inner *tree loc
-                   (string/upper-case (name kind))
-                   :operator? true))
+  (let [parens? (and (= loc [0])
+                     (> (count clauses) 1))]
+    [:div.flex.flex-row.gap-1.flex-wrap.items-center.text-sm
+     (when parens? [:div.text-4xl.mr-1.font-thin "("])
+     (when-not (and (= loc [0])
+                    (= kind :and)
+                    (<= (count clauses) 1))
+       (clause-inner *tree loc
+                     (string/upper-case (name kind))
+                     :operator? true))
 
-   (map-indexed (fn [i item]
-                  (clause *tree *find (update loc (dec (count loc)) #(+ % i 1)) item))
-                clauses)
+     (map-indexed (fn [i item]
+                    (clause *tree *find (update loc (dec (count loc)) #(+ % i 1)) item))
+                  clauses)
 
-   (when (not= loc [0])
-     (add-filter *find *tree loc []))])
+     (when parens? [:div.text-4xl.ml-1.font-thin ")"])
+
+     (when (not= loc [0])
+       (add-filter *find *tree loc []))]))
 
 (rum/defc clause-tree < rum/reactive
   [*tree *find]
@@ -425,5 +436,7 @@
         *tree (::tree state)]
     [:div.cp__query-builder
      [:div.cp__query-builder-filter
-      (clause-tree *tree *find)
+      (when (and (seq @*tree)
+                 (not= @*tree [:and]))
+        (clause-tree *tree *find))
       (add-filter *find *tree [0] [])]]))

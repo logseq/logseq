@@ -3082,7 +3082,7 @@
                                   {:enabled           true
                                    :boundariesElement "viewport"}}}
     :arrow true}
-   [:a.fade-link.ml-1.flex
+   [:a.fade-link.flex
     {:on-mouse-down on-mouse-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
