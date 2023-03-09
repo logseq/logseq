@@ -71,6 +71,7 @@
        {:item-render       (or item-cp render-item)
         :class             "cp__select-results"
         :on-chosen         (fn [x]
+                             (reset! input "")
                              (when close-modal? (state/close-modal!))
                              (when on-chosen (on-chosen x)))
         :empty-placeholder (empty-placeholder t)})]]))
