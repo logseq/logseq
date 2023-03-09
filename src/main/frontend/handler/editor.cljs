@@ -2030,7 +2030,8 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [page-id (:db/id (:block/page target-block))
+  (let [page-id (or (:db/id (:block/page target-block))
+                    (:db/id target-block))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-left page-id blocks)
