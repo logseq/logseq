@@ -15,8 +15,9 @@
 
 
 
-(defn file-name
-  "File name of a path or URL"
+(defn filename
+  "File name of a path or URL.
+   Returns nil when it's a path."
   [path]
   (let [fname (if (string/ends-with? path "/")
                 nil
@@ -29,11 +30,11 @@
 (defn split-ext
   "Split file name into stem and extension, for both path and URL"
   [path]
-  (let [fname (file-name path)
+  (let [fname (filename path)
         pos (string/last-index-of fname ".")]
     (if-not (or (nil? pos) (zero? pos))
       [(subs fname 0 pos)
-       (subs fname (+ pos 1))]
+       (string/lower-case (subs fname (+ pos 1)))]
       [fname ""])))
 
 (defn file-stem
@@ -42,12 +43,12 @@
   (first (split-ext path)))
 
 (defn file-ext
-  "File extension"
+  "File extension, lowercased"
   [path]
   (second (split-ext path)))
 
-(defn safe-file-name?
-  "Safe path on all platforms"
+(defn safe-filename?
+  "Safe filename on all platforms"
   [fname]
   (and (not (string/blank? fname))
        (< (count fname) 255)
@@ -57,9 +58,6 @@
                 (re-find #"(?i)^(COM[0-9]|CON|LPT[0-9]|NUL|PRN|AUX|com[0-9]|con|lpt[0-9]|nul|prn|aux)\..+" fname)
                 (re-find #"[\u0000-\u001f\u0080-\u009f]" fname)))))
 
-(comment defn inspect [x]
-         (prn ::inspect x)
-         x)
 
 (defn path-join
   "Joins the given path segments into a single path, handling relative paths,
