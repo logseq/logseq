@@ -838,9 +838,8 @@
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
               file-name (date/journal-title->default title)
-              path (str (config/get-journals-directory) "/" file-name "."
+              file-path (str (config/get-journals-directory) "/" file-name "."
                         (config/get-file-extension format))
-              file-path (str "/" path)
               repo-dir (config/get-repo-dir repo)
               template (state/get-default-journal-template)]
           (p/let [file-exists? (fs/file-exists? repo-dir file-path)
