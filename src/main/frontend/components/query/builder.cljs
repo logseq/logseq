@@ -314,7 +314,16 @@
                                       (let [loc' (if operator? (vec (butlast loc)) loc)]
                                         (query-builder/remove-element q loc'))))
                        (toggle-fn))}
-       "Delete (X)"]
+       "Delete"]
+
+      (when operator?
+        [:a {:title "Unwrap this operator"
+             :on-click (fn []
+                         (swap! *tree (fn [q]
+                                        (let [loc' (vec (butlast loc))]
+                                          (query-builder/unwrap-operator q loc'))))
+                         (toggle-fn))}
+         "Unwrap"])
 
       [:div.font-medium.text-sm "Wrap this filter with: "]
       [:div.flex.flex-row.gap-2

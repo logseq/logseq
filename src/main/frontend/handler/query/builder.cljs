@@ -32,7 +32,10 @@
 
 (defn- vec-replace-item
   [vec idx item]
-  (into (conj (subvec vec 0 idx) item)
+  (into (if (and (coll? item)
+                 (not (operators-set (first item))))
+          (concat (subvec vec 0 idx) item)
+          (conj (subvec vec 0 idx) item))
         (subvec vec (inc idx))))
 
 (defn add-element
@@ -94,16 +97,19 @@
       (let [x' [operator x]]
         (replace-element q loc x')))))
 
-#_(defn unwrap-operator
+(defn unwrap-operator
   [q loc]
   {:pre [(seq q) (seq loc)]}
-  (if (and (= loc [0]) (operators-set (first q)))
-    (second q)
-    (when-let [x (get-in q loc)]
-      (when (and (operators-set (first x))
-                 (= 1 (count (rest x))))
-        (let [x' (second x)]
-          (replace-element q loc x'))))))
+  (let [result (if (and (= loc [0]) (operators-set (first q)))
+                 (second q)
+                 (when-let [x (get-in q loc)]
+                   (when (and (operators-set (first x))
+                              (seq (rest x)))
+                     (let [x' (rest x)]
+                       (replace-element q loc x')))))]
+    (if (empty? result)
+      q
+      result)))
 
 (defn ->page-ref
   [x]
