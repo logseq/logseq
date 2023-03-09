@@ -53,7 +53,8 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.fs2.path :as fs2-path]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1353,21 +1354,25 @@
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
           _ (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))]
+    (prn ::ensure-assets-dir repo-dir  assets-dir)
     [repo-dir assets-dir]))
 
 (defn get-asset-path
   "Get asset path from filename, ensure assets dir exists"
   [filename]
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
-    (util/safe-path-join repo-dir assets-dir filename)))
+    (fs2-path/path-join repo-dir assets-dir filename)))
 
 (defn save-assets!
+  "Save incoming(pasted) assets to assets directory.
+
+   Returns: [filename file-obj file-fpath matched-alias]"
   ([_ repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
-                   (fn [index file-base]
+                   (fn [index file-stem]
                      ;; TODO: maybe there're other chars we need to handle?
-                     (let [file-base (-> file-base
+                     (let [file-base (-> file-stem
                                          (string/replace " " "_")
                                          (string/replace "%" "_")
                                          (string/replace "/" "_"))
@@ -1378,24 +1383,23 @@
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
       (let [file-name (util/node-path.basename (.-name file))
-            [file-base ext-full ext-base] (if file-name
-                              (let [ext-base (util/node-path.extname file-name)
-                                    ext-full (if-not (config/extname-of-supported? ext-base)
-                                               (util/full-path-extname file-name) ext-base)]
-                                [(subs file-name 0 (- (count file-name)
-                                                      (count ext-full))) ext-full ext-base])
-                              ["" "" ""])
-            filename  (str (gen-filename index file-base) ext-full)
+            [file-stem ext-full ext-base] (if file-name
+                                            (let [ext-base (util/node-path.extname file-name)
+                                                  ext-full (if-not (config/extname-of-supported? ext-base)
+                                                             (util/full-path-extname file-name) ext-base)]
+                                              [(subs file-name 0 (- (count file-name)
+                                                                    (count ext-full))) ext-full ext-base])
+                                            ["" "" ""])
+            filename  (str (gen-filename index file-stem) ext-full)
             filename  (str path "/" filename)
             matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
-              filename (cond-> filename
-                         (not (nil? matched-alias))
-                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
-              dir (or (:dir matched-alias) dir)]
+            filename (cond-> filename
+                       (not (nil? matched-alias))
+                       (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+            dir (or (:dir matched-alias) dir)]
 
         (if (util/electron?)
-          (let [from (.-path file)
-                from (if (string/blank? from) nil from)]
+          (let [from (not-empty (.-path file))]
 
             (js/console.debug "Debug: Copy Asset #" dir filename from)
 
@@ -1414,6 +1418,7 @@
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
+  "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets" or compatible for "../assets"
   (if config/publishing? path
     (let [repo      (state/get-current-repo)
@@ -1421,6 +1426,7 @@
           path      (string/replace path "../" "/")
           full-path (util/node-path.join repo-dir path)
           data-url? (string/starts-with? path "data:")]
+      (prn ::make-asset-url full-path)
       (cond
         data-url?
         path ;; just return the original
@@ -1466,25 +1472,32 @@
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
+  "Relative path to current file path.
+   
+   Requires editing state"
   [file-path]
-  (if-let [current-file (or (db-model/get-block-file-path (state/get-edit-block))
+  (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
                             ;; fix dummy file path of page
-                            (and (util/electron?)
-                                 (util/node-path.join
-                                  (config/get-repo-dir (state/get-current-repo))
-                                  (config/get-pages-directory) "_.md")))]
-    (util/get-relative-path current-file file-path)
+                               (and (util/electron?)
+                                    (util/node-path.join
+                                     (config/get-repo-dir (state/get-current-repo))
+                                     (config/get-pages-directory) "_.md")))]
+    (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+            current-file-fpath (fs2-path/path-join repo-dir current-file-rpath)]
+        (util/get-relative-path current-file-fpath file-path))
     file-path))
 
 (defn upload-asset
+  "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
     (when (config/local-db? repo)
       (-> (save-assets! block repo (js->clj files))
+          ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]
-             (when-let [[asset-file-name file full-file-path matched-alias] (and (seq res) (first res))]
+             (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
                (let [image? (util/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
@@ -1493,8 +1506,8 @@
                                          (str
                                           (if image? "../assets/" "")
                                           "@" (:name matched-alias) "/" asset-file-name)
-                                         (resolve-relative-path (or full-file-path asset-file-name)))
-                                       (if file (.-name file) (if image? "image" "asset"))
+                                         (resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                       (if file-obj (.-name file-obj) (if image? "image" "asset"))
                                        image?)
                   format
                   {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))

@@ -47,7 +47,6 @@
 (defn- write-file-impl!
   [this repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (prn ::write-file-impl repo dir rpath)
-  (js/console.trace)
   (let [file-path (fs2-path/path-join dir rpath)]
     (if skip-compare?
       (p/catch
