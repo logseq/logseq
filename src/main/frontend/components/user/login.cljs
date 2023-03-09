@@ -5,7 +5,8 @@
             [frontend.handler.user :as user]
             [cljs-bean.core :as bean]
             [frontend.ui :as ui]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.config :as config]))
 
 (def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
 (def LSAuthenticator
@@ -15,11 +16,11 @@
   []
   (.setLanguage js/LSAmplify.I18n (:preferred-language @state/state))
   (setupAuthConfigure!
-    #js {:region              "us-east-2",
-         :userPoolId          "us-east-2_kAqZcxIeM",
-         :userPoolWebClientId "1qi1uijg8b6ra70nejvbptis0q"
-         :identityPoolId      "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5"
-         :oauthDomain         "logseq-test2.auth.us-east-2.amazoncognito.com"}))
+    #js {:region              config/REGION,
+         :userPoolId          config/USER-POOL-ID,
+         :userPoolWebClientId config/COGNITO-CLIENT-ID,
+         :identityPoolId      config/IDENTITY-POOL-ID,
+         :oauthDomain         config/OAUTH-DOMAIN}))
 
 (rum/defc user-pane
   [sign-out! user]

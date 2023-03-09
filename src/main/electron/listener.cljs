@@ -147,10 +147,6 @@
                          (ui/focus-element "search-in-page-input")
                          true)))
 
-  (js/window.apis.on "loginCallback"
-                     (fn [code]
-                       (user/login-callback code)))
-
   (js/window.apis.on "quickCapture"
                      (fn [args]
                        (state/pub-event! [:editor/quick-capture args])))

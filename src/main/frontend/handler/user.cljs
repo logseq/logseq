@@ -107,14 +107,20 @@
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)))
 
+(defn- <refresh-tokens
+  "return refreshed id-token, access-token"
+  [refresh-token]
+  (http/post (str "https://" config/OAUTH-DOMAIN "/oauth2/token")
+             {:form-params {:grant_type "refresh_token"
+                            :client_id config/COGNITO-CLIENT-ID
+                            :refresh_token refresh-token}}))
 
 (defn <refresh-id-token&access-token
   "Refresh id-token and access-token"
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
-                               {:with-credentials? false}))]
+      (let [resp (<! (<refresh-tokens refresh-token))]
         (cond
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
@@ -132,8 +138,8 @@
           (clear-tokens true)
 
           :else                         ; ok
-        (when (and (:id_token (:body resp)) (:access_token (:body resp)))
-          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
+          (when (and (:id_token (:body resp)) (:access_token (:body resp)))
+            (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
   "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
@@ -146,25 +152,13 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn ^:export login-callback [code]
-  (when-let [apply-tokens! (and code
-                                (fn [$]
-                                  (set-tokens!
-                                    (or (:id_token $) (:jwtToken (:idToken $)))
-                                    (or (:access_token $) (:jwtToken (:accessToken $)))
-                                    (or (:refresh_token $) (:token (:refreshToken $))))
-                                  (state/pub-event! [:user/fetch-info-and-graphs])))]
-    (let [set-loading! #(state/set-state! [:ui/loading? :login] %)]
-      (set-loading! true)
-      (if (string? code)
-        (go
-          (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
-                                   {:with-credentials? false}))]
-            (if (= 200 (:status resp))
-              (-> resp :body (apply-tokens!))
-              (debug/pprint "login-callback" resp))
-            (set-loading! false)))
-        (apply-tokens! code)))))
+(defn login-callback
+  [session]
+  (set-tokens!
+   (:jwtToken (:idToken session))
+   (:jwtToken (:accessToken session))
+   (:token (:refreshToken session)))
+  (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
   [username password client-id client-secret]
