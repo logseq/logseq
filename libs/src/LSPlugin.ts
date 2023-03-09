@@ -317,7 +317,10 @@ export interface IPluginSearchServiceHooks {
 
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: {
+    added: Array<SearchBlockItem>,
+    removed: Array<EntityID>
+  }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
@@ -481,6 +484,7 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
+  onTodayJournalCreated: IUserHook<{ title: string }>
 
   /**
    * provide ui slot to specific block with UUID
