@@ -3215,7 +3215,7 @@
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         page-list? (and (seq result)
-                        (:block/name (first result)))
+                        (some? (:block/name (first result))))
         full-text-search? (and dsl-query?
                                (util/electron?)
                                (symbol? (safe-read-string query false)))]

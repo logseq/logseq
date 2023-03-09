@@ -7,8 +7,19 @@
 
 (def operators [:and :or :not])
 (def operators-set (set operators))
-(def page-filters [:all-tags :namespace :tags :property :sample])
-(def block-filters [:page-ref :property :task :priority :page :full-text-search :between :sample])
+(def page-filters ["all page tags"
+                   "namespace"
+                   "tags"
+                   "property"
+                   "sample"])
+(def block-filters ["page reference"
+                    "property"
+                    "task"
+                    "priority"
+                    "page"
+                    "full text search"
+                    "between"
+                    "sample"])
 
 (defn- vec-dissoc-item
   [vec idx]

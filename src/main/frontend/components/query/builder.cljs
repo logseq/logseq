@@ -201,14 +201,14 @@
                 (fn [value]
                   (append-tree! *tree opts loc [:page value]))))
 
-            "page-ref"
+            "page reference"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
               (select pages
                 (fn [value]
                   (append-tree! *tree opts loc [:page-ref value]))
                 {}))
 
-            "full-text-search"
+            "full text search"
             (search (fn [v] (append-tree! *tree opts loc v))
                     (:toggle-fn opts))
 
@@ -230,7 +230,7 @@
           (map name filters-and-ops)
           (fn [value]
             (cond
-              (= value "all-tags")
+              (= value "all page tags")
               (append-tree! *tree opts loc [:all-page-tags])
 
               (operator? value)

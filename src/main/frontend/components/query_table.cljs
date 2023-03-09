@@ -100,6 +100,7 @@
 (defn- get-columns [current-block result {:keys [page?]}]
   (let [query-properties (some-> (get-in current-block [:block/properties :query-properties] "")
                                  (common-handler/safe-read-string "Parsing query properties failed"))
+        query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
                   (get-keys result page?))
