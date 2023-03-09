@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLDocumentModel } from '@tldraw/core'
+import type { TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -15,6 +15,7 @@ import { ContextMenu } from './components/ContextMenu'
 import { QuickLinks } from './components/QuickLinks'
 import { useDrop } from './hooks/useDrop'
 import { usePaste } from './hooks/usePaste'
+import { useCopy } from './hooks/useCopy'
 import { useQuickAdd } from './hooks/useQuickAdd'
 import {
   BoxTool,
@@ -95,11 +96,12 @@ const AppInner = ({
 }: Omit<LogseqTldrawProps, 'renderers' | 'handlers'>) => {
   const onDrop = useDrop()
   const onPaste = usePaste()
+  const onCopy = useCopy()
   const onQuickAdd = useQuickAdd()
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
-       onPersist?.(app, info)
+      onPersist?.(app, info)
     },
     [model]
   )
@@ -110,6 +112,7 @@ const AppInner = ({
       Tools={tools}
       onDrop={onDrop}
       onPaste={onPaste}
+      onCopy={onCopy}
       onCanvasDBClick={onQuickAdd}
       onPersist={onPersistOnDiff}
       model={model}

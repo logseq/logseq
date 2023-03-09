@@ -83,7 +83,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
         {...events}
       >
         <div
-          className="rounded-xl w-full h-full relative shadow-xl"
+          className="rounded-xl w-full h-full relative shadow-xl tl-tweet-container"
           style={{
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',

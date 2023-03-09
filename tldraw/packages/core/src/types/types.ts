@@ -141,6 +141,11 @@ export type TLPasteEventInfo = {
   fromDrop?: boolean
 }
 
+export type TLCopyEventInfo = {
+  text: string
+  html: string
+}
+
 /* --------------------- Events --------------------- */
 
 export type TLSubscriptionEvent =
@@ -187,6 +192,10 @@ export type TLSubscriptionEvent =
   | {
       event: 'drop'
       info: { dataTransfer: DataTransfer; point: number[] }
+    }
+  | {
+      event: 'copy'
+      info: TLCopyEventInfo
     }
   | {
       event: 'paste'
