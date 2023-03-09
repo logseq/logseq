@@ -2142,11 +2142,12 @@
 (defn- block-content-on-mouse-down
   [e block block-id content edit-input-id]
   (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
-    (.stopPropagation e)
     (let [target (gobj/get e "target")
           button (gobj/get e "buttons")
           shift? (gobj/get e "shiftKey")
-          meta? (util/meta-key? e)]
+          meta? (util/meta-key? e)
+          forbidden-edit? (target-forbidden-edit? target)]
+      (when-not forbidden-edit? (.stopPropagation e))
       (if (and meta? (not (state/get-edit-input-id)))
         (do
           (util/stop e)
@@ -2154,7 +2155,7 @@
           (when block-id
             (state/set-selection-start-block! block-id)))
         (when (contains? #{1 0} button)
-          (when-not (target-forbidden-edit? target)
+          (when-not forbidden-edit?
             (cond
               (and shift? (state/get-selection-start-block-or-first))
               (do
