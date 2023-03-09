@@ -676,6 +676,29 @@
        :warning
        [:p (t :settings-page/clear-cache-warning)])]))
 
+(defn- set-openai-token!
+  [value]
+  (when-not (string/blank? value)
+    (state/set-state! :open-ai/token value)
+    (storage/set :open-ai-token value)))
+
+(rum/defc settings-ai < rum/reactive
+  [_current-repo]
+  [:div.panel-wrap
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for "OpenAI token"}
+     "OpenAI token"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md.sm:max-w-xs
+      [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+       {:default-value (or (:open-ai/token @state/state) "")
+        :on-blur       (fn [e]
+                         (set-openai-token! (util/evalue e)))
+        :on-key-press  (fn [e]
+                         (when (= "Enter" (util/ekey e))
+                           (set-openai-token! (util/evalue e))))}]]]]])
+
 (rum/defc sync-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -813,6 +836,7 @@
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
+               [:ai "ai" "AI" (ui/icon "wand")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
                                                                                              :style {:margin-left 2}})]
 
@@ -854,6 +878,9 @@
 
          :advanced
          (settings-advanced current-repo)
+
+         :ai
+         (settings-ai current-repo)
 
          :features
          (settings-features)
