@@ -41,7 +41,8 @@
   (let [ast  (map first ast)
         file (if uri-encoded? (js/decodeURI file-path) file-path)]
     ;; check backward compatibility?
-    (if (string/includes? file "pages/contents.")
+    ;; FIXME: use pre-config dir
+    (if (string/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
             property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
