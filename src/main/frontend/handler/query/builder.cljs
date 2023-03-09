@@ -87,8 +87,8 @@
 
 (defn wrap-operator
   [q loc operator]
-  {:pre [(seq q) (seq loc) (operators-set operator)]}
-  (if (= loc [0])
+  {:pre [(seq q) (operators-set operator)]}
+  (if (or (= loc [0]) (empty? loc))
     [operator q]
     (when-let [x (get-in q loc)]
       (let [x' [operator x]]
