@@ -23,6 +23,21 @@
   (let [{:keys [active?]} (:ui/ai-dialog @state/state)]
     (state/set-state! :ui/ai-dialog nil)))
 
+(defn- text->segments
+  [i text multiple?]
+  (let [content (string/trim text)
+        segments (string/split content #"(?:\r?\n){2,}")]
+    (if (= 1 (count segments))
+      (if multiple?
+        {:content (str "Choice " (inc i))
+         :children [{:content content}]}
+        {:content content})
+      (let [result (map (fn [s] {:content s}) segments)]
+        (if multiple?
+          {:content (str "Choice " (inc i))
+           :children result}
+          result)))))
+
 (defn ask!
   [q {:keys [parent-block] :as opts}]
   (-> (p/let [result (ai/ask default-service q opts)]
@@ -33,12 +48,15 @@
                           (let [page (str "Chat/" (date/date->file-name (t/now)))]
                             (page-handler/create! page {:redirect? false
                                                         :create-first-block? false})
-                            (:db/id (db/entity [:block/name (string/lower-case page)]))))]
+                            (:db/id (db/entity [:block/name (string/lower-case page)]))))
+              multiple-choices? (> (count result) 1)]
           (editor-handler/insert-block-tree-after-target
            parent-id
            false
            [{:content q
-             :children (map (fn [content] {:content content}) result)}]
+             :children (if multiple-choices?
+                         (map-indexed (fn [i text] (text->segments i text true)) result)
+                         (text->segments 0 (first result) false))}]
            (state/get-preferred-format)
            false)))
       (p/catch (fn [error]
