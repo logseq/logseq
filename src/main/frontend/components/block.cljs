@@ -202,7 +202,7 @@
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
                           ;; FIXME(andelf): possible bug here
-                          (p/let [exist? (fs/file-or-href-exists? "" asset-path)]
+                          (p/let [exist? (fs/asset-href-exists? asset-path)]
                             (reset! *exist? (boolean exist?))))
                         (assoc state ::asset-path asset-path ::asset-file? true))
                       state)))

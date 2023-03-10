@@ -360,17 +360,16 @@
                 (str "file://" dir)
                 dir)]
       (readdir dir)))
-  (unlink! [this repo path _opts]
-    (p/let [_ (prn ::unlink path)
-            repo-url (config/get-local-dir repo)
-            recycle-dir (util/safe-path-join repo-url config/app-name ".recycle") ;; logseq/.recycle
+  (unlink! [this repo fpath _opts]
+    (p/let [_ (prn ::unlink fpath)
+            repo-dir (config/get-local-dir repo)
+            recycle-dir (fs2-path/path-join repo-dir config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
-            file-name (-> (string/replace path repo-url "")
-                          (string/replace "/" "_")
-                          (string/replace "\\" "_"))
-            new-path (str recycle-dir "/" file-name)
+            file-name (-> (fs2-path/trim-dir-prefix repo-dir fpath)
+                          (string/replace "/" "_"))
+            new-path (fs2-path/path-join recycle-dir file-name)
             _ (protocol/mkdir-recur! this recycle-dir)]
-      (protocol/rename! this repo path new-path)))
+      (protocol/rename! this repo fpath new-path)))
   (rmdir! [_this _dir]
     ;; Too dangerous!!! We'll never implement this.
     nil)
