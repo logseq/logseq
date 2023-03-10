@@ -44,6 +44,16 @@
            (fn [_error]
              false)))
 
+(defn- <dir-exists?
+  [fpath]
+  (p/catch (p/let [fpath (fs2-path/path-normalize fpath)
+                   stat (.stat Filesystem (clj->js {:path fpath}))]
+             (-> stat
+                 bean/->clj
+                 :type
+                 (= "directory")))
+           (fn [_error]
+             false)))
 
 (defn- <write-file-with-utf8
   [path content]
@@ -251,46 +261,6 @@
       path)
     path))
 
-(defn normalize-file-protocol-path [dir path]
-  (prn ::fuck-DO-NOT-CALL-THIS)
-  (js/console.trace)
-  (let [dir             (some-> dir (string/replace #"/+$" ""))
-        dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
-                          (do
-                            (js/console.trace "WARN: detect absolute path, use URL instead")
-                            (str "file://" (js/encodeURI dir)))
-                          dir)
-        path            (some-> path (string/replace #"^/+" ""))
-        normalize-f     gp-util/path-normalize
-        encodeURI-f     js/encodeURI
-        safe-encode-url #(let [encoded-chars?
-                               (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
-                           (cond
-                             (not encoded-chars?)
-                             (encodeURI-f (normalize-f %))
-
-                             :else
-                             (encodeURI-f (normalize-f (js/decodeURI %)))))
-        path' (cond
-                (and path (string/starts-with? path "file:/"))
-                (safe-encode-url path)
-
-                (string/blank? path)
-                (safe-encode-url dir)
-
-                (string/blank? dir)
-                (safe-encode-url path)
-
-                (string/starts-with? path dir)
-                (safe-encode-url path)
-
-                :else
-                (let [path' (safe-encode-url path)]
-                  (str dir "/" path')))]
-    (if (mobile-util/native-ios?)
-      (ios-force-include-private path')
-      path')))
-
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
   [path localDocumentsPath]
@@ -327,38 +297,40 @@
                        (not (or (local-container-path? path localDocumentsPath)
                                 (mobile-util/iCloud-container-path? path))))
               (state/pub-event! [:modal/show-instruction]))
+          path (if (mobile-util/native-ios?)
+                  (ios-force-include-private path)
+                  path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
-          files (readdir path)
-          files (js->clj files :keywordize-keys true)]
+          files (readdir path)]
     (into [] (concat [{:path path}] files))))
 
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (let [dir' (fs2-path/path-normalize dir)]
-      (-> (.mkdir Filesystem
-                  (clj->js
-                   {:path dir'}))
-          (p/catch (fn [error]
-                     (log/error :mkdir! {:path  dir'
-                                         :error error}))))))
+    (-> (<dir-exists? dir)
+        (p/then (fn [exists?]
+                  (if exists?
+                    (p/resolved true)
+                    (.mkdir Filesystem
+                            (clj->js
+                             {:path dir})))))
+        (p/catch (fn [error]
+                   (log/error :mkdir! {:path dir
+                                       :error error})))))
   (mkdir-recur! [_this dir]
-    (p/let
-     [_ (-> (.mkdir Filesystem
-                    (clj->js
-                     {:path dir
-                      :recursive true}))
-            (p/catch (fn [error]
-                       (log/error :mkdir-recur! {:path dir
-                                                 :error error}))))
-      stat (<stat dir)]
-      (if (= (:type stat) "directory")
-        (p/resolved true)
-        (p/rejected (js/Error. "mkdir-recur! failed")))))
+    (-> (<dir-exists? dir)
+        (p/then (fn [exists?]
+                  (if exists?
+                    (p/resolved true)
+                    (.mkdir Filesystem
+                            (clj->js
+                             {:path dir
+                              :recursive true})))))
+        (p/catch (fn [error]
+                   (log/error :mkdir-recur! {:path dir
+                                             :error error})))))
   (readdir [_this dir]                  ; recursive
-    (let [dir (if-not (string/starts-with? dir "file://")
-                (str "file://" dir)
-                dir)]
+    (let [dir (fs2-path/path-normalize dir)]
       (readdir dir)))
   (unlink! [this repo fpath _opts]
     (p/let [_ (prn ::unlink fpath)
@@ -401,13 +373,12 @@
   (copy! [_this _repo old-path new-path]
     (let []
       (prn ::copy old-path new-path)
-      (p/catch
-       (p/let [_ (.copy Filesystem
-                        (clj->js
-                         {:from old-path
-                          :to new-path}))])
-       (fn [error]
-         (log/error :copy-file-failed error)))))
+      (-> (.copy Filesystem
+                 (clj->js
+                  {:from old-path
+                   :to new-path}))
+          (p/catch (fn [error]
+                     (log/error :copy-file-failed error))))))
   (stat [_this dir path]
     (let [path (fs2-path/path-join dir path)]
       (p/chain (.stat Filesystem (clj->js {:path path}))
