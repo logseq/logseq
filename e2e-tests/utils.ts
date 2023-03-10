@@ -9,6 +9,7 @@ export const IsLinux = process.platform === 'linux'
 export const IsWindows = process.platform === 'win32'
 export const IsCI = process.env.CI === 'true'
 export const modKey = IsMac ? 'Meta' : 'Control'
+export const altKey = IsMac ? 'Option' : 'Alt'
 
 export function randomString(length: number) {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

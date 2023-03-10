@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { modKey } from './utils'
+import { modKey, altKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
@@ -90,17 +90,17 @@ test('clone the rectangle', async ({ page }) => {
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
 
-  await page.keyboard.down('Alt')
+  await page.keyboard.down(altKey)
   await page.mouse.down()
 
   await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
   await page.mouse.up()
-  await page.keyboard.up('Alt')
+  await page.keyboard.up(altKey)
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 })
 
-test('connect rectangles with arrow connector', async ({ page }) => {
+test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
@@ -118,11 +118,11 @@ test('connect rectangles with arrow connector', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
 })
 
-test('delete the first rectangle', async ({ page }) => {
+test('delete the second rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.mouse.click(bounds.x + 20, bounds.y + 20)
+  await page.mouse.click(bounds.x + 100, bounds.y + 100)
   await page.keyboard.press('Delete')
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
