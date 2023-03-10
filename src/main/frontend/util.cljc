@@ -2,34 +2,35 @@
   "Main ns for utility fns. This ns should be split up into more focused namespaces"
   #?(:clj (:refer-clojure :exclude [format]))
   #?(:cljs (:require-macros [frontend.util]))
-  #?(:cljs (:require
-            ["/frontend/selection" :as selection]
-            ["/frontend/utils" :as utils]
-            ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
-            ["grapheme-splitter" :as GraphemeSplitter]
-            ["remove-accents" :as removeAccents]
-            ["sanitize-filename" :as sanitizeFilename]
-            ["check-password-strength" :refer [passwordStrength]]
-            ["path-complete-extname" :as pathCompleteExtname]
-            [frontend.loader :refer [load]]
-            [cljs-bean.core :as bean]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [clojure.pprint]
-            [dommy.core :as d]
-            [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [goog.string :as gstring]
-            [goog.userAgent]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [medley.core :as medley]
-            [frontend.pubsub :as pubsub]))
+  #?(:cljs (:require ["/frontend/selection" :as selection]
+                     ["/frontend/utils" :as utils]
+                     ["@capacitor/status-bar" :refer [^js StatusBar Style]]
+                     ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
+                     ["check-password-strength" :refer [passwordStrength]]
+                     ["grapheme-splitter" :as GraphemeSplitter]
+                     ["path-complete-extname" :as pathCompleteExtname]
+                     ["remove-accents" :as removeAccents]
+                     ["sanitize-filename" :as sanitizeFilename]
+                     [cljs-bean.core :as bean]
+                     [cljs-time.coerce :as tc]
+                     [cljs-time.core :as t]
+                     [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
+                     [clojure.core.async :as async]
+                     [clojure.pprint]
+                     [dommy.core :as d]
+                     [frontend.loader :refer [load]]
+                     [frontend.mobile.util :as mobile-util]
+                     [frontend.pubsub :as pubsub]
+                     [goog.dom :as gdom]
+                     [goog.object :as gobj]
+                     [goog.string :as gstring]
+                     [goog.userAgent]
+                     [logseq.graph-parser.util :as gp-util]
+                     [malli.core :as m]
+                     [malli.util :as mu]
+                     [medley.core :as medley]
+                     [promesa.core :as p]
+                     [rum.core :as rum]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -1521,3 +1522,14 @@ Arg *stop: atom, reset to true to stop the loop"
   "Vector version of remove. non-lazy"
   [pred coll]
   `(vec (remove ~pred ~coll)))
+
+
+#?(:cljs
+   (defn validate
+     "call malli.core/validate, if failed, then explain it,
+  return the boolean value"
+     [malli-schema value]
+     (let [v (m/validate malli-schema value)]
+       (when-not v
+         (js/console.error :validate-err (mu/explain-data malli-schema value)))
+       v)))

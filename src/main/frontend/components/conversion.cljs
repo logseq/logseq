@@ -36,7 +36,7 @@
     (let [renamed-paths (keep (fn [{:keys [file file-name target]}]
                                 (when (not= file-name target)
                                   (sync/relative-path (:file/path file)))) rename-items)
-          graph-txid (second @sync/graphs-txid)]
+          graph-txid (:graph-uuid (sync/read-graphs-txid))]
       (when (and (seq renamed-paths) sync? graph-txid)
         (async/<!
          (sync/<delete-remote-files-control

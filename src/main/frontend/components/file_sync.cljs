@@ -1,7 +1,6 @@
 (ns frontend.components.file-sync
   (:require [cljs.core.async :as async]
             [cljs.core.async.interop :refer [p->c]]
-            [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -132,7 +131,7 @@
               (open-icloud-graph-clone-picker repo)
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
-                (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+                (when-let [GraphUUID (:graph-uuid (async/<! (file-sync-handler/<create-graph graph-name)))]
                   (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
                   ;; update both local && remote graphs
@@ -367,8 +366,9 @@
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
                                      (async/go
-                                       (let [graphs-txid fs-sync/graphs-txid]
-                                         (async/<! (p->c (persist-var/-load graphs-txid)))
+                                       (async/<! (p->c (fs-sync/<load-graph-txid)))
+                                       (let [{current-graph-user-uuid :user-uuid current-graph-uuid :graph-uuid}
+                                             (fs-sync/read-graphs-txid)]
                                          (cond
                                            @*beta-unavailable?
                                            (state/pub-event! [:file-sync/onboarding-tip :unavailable])
@@ -376,30 +376,27 @@
                                            ;; current graph belong to other user, do nothing
                                            (let [user-uuid (async/<! (user-handler/<user-uuid))
                                                  user-uuid (when-not (instance? ExceptionInfo user-uuid) user-uuid)]
-                                             (and (first @graphs-txid)
+                                             (and current-graph-user-uuid
                                                   user-uuid
                                                   (not (fs-sync/check-graph-belong-to-current-user
                                                         user-uuid
-                                                        (first @graphs-txid)))))
+                                                        current-graph-user-uuid))))
                                            nil
 
-                                           (and (second @graphs-txid)
-                                                (fs-sync/graph-sync-off? (second @graphs-txid))
-                                                (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
+                                           (and current-graph-uuid
+                                                (fs-sync/graph-sync-off? current-graph-uuid)
+                                                (async/<! (fs-sync/<check-remote-graph-exists current-graph-uuid)))
                                            (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                           (second @graphs-txid) ; <check-remote-graph-exists -> false
+                                           current-graph-uuid ; <check-remote-graph-exists -> false
                                            (do (state/set-repos!
                                                 (map (fn [r]
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                  (state/get-repos)))
+                                                     (state/get-repos)))
                                                (create-remote-graph-fn))
-
-                                           (second @graphs-txid) ; sync not started yet
-                                           nil
 
                                            :else
                                            (create-remote-graph-fn))))))
@@ -457,8 +454,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-narrow-down"))
-                           }) downloading-files)
+                                    (ui/icon "arrow-narrow-down"))}) downloading-files)
 
              (map (fn [e] (let [icon (case (.-type e)
                                        "add" "plus"
@@ -486,8 +482,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-up"))
-                           }) uploading-files)
+                                    (ui/icon "arrow-up"))}) uploading-files)
 
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
@@ -531,41 +526,37 @@
                                                          (:GraphName graph))]
 
    (ui/button
-     "Open a local directory"
-     :class "block w-full py-4 mt-4"
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                   (page-handler/ls-dir-files!
-                    (fn [{:keys [url]}]
-                      (file-sync-handler/init-remote-graph url graph)
-                      (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+    "Open a local directory"
+    :class "block w-full py-4 mt-4"
+    :on-click #(do
+                 (state/close-modal!)
+                 (fs-sync/<sync-stop)
+                 (->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url graph)
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                    {:empty-dir?-or-pred
-                     (fn [ret]
-                       (let [empty-dir? (nil? (second ret))]
-                         (if-let [root (first ret)]
+                   {:empty-dir?-or-pred
+                    (fn [ret]
+                      (let [empty-dir? (nil? (second ret))]
+                        (if-let [root (first ret)]
 
                            ;; verify directory
-                           (-> (if empty-dir?
-                                 (p/resolved nil)
-                                 (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root)))
-
-                               (p/then (fn [^js info]
-                                         (when (and (not empty-dir?)
-                                                    (or (nil? info)
-                                                        (nil? (second info))
-                                                        (not= (second info) (:GraphUUID graph))))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (throw (js/Error. nil)))))))
+                          (-> (if empty-dir?
+                                (p/resolved nil)
+                                (fs-sync/read-graphs-txid (config/get-local-repo root)))
+                              (p/then (fn [{select-graph-uuid :graph-uuid}]
+                                        (when (and (not empty-dir?)
+                                                   (or (nil? select-graph-uuid)
+                                                       (not= select-graph-uuid (:GraphUUID graph))))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (p/resolved nil)
+                                            (throw (js/Error. nil)))))))
 
                            ;; cancel pick a directory
-                           (throw (js/Error. nil)))))})
-                   (p/catch (fn [])))))
+                          (throw (js/Error. nil)))))})
+                  (p/catch (fn [])))))
 
    [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
     (ui/icon "alert-circle")

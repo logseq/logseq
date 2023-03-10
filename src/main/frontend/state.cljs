@@ -3,13 +3,13 @@
   cursors"
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async :refer [<!]]
-            [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.fs.sync-schema :as sync-schema]
             [frontend.mobile.util :as mobile-util]
-            [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -1992,8 +1992,9 @@ Similar to re-frame subscriptions"
                :file-sync/progress]
               nil))
 
-(defn set-file-sync-state [graph-uuid v]
-  (when v (s/assert :frontend.fs.sync/sync-state v))
+(defn set-file-sync-state
+  [graph-uuid v]
+  {:pre [(util/validate [:maybe sync-schema/sync-state-schema] v)]}
   (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
 (defn get-current-file-sync-graph-uuid

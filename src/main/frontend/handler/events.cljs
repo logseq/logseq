@@ -111,9 +111,9 @@
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
                   (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
+                                    (map? (:sync-meta %))
+                                    (util/uuid-string? (:user-uuid (:sync-meta %)))
+                                    (util/uuid-string? (:graph-uuid (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)
@@ -442,11 +442,11 @@
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload]}]]
-  (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
+  (let [{:keys [user-uuid graph-uuid txid]} (sync/read-graphs-txid)
         payload (assoc payload
                        :user-id user-uuid
                        :graph-id graph-uuid
-                       :tx-id tx-id)]
+                       :tx-id txid)]
     (Sentry/captureException error
                              (bean/->js {:tags payload}))))
 
@@ -646,7 +646,7 @@
     (async/go
       (async/<! (sync/<sync-stop))
       (state/set-state! [:ui/loading? :graph/create-remote?] true)
-      (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+      (when-let [GraphUUID (:graph-uuid (async/<! (file-sync-handler/<create-graph graph-name)))]
         (async/<! (sync/<sync-start))
         (state/set-state! [:ui/loading? :graph/create-remote?] false)
         ;; update existing repo

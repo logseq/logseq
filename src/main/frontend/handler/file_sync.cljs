@@ -42,7 +42,7 @@
   (some (fn [item] (and (= graph (:url item))
                         (:GraphUUID item))) (state/get-repos)))
 
-(defn create-graph
+(defn <create-graph
   [name]
   (go
     (let [r* (<! (sync/<create-graph sync/remoteapi name))
@@ -54,8 +54,10 @@
       (when-not (instance? ExceptionInfo user-uuid-or-exp)
         (if (and (not (instance? ExceptionInfo r))
                  (string? r))
-          (let [tx-info [0 r user-uuid-or-exp (state/get-current-repo)]]
-            (<! (apply sync/<update-graphs-txid! tx-info))
+          (let [repo (state/get-current-repo)
+                tx-info {:user-uuid user-uuid-or-exp :graph-uuid r :txid 0
+                         :work-dir (config/get-repo-dir repo)}]
+            (<! (sync/<update-graphs-txid-all-fields! tx-info repo))
             (swap! refresh-file-sync-component not)
             tx-info)
           (do
@@ -112,7 +114,10 @@
         (notification/show! (ex-message user-uuid-or-exp) :error)
         (do
           (state/set-state! :sync-graph/init? true)
-          (<! (sync/<update-graphs-txid! 0 graph-uuid user-uuid-or-exp repo))
+          (<! (sync/<update-graphs-txid-all-fields!
+               {:user-uuid user-uuid-or-exp :graph-uuid graph-uuid :txid 0
+                :work-dir (config/get-repo-dir repo)}
+               repo))
           (swap! refresh-file-sync-component not)
           (state/pub-event! [:graph/switch repo {:persist? false}]))))))
 

@@ -3,6 +3,7 @@
   (:require-macros [gen-malli-kondo-config.collect :refer [collect-schema]])
   (:require [frontend.util]
             [frontend.util.list]
+            [frontend.fs.sync]
             [malli.clj-kondo :as mc]
             [malli.instrument]))
 

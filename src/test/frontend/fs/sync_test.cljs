@@ -9,6 +9,7 @@
     ".DS_store" true
     "foo/.DS_store" true
     "logseq/graphs-txid.edn" true
+    "logseq/.graphs-txid.edn" true
     "logseq/version-files/1.md" true
     "logseq/bak/1.md" true
     "node_modules/test" true
