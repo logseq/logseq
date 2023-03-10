@@ -2,7 +2,6 @@
   "Path manipulation functions, use '/' on all platforms.
    Also handles URL paths."
   (:require [clojure.string :as string]
-            [goog :refer [Uri]]
             [logseq.graph-parser.util :as gp-util]))
 
 
@@ -205,7 +204,7 @@
   "Get relative path from base path.
    Works for both path and URL."
   [base-path sub-path]
-    (prn :rel-path base-path sub-path)
+  (prn :rel-path base-path sub-path)
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
         is-url? (is-file-url base-path)]
