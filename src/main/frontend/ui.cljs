@@ -483,7 +483,7 @@
            item-render
            class
            header]}]
-  (let [current-idx (get state ::current-idx)]
+  (let [*current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
@@ -492,17 +492,20 @@
           [:<>
            {:key idx}
            (let [item-cp
-                 [:div {:key idx}
-                  (let [chosen? (= @current-idx idx)]
+                 [:div.menu-link-wrap
+                  {:key            idx
+                   ;; mouse-move event to indicate that cursor moved by user
+                   :on-mouse-move  #(reset! *current-idx idx)}
+                  (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                     {:id            (str "ac-" idx)
-                      :class         (when chosen? "chosen")
-                      :on-mouse-down (fn [e]
-                                       (util/stop e)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item)))}
-                     (if item-render (item-render item chosen?) item) nil))]]
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
