@@ -57,8 +57,7 @@
           ;; on the client to correctly identify it
           repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           {:keys [mtime]} stat
-          db-content (or (db/get-file repo path) "")
-          _ (prn ::read-out-db-cont db-content content)]
+          db-content (or (db/get-file repo path) "")]
       
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond

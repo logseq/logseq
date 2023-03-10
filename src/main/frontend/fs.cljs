@@ -65,8 +65,8 @@
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
-  [repo path opts]
-  (protocol/unlink! (get-fs path) repo path opts))
+  [repo fpath opts]
+  (protocol/unlink! (get-fs fpath) repo fpath opts))
 
 (defn rmdir!
   "Remove the directory recursively.
@@ -234,14 +234,14 @@
    (fn [stat] (not (nil? stat)))
    (fn [_e] false)))
 
-(defn file-or-href-exists?
-  "It not only accept path, but also href (url encoded path)"
-  [dir href]
-  (p/let [exist? (file-exists? dir href)
-          decoded-href   (gp-util/safe-decode-uri-component href)
-          decoded-exist? (when (not= decoded-href href)
-                           (file-exists? dir decoded-href))]
-    (or exist? decoded-exist?)))
+(defn asset-href-exists?
+  "href is from `make-asset-url`, so it's most likely a full-path"
+  [href]
+  (p/let [repo-dir (config/get-repo-dir (state/get-current-repo))
+          rpath (fs2-path/relative-path repo-dir href)
+          exist? (file-exists? repo-dir rpath)]
+    (prn ::href href exist?)
+    exist?))
 
 (defn dir-exists?
   [dir]

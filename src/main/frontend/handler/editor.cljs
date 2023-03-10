@@ -55,7 +55,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.fs2.path :as fs2-path]))
+            [frontend.fs2.path :as fs2-path]
+            [frontend.db.model :as model]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -381,8 +382,8 @@
      (let [block' (wrap-parse-block block)
            opts' (merge opts {:outliner-op :save-block})]
        (outliner-tx/transact!
-         opts'
-         (outliner-core/save-block! block'))
+        opts'
+        (outliner-core/save-block! block'))
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
@@ -1494,14 +1495,15 @@
         content (string/replace text full-text "")]
     (save-block! repo block content)
     (when (and local? delete-local?)
-      ;; FIXME: should be relative to current block page path
       (when-let [href (if (util/electron?) href
-                        (second (re-find #"\((.+)\)$" full-text)))]
-        (fs/unlink! repo
-                    (config/get-repo-path
-                     repo (-> href
-                              (string/replace #"^../" "/")
-                              (string/replace #"^assets://" ""))) nil)))))
+                          (second (re-find #"\((.+)\)$" full-text)))]
+        (let [block-file-rpath (model/get-block-file-path block)
+              asset-fpath (if (string/starts-with? href "asset://")
+                            (throw (js/Error. "unimpl"))
+                            (config/get-repo-fpath
+                             repo
+                             (fs2-path/resolve-relative-path block-file-rpath href)))]
+          (fs/unlink! repo asset-fpath nil))))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path

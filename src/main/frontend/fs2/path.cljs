@@ -63,9 +63,7 @@
   "Joins the given path segments into a single path, handling relative paths,
   '..' and '.' normalization."
   [& segments]
-  (let [segments (remove nil? segments) ;; handle (path-join nil path)
-        _ (prn ::join-seg segments)
-        ;; _ (js/console.trace)
+  (let [segments (remove string/blank? segments) ;; handle (path-join nil path)
         segments (map #(string/replace % #"[/\\]+" "/") segments)
         ;; a fix for clojure.string/split
         split-fn (fn [s]
@@ -105,7 +103,7 @@
   '..' and '.' normalization."
   [& segments]
   (let [segments (remove nil? segments) ;; handle (path-join nil path)
-        _ (prn ::uri-join-seg segments)
+        ; _ (prn ::uri-join-seg segments)
         ; _ (js/console.trace)
         segments (map #(string/replace % #"[/\\]+" "/") segments)
         ;; a fix for clojure.string/split
@@ -156,6 +154,11 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
+  (prn ::join base segments)
+  (when (string/blank? base)
+    (prn ::SHOULD-NOT-JOIN-EMPTY)
+    (js/console.trace))
+
   (if (is-file-url base)
     (apply url-join base segments)
     (apply path-join-internal base segments)))
@@ -212,21 +215,57 @@
         (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
         (string/replace (subs sub-path (count base-path)) #"^/+", ""))
        ;; append as many .. 
+      ;; NOTE: buggy impl
       (let [base-segs (string/split base-path #"/" -1)
             path-segs (string/split sub-path #"/" -1)
             common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
             base-segs (drop (count common-segs) base-segs)
             remain-segs (drop (count common-segs) path-segs)
             base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
+        (js/console.error (js/Error. "buggy"))
         #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
         (if is-url?
           (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
           (str base-prefix (string/join "/" remain-segs)))))))
 
 
+
 (defn parent
   "Parent, containing directory"
   [path]
-  ;; ugly but works
-  (path-normalize (str path "/..")))
+  (if (string/includes? path "/")
+    ;; ugly but works
+    (path-normalize (str path "/.."))
+    nil))
+
+
+
+(defn resolve-relative-path
+  "Assume current-path is a file"
+  [current-path rel-path]
+  (if-let [base-dir (parent current-path)]
+    (path-join base-dir rel-path)
+    rel-path))
+
+(defn get-relative-path
+  "Assume current-path is a file, and target-path is a file or directory.
+   Return relative path from current-path to target-path.
+   Works for both path and URL. Also works for relative path.
+   The opposite operation is `resolve-relative-path`"
+  [current-path target-path]
+  (let [base-path (parent current-path)
+        sub-path (path-normalize target-path)
+        is-url? (is-file-url base-path)
+        base-segs (if base-path
+                    (string/split base-path #"/" -1)
+                    [])
+        path-segs (string/split sub-path #"/" -1)
+        common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
+        base-segs (drop (count common-segs) base-segs)
+        remain-segs (drop (count common-segs) path-segs)
+        base-prefix (apply str (repeat (max 0 (count base-segs)) "../"))]
+    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
+    (if is-url?
+      (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
+      (str base-prefix (string/join "/" remain-segs)))))
 

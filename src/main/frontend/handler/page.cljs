@@ -183,7 +183,7 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (when unlink-file?
-        (-> (fs/unlink! repo (config/get-repo-path repo file-path) nil)
+        (-> (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
