@@ -221,7 +221,7 @@
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x )
+                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x)
                                                      (= (:file/path file) (:file/path (:block/file x))))
                                             (:block/name x))) result)
                   page-exists? (and page-name (get @*page-names page-name))
@@ -262,11 +262,11 @@
 
 
 (defn load-new-repo-to-db!
-  "load graph files to db"
+  "load graph files to db."
   [repo-url {:keys [file-objs new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
-  (prn ::load---- file-objs repo-url)
+  (prn ::load---new-file-objs repo-url)
   (state/set-parsing-state! {:graph-loading? true})
   (let [repo-dir (config/get-local-dir repo-url)
         _ (prn ::repo-dir repo-dir)
@@ -274,15 +274,15 @@
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
-        _ (prn ::repo-config config)
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         ;; config should be loaded to state first
         _ (state/set-config! repo-url config)
         ;; remove :hidden files from file-objs, :hidden
         file-objs (common-handler/remove-hidden-files file-objs config :file/path)]
-    (when (seq file-objs)
+    (if (seq file-objs)
       (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
-                                                       :empty-graph? empty-graph?}))))
+                                                       :empty-graph? empty-graph?})
+      (state/set-parsing-state! {:graph-loading? false}))))
 
 
 
@@ -290,7 +290,7 @@
   [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
-  (prn ::load---- file-objs)
+  (prn ::load----file-objs file-objs)
   (state/set-parsing-state! {:graph-loading? true})
   (let [repo-dir (config/get-local-dir repo-url)
         _ (prn ::repo-dir repo-dir)
