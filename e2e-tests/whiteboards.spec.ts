@@ -129,6 +129,12 @@ test('delete the second rectangle', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
 })
 
+test('cleanup the shapes', async ({ page }) => {
+  await page.keyboard.press(`${modKey}+a`)
+  await page.keyboard.press('Delete')
+  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
+})
+
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
@@ -184,12 +190,6 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   await page.keyboard.press(modKey + '+v')
 
   await expect(page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
-})
-
-test('cleanup the shapes', async ({ page }) => {
-  await page.keyboard.press(`${modKey}+a`)
-  await page.keyboard.press('Delete')
-  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('zoom in', async ({ page }) => {
