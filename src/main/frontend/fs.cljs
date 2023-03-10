@@ -59,11 +59,9 @@
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
     (let [result (if (and path-only? (map? (first result)))
-                   (map :uri result)
+                   (map :path result)
                    result)]
-      (if (and (map? (first result)) (:uri (first result)))
-        (map #(update % :uri gp-util/path-normalize) result)
-        (map gp-util/path-normalize result)))))
+      (map gp-util/path-normalize result))))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -180,19 +178,20 @@
   "List all files in the directory, recursively.
    {:path :files []}"
   [path-or-handle ok-handler]
-  (let [record (get-record)]
+  (let [fs-record (get-record)]
     (when ok-handler
       (js/console.warn "ok-handler not nil"))
-    (p/let [result (protocol/list-files record path-or-handle ok-handler)]
+    (p/let [result (protocol/list-files fs-record path-or-handle ok-handler)]
       (prn :t result)
       (if (or (util/electron?)
               (mobile-util/native-platform?))
-        (let [[dir & paths] result
-              dir (:path dir)
+        (let [files result ;; TODO(andelf): rm first item from electron
+              dir path-or-handle
+              _ (prn ::prepare-rel-path dir)
               files (mapv (fn [entry]
-                            (prn ::xx entry)
+                            ;; (prn ::xx entry)
                             (assoc entry :path (fs2-path/relative-path dir (:path entry))))
-                          paths)]
+                          files)]
           (prn :got files)
           {:path dir :files files})
         result))))
