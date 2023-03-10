@@ -6,10 +6,17 @@
             [cljs-bean.core :as bean]
             [goog.functions :refer [debounce]]))
 
+(defn- dom-purify
+  [html opts]
+  (try
+    (js-invoke js/DOMPurify "sanitize" html (bean/->js opts))
+    (catch js/Error e
+      (js/console.warn e) html)))
+
 (rum/defc html-content
   [html]
   [:div.html-content.pl-1.flex-1.text-sm
-   {:dangerouslySetInnerHTML {:__html html}}])
+   {:dangerouslySetInnerHTML {:__html (dom-purify html nil)}}])
 
 (rum/defc edit-settings-file
   [pid {:keys [class]}]
