@@ -77,15 +77,56 @@ test('draw a rectangle', async ({ page }) => {
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
 
-  await page.mouse.move(
-    bounds.x + bounds.width / 2,
-    bounds.y + bounds.height / 2
-  )
+  await page.mouse.move(bounds.x + 50, bounds.y + 50 )
   await page.mouse.up()
+  await page.keyboard.press('Escape')
 
-  await expect(
-    page.locator('.logseq-tldraw .tl-positioned-svg rect')
-  ).not.toHaveCount(0)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+})
+
+test('clone the rectangle', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+
+  await page.keyboard.down('Alt')
+  await page.mouse.down()
+
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
+  await page.mouse.up()
+  await page.keyboard.up('Alt')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+})
+
+test('connect rectangles with arrow connector', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('c')
+
+  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.down()
+
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
+  await page.mouse.up()
+  await page.keyboard.press('Escape')
+
+  await page.waitForTimeout(1000)
+
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('delete the first rectangle', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.mouse.click(bounds.x + 20, bounds.y + 20)
+  await page.keyboard.press('Delete')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
 })
 
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
@@ -142,7 +183,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
 
   await page.keyboard.press(modKey + '+v')
 
-  await expect( page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
 })
 
 test('cleanup the shapes', async ({ page }) => {
