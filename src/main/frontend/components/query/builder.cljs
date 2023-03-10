@@ -175,8 +175,8 @@
               (select values
                 (fn [value]
                   (let [x (if (= value "Select all")
-                            [:property @*property]
-                            [:property @*property value])]
+                            [(if (= @*find :page) :page-property :property) @*property]
+                            [(if (= @*find :page) :page-property :property) @*property value])]
                     (reset! *property nil)
                     (append-tree! *tree opts loc x)))))
 
