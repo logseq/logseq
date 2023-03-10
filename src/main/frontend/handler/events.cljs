@@ -69,7 +69,8 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.fs2.path :as fs2-path]))
 
 ;; TODO: should we move all events here?
 
@@ -609,10 +610,13 @@
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (-> event
-                    (js->clj :keywordize-keys true)
-                    (update :path (fn [path]
-                                    (when (string? path) (capacitor-fs/normalize-file-protocol-path nil path)))))]
+        payload (js->clj event :keywordize-keys true)
+        dir (:dir payload)
+        payload (-> payload
+                    (update :path
+                           (fn [path]
+                             (when (string? path)
+                               (fs2-path/relative-path dir path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
