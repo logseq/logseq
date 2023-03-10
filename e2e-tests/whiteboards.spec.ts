@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { modKey, altKey } from './utils'
+import { modKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
@@ -90,12 +90,12 @@ test('clone the rectangle', async ({ page }) => {
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
 
-  await page.keyboard.down(altKey)
+  await page.keyboard.down('Alt')
   await page.mouse.down()
 
   await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
   await page.mouse.up()
-  await page.keyboard.up(altKey)
+  await page.keyboard.up('Alt')
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 })
