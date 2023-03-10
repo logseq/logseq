@@ -31,6 +31,20 @@
         (p/do!
          (.requestPermissions Filesystem))))))
 
+
+;; FIXME: should distinguish between no-exist and error
+(defn- <file-exists?
+  [fpath]
+  (p/catch (p/let [fpath (fs2-path/path-normalize fpath)
+                   stat (.stat Filesystem (clj->js {:path fpath}))]
+             (-> stat
+                 bean/->clj
+                 :type
+                 (= "file")))
+           (fn [_error]
+             false)))
+
+
 (defn- <write-file-with-utf8
   [path content]
   (when-not (string/blank? path)
@@ -184,14 +198,14 @@
            (log/error :write-file-failed error))))
 
     ;; Compare with disk content and backup if not equal
-      (p/let [disk-content (<read-file-with-utf8 fpath)
+      (p/let [disk-content (if (not= stat :not-found)
+                             (<read-file-with-utf8 fpath)
+                             "")
               disk-content (or disk-content "")
               repo-dir (config/get-local-dir repo)
               ext (util/get-file-ext rpath)
               db-content (or old-content (db/get-file repo rpath) "")
               contents-matched? (contents-matched? disk-content db-content)]
-        (prn ::before-write contents-matched? )
-        (prn disk-content db-content)
         (cond
           (and
            (not= stat :not-found)   ; file on the disk was deleted
@@ -208,9 +222,9 @@
                              :mtime)]
              (when-not contents-matched?
                (backup-file repo-dir :backup-dir fpath disk-content))
-             (db/set-file-last-modified-at! repo fpath mtime)
+             (db/set-file-last-modified-at! repo rpath mtime)
              (p/let [content content]
-               (db/set-file-content! repo fpath content))
+               (db/set-file-content! repo rpath content))
              (when ok-handler
                (ok-handler repo fpath result))
              result)
@@ -219,7 +233,7 @@
                         (error-handler error)
                         (log/error :write-file-failed error))))))))))
 
-(defn ios-force-include-private
+(defn- ios-force-include-private
   "iOS sometimes return paths without the private part."
   [path]
   (if (mobile-util/native-ios?)
@@ -321,7 +335,7 @@
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (let [dir' (normalize-file-protocol-path "" dir)]
+    (let [dir' (fs2-path/path-normalize dir)]
       (-> (.mkdir Filesystem
                   (clj->js
                    {:path dir'}))

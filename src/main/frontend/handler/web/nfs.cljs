@@ -123,7 +123,7 @@
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn picked-root-fn dir]}]
+  ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir]}]
    (let [path-handles (atom {})
          electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
@@ -139,14 +139,8 @@
                                     (fn [path handle]
                                       (when nfs?
                                         (swap! path-handles assoc path handle)))))
-              _ (when-not (nil? empty-dir?-or-pred)
-                  (cond
-                    (boolean? empty-dir?-or-pred)
-                    (and (not-empty (:files result))
-                         (throw (js/Error. "EmptyDirOnly")))
-
-                    (fn? empty-dir?-or-pred)
-                    (empty-dir?-or-pred result)))
+              _ (when (fn? on-open-dir)
+                  (on-open-dir result))
               root-handle (:path result)
               _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
               dir-name (if nfs?
@@ -206,11 +200,11 @@
                                 (prn ::prepare-load-new-repo files)
                                 (repo-handler/start-repo-db-if-not-exists! repo)
                                 (prn ::dd (nil? (seq markup-files)))
-                                (let [_finished? (repo-handler/load-new-repo-to-db! repo
-                                                                                    {:new-graph?   true
-                                                                                     :empty-graph? (nil? (seq markup-files))
-                                                                                     :file-objs    files})
-                                      _ (prn ::fuck _finished?)]
+                                (p/do!
+                                  (repo-handler/load-new-repo-to-db! repo
+                                                                     {:new-graph?   true
+                                                                      :empty-graph? (nil? (seq markup-files))
+                                                                      :file-objs    files})
                                   (prn ::debug-2.5)
                                   (state/add-repo! {:url repo :nfs? true})
                                   (prn ::debug-33333)
