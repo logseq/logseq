@@ -57,7 +57,9 @@
           ;; on the client to correctly identify it
           repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           {:keys [mtime]} stat
-          db-content (or (db/get-file repo path) "")]
+          db-content (or (db/get-file repo path) "")
+          _ (prn ::read-out-db-cont db-content content)]
+      
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)
@@ -80,7 +82,7 @@
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
-               (not (gp-config/local-asset? (string/replace-first path dir ""))))
+               (not (gp-config/local-asset? path)))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
                      (or
@@ -88,6 +90,7 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
+            (prn ::fuck!!)
             (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)
@@ -122,7 +125,7 @@
                         (map first)
                         (filter #(string/starts-with? % (config/get-repo-dir graph))))]
       (p/let [files (fs/readdir dir :path-only? true)
-              files (map #(fs2-path/relative-path dir %) files)       ;; FIXME: readdir returns full paths
+              files (map #(fs2-path/relative-path dir %) files)       ;; FIXME(andelf): readdir returns full paths
               files (remove #(fs-util/ignored-path? dir %) files)]
         (let [deleted-files (set/difference (set db-files) (set files))]
           (when (seq deleted-files)
@@ -130,17 +133,18 @@
                                       (concat (db/delete-blocks graph deleted-files nil))
                                       (remove nil?))]
               (db/transact! graph delete-tx-data {:delete-files? true})))
-          (doseq [file files]
-            (when-let [_ext (util/get-file-ext file)]
+          (doseq [file-rpath files]
+            (prn ::init-watcher file-rpath)
+            (when-let [_ext (util/get-file-ext file-rpath)]
               (->
-               (p/let [content (fs/read-file dir file)
-                       stat (fs/stat dir file)
-                       type (if (db/file-exists? graph file)
+               (p/let [content (fs/read-file dir file-rpath)
+                       stat (fs/stat dir file-rpath)
+                       type (if (db/file-exists? graph file-rpath)
                               "change"
                               "add")]
                  (handle-changed! type
                                   {:dir dir
-                                   :path file
+                                   :path file-rpath
                                    :content content
                                    :stat stat}))
                (p/catch (fn [error]

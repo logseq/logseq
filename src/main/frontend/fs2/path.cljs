@@ -9,11 +9,10 @@
 (defn is-file-url
   [s]
   (and (string? s)
-       (or (string/starts-with? s "file://")
-           (string/starts-with? s "content://")
+       (or (string/starts-with? s "file://") ;; mobile platform
+           (string/starts-with? s "content://") ;; android only
            (string/starts-with? s "logseq://") ;; reserved for future fs protocl
            (string/starts-with? s "s3://"))))
-
 
 
 (defn filename
@@ -65,7 +64,8 @@
   '..' and '.' normalization."
   [& segments]
   (let [segments (remove nil? segments) ;; handle (path-join nil path)
-        _ (prn ::seg segments)
+        _ (prn ::join-seg segments)
+        ;; _ (js/console.trace)
         segments (map #(string/replace % #"[/\\]+" "/") segments)
         ;; a fix for clojure.string/split
         split-fn (fn [s]
@@ -100,17 +100,57 @@
                  [])
          (join-fn))))
 
+(defn- uri-path-join-internal
+  "Joins the given URI path segments into a single path, handling relative paths,
+  '..' and '.' normalization."
+  [& segments]
+  (let [segments (remove nil? segments) ;; handle (path-join nil path)
+        _ (prn ::uri-join-seg segments)
+        ; _ (js/console.trace)
+        segments (map #(string/replace % #"[/\\]+" "/") segments)
+        ;; a fix for clojure.string/split
+        split-fn (fn [s]
+                   (if (= s "/")
+                     [""]
+                     (string/split s #"/")))
+        join-fn (fn [segs]
+                  (case segs
+                    []   "."
+                    [""] "/"
+                    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
+                    (string/join "/" segs)))]
+    (->> (filter not-empty segments)
+         (mapcat split-fn)
+         (map #(js/encodeURIComponent %))
+         (reduce (fn [acc segment]
+                   (cond
+                     (= "" segment)
+                     [segment]
+
+                     (= ".." segment)
+                     (case (last acc)
+                       ".." (conj acc segment)
+                       ""   acc
+                       nil  [".."]
+                       (pop acc))
+
+                     (= "." segment)
+                     acc
+
+                     :else
+                     (conj acc segment)))
+                 [])
+         (join-fn))))
+
 (defn url-join
   "Segments are not URL-ecoded"
   [base-url & segments]
-  (let [^js url (.parse Uri base-url)
-        scheme (.getScheme url)
-        domain (.getDomain url)
-        path (.getPath url)
-        new-path (apply path-join-internal path segments)
-        ;; opt_scheme, opt_userInfo, opt_domain, opt_port, opt_path, opt_query, opt_fragment, opt_ignoreCase
-        new-url (.create Uri scheme nil domain nil new-path nil nil nil)]
-    (.toString new-url)))
+  (let [^js url (js/URL. base-url)
+        scheme (.-protocol url)
+        domain (or (not-empty (.-host url)) "")
+        path (gp-util/safe-decode-uri-component (.-pathname url))
+        encoded-new-path (apply uri-path-join-internal path segments)]
+    (str scheme "//" domain encoded-new-path)))
 
 
 (defn path-join
@@ -128,15 +168,13 @@
 
 
 (defn url-normalize
-  [url]
-  (let [^js uri (.parse Uri url)
-        scheme (.getScheme uri)
-        domain (.getDomain uri)
-        path (.getPath uri)
-        new-path (path-normalize-internal path)
-        ;; opt_scheme, opt_userInfo, opt_domain, opt_port, opt_path, opt_query, opt_fragment, opt_ignoreCase
-        new-uri (.create Uri scheme nil domain nil new-path nil nil nil)]
-    (.toString new-uri)))
+  [origin-url]
+  (let [^js url (js/URL. origin-url)
+        scheme (.-protocol url)
+        domain (or (not-empty (.-host url)) "")
+        path (gp-util/safe-decode-uri-component (.-pathname url))
+        encoded-new-path (uri-path-join-internal path)]
+    (str scheme "//" domain encoded-new-path)))
 
 (defn path-normalize
   "Normalize path or URL"
@@ -164,11 +202,15 @@
   "Get relative path from base path.
    Works for both path and URL."
   [base-path sub-path]
+    (prn :rel-path base-path sub-path)
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
         is-url? (is-file-url base-path)]
+    (prn :rel-path base-path sub-path)
     (if (string/starts-with? sub-path base-path)
-      (trim-dir-prefix base-path sub-path) ;; FIXME(andelf): speedup
+      (if is-url?
+        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+        (string/replace (subs sub-path (count base-path)) #"^/+", ""))
        ;; append as many .. 
       (let [base-segs (string/split base-path #"/" -1)
             path-segs (string/split sub-path #"/" -1)
@@ -182,18 +224,8 @@
           (str base-prefix (string/join "/" remain-segs)))))))
 
 
-(defn decoded-relative-uri
-  "Get relative uri from base url, url-decoded"
-  [base-url path-url]
-  (let [base-url (url-normalize base-url)
-        path-url (url-normalize path-url)]
-    (if (string/starts-with? path-url base-url)
-      (gp-util/safe-decode-uri-component (string/replace (subs path-url (count base-url)) #"^/+", ""))
-      (do
-        (js/console.error "unhandled relative path" base-url path-url)
-        path-url))))
-
 (defn parent
+  "Parent, containing directory"
   [path]
   ;; ugly but works
   (path-normalize (str path "/..")))
