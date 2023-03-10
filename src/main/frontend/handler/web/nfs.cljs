@@ -47,18 +47,19 @@
       (p/resolved files))))
 
 (defn- ->db-files
-  [mobile-native? electron? dir-name result]
+  [dir-name result]
   (->>
    (cond
-     mobile-native?
-     (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (gp-util/path-normalize uri)
+     ;; TODO(andelf): use the same structure for both fields
+     (mobile-util/native-platform?)
+     (map (fn [{:keys [path content size mtime]}]
+            {:file/path             (gp-util/path-normalize path)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
           result)
 
-     electron?
+     (util/electron?)
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
               {:file/path             (gp-util/path-normalize path)
@@ -151,9 +152,7 @@
               dir-name (if nfs?
                          (gobj/get root-handle "name")
                          root-handle)
-              dir-name (if (mobile-util/native-platform?)
-                         (capacitor-fs/normalize-file-protocol-path "" dir-name)
-                         dir-name)
+
               repo (str config/local-db-prefix dir-name)
               _ (state/set-loading-files! repo true)
               _ (when-not (or (state/home?) (state/setups-picker?))
@@ -165,7 +164,7 @@
                       (idb/set-item! root-handle-path root-handle)
                       (nfs/add-nfs-file-handle! root-handle-path root-handle))
                   files (:files result)
-                  files (-> (->db-files mobile-native? electron? dir-name files)
+                  files (-> (->db-files dir-name files)
                             (remove-ignore-files dir-name nfs?))
                   _ (when nfs?
                       ;; only for browserfs
@@ -206,15 +205,18 @@
                               (do
                                 (prn ::prepare-load-new-repo files)
                                 (repo-handler/start-repo-db-if-not-exists! repo)
-                                (async/go
-                                  (let [_finished? (async/<! (repo-handler/load-new-repo-to-db! repo
-                                                                                            {:new-graph?   true
-                                                                                             :empty-graph? (nil? (seq markup-files))
-                                                                                             :file-objs    files}))]
-                                    (state/add-repo! {:url repo :nfs? true})
-                                    (state/set-loading-files! repo false)
-                                    (when ok-handler (ok-handler {:url repo}))
-                                    (db/persist-if-idle! repo))))))))
+                                (prn ::dd (nil? (seq markup-files)))
+                                (let [_finished? (repo-handler/load-new-repo-to-db! repo
+                                                                                    {:new-graph?   true
+                                                                                     :empty-graph? (nil? (seq markup-files))
+                                                                                     :file-objs    files})
+                                      _ (prn ::fuck _finished?)]
+                                  (prn ::debug-2.5)
+                                  (state/add-repo! {:url repo :nfs? true})
+                                  (prn ::debug-33333)
+                                  (state/set-loading-files! repo false)
+                                  (when ok-handler (ok-handler {:url repo}))
+                                  (db/persist-if-idle! repo)))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)
                            (log/error :exception error)))))))
@@ -228,6 +230,7 @@
                    (throw error))))
       (p/finally
         (fn []
+          (prn ::set-loading-files false)
           (state/set-loading-files! @*repo false)))))))
 
 (defn ls-dir-files-with-path!
@@ -349,7 +352,7 @@
                                   (fn [path handle]
                                     (when nfs?
                                       (swap! path-handles assoc path handle))))
-                   new-local-files (-> (->db-files mobile-native? electron? dir-name (:files local-files-result))
+                   new-local-files (-> (->db-files dir-name (:files local-files-result))
                                        (remove-ignore-files dir-name nfs?))
                   ;; new-global-files (if (and (config/global-config-enabled?)
                    ;;                          ;; Hack until we better understand failure in frontend.handler.file/alter-file
@@ -357,7 +360,7 @@
                      ;;                 (p/let [global-files-result (fs/list-files
                       ;;                                             (global-config-handler/global-config-dir)
                        ;;                                            (constantly nil))
-                        ;;                      global-files (-> (->db-files mobile-native? electron? (global-config-handler/global-config-dir) global-files-result)
+                        ;;                      global-files (-> (->db-files (global-config-handler/global-config-dir) global-files-result)
                          ;;                                      (remove-ignore-files (global-config-handler/global-config-dir) nfs?))]
                           ;;              global-files)
                            ;;           (p/resolved []))

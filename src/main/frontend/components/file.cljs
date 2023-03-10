@@ -5,21 +5,22 @@
             [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.fs :as fs]
-            [frontend.config :as config]
             [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [goog.string :as gstring]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [goog.object :as gobj]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [promesa.core :as p]))
+            [rum.core :as rum]))
 
 (defn- get-path
   [state]
@@ -29,7 +30,8 @@
 (rum/defc files-all < rum/reactive
   []
   (when-let [current-repo (state/sub :git/current-repo)]
-    (let [files (db/get-files current-repo)
+    (let [files (db/get-files current-repo) ; [[string]]
+          files (sort-by first gstring/intAwareCompare files)
           mobile? (util/mobile?)]
       [:table.table-auto
        [:thead
@@ -103,7 +105,7 @@
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi (js/decodeURI path)]]
+      [:bdi path]]
      (when original-name
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

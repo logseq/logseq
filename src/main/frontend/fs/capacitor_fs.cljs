@@ -13,7 +13,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.fs2.path :as fs2-path]))
 
 (when (mobile-util/native-ios?)
   (defn ios-ensure-documents!
@@ -97,7 +98,9 @@
                                    (mapv
                                     (fn [{:keys [uri] :as file-info}]
                                       (p/chain (<read-file-with-utf8 uri)
-                                               #(assoc file-info :content %))))))]
+                                               #(assoc (dissoc file-info :uri)
+                                                       :content %
+                                                       :path uri))))))]
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))]
     (js->clj result :keywordize-keys true)))
@@ -127,7 +130,7 @@
            files (js->clj files :keywordize-keys true)
            old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
      (mapv (fn [file]
-             (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+             (.deleteFile Filesystem (clj->js {:path (:path file)})))
            old-versioned-files))
    (p/catch (fn [_]))))
 
@@ -168,50 +171,53 @@
     (truncate-old-versioned-files! file-root)))
 
 (defn- write-file-impl!
-  [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (if (or (string/blank? repo) skip-compare?)
-    (p/catch
-     (p/let [result (<write-file-with-utf8 path content)]
-       (when ok-handler
-         (ok-handler repo path result)))
-     (fn [error]
-       (if error-handler
-         (error-handler error)
-         (log/error :write-file-failed error))))
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  (let [fpath (fs2-path/path-join dir rpath)]
+    (if (or (string/blank? repo) skip-compare?)
+      (p/catch
+       (p/let [result (<write-file-with-utf8 fpath content)]
+         (when ok-handler
+           (ok-handler repo fpath result)))
+       (fn [error]
+         (if error-handler
+           (error-handler error)
+           (log/error :write-file-failed error))))
 
     ;; Compare with disk content and backup if not equal
-    (p/let [disk-content (<read-file-with-utf8 path)
-            disk-content (or disk-content "")
-            repo-dir (config/get-local-dir repo)
-            ext (util/get-file-ext path)
-            db-content (or old-content (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)]
-      (cond
-        (and
-         (not= stat :not-found)   ; file on the disk was deleted
-         (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn" "css"} ext))
-         (not (string/includes? path "/.recycle/")))
-        (p/let [disk-content disk-content]
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+      (p/let [disk-content (<read-file-with-utf8 fpath)
+              disk-content (or disk-content "")
+              repo-dir (config/get-local-dir repo)
+              ext (util/get-file-ext rpath)
+              db-content (or old-content (db/get-file repo rpath) "")
+              contents-matched? (contents-matched? disk-content db-content)]
+        (prn ::before-write contents-matched? )
+        (prn disk-content db-content)
+        (cond
+          (and
+           (not= stat :not-found)   ; file on the disk was deleted
+           (not contents-matched?)
+           (not (contains? #{"excalidraw" "edn" "css"} ext))
+           (not (string/includes? fpath "/.recycle/")))
+          (p/let [disk-content disk-content]
+            (state/pub-event! [:file/not-matched-from-disk rpath disk-content content]))
 
-        :else
-        (->
-         (p/let [result (<write-file-with-utf8 path content)
-                 mtime (-> (js->clj stat :keywordize-keys true)
-                           :mtime)]
-           (when-not contents-matched?
-             (backup-file repo-dir :backup-dir path disk-content))
-           (db/set-file-last-modified-at! repo path mtime)
-           (p/let [content content]
-             (db/set-file-content! repo path content))
-           (when ok-handler
-             (ok-handler repo path result))
-           result)
-         (p/catch (fn [error]
-                    (if error-handler
-                      (error-handler error)
-                      (log/error :write-file-failed error)))))))))
+          :else
+          (->
+           (p/let [result (<write-file-with-utf8 fpath content)
+                   mtime (-> (js->clj stat :keywordize-keys true)
+                             :mtime)]
+             (when-not contents-matched?
+               (backup-file repo-dir :backup-dir fpath disk-content))
+             (db/set-file-last-modified-at! repo fpath mtime)
+             (p/let [content content]
+               (db/set-file-content! repo fpath content))
+             (when ok-handler
+               (ok-handler repo fpath result))
+             result)
+           (p/catch (fn [error]
+                      (if error-handler
+                        (error-handler error)
+                        (log/error :write-file-failed error))))))))))
 
 (defn ios-force-include-private
   "iOS sometimes return paths without the private part."
@@ -232,6 +238,8 @@
     path))
 
 (defn normalize-file-protocol-path [dir path]
+  (prn ::fuck-DO-NOT-CALL-THIS)
+  (js/console.trace)
   (let [dir             (some-> dir (string/replace #"/+$" ""))
         dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
                           (do
@@ -339,7 +347,7 @@
                 dir)]
       (readdir dir)))
   (unlink! [this repo path _opts]
-    (p/let [path (normalize-file-protocol-path nil path)
+    (p/let [_ (prn ::unlink path)
             repo-url (config/get-local-dir repo)
             recycle-dir (util/safe-path-join repo-url config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
@@ -353,20 +361,23 @@
     ;; Too dangerous!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (let [path (normalize-file-protocol-path dir path)]
+    (prn ::read-file dir path)
+    (let [fpath (fs2-path/path-join dir path)]
       (->
-       (<read-file-with-utf8 path)
+       (<read-file-with-utf8 fpath)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (write-file! [this repo dir path content opts]
-    (let [path (normalize-file-protocol-path dir path)]
+  (write-file! [_this repo dir path content opts]
+    (prn ::write-file dir path)
+    (let [fpath (fs2-path/path-join dir path)]
       (p/let [stat (p/catch
-                    (.stat Filesystem (clj->js {:path path}))
+                    (.stat Filesystem (clj->js {:path fpath}))
                     (fn [_e] :not-found))]
         ;; `path` is full-path
-        (write-file-impl! this repo dir path content opts stat))))
+        (write-file-impl! repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
+    (let []
+      (prn ::rename old-path new-path)
       (p/catch
        (p/let [_ (.rename Filesystem
                           (clj->js
@@ -375,7 +386,8 @@
        (fn [error]
          (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
+    (let []
+      (prn ::copy old-path new-path)
       (p/catch
        (p/let [_ (.copy Filesystem
                         (clj->js
@@ -384,12 +396,13 @@
        (fn [error]
          (log/error :copy-file-failed error)))))
   (stat [_this dir path]
-    (let [path (normalize-file-protocol-path dir path)]
+    (let [path (fs2-path/path-join dir path)]
       (p/chain (.stat Filesystem (clj->js {:path path}))
                #(js->clj % :keywordize-keys true))))
   (open-dir [_this dir _ok-handler]
     (open-dir dir))
   (list-files [_this dir _ok-handler]
+    (prn ::readdir dir)
     (readdir dir))
   (watch-dir! [_this dir _options]
     (p/do!
