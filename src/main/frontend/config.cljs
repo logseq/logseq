@@ -2,6 +2,7 @@
   "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.fs2.path :as fs2-path]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -364,11 +365,11 @@
               (str "/" (string/capitalize app-name) "/")))
     (get-repo-dir repo-dir)))
 
-(defn get-repo-path
+(defn get-repo-fpath
   [repo-url path]
   (if (and (or (util/electron?) (mobile-util/native-platform?))
            (local-db? repo-url))
-    path
+    (fs2-path/path-join (get-repo-dir repo-url) path)
     (util/node-path.join (get-repo-dir repo-url) path)))
 
 ;; FIXME: There is another normalize-file-protocol-path at src/main/frontend/fs/capacitor_fs.cljs
