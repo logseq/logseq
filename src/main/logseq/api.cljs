@@ -165,6 +165,14 @@
              (filter string?)
              (bean/->js))))
 
+(def ^:export get_current_graph_templates
+  (fn []
+    (when-let [_repo (state/get-current-repo)]
+      (some-> (db-model/get-all-templates)
+              (update-vals #(db-model/pull-block %))
+              (normalize-keyword-for-json)
+              (bean/->js)))))
+
 (def ^:export get_current_graph
   (fn []
     (when-let [repo (state/get-current-repo)]
