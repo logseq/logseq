@@ -326,6 +326,7 @@
   [s]
   (string/replace s local-db-prefix ""))
 
+;; FIXME(andelf): this is not the reverse op of get-repo-dir, should be fixed
 (defn get-local-repo
   [dir]
   (str local-db-prefix dir))
