@@ -44,7 +44,7 @@
 
 (def support-seconds?
   (get-in (state/get-config)
-       [:logbook/settings :with-second-support?] true))
+          [:logbook/settings :with-second-support?] true))
 
 (defn- now []
   (if support-seconds?
