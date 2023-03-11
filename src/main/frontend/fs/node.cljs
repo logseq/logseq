@@ -119,17 +119,18 @@
     (let [path (fs2-path/path-join dir path)]
       (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content opts]
-    (p/let [stat (p/catch
-                  (protocol/stat this dir path)
+    (p/let [fpath (fs2-path/path-join dir path)
+            stat (p/catch
+                  (protocol/stat this fpath)
                   (fn [_e] :not-found))
             sub-dir (first (util/get-dir-and-basename path)) ;; FIXME: todo dirname
             _ (protocol/mkdir-recur! this sub-dir)]
       (write-file-impl! repo dir path content opts stat)))
   (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
-  (stat [_this dir path]
-    (let [path (fs2-path/path-join dir path)]
-      (ipc/ipc "stat" path)))
+  (stat [_this fpath]
+    (-> (ipc/ipc "stat" fpath)
+        (p/then bean/->clj)))
   (open-dir [_this dir _ok-handler]
     (p/then (open-dir dir)
             bean/->clj))

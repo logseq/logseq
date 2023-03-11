@@ -214,10 +214,8 @@
             content (.text file)
             _ (protocol/write-file! this repo dir new-path content nil)]
       (protocol/unlink! this repo old-path nil)))
-  (stat [_this dir path]
-    (if-let [file (get-nfs-file-handle (str "handle/"
-                                            (string/replace-first dir "/" "")
-                                            path))]
+  (stat [_this fpath]
+    (if-let [file (get-nfs-file-handle (str "handle/" fpath))]
       (p/let [file (.getFile file)]
         (let [get-attr #(gobj/get file %)]
           {:file/last-modified-at (get-attr "lastModified")

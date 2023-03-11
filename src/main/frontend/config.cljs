@@ -454,11 +454,10 @@
 (defn expand-relative-assets-path
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (js/console.error "BUG: assets:// url handling")
   (when-let [protocol (and (string? source)
                            (not (string/blank? source))
                            (if (util/electron?) "assets" "file"))]
-
+    (js/console.error "BUG: assets:// url handling")
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 

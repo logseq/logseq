@@ -146,8 +146,11 @@
       (protocol/copy! (get-fs old-path) repo old-path new-path))))
 
 (defn stat
-  [dir path]
-  (protocol/stat (get-fs dir) dir path))
+  ([fpath]
+   (protocol/stat (get-fs fpath) fpath))
+  ([dir path]
+   (let [fpath (fs2-path/path-join dir path)]
+     (protocol/stat (get-fs dir) fpath))))
 
 (defn- get-native-backend
   "Native FS backend of current platform"
@@ -213,7 +216,7 @@
   (->
    (when dir
      (util/p-handle
-      (stat dir nil)
+      (stat dir)
       (fn [_stat])
       (fn [_error]
         (mkdir! dir))))
