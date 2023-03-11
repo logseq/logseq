@@ -53,7 +53,7 @@
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
-        (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
+        (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
             (file-common-handler/reset-file! repo-url file-rpath default-content)))))))
