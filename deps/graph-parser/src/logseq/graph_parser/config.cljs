@@ -30,6 +30,7 @@
 
 (defn remove-asset-protocol
   [s]
+  (js/console.error "BUG: remove-asset-protocol")
   (if (local-protocol-asset? s)
     (-> s
         (string/replace-first asset-protocol "")
