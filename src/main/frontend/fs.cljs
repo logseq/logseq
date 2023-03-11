@@ -6,7 +6,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.fs.bfs :as bfs]
+            [frontend.fs.memory-fs :as bfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
@@ -19,10 +19,10 @@
             [logseq.graph-parser.util :as gp-util]
             [electron.ipc :as ipc]))
 
-(defonce nfs-record (nfs/->Nfs))
-(defonce bfs-record (bfs/->Bfs))
-(defonce node-record (node/->Node))
-(defonce mobile-record (capacitor-fs/->Capacitorfs))
+(defonce nfs-backend (nfs/->Nfs))
+(defonce memory-backend (bfs/->Bfs))
+(defonce node-backend (node/->Node))
+(defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
 (defn local-db?
   [dir]
@@ -34,17 +34,22 @@
   (let [bfs-local? (or (string/starts-with? dir "/local")
                        (string/starts-with? dir "local"))]
     (cond
+      (string/starts-with? dir "memory://")
+      (do
+        ; (prn ::debug-using-memory-backend)
+        memory-backend)
+
       (and (util/electron?) (not bfs-local?))
-      node-record
+      node-backend
 
       (mobile-util/native-platform?)
-      mobile-record
+      mobile-backend
 
       (local-db? dir)
-      nfs-record
+      nfs-backend
 
       :else
-      bfs-record)))
+      memory-backend)))
 
 (defn mkdir!
   [dir]
@@ -73,14 +78,14 @@
    Warning: only run it for browser cache."
   [dir]
   (when-let [fs (get-fs dir)]
-    (when (= fs bfs-record)
+    (when (= fs memory-backend)
       (protocol/rmdir! fs dir))))
 
 ;; TODO(andelf): distingush from graph file writing and global file write
 (defn write-file!
-  [repo dir path content opts]
+  [repo dir rpath content opts]
   (when content
-    (let [path (gp-util/path-normalize path)
+    (let [path (gp-util/path-normalize rpath)
           fs-record (get-fs dir)]
       (->
        (p/let [opts (assoc opts
@@ -91,9 +96,7 @@
                                                                           :fs (type fs-record)
                                                                           :user-agent (when js/navigator js/navigator.userAgent)
                                                                           :content-length (count content)}}])))
-               _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-         (when (= bfs-record fs-record)
-           (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+               _ (protocol/write-file! (get-fs dir) repo dir path content opts)])
        (p/catch (fn [error]
                   (log/error :file/write-failed {:dir dir
                                                  :path path
@@ -105,7 +108,7 @@
 (defn read-file
   ([dir path]
    (let [fs (get-fs dir)
-         options (if (= fs bfs-record)
+         options (if (= fs memory-backend)
                    {:encoding "utf8"}
                    {})]
      (read-file dir path options)))
@@ -146,21 +149,22 @@
   [dir path]
   (protocol/stat (get-fs dir) dir path))
 
-(defn- get-record
+(defn- get-native-backend
+  "Native FS backend of current platform"
   []
   (cond
     (util/electron?)
-    node-record
+    node-backend
 
     (mobile-util/native-platform?)
-    mobile-record
+    mobile-backend
 
     :else
-    nfs-record))
+    nfs-backend))
 
 (defn open-dir
   [dir ok-handler]
-  (let [record (get-record)]
+  (let [record (get-native-backend)]
     (p/let [result (protocol/open-dir record dir ok-handler)]
       (if (or (util/electron?)
               (mobile-util/native-platform?))
@@ -178,7 +182,7 @@
   "List all files in the directory, recursively.
    {:path :files []}"
   [path-or-handle ok-handler]
-  (let [fs-record (get-record)]
+  (let [fs-record (get-native-backend)]
     (when ok-handler
       (js/console.warn "ok-handler not nil"))
     (p/let [result (protocol/list-files fs-record path-or-handle ok-handler)]
@@ -198,11 +202,11 @@
 
 (defn watch-dir!
   ([dir] (watch-dir! dir {}))
-  ([dir options] (protocol/watch-dir! (get-record) dir options)))
+  ([dir options] (protocol/watch-dir! (get-fs dir) dir options)))
 
 (defn unwatch-dir!
   [dir]
-  (protocol/unwatch-dir! (get-record) dir))
+  (protocol/unwatch-dir! (get-fs dir) dir))
 
 (defn mkdir-if-not-exists
   [dir]
@@ -219,13 +223,12 @@
   ([repo dir path]
    (create-if-not-exists repo dir path ""))
   ([repo dir path initial-content]
-   (let []
-     (-> (p/let [_stat (stat dir path)]
-           true)
-         (p/catch
-          (fn [_error]
-            (p/let [_ (write-file! repo dir path initial-content nil)]
-              false)))))))
+   (-> (p/let [_stat (stat dir path)]
+         true)
+       (p/catch
+        (fn [_error]
+          (p/let [_ (write-file! repo dir path initial-content nil)]
+            false))))))
 
 (defn file-exists?
   [dir path]
