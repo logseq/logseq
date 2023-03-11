@@ -13,20 +13,6 @@
             [promesa.core :as p]
             [frontend.fs2.path :as fs2-path]))
 
-(defn concat-path
-  [dir path]
-  (cond
-    (nil? path)
-    dir
-
-    (string/starts-with? path dir)
-    path
-
-    :else
-    (str (string/replace dir #"/$" "")
-         (when path
-           (str "/" (string/replace path #"^/" ""))))))
-
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))

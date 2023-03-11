@@ -13,7 +13,8 @@
   (rename! [this repo old-path new-path])
   (copy! [this repo old-path new-path])
   (stat [this dir path])
-  (open-dir [this dir ok-handler])
+  (open-dir [this dir ok-handler]
+    "=> {:path string :files [{...}]}")
   (list-files [this dir ok-handler]
     "dir => [{:path string :content string}]")
   (watch-dir! [this dir options])
