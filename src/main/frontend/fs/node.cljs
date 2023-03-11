@@ -45,12 +45,12 @@
   )
 
 (defn- write-file-impl!
-  [this repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (prn ::write-file-impl repo dir rpath)
-  (let [file-path (fs2-path/path-join dir rpath)]
+  (let [file-fpath (fs2-path/path-join dir rpath)]
     (if skip-compare?
       (p/catch
-       (p/let [result (ipc/ipc "writeFile" repo file-path content)]
+       (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
          (when ok-handler
            (prn ::fuck :why-are-you-using-ok-handler)
            (ok-handler repo rpath result)))
@@ -60,7 +60,8 @@
            (log/error :write-file-failed error))))
 
       (p/let [disk-content (when (not= stat :not-found)
-                             (-> (protocol/read-file this dir file-path nil)
+                             (-> (ipc/ipc "readFile" file-fpath)
+                                 (p/then bean/->clj)
                                  (p/catch (fn [error]
                                             (js/console.error error)
                                             nil))))
@@ -81,7 +82,7 @@
 
           :else
           (->
-           (p/let [result (ipc/ipc "writeFile" repo file-path content)
+           (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
                    mtime (gobj/get result "mtime")]
              (when-not contents-matched?
                (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
@@ -139,7 +140,7 @@
                   (fn [_e] :not-found))
             sub-dir (first (util/get-dir-and-basename path)) ;; FIXME: todo dirname
             _ (protocol/mkdir-recur! this sub-dir)]
-      (write-file-impl! this repo dir path content opts stat)))
+      (write-file-impl! repo dir path content opts stat)))
   (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
   (stat [_this dir path]
@@ -149,8 +150,8 @@
     (p/then (open-dir dir)
             bean/->clj))
   (list-files [_this dir _ok-handler]
-    (p/then (ipc/ipc "getFiles" dir)
-            bean/->clj))
+    (-> (ipc/ipc "getFiles" dir)
+        (p/then bean/->clj)))
   (watch-dir! [_this dir options]
     (ipc/ipc "addDirWatcher" dir options))
   (unwatch-dir! [_this dir]

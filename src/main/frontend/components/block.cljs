@@ -155,6 +155,7 @@
 
 (defn- get-file-absolute-path
   [config path]
+  (js/console.error "TODO: buggy path fn")
   (let [path (string/replace path "file:" "")
         block-id (:block/uuid config)
         current-file (and block-id
@@ -275,7 +276,7 @@
   {:will-unmount (fn [state]
                    (reset! *resizing-image? false)
                    state)}
-  [state config title src metadata full_text local?]
+  [state config title src metadata full-text local?]
   (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
@@ -292,7 +293,7 @@
                        (when (and @size @*resizing-image?)
                          (when-let [block-id (:block/uuid config)]
                            (let [size (bean/->clj @size)]
-                             (editor-handler/resize-image! block-id metadata full_text size))))
+                             (editor-handler/resize-image! block-id metadata full-text size))))
                        (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
                          (js/setTimeout #(reset! *resizing-image? false) 200)))
@@ -344,7 +345,7 @@
                                                        :repo        (state/get-current-repo)
                                                        :href        src
                                                        :title       title
-                                                       :full-text   full_text}))})]
+                                                       :full-text   full-text}))})]
                    (util/stop e)
                    (state/set-modal! confirm-fn))))}
             (ui/icon "trash")]

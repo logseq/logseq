@@ -157,19 +157,19 @@
       keyword))
 
 (defn- get-files
+  "Returns vec of file-objs"
   [path]
-  (let [result (->>
-                (readdir path)
-                (remove (partial utils/ignored-path? path))
-                (filter #(contains? allowed-formats (get-ext %)))
-                (map (fn [path]
-                       (let [stat (fs/statSync path)]
-                         (when-not (.isDirectory stat)
-                           {:path    (utils/fix-win-path! path)
-                            :content (utils/read-file path)
-                            :stat    stat}))))
-                (remove nil?))]
-    (vec (cons {:path (utils/fix-win-path! path)} result))))
+  (->> (readdir path)
+       (remove (partial utils/ignored-path? path))
+       (filter #(contains? allowed-formats (get-ext %)))
+       (map (fn [path]
+              (let [stat (fs/statSync path)]
+                (when-not (.isDirectory stat)
+                  {:path    (utils/fix-win-path! path)
+                   :content (utils/read-file path)
+                   :stat    stat}))))
+       (remove nil?)
+       vec))
 
 (defn open-dir-dialog []
   (p/let [result (.showOpenDialog dialog (bean/->js
@@ -193,11 +193,13 @@
 
 (defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
-  (p/let [path (open-dir-dialog)]
+  (p/let [path (open-dir-dialog)
+          path (utils/fix-win-path! path)]
     (logger/debug ::open-dir {:path path})
     (if path
       (try
-        (p/resolved (bean/->js (get-files path)))
+        (p/resolved (bean/->js {:path path
+                                :files (get-files path)}))
         (catch js/Error e 
           (do
             (utils/send-to-renderer window "notification" {:type "error"

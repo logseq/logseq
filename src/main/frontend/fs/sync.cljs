@@ -2700,7 +2700,7 @@
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
-    (println "[SyncManager" graph-uuid "]"
+    (println (str "[SyncManager " graph-uuid "]")
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
@@ -3090,7 +3090,7 @@
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
 
@@ -3098,7 +3098,7 @@
 
       (reset! *sync-entered? false)
 
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 

@@ -1466,11 +1466,12 @@
       (when-let [href (if (util/electron?) href
                           (second (re-find #"\((.+)\)$" full-text)))]
         (let [block-file-rpath (model/get-block-file-path block)
-              asset-fpath (if (string/starts-with? href "asset://")
-                            (throw (js/Error. "unimpl"))
+              asset-fpath (if (string/starts-with? href "assets://")
+                            (fs2-path/url-to-path href)
                             (config/get-repo-fpath
                              repo
                              (fs2-path/resolve-relative-path block-file-rpath href)))]
+          (prn ::deleting href asset-fpath)
           (fs/unlink! repo asset-fpath nil))))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png

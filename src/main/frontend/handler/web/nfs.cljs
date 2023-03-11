@@ -312,13 +312,17 @@
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
                       (comment "re-index a local graph is handled here")
-                      (async/go
-                        (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                  {:diffs     diffs
-                                                                                   :nfs-files modified-files
-                                                                                   :refresh? (not re-index?)
-                                                                                   :new-graph? re-index?}))]
-                          (ok-handler))))
+                      (-> (repo-handler/load-repo-to-db! repo
+                                                         {:diffs     diffs
+                                                          :nfs-files modified-files
+                                                          :refresh? (not re-index?)
+                                                          :new-graph? re-index?})
+                          (p/then (fn [state]
+                                    (prn :load-repo-to-db! state)
+                                    (ok-handler)))
+                          (p/catch (fn [error]
+                                     (js/console.error "load-repo-to-db" error)))))
+
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
 
