@@ -55,10 +55,14 @@
   (when dir
     (let [;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
-          repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
+          repo (cond
+                 global-dir (state/get-current-repo)
+                 ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
+                 (string/starts-with? dir "memory://") "local"
+                 :else (config/get-local-repo dir))
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      
+
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)
