@@ -164,13 +164,12 @@
     (p/let [result (protocol/open-dir record dir ok-handler)]
       (if (or (util/electron?)
               (mobile-util/native-platform?))
-        (let [[dir & paths] result
-              _ (prn ::open-dir result)
-              dir (:path dir)
+        (let [{:keys [path files]} result
+              dir path
               _ (prn ::open-dir dir)
               files (mapv (fn [entry]
                             (assoc entry :path (fs2-path/relative-path dir (:path entry))))
-                          paths)]
+                          files)]
           (prn :got files)
           {:path dir :files files})
         result))))
