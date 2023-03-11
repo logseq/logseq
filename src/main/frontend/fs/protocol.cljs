@@ -14,7 +14,8 @@
   (copy! [this repo old-path new-path])
   (stat [this dir path])
   (open-dir [this dir ok-handler])
-  (list-files [this dir ok-handler])
+  (list-files [this dir ok-handler]
+    "dir => [{:path string :content string}]")
   (watch-dir! [this dir options])
   (unwatch-dir! [this dir])
   ;; Ensure the dir is watched, window agnostic.

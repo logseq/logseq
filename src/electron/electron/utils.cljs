@@ -37,7 +37,7 @@
 
 (defn fix-win-path!
   [path]
-  (when path
+  (when (not-empty path)
     (if win32?
       (string/replace path "\\" "/")
       path)))

@@ -10,6 +10,7 @@
   (and (string? s)
        (or (string/starts-with? s "file://") ;; mobile platform
            (string/starts-with? s "content://") ;; android only
+           (string/starts-with? s "assets://") ;; FIXME: Electron asset, not urlencoded
            (string/starts-with? s "logseq://") ;; reserved for future fs protocl
            (string/starts-with? s "s3://"))))
 
@@ -198,6 +199,13 @@
       (do
         (js/console.error "unhandled trim-base" base-path sub-path)
         sub-path))))
+
+(defn url-to-path
+  "Extract path part of a URL. decoded"
+  [original-url]
+  (let [^js url (js/URL. original-url)
+        path (gp-util/safe-decode-uri-component (.-pathname url))]
+    path))
 
 
 (defn relative-path
