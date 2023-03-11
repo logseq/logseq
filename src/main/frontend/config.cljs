@@ -452,9 +452,9 @@
 
 (defn get-current-repo-assets-root
   []
-  (when-let [repo-root (and (local-db? (state/get-current-repo))
+  (when-let [repo-dir (and (local-db? (state/get-current-repo))
                             (get-repo-dir (state/get-current-repo)))]
-    (util/node-path.join repo-root "assets")))
+    (fs2-path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path
   ([]

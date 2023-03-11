@@ -1355,8 +1355,8 @@
   [repo]
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
-          _ (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))]
-    (prn ::ensure-assets-dir repo-dir  assets-dir)
+          _ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir assets-dir))]
+    (prn ::ensure-assets-dir repo-dir assets-dir)
     [repo-dir assets-dir]))
 
 (defn get-asset-path
@@ -1438,7 +1438,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (str "assets://" full-path)
+        (fs2-path/path-join "assets://" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
