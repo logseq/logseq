@@ -21,7 +21,6 @@
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.config :as gp-config]
-            [clojure.string :as string]
             ["path" :as path]))
 
 ;; TODO: extract all git ops using a channel
@@ -163,10 +162,10 @@
               (when re-render-root? (ui-handler/re-render-root!))
 
               (cond
-                (= path "logseq/custom.css") ; (= path (config/get-custom-css-path repo))
+                (= path "logseq/custom.css")
                 (ui-handler/add-style-if-exists!)
 
-                (= path "logseq/config.edn") ; (= path (config/get-repo-config-path repo))
+                (= path "logseq/config.edn")
                 (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
                   (state/pub-event! [:shortcut/refresh]))
 

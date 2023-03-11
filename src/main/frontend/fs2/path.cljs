@@ -12,6 +12,7 @@
            (string/starts-with? s "content://") ;; android only
            (string/starts-with? s "assets://") ;; FIXME: Electron asset, not urlencoded
            (string/starts-with? s "logseq://") ;; reserved for future fs protocl
+           (string/starts-with? s "memory://") ;; special memory fs
            (string/starts-with? s "s3://"))))
 
 
@@ -201,13 +202,18 @@
         sub-path))))
 
 (defn url-to-path
-  "Extract path part of a URL. decoded"
+  "Extract path part of a URL, decoded.
+   
+   The reverse operation is (path-join protocl:// path)"
   [original-url]
   (if (is-file-url original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
     (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
-          path (gp-util/safe-decode-uri-component (.-pathname url))]
+          path (gp-util/safe-decode-uri-component (.-pathname url))
+          path (if (string/starts-with? path "///")
+                 (subs path 2)
+                 path)]
       path)
     original-url))
 

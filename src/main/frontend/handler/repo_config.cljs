@@ -3,19 +3,20 @@
   This component only concerns itself with one user-facing repo config file,
   logseq/config.edn. In the future it may manage more files. This component
   depends on a repo."
-  (:require [frontend.db :as db]
+  (:require [clojure.edn :as edn]
             [frontend.config :as config]
-            [frontend.state :as state]
+            [frontend.db :as db]
+            [frontend.fs :as fs]
+            [frontend.fs2.path :as fs2-path]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.notification :as notification]
-            [frontend.fs :as fs]
-            [promesa.core :as p]
-            [clojure.edn :as edn]
-            [frontend.spec :as spec]))
+            [frontend.spec :as spec]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (defn- get-repo-config-content
   [repo-url]
-  (db/get-file repo-url (config/get-repo-config-path)))
+  (db/get-file repo-url "logseq/config.edn"))
 
 (defn read-repo-config
   "Converts file content to edn"
@@ -40,14 +41,14 @@
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         app-dir config/app-name
-        dir (str repo-dir "/" app-dir)]
+        dir (fs2-path/path-join repo-dir app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
-           (let [default-content config/config-default-content
-                  path (str app-dir "/" config/config-file)]
-             (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir "logseq/config.edn" default-content)]
-                    (when-not file-exists?
-                      (file-common-handler/reset-file! repo-url path default-content)
-                      (set-repo-config-state! repo-url default-content)))))))
+      (let [default-content config/config-default-content
+            path (str app-dir "/" config/config-file)]
+        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir "logseq/config.edn" default-content)]
+          (when-not file-exists?
+            (file-common-handler/reset-file! repo-url path default-content)
+            (set-repo-config-state! repo-url default-content)))))))
 
 (defn restore-repo-config!
   "Sets repo config state from db"

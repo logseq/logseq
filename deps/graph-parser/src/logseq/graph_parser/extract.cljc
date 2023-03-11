@@ -186,7 +186,6 @@
 (defn extract
   "Extracts pages, blocks and ast from given file"
   [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
-  (prn ::extract file-path)
   (if (string/blank? content)
     []
     (let [format (gp-util/get-format file-path)

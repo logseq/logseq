@@ -30,7 +30,8 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.fs2.path :as fs2-path]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -41,7 +42,7 @@
   (spec/validate :repos/url repo-url)
   (p/let [repo-dir (config/get-repo-dir repo-url)
           pages-dir (state/get-pages-directory)
-          [org-path md-path] (map #(str "/" pages-dir "/contents." %) ["org" "md"])
+          [org-path md-path] (map #(str pages-dir "/contents." %) ["org" "md"])
           contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
     (when-not contents-file-exist?
       (let [format (state/get-preferred-format)
@@ -64,7 +65,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-rpath path
         default-content ""]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
         (file-common-handler/reset-file! repo-url path default-content)))))
@@ -73,11 +74,10 @@
   [repo-url content]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
-        file-path (str "/" path)]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-pages-directory)))
-            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-      (file-common-handler/reset-file! repo-url path content))))
+        file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
+    (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir (config/get-pages-directory)))
+            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
+      (file-common-handler/reset-file! repo-url file-rpath content))))
 
 (defn- create-today-journal-if-not-exists
   [repo-url {:keys [content]}]
@@ -101,18 +101,17 @@
 
                     :else
                     default-content)
-          path (util/safe-path-join (config/get-journals-directory) (str file-name "."
-                                                                         (config/get-file-extension format)))
-          file-path (str "/" path)
+          file-rpath (fs2-path/path-join (config/get-journals-directory) (str file-name "."
+                                                                              (config/get-file-extension format)))
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
-                file-exists? (fs/file-exists? repo-dir file-path)]
+                _ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir (config/get-journals-directory)))
+                file-exists? (fs/file-exists? repo-dir file-rpath)]
           (when-not file-exists?
-            (p/let [_ (file-common-handler/reset-file! repo-url path content)]
-              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+            (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
+              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
                 (when-not (state/editing?)
                   (ui-handler/re-render-root!)))))
           (when-not (state/editing?)
@@ -374,8 +373,9 @@
   []
   ;; loop query if js/window.pfs is ready, interval 100ms
   (if js/window.pfs
-    (let [repo config/local-repo]
-      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
+    (let [repo config/local-repo
+          repo-dir (config/get-repo-dir repo)]
+      (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
              (db/start-db-conn! repo)
              (when-not config/publishing?
@@ -394,6 +394,7 @@
             setup-local-repo-if-not-exists-impl!)))
 
 (defn setup-local-repo-if-not-exists!
+  "Setup demo repo, i.e. `local-repo`"
   []
   ;; ensure `(state/set-db-restoring! false)` at exit
   (-> (setup-local-repo-if-not-exists-impl!)
