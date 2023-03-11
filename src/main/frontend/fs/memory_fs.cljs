@@ -49,7 +49,6 @@
 (defrecord Bfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (js/console.trace)
     (when js/window.pfs
       (let [fpath (fs2-path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
@@ -87,13 +86,9 @@
     (let [old-path (fs2-path/url-to-path old-path)
           new-path (fs2-path/url-to-path new-path)]
       (js/window.pfs.rename old-path new-path)))
-  ;; FIXME(andelf): API sign for dir-only state
-  (stat [_this dir path]
-    (if path
-      (let [fpath (fs2-path/url-to-path (fs2-path/path-join dir path))]
-        (js/window.pfs.stat fpath))
-      (let [fpath (fs2-path/url-to-path dir)]
-        (js/window.pfs.stat fpath))))
+  (stat [_this fpath]
+    (let [fpath (fs2-path/url-to-path fpath)]
+      (js/window.pfs.stat fpath)))
   (open-dir [_this _dir _ok-handler]
     nil)
   (list-files [_this _path-or-handle _ok-handler]

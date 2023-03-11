@@ -379,10 +379,9 @@
                    :to new-path}))
           (p/catch (fn [error]
                      (log/error :copy-file-failed error))))))
-  (stat [_this dir path]
-    (let [path (fs2-path/path-join dir path)]
-      (p/chain (.stat Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true))))
+  (stat [_this fpath]
+    (p/chain (.stat Filesystem (clj->js {:path fpath}))
+             #(js->clj % :keywordize-keys true)))
   (open-dir [_this dir _ok-handler]
     (open-dir dir))
   (list-files [_this dir _ok-handler]
