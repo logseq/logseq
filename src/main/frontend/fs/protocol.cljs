@@ -12,7 +12,8 @@
   (write-file! [this repo dir path content opts])
   (rename! [this repo old-path new-path])
   (copy! [this repo old-path new-path])
-  (stat [this dir path])
+  (stat [this path]
+    "=> {:type string :size number :mtime number}")
   (open-dir [this dir ok-handler]
     "=> {:path string :files [{...}]}")
   (list-files [this dir ok-handler]
