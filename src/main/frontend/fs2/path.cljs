@@ -203,9 +203,13 @@
 (defn url-to-path
   "Extract path part of a URL. decoded"
   [original-url]
-  (let [^js url (js/URL. original-url)
-        path (gp-util/safe-decode-uri-component (.-pathname url))]
-    path))
+  (if (is-file-url original-url)
+    ;; NOTE: URL type is not consistent across all protocols
+    ;; Check file:// and assets://, pathname behavior is different
+    (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
+          path (gp-util/safe-decode-uri-component (.-pathname url))]
+      path)
+    original-url))
 
 
 (defn relative-path
@@ -213,6 +217,7 @@
    Works for both path and URL."
   [base-path sub-path]
   (prn :rel-path base-path sub-path)
+  ;; (js/console.trace)
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
         is-url? (is-file-url base-path)]

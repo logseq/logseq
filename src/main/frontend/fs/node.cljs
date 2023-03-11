@@ -69,7 +69,6 @@
               ext (string/lower-case (util/get-file-ext rpath))
               db-content (or old-content (db/get-file repo rpath) "")
               contents-matched? (contents-matched? disk-content db-content)]
-        (prn ::disk disk-content ::db db-content ::new content)
         (cond
           (and
            (not= stat :not-found)         ; file on the disk was deleted
@@ -77,7 +76,6 @@
            (not (contains? #{"excalidraw" "edn" "css"} ext))
            (not (string/includes? rpath "/.recycle/")))
           (do
-            (prn ::?????)
             (state/pub-event! [:file/not-matched-from-disk rpath disk-content content]))
 
           :else
