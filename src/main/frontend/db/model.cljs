@@ -251,6 +251,8 @@
   ([path]
    (get-file (state/get-current-repo) path))
   ([repo path]
+   (when (string/starts-with? path "/")
+     (js/console.error "BUG: Using absolute path while querying DB"))
    (when (and repo path)
      (when-let [db (conn/get-db repo)]
        (:file/content (db-utils/entity db [:file/path path]))))))
@@ -258,7 +260,7 @@
 (defn get-custom-css
   []
   (when-let [repo (state/get-current-repo)]
-    (get-file (config/get-file-path repo "logseq/custom.css"))))
+    (get-file repo "logseq/custom.css")))
 
 (defn get-block-by-uuid
   [id]

@@ -2,7 +2,6 @@
   "The File System Access API, https://web.dev/file-system-access/."
   (:require ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
-            [clojure.core.async :as async]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
@@ -23,8 +22,7 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [promesa.core :as p]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]

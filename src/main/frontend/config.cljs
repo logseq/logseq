@@ -8,7 +8,8 @@
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            [frontend.fs2.path :as path]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -297,8 +298,8 @@
   "Demo graph or nil graph?"
   ([]
    (demo-graph? (state/get-current-repo)))
-  ([graph]
-   (or (nil? graph) (= graph local-repo))))
+  ([repo-url]
+   (or (nil? repo-url) (= repo-url local-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
@@ -337,14 +338,21 @@
 
     (and (mobile-util/native-platform?) (local-db? repo-url))
     (let [dir (get-local-dir repo-url)]
-      (if (string/starts-with? dir "file:")
+      (if (string/starts-with? dir "file://")
         dir
+        ;; FIXME(andelf): should not use str to concat file:// url
         (str "file:///" (string/replace dir #"^/+" ""))))
 
+    ;; Special handling for demo graph
+    (= repo-url "local")
+    "memory:///local"
+
     :else
-    (str "/"
-         (->> (take-last 2 (string/split repo-url #"/"))
-              (string/join "_")))))
+    (do
+      (js/console.error "BUG: get-repo-dir" repo-url)
+      (str "/"
+           (->> (take-last 2 (string/split repo-url #"/"))
+                (string/join "_"))))))
 
 (defn get-string-repo-dir
   [repo-dir]
@@ -374,23 +382,26 @@
 
 (defn get-file-path
   "Normalization happens here"
-  [repo-url relative-path]
-  (js/console.error "::SHOULD-NOT-USE-BUGGY-FN" repo-url relative-path)
-  (when (and repo-url relative-path)
+  [repo-url rpath]
+  (js/console.error "BUG SHOULD-NOT-USE-BUGGY-FN" repo-url rpath)
+  (when (and repo-url rpath)
     (let [path (cond
                  (demo-graph?)
-                 nil
+                 (let [dir (get-repo-dir repo-url)
+                       r (fs2-path/path-join dir rpath)]
+                   (js/console.error "get-file-path" r)
+                   r)
 
                  (and (util/electron?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (if (string/starts-with? relative-path dir)
-                     relative-path
+                   (if (string/starts-with? rpath dir)
+                     rpath
                      (str dir "/"
-                          (string/replace relative-path #"^/" ""))))
+                          (string/replace rpath #"^/" ""))))
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (util/safe-path-join dir relative-path))
+                   (fs2-path/path-join dir rpath))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -398,13 +409,13 @@
                                    (string/starts-with? dir "content:"))
                              dir
                              (str "file:///" (string/replace dir #"^/+" "")))]
-                   (util/safe-path-join dir relative-path))
+                   (util/safe-path-join dir rpath))
 
-                 (= "/" (first relative-path))
-                 (subs relative-path 1)
+                 (= "/" (first rpath))
+                 (subs rpath 1)
 
                  :else
-                 relative-path)]
+                 rpath)]
       (and (not-empty path) (gp-util/path-normalize path)))))
 
 ;; NOTE: js/encodeURIComponent cannot be used here
