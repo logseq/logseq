@@ -76,6 +76,7 @@
     (when (= fs bfs-record)
       (protocol/rmdir! fs dir))))
 
+;; TODO(andelf): distingush from graph file writing and global file write
 (defn write-file!
   [repo dir path content opts]
   (when content
@@ -182,7 +183,7 @@
     (when ok-handler
       (js/console.warn "ok-handler not nil"))
     (p/let [result (protocol/list-files fs-record path-or-handle ok-handler)]
-      (prn :t result)
+      (prn ::list-files (first result) "....")
       (if (or (util/electron?)
               (mobile-util/native-platform?))
         (let [files result ;; TODO(andelf): rm first item from electron
@@ -240,7 +241,7 @@
   (p/let [repo-dir (config/get-repo-dir (state/get-current-repo))
           rpath (fs2-path/relative-path repo-dir href)
           exist? (file-exists? repo-dir rpath)]
-    (prn ::href href exist?)
+    (prn ::href-exists href exist?)
     exist?))
 
 (defn dir-exists?
