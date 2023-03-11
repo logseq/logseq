@@ -302,6 +302,7 @@
                   path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
           files (readdir path)]
+    ;; FIXME: wrong stucture returned
     (into [] (concat [{:path path}] files))))
 
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
@@ -361,24 +362,20 @@
         ;; `path` is full-path
         (write-file-impl! repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
-    (let []
-      (prn ::rename old-path new-path)
-      (p/catch
-       (p/let [_ (.rename Filesystem
-                          (clj->js
-                           {:from old-path
-                            :to new-path}))])
-       (fn [error]
-         (log/error :rename-file-failed error)))))
+    (p/catch
+     (p/let [_ (.rename Filesystem
+                        (clj->js
+                         {:from old-path
+                          :to new-path}))])
+     (fn [error]
+       (log/error :rename-file-failed error))))
   (copy! [_this _repo old-path new-path]
-    (let []
-      (prn ::copy old-path new-path)
-      (-> (.copy Filesystem
-                 (clj->js
-                  {:from old-path
-                   :to new-path}))
-          (p/catch (fn [error]
-                     (log/error :copy-file-failed error))))))
+    (-> (.copy Filesystem
+               (clj->js
+                {:from old-path
+                 :to new-path}))
+        (p/catch (fn [error]
+                   (log/error :copy-file-failed error)))))
   (stat [_this fpath]
     (p/chain (.stat Filesystem (clj->js {:path fpath}))
              #(js->clj % :keywordize-keys true)))
