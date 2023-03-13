@@ -428,9 +428,9 @@
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
-            ast (if (= :all keep-level<=n)
-                  ast
-                  (common/keep-only-level<=n ast keep-level<=n))
+            ast (if (pos? keep-level<=n)
+                  (common/keep-only-level<=n ast keep-level<=n)
+                  ast)
             ast* (common/replace-block&page-reference&embed ast)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (mapv common/replace-Heading-with-Paragraph ast*)
@@ -453,7 +453,8 @@
 (defn export-blocks-as-markdown
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
-  :remove-options [:emphasis :page-ref :tag]"
+  :remove-options [:emphasis :page-ref :tag]
+  :other-options {:keep-only-level<=N int}"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
