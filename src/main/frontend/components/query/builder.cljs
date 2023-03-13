@@ -119,6 +119,9 @@
                        (reset! *between-dates {}))))))])
 
 (rum/defcs ^:large-vars/cleanup-todo picker <
+  {:will-mount (fn [state]
+                 (state/clear-selection!)
+                 state)}
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
   [state *find *tree loc clause opts]
