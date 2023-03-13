@@ -117,46 +117,47 @@
     (symbol (page-ref/->page-ref x))
     (->page-ref (second x))))
 
+(defn- ->dsl*
+  [f]
+  (cond
+    (and (vector? f) (= :priority (keyword (first f))))
+    (vec (cons (symbol :priority) (map symbol (rest f))))
+
+    (and (vector? f) (= :task (keyword (first f))))
+    (vec (cons (symbol :task) (map symbol (rest f))))
+
+    (and (vector? f) (= :page-ref (keyword (first f))))
+    (->page-ref (second f))
+
+    (and (vector? f) (= :page-tags (keyword (first f))))
+    [(symbol :page-tags) (->page-ref (second f))]
+
+    (and (vector? f) (= :between (keyword (first f))))
+    (into [(symbol :between)] (map ->page-ref (rest f)))
+
+    ;; property key value
+    (and (vector? f) (= 3 (count f)) (contains? #{:page-property :property} (keyword (first f))))
+    (let [l (if (page-ref/page-ref? (str (last f)))
+              (symbol (last f))
+              (last f))]
+      (into [(symbol (first f))] [(second f) l]))
+
+    (and (vector? f) (contains? #{:page :namespace :tags} (keyword (first f))))
+    (into [(symbol (first f))] (map ->page-ref (rest f)))
+
+    :else f))
+
 (defn ->dsl
   [col]
-  (->>
-   (walk/prewalk
-    (fn [f]
-      (cond
-        (and (vector? f) (= :priority (keyword (first f))))
-        (vec (cons (symbol :priority) (map symbol (rest f))))
+  (walk/prewalk
+   (fn [f]
+     (let [f' (->dsl* f)]
+       (cond
+         (and (vector? f') (keyword (first f')))
+         (cons (symbol (first f')) (rest f'))
 
-        (and (vector? f) (= :task (keyword (first f))))
-        (vec (cons (symbol :task) (map symbol (rest f))))
-
-        (and (vector? f) (= :page-ref (keyword (first f))))
-        (->page-ref (second f))
-
-        (and (vector? f) (= :page-tags (keyword (first f))))
-        [(symbol :page-tags) (->page-ref (second f))]
-
-        (and (vector? f) (= :between (keyword (first f))))
-        (into [(symbol :between)] (map ->page-ref (rest f)))
-
-        ;; property key value
-        (and (vector? f) (= 3 (count f)) (contains? #{:page-property :property} (keyword (first f))))
-        (let [l (if (page-ref/page-ref? (str (last f)))
-                  (symbol (last f))
-                  (last f))]
-          (into [(symbol (first f))] [(second f) l]))
-
-        (and (vector? f) (contains? #{:page :namespace :tags} (keyword (first f))))
-        (into [(symbol (first f))] (map ->page-ref (rest f)))
-
-        :else f))
-    col)
-   (walk/prewalk
-    (fn [f]
-      (cond
-        (and (vector? f) (keyword (first f)))
-        (cons (symbol (first f)) (rest f))
-
-        :else f)))))
+         :else f')))
+   col))
 
 (defn from-dsl
   [dsl-form]
