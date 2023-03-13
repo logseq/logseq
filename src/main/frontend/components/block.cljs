@@ -3219,6 +3219,8 @@
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
+        dsl-page-query? (and dsl-query?
+                         (not (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
                                (util/electron?)
                                (symbol? (safe-read-string query false)))]
@@ -3240,7 +3242,7 @@
              [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
               [:div.flex.flex-1.flex-row
                (ui/icon "search" {:size 14})
-               [:div.ml-1 "Live query"]]
+               [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]]
               (when-not collapsed?'
                 [:div.flex.flex-row.items-center.fade-in
                  (when (> (count result) 0)

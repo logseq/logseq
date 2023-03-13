@@ -269,14 +269,14 @@
         (str "#" (second clause))
         (str "#" (second (second clause))))
 
-      (= (keyword f) :property)
+      (contains? #{:property :page-property} (keyword f))
       (str (name (second clause)) ": "
            (cond
              (and (vector? (last clause)) (= :page-ref (first (last clause))))
              (second (last clause))
 
              (= 2 (count clause))
-             "*"
+             "ALL"
 
              :else
              (last clause)))
