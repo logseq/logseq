@@ -12,14 +12,19 @@
 
 (defn- get-state
   []
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        page (or (when-let [sidebar-page (.closest js/document.activeElement ".sidebar-item")]
+                   (.getAttribute sidebar-page "data-title"))
+                 (state/get-current-whiteboard)
+                 (state/get-current-page))]
     (assert (string? repo) "Repo should satisfy string?")
-    (if-let [state (get @undo-redo-states repo)]
-      state
-      (let [new-state {:undo-stack (atom [])
-                       :redo-stack (atom [])}]
-        (swap! undo-redo-states assoc repo new-state)
-        new-state))))
+    (when page
+      (if-let [state (get-in @undo-redo-states [repo page])]
+        state
+        (let [new-state {:undo-stack (atom [])
+                         :redo-stack (atom [])}]
+          (swap! undo-redo-states assoc-in [repo page] new-state)
+          new-state)))))
 
 (defn- get-undo-stack
   []

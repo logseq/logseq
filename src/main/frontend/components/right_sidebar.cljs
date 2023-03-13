@@ -137,8 +137,8 @@
   (let [item (build-sidebar-item repo idx db-id block-type)]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4.shadow-md
-         (let [[title component] item]
+        (let [[title component] item]
+          [:div.sidebar-item.content.color-level.px-4.shadow-md {:data-title (last title)}
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
              [:div.flex.flex-row.justify-center
@@ -149,7 +149,7 @@
                title]]
              (close #(state/sidebar-remove-block! idx))]
             [:div {:class (if collapse? "hidden" "initial")}
-             component]])]))))
+             component]]])))))
 
 (defn- get-page
   [match]
