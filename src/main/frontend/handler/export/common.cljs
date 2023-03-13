@@ -44,7 +44,8 @@
     :indent-style "dashes"
     :remove-page-ref-brackets? false
     :remove-emphasis? false
-    :remove-tags? false}})
+    :remove-tags? false
+    :keep-only-level<=N :all}})
 
 ;;; internal utils
 (defn- get-blocks-contents
@@ -527,6 +528,29 @@
               true vec)]
         ["Paragraph" inline-coll])
       heading-ast)))
+
+(defn keep-only-level<=n
+  [block-ast-coll n]
+  (-> (reduce
+       (fn [{:keys [result-ast-tcoll accepted-heading] :as r} ast]
+         (let [[heading-type {level :level}] ast
+               is-heading?                   (= heading-type "Heading")]
+           (cond
+             (and (not is-heading?) accepted-heading)
+             {:result-ast-tcoll (conj! result-ast-tcoll ast) :accepted-heading accepted-heading}
+
+             (and (not is-heading?) (not accepted-heading))
+             r
+
+             (and is-heading? (<= level n))
+             {:result-ast-tcoll (conj! result-ast-tcoll ast) :accepted-heading true}
+
+             (and is-heading? (> level n))
+             {:result-ast-tcoll result-ast-tcoll :accepted-heading false})))
+       {:result-ast-tcoll  (transient []) :accepted-heading false}
+       block-ast-coll)
+      :result-ast-tcoll
+      persistent!))
 
 ;;; inline transformers
 

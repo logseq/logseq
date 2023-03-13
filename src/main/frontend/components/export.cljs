@@ -62,30 +62,34 @@
   (let [current-repo (state/get-current-repo)
         text-indent-style (state/get-export-block-text-indent-style)
         text-remove-options (set (state/get-export-block-text-remove-options))
+        text-other-options (state/get-export-block-text-other-options)
         tp @*export-block-type]
     (case tp
       :text (export-text/export-blocks-as-markdown
              current-repo block-uuids-or-page-name
-             {:indent-style text-indent-style :remove-options text-remove-options})
+             {:indent-style text-indent-style :remove-options text-remove-options :other-options text-other-options})
       :opml (export-opml/export-blocks-as-opml
-             current-repo block-uuids-or-page-name {:remove-options text-remove-options})
+             current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
       :html (export-html/export-blocks-as-html
-             current-repo block-uuids-or-page-name {:remove-options text-remove-options})
+             current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
 (rum/defcs export-blocks < rum/static
   (rum/local false ::copied?)
   (rum/local nil ::text-remove-options)
   (rum/local nil ::text-indent-style)
+  (rum/local nil ::text-other-options)
   (rum/local nil ::content)
   {:will-mount (fn [state]
                  (let [content (export-helper (last (:rum/args state)))]
                    (reset! (::content state) content)
                    (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
                    (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
+                   (reset! (::text-other-options state) (state/get-export-block-text-other-options))
                    state))}
   [state root-block-uuids-or-page-name]
   (let [tp @*export-block-type
+        *text-other-options (::text-other-options state)
         *text-remove-options (::text-remove-options state)
         *text-indent-style (::text-indent-style state)
         *copied? (::copied? state)
@@ -163,7 +167,23 @@
                                     (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "remove #tags"]]])
+          "remove #tags"]]
+
+        [:div.flex.items-center
+         [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+          "level <="]
+         [:select.block.my-2.text-lg.rounded.border
+          {:style {:padding "0 0 0 12px"
+                   :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+           :value (or (:keep-only-level<=N @*text-other-options) :all)
+           :on-change (fn [e]
+                        (let [value (util/evalue e)
+                              level (if (= "all" value) :all (util/safe-parse-int value))]
+                          (state/update-export-block-text-other-options! :keep-only-level<=N level)
+                          (reset! *text-other-options (state/get-export-block-text-other-options))
+                          (reset! *content (export-helper root-block-uuids-or-page-name))))}
+          (for [n (cons "all" (range 1 10))]
+            [:option {:key n :value n} n])]]])
 
      [:div.mt-4
       (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
