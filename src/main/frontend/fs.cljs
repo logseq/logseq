@@ -35,9 +35,7 @@
                        (string/starts-with? dir "local"))]
     (cond
       (string/starts-with? dir "memory://")
-      (do
-        (prn ::debug-using-memory-backend)
-        memory-backend)
+      memory-backend
 
       (and (util/electron?) (not bfs-local?))
       node-backend
@@ -46,8 +44,7 @@
       mobile-backend
 
       :else
-      (do
-        nfs-backend))))
+      nfs-backend)))
 
 (defn mkdir!
   [dir]
@@ -62,8 +59,7 @@
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
     (let [result (if (and path-only? (map? (first result)))
-                   ;; FIXME(andelf): nfs uses :file/path, other fs uses :path
-                   (map #(or (:path %) (:file/path %)) result)
+                   (map :path result)
                    result)]
       (map gp-util/path-normalize result))))
 

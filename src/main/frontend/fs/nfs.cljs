@@ -57,7 +57,6 @@
         repo-dir (config/get-repo-dir repo)
         handle-path (str "handle/" repo-dir)
         handle (get-nfs-file-handle handle-path)]
-    (prn ::verify-permission repo-dir handle)
     (p/then
      (utils/verifyPermission handle read-write?)
      (fn []
@@ -113,7 +112,7 @@
                                 true
                                 (fn [path entry]
                                   (let [handle-path (str "handle/" path)]
-                                    ;; Same all handles here, even for directories and ignored directories(for backing up)
+                                    ;; Same for all handles here, even for directories and ignored directories(for backing up)
                                     ;; FileSystemDirectoryHandle or FileSystemFileHandle
                                     (add-nfs-file-handle! handle-path entry))))]
     (p/all (->> files
@@ -126,18 +125,18 @@
                                   (string/starts-with? rpath "logseq/bak")
                                   (string/starts-with? rpath "logseq/version-files")
                                   (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
-                       ;; Read out using .text, Promise<string>
+                ;; Read out using .text, Promise<string>
                 (map (fn [file]
                        (p/let [content (.text file)]
-                         {:file/name             (.-name file)
-                          :file/path             (-> (.-webkitRelativePath file)
-                                                     gp-util/path-normalize)
-                          :file/last-modified-at (.-lastModified file)
-                          :file/size             (.-size file)
-                          :file/type             (.-kind (.-handle file))
-                          :file/file             file
-                          :file/handle           (.-handle file)
-                          :file/content          content})))))))
+                         {:name        (.-name file)
+                          :path        (-> (.-webkitRelativePath file)
+                                           gp-util/path-normalize)
+                          :mtime       (.-lastModified file)
+                          :size        (.-size file)
+                          :type        (.-kind (.-handle file))
+                          :content     content
+                          :file/file   file
+                          :file/handle (.-handle file)})))))))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -219,7 +218,6 @@
   (write-file! [_this repo dir path content opts]
     ;; TODO: file backup handling
     (prn ::write-file dir path)
-    (prn ::debug-xxx @nfs-file-handles-cache)
     (let [fpath (fs2-path/path-join dir path)
           ext (util/get-file-ext path)
           file-handle-path (str "handle/" fpath)]
@@ -238,14 +236,13 @@
                  (not (string/includes? path "/.recycle/")))
               (state/pub-event! [:file/not-matched-from-disk path disk-content content])
               (do ;; actually writing
-                (prn ::begin-writing)
                 (p/let [_ (verify-permission repo true)
                         _ (utils/writeFile file-handle content)
                         file (.getFile file-handle)]
                   (when file
                     (db/set-file-content! repo path content)
                     (nfs-saved-handler repo path file))))))
-          ;; file no-exist
+          ;; file no-exist, write via parent dir handle
           (p/let [basename (fs2-path/filename fpath)
                   parent-dir (fs2-path/parent fpath)
                   parent-dir-handle-path (str "handle/" parent-dir)
@@ -270,7 +267,7 @@
                                         false)
                     (state/pub-event! [:file/alter repo path text]))))
 
-
+              ;; TODO: create parent directory and write
               (js/console.error "file not exists in cache")))))))
 
   (rename! [this repo old-path new-path]
@@ -288,7 +285,6 @@
     (prn ::stat fpath)
     (if-let [file (get-nfs-file-handle (str "handle/" fpath))]
       (p/let [file (.getFile file)]
-        (js/console.log "stat" file)
         (let [get-attr #(gobj/get file %)]
           {:last-modified-at (get-attr "lastModified")
            :size (get-attr "size")
@@ -320,16 +316,18 @@
                        (map (fn [file]
                               (js/console.log "handle" file)
                               (p/let [content (.text file)]
-                                {:file/name             (.-name file)
-                                 :file/path             (-> (.-webkitRelativePath file)
-                                                            (string/replace-first (str dir-name "/") "")
-                                                            gp-util/path-normalize)
-                                 :file/last-modified-at (.-lastModified file)
-                                 :file/size             (.-size file)
-                                 :file/type             (.-kind (.-handle file))
-                                 :file/file             file
-                                 :file/handle           (.-handle file)
-                                 :file/content          content}))))
+                                ;; path content size mtime
+                                {:name        (.-name file)
+                                 :path        (-> (.-webkitRelativePath file)
+                                                  (string/replace-first (str dir-name "/") "")
+                                                  gp-util/path-normalize)
+                                 :mtime       (.-lastModified file)
+                                 :size        (.-size file)
+                                 :type        (.-kind (.-handle file))
+                                 :content     content
+                                 ;; expose the following, they are used by the file system
+                                 :file/file   file
+                                 :file/handle (.-handle file)}))))
             files (p/all files)]
       (add-nfs-file-handle! (str "handle/" dir-name) dir-handle)
       (idb/set-item! (str "handle/" dir-name) dir-handle)
