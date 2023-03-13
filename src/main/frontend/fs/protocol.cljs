@@ -7,6 +7,7 @@
   (mkdir-recur! [this dir])
   (readdir [this dir])
   (unlink! [this repo path opts])
+  ;; FIXME(andelf): remove this API? since the only usage is plugin API
   (rmdir! [this dir])
   (read-file [this dir path opts])
   (write-file! [this repo dir path content opts])
@@ -17,7 +18,7 @@
   (open-dir [this dir ok-handler]
     "=> {:path string :files [{...}]}")
   (list-files [this dir ok-handler]
-    "dir => [{:path string :content string}]")
+    "=> [{:path string :content string}]")
   (watch-dir! [this dir options])
   (unwatch-dir! [this dir])
   ;; Ensure the dir is watched, window agnostic.
