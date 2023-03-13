@@ -17,6 +17,7 @@
 
     .cp__select .input-wrap {
         height: auto;
+        min-width: 14em;
     }
 
     .cp__select .input-wrap input {

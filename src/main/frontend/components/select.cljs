@@ -23,7 +23,9 @@
     [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
      [:span
       (when multiple-choices? (ui/checkbox {:checked (selected-choices value)
-                                            :style {:margin-right 4}}))
+                                            :style {:margin-right 4}
+                                            :on-click (fn [e]
+                                                        (.preventDefault e))}))
       value]
      (when (and (map? result) (:id result))
        [:div.tip.flex

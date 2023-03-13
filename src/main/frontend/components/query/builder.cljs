@@ -218,7 +218,7 @@
             nil)])
        [:div
         (when-not @*find
-          [:div.flex.flex-row.items-center.p-2
+          [:div.flex.flex-row.items-center.p-2.justify-between
            [:div.ml-2 "Find: "]
            (page-block-selector *find)])
         (when-not @*find
