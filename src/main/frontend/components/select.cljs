@@ -47,7 +47,7 @@
                  prompt-key input-default-placeholder close-modal?
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
-                 multiple-choices? selected-choices]
+                 multiple-choices? _selected-choices]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
