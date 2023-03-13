@@ -44,6 +44,7 @@
         (p/resolved files))
       (p/resolved files))))
 
+;; TODO: this should be handled in fs layer
 (defn- ->db-files
   [dir-name result]
   (->>
@@ -66,20 +67,8 @@
                :file/content content}))
           result)
 
-     :else
-     (let [result (flatten (bean/->clj result))]
-       (map (fn [file]
-              (let [handle (gobj/get file "handle")
-                    get-attr #(gobj/get file %)
-                    path (-> (get-attr "webkitRelativePath")
-                             (string/replace-first (str dir-name "/") ""))]
-                {:file/name             (get-attr "name")
-                 :file/path             (gp-util/path-normalize path)
-                 :file/last-modified-at (get-attr "lastModified")
-                 :file/size             (get-attr "size")
-                 :file/type             (get-attr "type")
-                 :file/file             file
-                 :file/handle           handle})) result)))
+     :else ;; NFS backend
+     result)
    (sort-by :file/path)))
 
 (defn- filter-markup-and-built-in-files
@@ -131,59 +120,65 @@
          dir (or dir nil)]
      ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
-      (p/let [result (if (fn? dir-result-fn)
+      (p/let [_ (prn :xxx-dir-result-fn dir-result-fn)
+              result (if (fn? dir-result-fn)
                        (dir-result-fn {:path-handles path-handles :nfs? nfs?})
                        (fs/open-dir dir
                                     (fn [path handle]
-                                      (when nfs?
-                                        (swap! path-handles assoc path handle)))))
+                                      (comment when nfs?
+                                               (swap! path-handles assoc path handle)))))
               _ (when (fn? on-open-dir)
+                  (prn ::calling-on-open-dir-fn)
                   (on-open-dir result))
               root-handle (:path result)
               _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
-              dir-name (if nfs?
-                         (gobj/get root-handle "name")
-                         root-handle)
-
-              repo (str config/local-db-prefix dir-name)
-              _ (state/set-loading-files! repo true)
-              _ (when-not (or (state/home?) (state/setups-picker?))
-                  (route-handler/redirect-to-home! false))]
+              ;dir-name (if nfs?
+              ;           (gobj/get root-handle "name")
+              ;           root-handle)
+              dir-name root-handle
+              repo (str config/local-db-prefix root-handle)]
+        
+        (state/set-loading-files! repo true)
+        (when-not (or (state/home?) (state/setups-picker?))
+          (route-handler/redirect-to-home! false))
         (reset! *repo repo)
+        (prn ::begin-hanlding-files dir-name)
         (when-not (string/blank? dir-name)
-          (p/let [root-handle-path (str config/local-handle-prefix dir-name)
-                  _ (when nfs?
-                      (idb/set-item! root-handle-path root-handle)
-                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
+          (p/let [; handle/logseq_local_dir-name
+                  _ (when-let [root-handle-path (and nfs?
+                                                     (str config/local-handle-prefix dir-name))]
+                      (prn ::saving-handle-to-idb)
+                      ; (idb/set-item! root-handle-path (str "handle/" root-handle)))
+                      (nfs/save-root-handle-to-idb! repo root-handle))
+                 ;      (idb/set-item! root-handle-path (str "handle/" root-handle))
+                 ;     ; (nfs/add-nfs-file-handle! root-handle-path root-handle)
+                 ;     )
                   files (:files result)
                   files (-> (->db-files dir-name files)
+                            ;; NOTE: filter, in case backend does not handle this
                             (remove-ignore-files dir-name nfs?))
-                  _ (when nfs?
+                  _ (prn ::remain-files files)
+                  _ (comment when nfs?
                       ;; only for browserfs
-                      (let [file-paths (set (map :file/path files))]
-                        (swap! path-handles (fn [handles]
-                                              (->> handles
-                                                   (filter (fn [[path _handle]]
-                                                             (or
-                                                              (contains? file-paths
-                                                                         (string/replace-first path (str dir-name "/") ""))
-                                                              (let [last-part (last (string/split path "/"))]
-                                                                (contains? #{config/app-name
-                                                                             gp-config/default-draw-directory
-                                                                             (config/get-journals-directory)
-                                                                             (config/get-whiteboards-directory)
-                                                                             (config/get-pages-directory)}
-                                                                           last-part)))))
-                                                   (into {})))))
+                             (let [file-paths (set (map :file/path files))]
+                               (swap! path-handles (fn [handles]
+                                                     (->> handles
+                                                          (filter (fn [[path _handle]]
+                                                                    (or
+                                                                     (contains? file-paths
+                                                                                (string/replace-first path (str dir-name "/") ""))
+                                                                     (let [last-part (last (string/split path "/"))]
+                                                                       (contains? #{config/app-name
+                                                                                    gp-config/default-draw-directory
+                                                                                    (config/get-journals-directory)
+                                                                                    (config/get-whiteboards-directory)
+                                                                                    (config/get-pages-directory)}
+                                                                                  last-part)))))
+                                                          (into {})))))
 
-                      (set-files! @path-handles))
+                             (set-files! @path-handles))
                   markup-files (filter-markup-and-built-in-files files)]
-            (-> (p/all (map (fn [file]
-                              ;; read file for nfs
-                              (p/let [content (if nfs?
-                                                (.text (:file/file file))
-                                                (:file/content file))]
-                                (assoc file :file/content content))) markup-files))
+            (-> files
                 (p/then (fn [result]
                           ;; handle graphs txid
                           (p/let [files (mapv #(dissoc % :file/file) result)
@@ -199,16 +194,16 @@
                                 (repo-handler/start-repo-db-if-not-exists! repo)
                                 (prn ::dd (nil? (seq markup-files)))
                                 (p/do!
-                                  (repo-handler/load-new-repo-to-db! repo
-                                                                     {:new-graph?   true
-                                                                      :empty-graph? (nil? (seq markup-files))
-                                                                      :file-objs    files})
-                                  (prn ::debug-2.5)
-                                  (state/add-repo! {:url repo :nfs? true})
-                                  (prn ::debug-33333)
-                                  (state/set-loading-files! repo false)
-                                  (when ok-handler (ok-handler {:url repo}))
-                                  (db/persist-if-idle! repo)))))))
+                                 (repo-handler/load-new-repo-to-db! repo
+                                                                    {:new-graph?   true
+                                                                     :empty-graph? (nil? (seq markup-files))
+                                                                     :file-objs    files})
+                                 (prn ::debug-2.5)
+                                 (state/add-repo! {:url repo :nfs? true})
+                                 (prn ::debug-33333)
+                                 (state/set-loading-files! repo false)
+                                 (when ok-handler (ok-handler {:url repo}))
+                                 (db/persist-if-idle! repo)))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)
                            (log/error :exception error)))))))
@@ -341,7 +336,7 @@
       (->
        (p/let [handle (when-not electron? (idb/get-item handle-path))]
          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
-           (p/let [_ (when handle (nfs/verify-permission repo handle true))
+           (p/let [_ (when handle (nfs/verify-permission repo true))
                    local-files-result
                    (fs/list-files (if nfs? handle
                                       (config/get-local-dir repo))

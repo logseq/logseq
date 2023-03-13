@@ -2076,6 +2076,10 @@ Similar to re-frame subscriptions"
   []
   (:pdf/current @state))
 
+(defn nfs-user-granted?
+  [repo]
+  (get-in @state [:nfs/user-granted? repo]))
+
 (defn set-current-pdf!
   [inflated-file]
   (let [settle-file! #(set-state! :pdf/current inflated-file)]
