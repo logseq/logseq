@@ -93,7 +93,7 @@ test('clone the rectangle', async ({ page }) => {
   await page.keyboard.down('Alt')
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
+  await page.mouse.move(bounds.x + 100, bounds.y + 100)
   await page.mouse.up()
   await page.keyboard.up('Alt')
 
@@ -109,7 +109,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 10})
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5}) // will fail without steps
   await page.mouse.up()
   await page.keyboard.press('Escape')
 
@@ -121,10 +121,10 @@ test('delete the first rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.mouse.click(bounds.x + 20, bounds.y + 20)
+  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.down()
+  await page.mouse.up()
   await page.keyboard.press('Delete')
-
-  await page.waitForTimeout(100)
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
@@ -196,14 +196,14 @@ test('cleanup the shapes', async ({ page }) => {
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.click('#tl-zoom-in')
+  await page.keyboard.press(`${modKey}+=`)
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
   await page.waitForTimeout(1500)
-  await page.click('#tl-zoom-out')
+  await page.keyboard.press(`${modKey}+-`)
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
