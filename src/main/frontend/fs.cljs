@@ -36,7 +36,7 @@
     (cond
       (string/starts-with? dir "memory://")
       (do
-        ; (prn ::debug-using-memory-backend)
+        (prn ::debug-using-memory-backend)
         memory-backend)
 
       (and (util/electron?) (not bfs-local?))
@@ -45,11 +45,9 @@
       (mobile-util/native-platform?)
       mobile-backend
 
-      (local-db? dir)
-      nfs-backend
-
       :else
-      memory-backend)))
+      (do
+        nfs-backend))))
 
 (defn mkdir!
   [dir]
@@ -64,7 +62,8 @@
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
     (let [result (if (and path-only? (map? (first result)))
-                   (map :path result)
+                   ;; FIXME(andelf): nfs uses :file/path, other fs uses :path
+                   (map #(or (:path %) (:file/path %)) result)
                    result)]
       (map gp-util/path-normalize result))))
 
@@ -86,7 +85,8 @@
   [repo dir rpath content opts]
   (when content
     (let [path (gp-util/path-normalize rpath)
-          fs-record (get-fs dir)]
+          fs-record (get-fs dir)
+          _ (prn ::debug-fs fs-record)]
       (->
        (p/let [opts (assoc opts
                            :error-handler
@@ -169,6 +169,7 @@
   [dir ok-handler]
   (let [record (get-native-backend)]
     (p/let [result (protocol/open-dir record dir ok-handler)]
+      (prn ::open-dir result)
       (if (or (util/electron?)
               (mobile-util/native-platform?))
         (let [{:keys [path files]} result

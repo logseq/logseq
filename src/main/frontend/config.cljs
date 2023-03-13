@@ -308,6 +308,12 @@
 (def custom-js-file "custom.js")
 (def config-default-content (rc/inline "config.edn"))
 
+;; NOTE: repo-url is the unique identifier of a repo.
+;; - `local` => in-memory demo graph
+;; - `logseq_local_/absolute/path/to/graph` => local graph, native fs backend
+;; - `logseq_local_x:/absolute/path/to/graph` => local graph, native fs backend, on Windows
+;; - `logseq_local_GraphName` => local graph, browser fs backend
+
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
@@ -348,9 +354,14 @@
     (= repo-url "local")
     "memory:///local"
 
+    ;; nfs, browser-fs-access
+    ;; Format: logseq_local_{dir-name}
+    (local-db? repo-url)
+    (string/replace-first repo-url local-db-prefix "")
+
     :else
     (do
-      (js/console.error "BUG: get-repo-dir" repo-url)
+      (js/console.error "BUG: This should be unreachable! get-repo-dir" repo-url)
       (str "/"
            (->> (take-last 2 (string/split repo-url #"/"))
                 (string/join "_"))))))
