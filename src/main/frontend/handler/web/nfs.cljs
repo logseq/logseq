@@ -46,7 +46,8 @@
 
 ;; TODO: this should be handled in fs layer
 (defn- ->db-files
-  [dir-name result]
+  ;; TODO(andelf): rm nfs? parameter
+  [result nfs?]
   (->>
    (cond
      ;; TODO(andelf): use the same structure for both fields
@@ -65,6 +66,16 @@
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
+          result)
+
+     nfs?
+     (map (fn [{:keys [path content size mtime type] :as file-obj}]
+            (merge file-obj
+                   {:file/path             (gp-util/path-normalize path)
+                    :file/last-modified-at mtime
+                    :file/size             size
+                    :file/type             type
+                    :file/content content}))
           result)
 
      :else ;; NFS backend
@@ -154,7 +165,7 @@
                  ;     ; (nfs/add-nfs-file-handle! root-handle-path root-handle)
                  ;     )
                   files (:files result)
-                  files (-> (->db-files dir-name files)
+                  files (-> (->db-files files nfs?)
                             ;; NOTE: filter, in case backend does not handle this
                             (remove-ignore-files dir-name nfs?))
                   _ (prn ::remain-files files)
@@ -343,7 +354,7 @@
                                   (fn [path handle]
                                     (when nfs?
                                       (swap! path-handles assoc path handle))))
-                   new-local-files (-> (->db-files dir-name (:files local-files-result))
+                   new-local-files (-> (->db-files (:files local-files-result) nfs?)
                                        (remove-ignore-files dir-name nfs?))
                   ;; new-global-files (if (and (config/global-config-enabled?)
                    ;;                          ;; Hack until we better understand failure in frontend.handler.file/alter-file
