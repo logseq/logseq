@@ -1,20 +1,20 @@
 (ns frontend.handler.export.opml
   "export blocks/pages as opml"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
-  (:require
-   [clojure.string :as string]
-   [clojure.zip :as z]
-   [frontend.db :as db]
-   [frontend.extensions.zip :as zip]
-   [frontend.handler.export.common :as common :refer
+  (:require [clojure.string :as string]
+            [clojure.zip :as z]
+            [frontend.db :as db]
+            [frontend.extensions.zip :as zip]
+            [frontend.handler.export.common :as common :refer
              [*state* raw-text simple-asts->string space]]
-   [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [concatv mapcatv removev]]
-   [hiccups.runtime :as h]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [promesa.core :as p]
-   [goog.dom :as gdom]))
+            [frontend.handler.export.zip-helper :refer [get-level goto-last
+                                                        goto-level]]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [goog.dom :as gdom]
+            [hiccups.runtime :as h]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [promesa.core :as p]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic

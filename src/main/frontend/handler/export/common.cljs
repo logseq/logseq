@@ -38,6 +38,10 @@
     :block-ref-replaced? false
     :block&page-embed-replaced? false}
 
+   ;; submap for :newline-after-block internal state
+   :newline-after-block
+   {:current-block-is-first-heading-block? true}
+
    ;; export-options submap
    :export-options
    {;; dashes, spaces, no-indent
@@ -45,7 +49,8 @@
     :remove-page-ref-brackets? false
     :remove-emphasis? false
     :remove-tags? false
-    :keep-only-level<=N :all}})
+    :keep-only-level<=N :all
+    :newline-after-block false}})
 
 ;;; internal utils
 (defn- get-blocks-contents
@@ -109,6 +114,10 @@
 (defn- plain-indent-inline-ast
   [level & {:keys [spaces] :or {spaces "  "}}]
   ["Plain" (str (reduce str (repeat (dec level) "\t")) spaces)])
+
+(defn- mk-paragraph-ast
+  [inline-coll meta]
+  (with-meta ["Paragraph" inline-coll] meta))
 
 ;;; internal utils (ends)
 
@@ -291,7 +300,7 @@
       [ast-type (replace-block-reference-in-heading ast-content)]
 
       "Paragraph"
-      [ast-type (replace-block-reference-in-paragraph ast-content)]
+      (mk-paragraph-ast (replace-block-reference-in-paragraph ast-content) (meta block-ast))
 
       "List"
       [ast-type (replace-block-reference-in-list ast-content)]
@@ -382,17 +391,20 @@
             (recur other-inlines heading-exist? (conj current-paragraph-inlines* inline) r)))))))
 
 (defn- replace-block&page-embeds-in-paragraph
-  [inline-coll]
+  [inline-coll meta]
   (let [current-level (get-in *state* [:replace-ref-embed :current-level])]
     (loop [[inline & other-inlines] inline-coll
            current-paragraph-inlines []
            just-after-embed? false
            blocks (transient [])]
       (if-not inline
-        (persistent!
-         (if (seq current-paragraph-inlines)
-           (conj! blocks ["Paragraph" current-paragraph-inlines])
-           blocks))
+        (let [[first-block & other-blocks] (persistent!
+                                            (if (seq current-paragraph-inlines)
+                                              (conj! blocks ["Paragraph" current-paragraph-inlines])
+                                              blocks))]
+          (if first-block
+            (apply vector (with-meta first-block meta) other-blocks)
+            []))
         (match [inline]
           [["Macro" {:name "embed" :arguments [block-uuid-or-page-name]}]]
           (cond
@@ -448,7 +460,7 @@
       "Heading"
       (replace-block&page-embeds-in-heading ast-content)
       "Paragraph"
-      (replace-block&page-embeds-in-paragraph ast-content)
+      (replace-block&page-embeds-in-paragraph ast-content (meta block-ast))
       "List"
       (replace-block&page-embeds-in-list ast-content)
       "Quote"
@@ -514,6 +526,7 @@
   [[tp _]]
   (= tp "Properties"))
 
+
 (defn replace-Heading-with-Paragraph
   "works on block-ast
   replace all heading with paragraph when indent-style is no-indent"
@@ -526,7 +539,7 @@
               marker (cons ["Plain" (str marker " ")])
               size (cons ["Plain" (str (reduce str (repeat size "#")) " ")])
               true vec)]
-        ["Paragraph" inline-coll])
+        (mk-paragraph-ast inline-coll {:origin-ast heading-ast}))
       heading-ast)))
 
 (defn keep-only-level<=n
@@ -625,7 +638,7 @@
   (let [[ast-type ast-content] block-ast]
     (case ast-type
       "Paragraph"
-      ["Paragraph" (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)]
+      (mk-paragraph-ast (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast) (meta block-ast))
       "Heading"
       (let [{:keys [title]} ast-content]
         ["Heading"

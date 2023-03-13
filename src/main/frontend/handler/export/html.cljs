@@ -1,17 +1,17 @@
 (ns frontend.handler.export.html
   "export blocks/pages as html"
-  (:require
-   [clojure.edn :as edn]
-   [clojure.string :as string]
-   [clojure.zip :as z]
-   [frontend.db :as db]
-   [frontend.handler.export.common :as common :refer [*state*]]
-   [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [concatv mapcatv removev]]
-   [hiccups.runtime :as h]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [malli.core :as m]))
+  (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [clojure.zip :as z]
+            [frontend.db :as db]
+            [frontend.handler.export.common :as common :refer [*state*]]
+            [frontend.handler.export.zip-helper :refer [get-level goto-last
+                                                        goto-level]]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [hiccups.runtime :as h]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [malli.core :as m]))
 
 (def ^:private hiccup-malli-schema
   [:cat :keyword [:* :any]])
