@@ -1,38 +1,38 @@
 (ns frontend.handler.query.builder-test
-  (:require [frontend.handler.query.builder :as b]
+  (:require [frontend.handler.query.builder :as query-builder]
             [clojure.test :refer [deftest is]]))
 
 (deftest builder
   (let [q []]
-    (is (= (b/wrap-operator [:page-ref "foo"] [0] :and)
+    (is (= (query-builder/wrap-operator [:page-ref "foo"] [0] :and)
            [:and [:page-ref "foo"]]))
-    (is (= (b/unwrap-operator [:and [:page-ref "foo"]] [0])
+    (is (= (query-builder/unwrap-operator [:and [:page-ref "foo"]] [0])
            [:page-ref "foo"]))
-    (is (= (-> (b/add-element q [0] :and)
-               (b/add-element [1] [:page-ref "foo"])
-               (b/add-element [2] [:page-ref "bar"])
-               (b/wrap-operator [1] :or)
-               (b/unwrap-operator [1]))
+    (is (= (-> (query-builder/add-element q [0] :and)
+               (query-builder/add-element [1] [:page-ref "foo"])
+               (query-builder/add-element [2] [:page-ref "bar"])
+               (query-builder/wrap-operator [1] :or)
+               (query-builder/unwrap-operator [1]))
            [:and [:page-ref "foo"] [:page-ref "bar"]]))
-    (is (= (-> (b/add-element q [0] :or)
-               (b/add-element [1] [:page-ref "foo"])
-               (b/add-element [2] [:page-ref "bar"])
-               (b/wrap-operator [2] :and)
-               (b/unwrap-operator [2]))
+    (is (= (-> (query-builder/add-element q [0] :or)
+               (query-builder/add-element [1] [:page-ref "foo"])
+               (query-builder/add-element [2] [:page-ref "bar"])
+               (query-builder/wrap-operator [2] :and)
+               (query-builder/unwrap-operator [2]))
            [:or [:page-ref "foo"] [:page-ref "bar"]]))))
 
 (deftest to-dsl
-  (is (= (str (b/->dsl [:and [:page-ref "foo"] [:page-ref "bar"]]))
+  (is (= (str (query-builder/->dsl [:and [:page-ref "foo"] [:page-ref "bar"]]))
          (str '(and [[foo]] [[bar]]))))
-  (is (= (str (b/->dsl [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]]))
+  (is (= (str (query-builder/->dsl [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]]))
          (str '(and [[foo]] (or [[bar]] (property :key :value))))))
-  (is (= (str (b/->dsl [:and [:priority "A"] [:task "NOW"]]))
+  (is (= (str (query-builder/->dsl [:and [:priority "A"] [:task "NOW"]]))
          (str '(and (priority A) (task NOW))))))
 
 (deftest from-dsl
-  (is (= (b/from-dsl '(and [[foo]] [[bar]]))
+  (is (= (query-builder/from-dsl '(and [[foo]] [[bar]]))
          [:and [:page-ref "foo"] [:page-ref "bar"]]))
-  (is (= (b/from-dsl '(and [[foo]] (or [[bar]] (:property :key :value))))
+  (is (= (query-builder/from-dsl '(and [[foo]] (or [[bar]] (:property :key :value))))
          [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]]))
-  (is (= (b/from-dsl '(and (priority A) (task NOW)))
+  (is (= (query-builder/from-dsl '(and (priority A) (task NOW)))
          [:and ['priority 'A] ['task 'NOW]])))

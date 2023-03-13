@@ -87,8 +87,11 @@
           (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
                                         :id  id})
           (state/set-state! :command-palette/commands (conj cmds command))))
-      (catch js/Error e
-        (js/console.error e)))))
+      ;; Catch unexpected errors so that subsequent register calls pass
+      (catch :default e
+        (log/error :command/register {:msg "Unexpectedly failed to register command"
+                                      :id id
+                                      :error (str e)})))))
 
 (defn unregister
   [id]

@@ -17,7 +17,7 @@
             [frontend.components.macro :as macro]
             [frontend.components.plugins :as plugins]
             [frontend.components.query-table :as query-table]
-            [frontend.components.query.builder :as query-builder]
+            [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -1212,7 +1212,7 @@
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
      (custom-query (assoc config :dsl-query? true)
-                   {:title (rum/with-key (query-builder/builder query config)
+                   {:title (rum/with-key (query-builder-component/builder query config)
                              query)
                     :query query}))])
 
