@@ -74,7 +74,8 @@
              current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
-(rum/defcs export-blocks < rum/static
+(rum/defcs ^:large-vars/cleanup-todo
+  export-blocks < rum/static
   (rum/local false ::copied?)
   (rum/local nil ::text-remove-options)
   (rum/local nil ::text-indent-style)
