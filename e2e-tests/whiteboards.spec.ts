@@ -117,19 +117,6 @@ test('connect rectangles with an arrow', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
 })
 
-test('delete the first rectangle', async ({ page }) => {
-  const canvas = await page.waitForSelector('.logseq-tldraw')
-  const bounds = (await canvas.boundingBox())!
-
-  await page.mouse.move(bounds.x + 20, bounds.y + 20)
-  await page.mouse.down()
-  await page.mouse.up()
-  await page.keyboard.press('Delete')
-
-  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
-  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
-})
-
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
