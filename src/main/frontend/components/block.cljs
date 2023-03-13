@@ -3095,9 +3095,10 @@
            table?
            dsl-query?
            page-list?
+           built-in-query?
            view-f]}]
   (let [*query-error query-error-atom
-        query-atom (trigger-custom-query! state *query-error)
+        query-atom (if built-in-query? query-result-atom (trigger-custom-query! state *query-error))
         query-result (and query-atom (rum/react query-atom))
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
@@ -3112,7 +3113,7 @@
                      (dissoc result nil)
                      result))
                  transformed-query-result)
-        _ (when query-result-atom
+        _ (when (and query-result-atom (not built-in-query?))
             (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -3236,7 +3237,8 @@
                     :current-block-uuid current-block-uuid
                     :table? table?
                     :view-f view-f
-                    :page-list? page-list?}]
+                    :page-list? page-list?
+                    :built-in-query? built-in?}]
           [:div.custom-query (get config :attr {})
            (when-not built-in?
              [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
