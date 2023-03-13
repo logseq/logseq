@@ -20,6 +20,14 @@
     (or (and page-name (:db/id (db/entity [:block/name page-name])))
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))
 
+(defn get-editing-page-id
+  "Fetch the editing page id"
+  []
+  (if (state/editing?)
+    (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
+    (when (not (state/get-edit-input-id))
+      (get-current-page-id))))
+
 (defn get-page-file-path
   "Gets the file path of a page. If no page is given, detects the current page.
 Returns nil if no file path is found or no page is detected or given"

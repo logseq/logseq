@@ -66,6 +66,7 @@
         :right-side-bar/switch-theme "Theme modes"
         :right-side-bar/contents "Contents"
         :right-side-bar/page-graph "Page graph"
+        :right-side-bar/history "(Dev) History"
         :right-side-bar/block-ref "Block references"
         :right-side-bar/graph-view "Graph view"
         :right-side-bar/all-pages "All pages"

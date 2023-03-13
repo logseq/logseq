@@ -17,6 +17,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.config :as config]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.object :as gobj]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
@@ -80,12 +82,16 @@
     [(str (t :right-side-bar/page-graph))
      (page/page-graph)]
 
+    :history
+    [(str (t :right-side-bar/history))
+     (undo-redo/history)]
+
     :block-ref
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-       [(t :right-side-bar/block-ref)
-        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+        [(t :right-side-bar/block-ref)
+         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
@@ -137,8 +143,8 @@
   (let [item (build-sidebar-item repo idx db-id block-type)]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        (let [[title component] item]
-          [:div.sidebar-item.content.color-level.px-4.shadow-md {:data-title (last title)}
+        [:div.sidebar-item.content.color-level.px-4.shadow-md
+         (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
              [:div.flex.flex-row.justify-center
@@ -149,7 +155,7 @@
                title]]
              (close #(state/sidebar-remove-block! idx))]
             [:div {:class (if collapse? "hidden" "initial")}
-             component]]])))))
+             component]])]))))
 
 (defn- get-page
   [match]
@@ -271,7 +277,12 @@
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "help" :help))}
-          (t :right-side-bar/help)]]]
+          (t :right-side-bar/help)]]
+
+        (when config/dev? [:div.text-sm
+                           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                                       (state/sidebar-add-block! repo "history" :history))}
+                            (t :right-side-bar/history)]])]
 
        (toggle)]
 

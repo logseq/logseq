@@ -3,7 +3,9 @@
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
-            [clojure.set :as set]))
+            [frontend.util.page :as page-util]
+            [clojure.set :as set]
+            [rum.core :as rum]))
 
 ;;;; APIs
 
@@ -13,10 +15,7 @@
 (defn- get-state
   []
   (let [repo (state/get-current-repo)
-        page (or (when-let [sidebar-page (.closest js/document.activeElement ".sidebar-item")]
-                   (.getAttribute sidebar-page "data-title"))
-                 (state/get-current-whiteboard)
-                 (state/get-current-page))]
+        page (page-util/get-editing-page-id)]
     (assert (string? repo) "Repo should satisfy string?")
     (when page
       (if-let [state (get-in @undo-redo-states [repo page])]
@@ -163,3 +162,11 @@
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
         (push-undo entity)))))
+
+(rum/defc history < rum/reactive
+  []
+  (let [paused? (rum/react *pause-listener)
+        state (rum/react undo-redo-states)]
+    (js/console.log state)
+    [:div 
+     [:div "Paused: " (str paused?)]]))
