@@ -109,14 +109,12 @@
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))
-    (datepicker :end "End date (optional)" opts)]
+    (datepicker :end "End date" opts)]
    (ui/button "Submit"
      :on-click (fn []
                  (let [{:keys [start end]} @*between-dates]
-                   (when start
-                     (let [clause (cond-> [:between start]
-                                    (some? end)
-                                    (conj end))]
+                   (when (and start end)
+                     (let [clause [:between start end]]
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
