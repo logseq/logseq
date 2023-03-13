@@ -51,12 +51,6 @@
         {:on-click #(state/pub-event! [:user/login])}
         [:span (t :login)]
         (when loading?
-          [:span.ml-2 (ui/loading "")])]
-
-       [:a.button.text-sm.font-medium.block
-        {:on-click #(state/pub-event! [:user/login true])}
-        [:span (str (t :login) "#HostUI")]
-        (when loading?
           [:span.ml-2 (ui/loading "")])]])))
 
 (rum/defc left-menu-button < rum/reactive

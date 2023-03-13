@@ -4,13 +4,18 @@
             [frontend.rum :refer [adapt-class]]
             [frontend.handler.user :as user]
             [cljs-bean.core :as bean]
-            [frontend.ui :as ui]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.config :as config]))
 
 (def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
 (def LSAuthenticator
   (adapt-class (.-LSAuthenticator js/LSAmplify)))
+
+(defn sign-out!
+  []
+  (try (.signOut js/LSAmplify.Auth)
+       (catch :default e (js/console.warn e))))
 
 (defn- setup-configure!
   []
@@ -23,20 +28,19 @@
          :oauthDomain         config/OAUTH-DOMAIN}))
 
 (rum/defc user-pane
-  [sign-out! user]
-  (let [session (:signInUserSession user)]
+  [_sign-out! user]
+  (let [session (:signInUserSession user)
+        username (:username user)]
 
     (rum/use-effect!
-      #(user/login-callback session)
+      (fn []
+        (when session
+          (user/login-callback session)
+          (notification/show! (str "Hi, " username " :)") :success)
+          (state/close-modal!)))
       [])
 
-    (when session
-      [:main.max-w-screen-sm.p-6
-       [:h1.text-3xl.mb-2.flex.justify-between
-        (str "Hi, " (:username user))
-
-        [:span (ui/button "Logout" :on-click sign-out!)]]
-       [:pre.text-sm.whitespace-pre-wrap (with-out-str (cljs.pprint/pprint session))]])))
+    nil))
 
 (rum/defc page
   []

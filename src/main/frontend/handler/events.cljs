@@ -123,7 +123,8 @@
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
   (sync/remove-all-pwd!)
-  (file-sync-handler/reset-user-state!))
+  (file-sync-handler/reset-user-state!)
+  (login/sign-out!))
 
 (defmethod handle :user/login [[_ host-ui?]]
   (if (or host-ui? (not util/electron?))
