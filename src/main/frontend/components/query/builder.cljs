@@ -118,18 +118,6 @@
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
-;; (rum/defcs option-item < rum/reactive
-;;   {:init (fn [state]
-;;            (assoc state ::checked? (atom (first (:rum/args state)))))}
-;;   [state _checked? value on-click]
-;;   (let [*checked? (::checked? state)]
-;;     [:div.flex.flex-row.items-center
-;;      {:on-mouse-down (fn [e] (util/stop e)
-;;                        (swap! *checked? not)
-;;                        (on-click @*checked? value))}
-;;      (ui/checkbox {:checked (rum/react *checked?)})
-;;      value]))
-
 (rum/defcs ^:large-vars/cleanup-todo picker <
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
@@ -186,12 +174,23 @@
             "task"
             (select db-default/built-in-markers
               (fn [value]
-                (append-tree! *tree opts loc [:task value])))
+                (when (seq value)
+                  (append-tree! *tree opts loc (vec (cons :task value)))))
+              {:multiple-choices? true
+               ;; Need the existing choices later to improve the UX
+               :selected-choices #{}
+               :prompt-key :select/default-select-multiple
+               :close-modal? false})
 
             "priority"
             (select db-default/built-in-priorities
               (fn [value]
-                (append-tree! *tree opts loc [:priority value])))
+                (when (seq value)
+                  (append-tree! *tree opts loc (vec (cons :priority value)))))
+              {:multiple-choices? true
+               :selected-choices #{}
+               :prompt-key :select/default-select-multiple
+               :close-modal? false})
 
             "page"
             (let [pages (sort (db-model/get-all-page-original-names repo))]
@@ -282,7 +281,11 @@
       (= (keyword f) :between)
       (str "between: " (second (second clause)) " - " (second (last clause)))
 
-      (contains? #{:page :task :todo :namespace} (keyword f))
+      (contains? #{:task :priority} (keyword f))
+      (str (name f) ": "
+           (string/join " | " (rest clause)))
+
+      (contains? #{:page :task :namespace} (keyword f))
       (str (name f) ": " (if (vector? (second clause))
                            (second (second clause))
                            (second clause)))

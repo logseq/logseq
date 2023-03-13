@@ -124,11 +124,10 @@
     (fn [f]
       (cond
         (and (vector? f) (= :priority (keyword (first f))))
-        [(symbol :priority) (symbol (second f))]
+        (vec (cons (symbol :priority) (map symbol (rest f))))
 
         (and (vector? f) (= :task (keyword (first f))))
-        [(symbol :task) (symbol (second f))]
-
+        (vec (cons (symbol :task) (map symbol (rest f))))
 
         (and (vector? f) (= :page-ref (keyword (first f))))
         (->page-ref (second f))

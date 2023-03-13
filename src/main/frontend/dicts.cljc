@@ -338,6 +338,7 @@
 
         :command-palette/prompt "Type a command"
         :select/default-prompt "Select one"
+        :select/default-select-multiple "Select one or multiple"
         :select.graph/prompt "Select a graph"
         :select.graph/empty-placeholder-description "No matched graphs. Do you want to add another one?"
         :select.graph/add-graph "Yes, add another graph"
