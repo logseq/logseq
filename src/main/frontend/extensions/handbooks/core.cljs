@@ -129,8 +129,9 @@
       (when open?
         [:ul
          (for [c children]
-           (when (not= (:key c) (:key topic))
-             [:li [:a {:tabIndex "0" :on-click #(on-select (:key c))}] (:title c)]))])]]))
+           (when (and (seq c) (not= (:key c) (:key topic)))
+             [:li [:a {:tabIndex "0" :on-click #(on-select (:key c))}
+                   (or (:title c) (:key c))]]))])]]))
 
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state nav!]
