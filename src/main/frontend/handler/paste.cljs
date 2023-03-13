@@ -198,9 +198,7 @@
          (utils/getClipText
           (fn [clipboard-data]
             (when-let [_ (state/get-input)]
-              (let [text (or (when (gp-util/url? clipboard-data)
-                               (wrap-macro-url clipboard-data))
-                             clipboard-data)]
+              (let [text clipboard-data]
                 (paste-text-or-blocks-aux input e text nil))))
           (fn [error]
             (js/console.error error)))
