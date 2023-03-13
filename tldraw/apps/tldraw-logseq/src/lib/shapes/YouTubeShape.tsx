@@ -54,7 +54,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         {...events}
       >
         <div
-          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
+          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl tl-youtube-container"
           style={{
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',

@@ -41,9 +41,9 @@
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors" alt="Contributors">
         <img src="https://img.shields.io/github/contributors/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
-    <a href="#🫶-support-logseq-development" alt="Backers on Open Collective">
+    <a href="#-support-logseq-development" alt="Backers on Open Collective">
         <img src="https://img.shields.io/opencollective/backers/logseq?color=%2385c8c8&style=for-the-badge"/></a>
-    <a href="#💎-sponsors" alt="Sponsors on Open Collective">
+    <a href="#-sponsors" alt="Sponsors on Open Collective">
         <img src="https://img.shields.io/opencollective/sponsors/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="https://github.com/logseq/logseq/blob/master/LICENSE.md" alt="Activity">
         <img src="https://img.shields.io/github/license/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
