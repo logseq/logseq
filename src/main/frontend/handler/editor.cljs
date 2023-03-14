@@ -3221,7 +3221,9 @@
   [block]
   (->> (:block/macros (db/entity (:db/id block)))
        (some (fn [macro]
-               (when-let [query-body (first (:logseq.macro-arguments (:block/properties macro)))]
+               (when-let [query-body (and
+                                      (= "query" (get-in macro [:block/properties :logseq.macro-name]))
+                                      (first (:logseq.macro-arguments (:block/properties macro))))]
                  (seq (:query
                        (try
                          (query-dsl/parse-query query-body)
