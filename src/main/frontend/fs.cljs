@@ -12,7 +12,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db :as db]
             [frontend.fs2.path :as fs2-path]
             [clojure.string :as string]
             [frontend.state :as state]
@@ -51,16 +50,13 @@
   (protocol/mkdir-recur! (get-fs dir) dir))
 
 (defn readdir
+  "list all absolute paths in dir, absolute"
   [dir & {:keys [path-only?]}]
   (when-not path-only?
-    (js/console.error "BUG: (deprecation) path-only? always true")
-    )
+    (js/console.error "BUG: (deprecation) path-only? is always true"))
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (let [result (if (and path-only? (map? (first result)))
-                   (map :path result)
-                   result)]
-      (map gp-util/path-normalize result))))
+    (map gp-util/path-normalize result)))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -126,6 +122,7 @@
         (protocol/rename! (get-fs old-path) repo old-path new-path)))))
 
 (defn copy!
+  "Only used by Logseq Sync"
   [repo old-path new-path]
   (cond
     (= old-path new-path)
@@ -162,19 +159,18 @@
 (defn open-dir
   [dir]
   (let [record (get-native-backend)]
+    (prn ::open-dir record)
     (p/let [result (protocol/open-dir record dir)]
-      (prn ::open-dir result)
-      (if (or (util/electron?)
-              (mobile-util/native-platform?))
+      (prn ::open-dir-stage-1 result)
+      (when result
         (let [{:keys [path files]} result
               dir path
               _ (prn ::open-dir dir)
               files (mapv (fn [entry]
                             (assoc entry :path (fs2-path/relative-path dir (:path entry))))
                           files)]
-          (prn :got files)
-          {:path dir :files files})
-        result))))
+          (prn :got-fixed files)
+          {:path dir :files files})))))
 
 (defn get-files
   "List all files in the directory, recursively.

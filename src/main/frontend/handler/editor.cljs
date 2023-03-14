@@ -8,7 +8,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
             [frontend.format.block :as block]
@@ -374,7 +373,6 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
-       (prn ::block block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
@@ -1468,7 +1466,7 @@
     (when (and local? delete-local?)
       (when-let [href (if (util/electron?) href
                           (second (re-find #"\((.+)\)$" full-text)))]
-        (let [block-file-rpath (model/get-block-file-path block)
+        (let [block-file-rpath (db-model/get-block-file-path block)
               asset-fpath (if (string/starts-with? href "assets://")
                             (fs2-path/url-to-path href)
                             (config/get-repo-fpath
@@ -1506,6 +1504,7 @@
            (fn [res]
              (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
                (let [image? (util/ext-of-image? asset-file-name)]
+                 (prn ::upload-asset asset-file-name asset-file-fpath)
                  (insert-command!
                   id
                   (get-asset-file-link format

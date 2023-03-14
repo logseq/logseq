@@ -65,13 +65,10 @@
 
 (defn check-directory-permission!
   [repo]
-  (js/console.error "check dir perm " repo)
   (when (config/local-db? repo)
     (p/let [repo-dir (config/get-repo-dir repo)
-            _ (prn (str "handle/" repo-dir))
             handle-path (str "handle/" repo-dir)
             handle (idb/get-item handle-path)]
-      (prn ::check-perm handle)
       (when handle
         (add-nfs-file-handle! handle-path handle)
         (verify-permission repo true)))))
@@ -96,7 +93,7 @@
   (js/Promise. (fn [resolve reject]
                  (let [timer (atom nil)
                        timer' (js/setInterval (fn []
-                                                (prn ::debug-checking-nfs-user-granted?)
+                                                (prn ::checking-nfs-permission)
                                                 (when (state/nfs-user-granted? repo)
                                                   (js/clearInterval @timer)
                                                   (resolve true)))
@@ -123,7 +120,8 @@
                                   (let [handle-path (str "handle/" path)]
                                     ;; Same for all handles here, even for directories and ignored directories(for backing up)
                                     ;; FileSystemDirectoryHandle or FileSystemFileHandle
-                                    (add-nfs-file-handle! handle-path entry))))]
+                                    (when-not (string/includes? path "/.")
+                                      (add-nfs-file-handle! handle-path entry)))))]
     (->> files
          (remove  (fn [file]
                     (let [rpath (string/replace-first (.-webkitRelativePath file) (str root-dir "/") "")
@@ -148,12 +146,12 @@
                                   (let [handle-path (str "handle/" path)]
                                     ;; Same for all handles here, even for directories and ignored directories(for backing up)
                                     ;; FileSystemDirectoryHandle or FileSystemFileHandle
-                                    (add-nfs-file-handle! handle-path entry))))]
+                                    (when-not (string/includes? path "/.")
+                                      (add-nfs-file-handle! handle-path entry)))))]
     (p/all (->> files
                 (remove  (fn [file]
                            (let [rpath (string/replace-first (.-webkitRelativePath file) (str root-dir "/") "")
                                  ext (util/get-file-ext rpath)]
-
                              (or  (string/blank? rpath)
                                   (string/starts-with? rpath ".")
                                   (string/starts-with? rpath "logseq/bak")
@@ -332,15 +330,15 @@
                                          (let [handle-path (str "handle/" path)]
                                            ;; Same all handles here, even for directories and ignored directories(for backing up)
                                            ;; FileSystemDirectoryHandle or FileSystemFileHandle
-                                           (add-nfs-file-handle! handle-path entry))))
-            _ (js/console.log "open-dir" files)
+                                           (when-not (string/includes? path "/.")
+                                             (add-nfs-file-handle! handle-path entry)))))
             dir-handle (first files) ;; FileSystemDirectoryHandle 
             dir-name (.-name dir-handle)
             files (->> (next files)
                        (remove  (fn [file]
-                                  (let [rpath (string/replace-first (.-webkitRelativePath file) (str dir-name "/") "")
+                                  (let [rpath (.-webkitRelativePath file) ; 
+                                        ; (string/replace-first (.-webkitRelativePath file) (str dir-name "/") "")
                                         ext (util/get-file-ext rpath)]
-
                                     (or  (string/blank? rpath)
                                          (string/starts-with? rpath ".")
                                          (string/starts-with? rpath "logseq/bak")
@@ -353,7 +351,6 @@
                                 ;; path content size mtime
                                 {:name        (.-name file)
                                  :path        (-> (.-webkitRelativePath file)
-                                                  (string/replace-first (str dir-name "/") "")
                                                   gp-util/path-normalize)
                                  :mtime       (.-lastModified file)
                                  :size        (.-size file)
