@@ -45,6 +45,21 @@
 ;; Tests
 ;; =====
 
+(defn- pre-transform-test
+  []
+  (are [x y] (= (query-dsl/pre-transform x) y)
+    "#foo"
+    "#tag foo"
+
+    "(and #foo)"
+    "(and #tag foo)"
+
+    "[[test #foo]]"
+    "\"[[test #foo]]\""
+
+    "(and [[test #foo]] (or #foo))"
+    "(and \"[[test #foo]]\" (or #tag foo))"))
+
 (defn- block-property-queries-test
   []
   (load-test-files [{:file/path "journals/2022_02_28.md"

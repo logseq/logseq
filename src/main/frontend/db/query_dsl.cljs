@@ -14,6 +14,7 @@
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]))
 
@@ -447,24 +448,31 @@ Some bindings in this fn:
 ;; parse fns
 ;; =========
 
-(defn- pre-transform
+(defonce tag-placeholder-in-page-ref "~~~tag-placeholder~~~")
+(defn pre-transform
   [s]
-  (let [quoted-page-ref (str "\"" page-ref/left-brackets "$1" page-ref/right-brackets "\"")]
-    (some-> s
-            (string/replace page-ref/page-ref-re quoted-page-ref)
-            (string/replace text-util/between-re
-                            (fn [[_ x]]
-                              (->> (string/split x #" ")
-                                   (remove string/blank?)
-                                   (map (fn [x]
-                                          (if (or (contains? #{"+" "-"} (first x))
-                                                  (and (util/safe-re-find #"\d" (first x))
-                                                       (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
-                                            (keyword (name x))
-                                            x)))
-                                   (string/join " ")
-                                   (util/format "(between %s)"))))
-            (string/replace "#" "#tag "))))
+  (if (gp-util/wrapped-by-quotes? s)
+    s
+    (let [quoted-page-ref (fn [matches]
+                            (let [match' (string/replace (second matches) "#" tag-placeholder-in-page-ref)]
+                              (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
+      (some-> s
+              (string/replace page-ref/page-ref-re quoted-page-ref)
+              (string/replace text-util/between-re
+                              (fn [[_ x]]
+                                (->> (string/split x #" ")
+                                     (remove string/blank?)
+                                     (map (fn [x]
+                                            (if (or (contains? #{"+" "-"} (first x))
+                                                    (and (util/safe-re-find #"\d" (first x))
+                                                         (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
+                                              (keyword (name x))
+                                              x)))
+                                     (string/join " ")
+                                     (util/format "(between %s)"))))
+              (string/replace " #" " #tag ")
+              (string/replace #"^#" "#tag ")
+              (string/replace tag-placeholder-in-page-ref "#")))))
 
 (defn- add-bindings!
   [form q]
