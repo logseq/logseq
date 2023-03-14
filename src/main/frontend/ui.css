@@ -32,6 +32,11 @@
           visibility: visible;
         }
       }
+
+      &:not(.chosen):hover {
+        background-color: unset !important;
+        color: var(--ls-primary-text-color);
+      }
     }
   }
 }
