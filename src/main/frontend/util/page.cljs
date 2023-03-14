@@ -23,10 +23,9 @@
 (defn get-editing-page-id
   "Fetch the editing page id"
   []
-  (if (state/editing?)
+  (if (or (state/editing?) (state/get-edit-input-id)) ; if there is an edit-input-id set, we are probably still on editing mode 
     (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
-    (or (state/get-edit-input-id) ; if there is an edit-input-id set, we are probably still on editing mode 
-        (get-current-page-id))))
+    (get-current-page-id)))
 
 (defn get-page-file-path
   "Gets the file path of a page. If no page is given, detects the current page.
