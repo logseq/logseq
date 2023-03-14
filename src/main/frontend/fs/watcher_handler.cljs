@@ -128,6 +128,7 @@
                         (map first)
                         (filter #(string/starts-with? % (config/get-repo-dir graph))))]
       (p/let [files (fs/readdir dir :path-only? true)
+              _ (prn ::read-files files)
               files (map #(fs2-path/relative-path dir %) files)       ;; FIXME(andelf): readdir returns full paths
               files (remove #(fs-util/ignored-path? dir %) files)]
         (let [deleted-files (set/difference (set db-files) (set files))]

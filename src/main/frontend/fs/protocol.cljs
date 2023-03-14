@@ -5,8 +5,12 @@
 (defprotocol Fs
   (mkdir! [this dir])
   (mkdir-recur! [this dir])
-  ;; TODO(andelf): clarify the return value. How is this different from `list-files`?
-  (readdir [this dir])
+  ;; TODO(andelf): clarify the return value. How is this different from `get-files`?
+  (readdir [this dir]
+    "Read directory and return list of files. Won't read file out.
+     Used by initial watcher, version files of Logseq Sync.
+     
+     => [string]")
   (unlink! [this repo path opts])
   ;; FIXME(andelf): remove this API? since the only usage is plugin API
   (rmdir! [this dir])
@@ -16,10 +20,14 @@
   (copy! [this repo old-path new-path])
   (stat [this path]
     "=> {:type string :size number :mtime number}")
-  (open-dir [this dir ok-handler]
-    "=> {:path string :files [{...}]}")
-  (list-files [this dir ok-handler]
-    "=> [{:path string :content string}] (absolute path)")
+  (open-dir [this dir]
+    "Open a directory and return the files in it.
+     
+     => {:path string :files [{...}]}")
+  (get-files [this dir]
+    "Almost the same as `open-dir`. For returning files.
+     
+     => [{:path string :content string}] (absolute path)")
   (watch-dir! [this dir options])
   (unwatch-dir! [this dir])
   ;; Ensure the dir is watched, window agnostic.

@@ -379,10 +379,9 @@
   (stat [_this fpath]
     (p/chain (.stat Filesystem (clj->js {:path fpath}))
              #(js->clj % :keywordize-keys true)))
-  (open-dir [_this dir _ok-handler]
+  (open-dir [_this dir]
     (open-dir dir))
-  (list-files [_this dir _ok-handler]
-    (prn ::readdir dir)
+  (get-files [_this dir]
     (readdir dir))
   (watch-dir! [_this dir _options]
     (p/do!
