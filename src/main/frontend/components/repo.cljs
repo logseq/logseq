@@ -165,9 +165,7 @@
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
                                   (or (nfs-handler/supported?)
-                                      (mobile-util/native-platform?))
-                                  ;; Disable refresh temporally for nfs
-                                  (not util/nfs?))
+                                      (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)
                           :options {:on-click #(state/pub-event! [:graph/ask-for-re-fresh])}}))

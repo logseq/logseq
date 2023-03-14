@@ -5,6 +5,7 @@
 (defprotocol Fs
   (mkdir! [this dir])
   (mkdir-recur! [this dir])
+  ;; TODO(andelf): clarify the return value. How is this different from `list-files`?
   (readdir [this dir])
   (unlink! [this repo path opts])
   ;; FIXME(andelf): remove this API? since the only usage is plugin API
@@ -18,7 +19,7 @@
   (open-dir [this dir ok-handler]
     "=> {:path string :files [{...}]}")
   (list-files [this dir ok-handler]
-    "=> [{:path string :content string}]")
+    "=> [{:path string :content string}] (absolute path)")
   (watch-dir! [this dir options])
   (unwatch-dir! [this dir])
   ;; Ensure the dir is watched, window agnostic.
