@@ -24,10 +24,6 @@
 (defonce node-backend (node/->Node))
 (defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
-(defn local-db?
-  [dir]
-  (and (string? dir)
-       (config/local-db? (subs dir 1))))
 
 (defn get-fs
   [dir]
@@ -84,8 +80,7 @@
   [repo dir rpath content opts]
   (when content
     (let [path (gp-util/path-normalize rpath)
-          fs-record (get-fs dir)
-          _ (prn ::debug-fs fs-record)]
+          fs-record (get-fs dir)]
       (->
        (p/let [opts (assoc opts
                            :error-handler

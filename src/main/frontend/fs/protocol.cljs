@@ -20,17 +20,17 @@
   (copy! [this repo old-path new-path])
   (stat [this path]
     "=> {:type string :size number :mtime number}")
+
+  ;; The following APIs are optional
   (open-dir [this dir]
     "Open a directory and return the files in it.
+     Used by open a new graph.
      
      => {:path string :files [{...}]}")
   (get-files [this dir]
     "Almost the same as `open-dir`. For returning files.
+     Used by re-index/refresh.
      
      => [{:path string :content string}] (absolute path)")
   (watch-dir! [this dir options])
-  (unwatch-dir! [this dir])
-  ;; Ensure the dir is watched, window agnostic.
-  ;; Implementation should handle the actual watcher's construction / destruction.
-  ;; So shouldn't consider `unwatch-dir!`.
-  )
+  (unwatch-dir! [this dir]))

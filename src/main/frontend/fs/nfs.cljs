@@ -88,7 +88,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
+    (= (string/trim disk-content) (string/trim db-content))))
 
 (defn- await-permission-granted
   "Guard against File System Access API permission, avoiding early access before granted"
@@ -107,8 +107,41 @@
                                     (reject false))
                                   100000)))))
 
-(defn- list-and-reload-all-file-handles [root-dir root-handle]
-  (prn ::list-and-reload-all-file-handles root-handle)
+(defn await-get-nfs-file-handle
+  "for accessing File handle outside, ensuring user granted."
+  [repo handle-path]
+  (p/do!
+   (await-permission-granted repo)
+   (get-nfs-file-handle handle-path)))
+
+(defn- readdir-and-reload-all-handles 
+  "Return list of filenames"
+  [root-dir root-handle] 
+  (p/let [files (utils/getFiles root-handle
+                                true
+                                (fn [path entry]
+                                  (let [handle-path (str "handle/" path)]
+                                    ;; Same for all handles here, even for directories and ignored directories(for backing up)
+                                    ;; FileSystemDirectoryHandle or FileSystemFileHandle
+                                    (add-nfs-file-handle! handle-path entry))))]
+    (->> files
+         (remove  (fn [file]
+                    (let [rpath (string/replace-first (.-webkitRelativePath file) (str root-dir "/") "")
+                          ext (util/get-file-ext rpath)]
+                      (or  (string/blank? rpath)
+                           (string/starts-with? rpath ".")
+                           (string/starts-with? rpath "logseq/bak")
+                           ; (string/starts-with? rpath "logseq/version-files")
+                           (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
+         (map (fn [file]
+                (-> (.-webkitRelativePath file)
+                    gp-util/path-normalize))))))
+
+
+(defn- get-files-and-reload-all-handles
+  "Return list of file objects"
+  [root-dir root-handle]
+  (prn ::get-files-and-reload-all-file-handles root-handle)
   (p/let [files (utils/getFiles root-handle
                                 true
                                 (fn [path entry]
@@ -173,10 +206,10 @@
                        (idb/get-item handle-path))
             _ (when handle
                 (verify-handle-permission handle true))
-            files (if (string/includes? dir "/")
+            fpaths (if (string/includes? dir "/")
                     (js/console.error "ERROR: unimpl")
-                    (list-and-reload-all-file-handles dir handle))]
-      files))
+                    (readdir-and-reload-all-handles dir handle))]
+      fpaths))
 
   (unlink! [this repo path _opts]
     (let [[dir basename] (util/get-dir-and-basename path)
@@ -229,7 +262,6 @@
                   disk-content (.text local-file)
                   db-content (db/get-file repo path)
                   contents-matched? (contents-matched? disk-content db-content)]
-            (prn ::file-exist file-handle disk-content db-content)
             (if (and
                  (not (string/blank? db-content))
                  (not (:skip-compare? opts))
@@ -341,7 +373,7 @@
       (js/console.error "BUG: get-files(nfs) only accepts repo-dir"))
     (p/let [handle-path (str "handle/" dir)
             handle (get-nfs-file-handle handle-path)
-            files (list-and-reload-all-file-handles dir handle)]
+            files (get-files-and-reload-all-handles dir handle)]
       (prn ::get-files files)
       files))
 

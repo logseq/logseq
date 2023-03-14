@@ -61,8 +61,7 @@
            (not contents-matched?)
            (not (contains? #{"excalidraw" "edn" "css"} ext))
            (not (string/includes? rpath "/.recycle/")))
-          (do
-            (state/pub-event! [:file/not-matched-from-disk rpath disk-content content]))
+          (state/pub-event! [:file/not-matched-from-disk rpath disk-content content])
 
           :else
           (->
@@ -89,15 +88,6 @@
                    (ipc/ipc "openDir" {}))]
     (prn ::open-dir result)
     result))
-
-(defn- <ensure-dir!
-  [fs dir]
-  (protocol/mkdir-recur! fs dir))
-
-(defn- <exists
-  [fs path]
-
-  )
 
 (defrecord Node []
   protocol/Fs

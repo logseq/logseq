@@ -93,8 +93,33 @@
                  (js/console.error "stat Error: " path ": " error)
                  nil))))
 
-(defn readdir
-  "readdir recursively"
+(defn- get-file-paths
+  "get all file paths recursively"
+  [path]
+  (p/let [result (p/loop [result []
+                          dirs [path]]
+                   (if (empty? dirs)
+                     result
+                     (p/let [d (first dirs)
+                             files (<readdir d)
+                             files (->> files
+                                        (remove (fn [{:keys [name  type]}]
+                                                  (or (string/starts-with? name ".")
+                                                      (and (= type "directory")
+                                                           (or (= name "bak")
+                                                               (= name "version-files")))))))
+                             files-dir (->> files
+                                            (filterv #(= (:type %) "directory"))
+                                            (mapv :uri))
+                             paths-result (->> files
+                                               (filterv #(= (:type %) "file"))
+                                               (mapv :uri))]
+                       (p/recur (concat result paths-result)
+                                (concat (rest dirs) files-dir)))))]
+    result))
+
+(defn- get-files
+  "get all files recursively"
   [path]
   (p/let [result (p/loop [result []
                           dirs [path]]
@@ -150,7 +175,7 @@
   "reserve the latest 6 version files"
   [dir]
   (->
-   (p/let [files (readdir dir)
+   (p/let [files (get-files dir)
            files (js->clj files :keywordize-keys true)
            old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
      (mapv (fn [file]
@@ -301,7 +326,7 @@
                   (ios-force-include-private path)
                   path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
-          files (readdir path)]
+          files (get-files path)]
     ;; FIXME: wrong stucture returned
     (into [] (concat [{:path path}] files))))
 
@@ -332,7 +357,7 @@
                                              :error error})))))
   (readdir [_this dir]                  ; recursive
     (let [dir (fs2-path/path-normalize dir)]
-      (readdir dir)))
+      (get-file-paths dir)))
   (unlink! [this repo fpath _opts]
     (p/let [_ (prn ::unlink fpath)
             repo-dir (config/get-local-dir repo)
@@ -382,7 +407,7 @@
   (open-dir [_this dir]
     (open-dir dir))
   (get-files [_this dir]
-    (readdir dir))
+    (get-files dir))
   (watch-dir! [_this dir _options]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
