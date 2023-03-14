@@ -134,6 +134,7 @@
       (p/let [_ (prn :xxx-dir-result-fn dir-result-fn)
               result (if (fn? dir-result-fn)
                        (dir-result-fn {:path-handles path-handles :nfs? nfs?})
+                       ;; TODO: rm callback
                        (fs/open-dir dir
                                     (fn [path handle]
                                       (comment when nfs?
@@ -143,9 +144,6 @@
                   (on-open-dir result))
               root-handle (:path result)
               _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
-              ;dir-name (if nfs?
-              ;           (gobj/get root-handle "name")
-              ;           root-handle)
               dir-name root-handle
               repo (str config/local-db-prefix root-handle)]
         
@@ -274,6 +272,7 @@
 (defn- handle-diffs!
   "Compute directory diffs and handle them."
   [repo nfs? old-files new-files handle-path path-handles re-index? ok-handler]
+  (prn ::handle-diff repo old-files new-files)
   (let [get-last-modified-at (fn [path] (some (fn [file]
                                                 (when (= path (:file/path file))
                                                   (:file/last-modified-at file)))
@@ -331,12 +330,14 @@
                       (db/transact! repo new-files))))))))
 
 (defn- reload-dir!
+  "Handle refresh and re-index"
   [repo {:keys [re-index? ok-handler]
          :or {re-index? false}}]
+  (prn ::reload-dir)
   (when (and repo (config/local-db? repo))
     (let [old-files (db/get-files-full repo)
-          dir-name (config/get-local-dir repo)
-          handle-path (str config/local-handle-prefix dir-name)
+          repo-dir (config/get-local-dir repo)
+          handle-path (str "handle/" repo-dir)
           path-handles (atom {})
           electron? (util/electron?)
           mobile-native? (mobile-util/native-platform?)
@@ -346,16 +347,19 @@
         (state/set-graph-syncing? true))
       (->
        (p/let [handle (when-not electron? (idb/get-item handle-path))]
+         (prn ::handle handle)
          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
            (p/let [_ (when handle (nfs/verify-permission repo true))
                    local-files-result
-                   (fs/list-files (if nfs? handle
-                                      (config/get-local-dir repo))
+                   (fs/list-files repo-dir
                                   (fn [path handle]
-                                    (when nfs?
-                                      (swap! path-handles assoc path handle))))
+                                    (comment when false ; nfs?
+                                      (swap! path-handles assoc path handle)))
+                                  )
+                   _ (prn ::reading-local-fils local-files-result)
                    new-local-files (-> (->db-files (:files local-files-result) nfs?)
-                                       (remove-ignore-files dir-name nfs?))
+                                       (remove-ignore-files repo-dir nfs?))
+                   _ (prn ::new-local-files)
                   ;; new-global-files (if (and (config/global-config-enabled?)
                    ;;                          ;; Hack until we better understand failure in frontend.handler.file/alter-file
                     ;;                         (global-config-handler/global-config-dir-exists?))
@@ -368,7 +372,7 @@
                            ;;           (p/resolved []))
                    new-files new-local-files ;; (concat new-local-files new-global-files)
 
-                   _ (when nfs?
+                   _ (comment when nfs?
                        (let [file-paths (set (map :file/path new-files))]
                          (swap! path-handles (fn [handles]
                                                (->> handles

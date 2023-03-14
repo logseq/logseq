@@ -180,17 +180,17 @@
 
 (defn list-files
   "List all files in the directory, recursively.
-   {:path :files []}"
-  [path-or-handle ok-handler]
+   
+   Wrap as {:path string :files []}, using relative path"
+  [dir ok-handler]
   (let [fs-record (get-native-backend)]
     (when ok-handler
       (js/console.warn "ok-handler not nil"))
-    (p/let [result (protocol/list-files fs-record path-or-handle ok-handler)]
+    (p/let [result (protocol/list-files fs-record dir ok-handler)]
       (prn ::list-files (first result) "....")
-      (if (or (util/electron?)
-              (mobile-util/native-platform?))
+      (if (seq result) ;; electron, mobile, nfs
         (let [files result ;; TODO(andelf): rm first item from electron
-              dir path-or-handle
+              dir dir
               _ (prn ::prepare-rel-path dir)
               files (mapv (fn [entry]
                             ;; (prn ::xx entry)

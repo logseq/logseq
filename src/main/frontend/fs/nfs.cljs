@@ -108,6 +108,7 @@
                                   100000)))))
 
 (defn- list-and-reload-all-file-handles [root-dir root-handle]
+  (prn ::list-and-reload-all-file-handles root-handle)
   (p/let [files (utils/getFiles root-handle
                                 true
                                 (fn [path entry]
@@ -226,8 +227,9 @@
           ;; file exist
           (p/let [local-file (.getFile file-handle)
                   disk-content (.text local-file)
-                  db-content (db/get-file repo path)]
-            (prn ::file-exist file-handle)
+                  db-content (db/get-file repo path)
+                  contents-matched? (contents-matched? disk-content db-content)]
+            (prn ::file-exist file-handle disk-content db-content)
             (if (and
                  (not (string/blank? db-content))
                  (not (:skip-compare? opts))
@@ -334,9 +336,14 @@
       {:path dir-name
        :files files}))
 
-  (list-files [_this path-or-handle ok-handler]
-    (js/console.error "list-files" "unimpl")
-    (utils/getFiles path-or-handle true ok-handler))
+  (list-files [_this dir _ok-handler]
+    (when (string/includes? dir "/")
+      (js/console.error "BUG: list-files(nfs) only accepts repo-dir"))
+    (p/let [handle-path (str "handle/" dir)
+            handle (get-nfs-file-handle handle-path)
+            files (list-and-reload-all-file-handles dir handle)]
+      (prn ::list-files files)
+      files))
 
   (watch-dir! [_this _dir _options]
     nil)
