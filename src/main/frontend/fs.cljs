@@ -56,6 +56,9 @@
 
 (defn readdir
   [dir & {:keys [path-only?]}]
+  (when-not path-only?
+    (js/console.error "BUG: (deprecation) path-only? always true")
+    )
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
     (let [result (if (and path-only? (map? (first result)))
@@ -162,9 +165,9 @@
     nfs-backend))
 
 (defn open-dir
-  [dir ok-handler]
+  [dir]
   (let [record (get-native-backend)]
-    (p/let [result (protocol/open-dir record dir ok-handler)]
+    (p/let [result (protocol/open-dir record dir)]
       (prn ::open-dir result)
       (if (or (util/electron?)
               (mobile-util/native-platform?))
@@ -178,16 +181,14 @@
           {:path dir :files files})
         result))))
 
-(defn list-files
+(defn get-files
   "List all files in the directory, recursively.
    
    Wrap as {:path string :files []}, using relative path"
-  [dir ok-handler]
+  [dir]
   (let [fs-record (get-native-backend)]
-    (when ok-handler
-      (js/console.warn "ok-handler not nil"))
-    (p/let [result (protocol/list-files fs-record dir ok-handler)]
-      (prn ::list-files (first result) "....")
+    (p/let [result (protocol/get-files fs-record dir)]
+      (prn ::get-files (first result) "....")
       (if (seq result) ;; electron, mobile, nfs
         (let [files result ;; TODO(andelf): rm first item from electron
               dir dir

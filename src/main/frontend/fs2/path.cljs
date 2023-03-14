@@ -104,8 +104,6 @@
   '..' and '.' normalization."
   [& segments]
   (let [segments (remove nil? segments) ;; handle (path-join nil path)
-        ; _ (prn ::uri-join-seg segments)
-        ; _ (js/console.trace)
         segments (map #(string/replace % #"[/\\]+" "/") segments)
         ;; a fix for clojure.string/split
         split-fn (fn [s]
@@ -155,9 +153,8 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-  (prn ::join base segments)
   (when (string/blank? base)
-    (prn ::SHOULD-NOT-JOIN-EMPTY)
+    (js/console.error "BUG: SHOULD-NOT-JOIN-EMPTY")
     (js/console.trace))
 
   (if (is-file-url base)
@@ -222,12 +219,9 @@
   "Get relative path from base path.
    Works for both path and URL."
   [base-path sub-path]
-  (prn :rel-path base-path sub-path)
-  ;; (js/console.trace)
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
         is-url? (is-file-url base-path)]
-    (prn :rel-path base-path sub-path)
     (if (string/starts-with? sub-path base-path)
       (if is-url?
         (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
@@ -240,7 +234,7 @@
             base-segs (drop (count common-segs) base-segs)
             remain-segs (drop (count common-segs) path-segs)
             base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
-        (js/console.error (js/Error. "buggy"))
+        (js/console.error (js/Error. "buggy relative-path"))
         #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
         (if is-url?
           (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
