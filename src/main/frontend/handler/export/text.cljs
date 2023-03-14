@@ -107,7 +107,7 @@
   (let [level (dec (get *state* :current-level 1))]
     (concatv
      [(indent-with-2-spaces level) (raw-text "```")]
-     (when language [space (raw-text language)])
+     (when language [(raw-text language)])
      [(newline* 1)]
      (mapv raw-text lines)
      [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
