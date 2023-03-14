@@ -106,19 +106,19 @@
 (def init-level 1)
 
 (defn- transact-file-tx-if-not-exists!
-  [page ok-handler]
+  [page-block ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (when (:block/name page)
-      (let [format (name (get page :block/format
+    (when (:block/name page-block)
+      (let [format (name (get page-block :block/format
                               (state/get-preferred-format)))
-            title (string/capitalize (:block/name page))
-            whiteboard-page? (model/whiteboard-page? page)
+            title (string/capitalize (:block/name page-block))
+            whiteboard-page? (model/whiteboard-page? page-block)
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
             journal-title (date/normalize-journal-title title)
             filename (if (and journal-page? (not (string/blank? journal-title)))
                        (date/date->file-name journal-title)
-                       (-> (or (:block/original-name page) (:block/name page))
+                       (-> (or (:block/original-name page-block) (:block/name page-block))
                            (fs-util/file-name-sanity)))
             sub-dir (cond
                       journal-page?    (config/get-journals-directory)
@@ -128,7 +128,7 @@
             file-rpath (str sub-dir "/" filename "." ext) ;; FIXME: use path-join
             file {:file/path file-rpath}
             tx [{:file/path file-rpath}
-                {:block/name (:block/name page)
+                {:block/name (:block/name page-block)
                  :block/file file}]]
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
