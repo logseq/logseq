@@ -9,6 +9,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.diff :as diff]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -3215,6 +3216,18 @@
            (mldoc/block-with-title? first-elem-type))
          true)))
 
+(defn- valid-dsl-query-block?
+  "Whether block has a valid dsl query."
+  [block]
+  (->> (:block/macros (db/entity (:db/id block)))
+       (some (fn [macro]
+               (when-let [query-body (first (:logseq.macro-arguments (:block/properties macro)))]
+                 (seq (:query
+                       (try
+                         (query-dsl/parse-query query-body)
+                         (catch :default _e
+                           nil)))))))))
+
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
@@ -3223,8 +3236,7 @@
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (or (db-model/has-children? block-id)
-           (some-> (:block/content block)
-                   (string/includes? "{{query"))
+           (valid-dsl-query-block? block)
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)
