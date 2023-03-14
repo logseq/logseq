@@ -31,6 +31,9 @@
   dev:app-watch
   logseq.tasks.dev.mobile/app-watch
 
+  dev:build-publishing
+  logseq.tasks.dev/build-publishing
+
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
 
