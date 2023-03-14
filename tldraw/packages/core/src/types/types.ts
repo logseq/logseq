@@ -155,7 +155,7 @@ export type TLSubscriptionEvent =
     }
   | {
       event: 'persist'
-      info: null
+      info: { replace: boolean }
     }
   | {
       event: 'save'
