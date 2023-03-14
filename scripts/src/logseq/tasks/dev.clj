@@ -1,7 +1,8 @@
 (ns logseq.tasks.dev
   "Tasks for general development. For desktop or mobile development see their
   namespaces"
-  (:require [babashka.tasks :refer [shell]]
+  (:require [babashka.process :refer [shell]]
+            [babashka.fs :as fs]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.edn :as edn]))
@@ -35,3 +36,10 @@
     (let [config (with-out-str
                    (pp/pprint (edn/read-string (:out (shell {:out :string} "node ./static/gen-malli-kondo-config.js")))))]
       (spit config-edn config))))
+
+(defn build-publishing
+  []
+  (if-let [_files (seq (set (fs/modified-since (fs/file "static/js/publishing/main.js")
+                                               (fs/glob "." "src/main/**"))))]
+    (shell "clojure -M:cljs release publishing")
+    (println "publishing assets are up to date")))
