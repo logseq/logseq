@@ -118,7 +118,96 @@
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
-(rum/defcs ^:large-vars/cleanup-todo picker <
+(defn- query-filter-picker
+  [state *find *tree loc clause opts]
+  (let [*mode (::mode state)
+        *property (::property state)
+        repo (state/get-current-repo)]
+    [:div
+     (case @*mode
+       "namespace"
+       (let [items (sort (db-model/get-all-namespace-parents repo))]
+         (select items
+                 (fn [value]
+                   (append-tree! *tree opts loc [:namespace value]))))
+
+       "tags"
+       (let [items (->> (db-model/get-all-tagged-pages repo)
+                        (map second)
+                        sort)]
+         (select items
+                 (fn [value]
+                   (append-tree! *tree opts loc [:page-tags value]))))
+
+       "property"
+       (let [properties (search/get-all-properties)]
+         (select properties
+                 (fn [value]
+                   (reset! *mode "property-value")
+                   (reset! *property (keyword value)))))
+
+       "property-value"
+       (let [values (cons "Select all" (db-model/get-property-values @*property))]
+         (select values
+                 (fn [value]
+                   (let [x (if (= value "Select all")
+                             [(if (= @*find :page) :page-property :property) @*property]
+                             [(if (= @*find :page) :page-property :property) @*property value])]
+                     (reset! *property nil)
+                     (append-tree! *tree opts loc x)))))
+
+       "sample"
+       (select (range 1 101)
+               (fn [value]
+                 (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
+
+       "task"
+       (select db-default/built-in-markers
+               (fn [value]
+                 (when (seq value)
+                   (append-tree! *tree opts loc (vec (cons :task value)))))
+               {:multiple-choices? true
+                ;; Need the existing choices later to improve the UX
+                :selected-choices #{}
+                :prompt-key :select/default-select-multiple
+                :close-modal? false})
+
+       "priority"
+       (select db-default/built-in-priorities
+               (fn [value]
+                 (when (seq value)
+                   (append-tree! *tree opts loc (vec (cons :priority value)))))
+               {:multiple-choices? true
+                :selected-choices #{}
+                :prompt-key :select/default-select-multiple
+                :close-modal? false})
+
+       "page"
+       (let [pages (sort (db-model/get-all-page-original-names repo))]
+         (select pages
+                 (fn [value]
+                   (append-tree! *tree opts loc [:page value]))))
+
+       "page reference"
+       (let [pages (sort (db-model/get-all-page-original-names repo))]
+         (select pages
+                 (fn [value]
+                   (append-tree! *tree opts loc [:page-ref value]))
+                 {}))
+
+       "full text search"
+       (search (fn [v] (append-tree! *tree opts loc v))
+               (:toggle-fn opts))
+
+       "between"
+       (between (merge opts
+                       {:tree *tree
+                        :loc loc
+                        :clause clause}))
+
+       nil)]))
+
+(rum/defcs picker <
   {:will-mount (fn [state]
                  (state/clear-selection!)
                  state)}
@@ -126,8 +215,6 @@
   (rum/local nil ::property)
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
-        *property (::property state)
-        repo (state/get-current-repo)
         filters (if (= :page @*find)
                   query-builder/page-filters
                   query-builder/block-filters)
@@ -136,89 +223,7 @@
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         [:div
-          (case @*mode
-            "namespace"
-            (let [items (sort (db-model/get-all-namespace-parents repo))]
-              (select items
-                (fn [value]
-                  (append-tree! *tree opts loc [:namespace value]))))
-
-            "tags"
-            (let [items (->> (db-model/get-all-tagged-pages repo)
-                             (map second)
-                             sort)]
-              (select items
-                (fn [value]
-                  (append-tree! *tree opts loc [:page-tags value]))))
-
-            "property"
-            (let [properties (search/get-all-properties)]
-              (select properties
-                (fn [value]
-                  (reset! *mode "property-value")
-                  (reset! *property (keyword value)))))
-
-            "property-value"
-            (let [values (cons "Select all" (db-model/get-property-values @*property))]
-              (select values
-                (fn [value]
-                  (let [x (if (= value "Select all")
-                            [(if (= @*find :page) :page-property :property) @*property]
-                            [(if (= @*find :page) :page-property :property) @*property value])]
-                    (reset! *property nil)
-                    (append-tree! *tree opts loc x)))))
-
-            "sample"
-            (select (range 1 101)
-              (fn [value]
-                (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
-
-            "task"
-            (select db-default/built-in-markers
-              (fn [value]
-                (when (seq value)
-                  (append-tree! *tree opts loc (vec (cons :task value)))))
-              {:multiple-choices? true
-               ;; Need the existing choices later to improve the UX
-               :selected-choices #{}
-               :prompt-key :select/default-select-multiple
-               :close-modal? false})
-
-            "priority"
-            (select db-default/built-in-priorities
-              (fn [value]
-                (when (seq value)
-                  (append-tree! *tree opts loc (vec (cons :priority value)))))
-              {:multiple-choices? true
-               :selected-choices #{}
-               :prompt-key :select/default-select-multiple
-               :close-modal? false})
-
-            "page"
-            (let [pages (sort (db-model/get-all-page-original-names repo))]
-              (select pages
-                (fn [value]
-                  (append-tree! *tree opts loc [:page value]))))
-
-            "page reference"
-            (let [pages (sort (db-model/get-all-page-original-names repo))]
-              (select pages
-                (fn [value]
-                  (append-tree! *tree opts loc [:page-ref value]))
-                {}))
-
-            "full text search"
-            (search (fn [v] (append-tree! *tree opts loc v))
-                    (:toggle-fn opts))
-
-            "between"
-            (between (merge opts
-                            {:tree *tree
-                             :loc loc
-                             :clause clause}))
-
-            nil)])
+         (query-filter-picker state *find *tree loc clause opts))
        [:div
         (when-not @*find
           [:div.flex.flex-row.items-center.p-2.justify-between
