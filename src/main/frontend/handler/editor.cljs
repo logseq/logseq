@@ -8,7 +8,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.diff :as diff]
@@ -1500,7 +1499,7 @@
     (when (and local? delete-local?)
       (when-let [href (if (util/electron?) href
                           (second (re-find #"\((.+)\)$" full-text)))]
-        (let [block-file-rpath (model/get-block-file-path block)
+        (let [block-file-rpath (db-model/get-block-file-path block)
               asset-fpath (if (string/starts-with? href "assets://")
                             (fs2-path/url-to-path href)
                             (config/get-repo-fpath

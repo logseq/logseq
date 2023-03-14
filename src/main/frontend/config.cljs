@@ -475,24 +475,22 @@
   ([]
    (get-repo-config-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" config-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (fs2-path/path-join repo-dir app-name config-file))))
 
 (defn get-custom-css-path
   ([]
    (get-custom-css-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" custom-css-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (fs2-path/path-join repo-dir app-name custom-css-file))))
 
 (defn get-export-css-path
   ([]
    (get-export-css-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" export-css-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (fs2-path/path-join repo-dir app-name  export-css-file))))
 
 (defn expand-relative-assets-path
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
@@ -514,9 +512,8 @@
   ([]
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" custom-js-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (fs2-path/path-join repo-dir app-name  custom-js-file))))
 
 (defn get-block-hidden-properties
   []
