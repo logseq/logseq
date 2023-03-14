@@ -6,13 +6,11 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs2.path :as fs2-path]
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
@@ -51,7 +49,6 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
-  (prn ::wather payload)
   (when dir
     (let [;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
@@ -128,28 +125,27 @@
                         (map first)
                         (filter #(string/starts-with? % (config/get-repo-dir graph))))]
       (p/let [files (fs/readdir dir :path-only? true)
-              _ (prn ::read-files files)
-              files (map #(fs2-path/relative-path dir %) files)       ;; FIXME(andelf): readdir returns full paths
-              files (remove #(fs-util/ignored-path? dir %) files)]
-        (let [deleted-files (set/difference (set db-files) (set files))]
-          (when (seq deleted-files)
-            (let [delete-tx-data (->> (db/delete-files deleted-files)
-                                      (concat (db/delete-blocks graph deleted-files nil))
-                                      (remove nil?))]
-              (db/transact! graph delete-tx-data {:delete-files? true})))
-          (doseq [file-rpath files]
-            (prn ::init-watcher file-rpath)
-            (when-let [_ext (util/get-file-ext file-rpath)]
-              (->
-               (p/let [content (fs/read-file dir file-rpath)
-                       stat (fs/stat dir file-rpath)
-                       type (if (db/file-exists? graph file-rpath)
-                              "change"
-                              "add")]
-                 (handle-changed! type
-                                  {:dir dir
-                                   :path file-rpath
-                                   :content content
-                                   :stat stat}))
-               (p/catch (fn [error]
-                          (js/console.dir error)))))))))))
+              files (map #(fs2-path/relative-path dir %) files)
+              files (remove #(fs-util/ignored-path? dir %) files)
+              deleted-files (set/difference (set db-files) (set files))]
+        (when (seq deleted-files)
+          (let [delete-tx-data (->> (db/delete-files deleted-files)
+                                    (concat (db/delete-blocks graph deleted-files nil))
+                                    (remove nil?))]
+            (db/transact! graph delete-tx-data {:delete-files? true})))
+        (doseq [file-rpath files]
+          (prn ::init-watcher file-rpath)
+          (when-let [_ext (util/get-file-ext file-rpath)]
+            (->
+             (p/let [content (fs/read-file dir file-rpath)
+                     stat (fs/stat dir file-rpath)
+                     type (if (db/file-exists? graph file-rpath)
+                            "change"
+                            "add")]
+               (handle-changed! type
+                                {:dir dir
+                                 :path file-rpath
+                                 :content content
+                                 :stat stat}))
+             (p/catch (fn [error]
+                        (js/console.dir error))))))))))
