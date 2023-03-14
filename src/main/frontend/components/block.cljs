@@ -524,14 +524,16 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
-(rum/defc page-inner
+(rum/defcs page-inner <
+  (rum/local false ::mouse-down?)
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
-  (let [tag? (:tag? config)
+  [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  (let [*mouse-down? (::mouse-down? state)
+        tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
     [:a
@@ -543,7 +545,11 @@
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
-      :on-mouse-up (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+      :on-mouse-down (fn [_e] (reset! *mouse-down? true))
+      :on-mouse-up (fn [e]
+                     (when @*mouse-down?
+                       (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
+                       (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
 

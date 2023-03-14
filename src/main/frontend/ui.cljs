@@ -500,15 +500,9 @@
                       :class         (when chosen? "chosen")
                       :on-mouse-down (fn [e]
                                        (util/stop e)
-                                       ;; TODO: hack
-                                       ;; problem: a soon-to-be displayed page reference might be opened after clicking
-                                       ;; this item, the reason is that components.block/page-inner listens to the on-mouse-up event
-                                       (js/setTimeout
-                                        (fn []
-                                          (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                            (on-shift-chosen item)
-                                            (on-chosen item)))
-                                        10))}
+                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                         (on-shift-chosen item)
+                                         (on-chosen item)))}
                      (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
