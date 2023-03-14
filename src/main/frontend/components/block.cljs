@@ -3221,7 +3221,7 @@
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
         dsl-page-query? (and dsl-query?
-                         (not (:blocks? (query-dsl/parse-query query))))
+                             (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
                                (util/electron?)
                                (symbol? (safe-read-string query false)))]
