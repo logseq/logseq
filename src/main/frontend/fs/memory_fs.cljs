@@ -1,7 +1,7 @@
 (ns ^:no-doc frontend.fs.memory-fs
   "Memory FS backed by lightning-fs
    
-   denoted by `memory://`"
+   Paths are denoted by `memory://`. No open-dir/get-files support."
   (:require [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
@@ -57,7 +57,6 @@
     (when js/window.pfs
       (let [fpath (fs2-path/url-to-path dir)]
         (-> (<readdir fpath)
-            ;; (p/then bean/->clj)
             (p/then (fn [rpaths]
                       (prn ::debug rpaths)
                       (mapv #(fs2-path/path-join "memory://" %) rpaths)))))))

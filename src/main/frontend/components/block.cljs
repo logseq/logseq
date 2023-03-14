@@ -385,7 +385,9 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (let [ext (keyword (util/get-file-ext @src))
+      ;; NOTE(andelf): Under nfs context, src might be a bare blob:http://..../uuid URI without ext info
+      (let [ext (keyword (or (util/get-file-ext @src)
+                             (util/get-file-ext href)))
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             path (str repo-dir href)
@@ -394,8 +396,7 @@
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
-                               basename (js/encodeURIComponent basename)
-                               asset-url (str repo-dir rel-dir "/" basename)]
+                               asset-url (fs2-path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]
 

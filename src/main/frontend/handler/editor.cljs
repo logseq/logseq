@@ -13,6 +13,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
+            [frontend.fs.nfs :as nfs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.export.text :as export-text]
@@ -21,7 +22,6 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.assets :as assets-handler]
-            [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -54,8 +54,7 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.fs2.path :as fs2-path]
-            [frontend.db.model :as model]))
+            [frontend.fs2.path :as fs2-path]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1341,6 +1340,7 @@
     (commands/restore-state)))
 
 (defn get-asset-file-link
+  "Link text for inserting to markdown/org"
   [format url file-name image?]
   (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))
         video? (and url (util/ext-of-video? url))]
@@ -1368,7 +1368,7 @@
 (defn save-assets!
   "Save incoming(pasted) assets to assets directory.
 
-   Returns: [filename file-obj file-fpath matched-alias]"
+   Returns: [file-rpath file-obj file-fpath matched-alias]"
   ([_ repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
@@ -1380,7 +1380,7 @@
                                          (string/replace "/" "_"))
                            file-name (str file-base "_" (.now js/Date) "_" index)]
                        (string/replace file-name #"_+" "_"))))))
-  ([repo dir path files gen-filename]
+  ([repo repo-dir asset-dir-rpath files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
@@ -1393,36 +1393,36 @@
                                                                     (count ext-full))) ext-full ext-base])
                                             ["" "" ""])
             filename  (str (gen-filename index file-stem) ext-full)
-            filename  (str path "/" filename)
+            file-rpath  (str asset-dir-rpath "/" filename)
             matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
-            filename (cond-> filename
-                       (not (nil? matched-alias))
-                       (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
-            dir (or (:dir matched-alias) dir)]
-
+            file-rpath (cond-> file-rpath
+                         (not (nil? matched-alias))
+                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+            dir (or (:dir matched-alias) repo-dir)]
         (if (util/electron?)
           (let [from (not-empty (.-path file))]
 
-            (js/console.debug "Debug: Copy Asset #" dir filename from)
-
-            (-> (js/window.apis.copyFileToAssets dir filename from)
+            (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
+            (-> (js/window.apis.copyFileToAssets dir file-rpath from)
                 (p/then
                  (fn [dest]
-                   [filename
+                   [file-rpath
                     (if (string? dest) (js/File. #js[] dest) file)
-                    (.join util/node-path dir filename)
+                    (.join util/node-path dir file-rpath)
                     matched-alias]))
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
-          (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                  #(p/resolved [filename file nil matched-alias]))))))))
+          (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+                 (fs/write-file! repo dir file-rpath (.stream file) nil)
+                 [file-rpath file (fs2-path/path-join dir file-rpath) matched-alias])))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets" or compatible for "../assets"
-  (if config/publishing? path
+  (if config/publishing?
+    path
     (let [repo      (state/get-current-repo)
           repo-dir  (config/get-repo-dir repo)
           path      (string/replace path "../" "/")
@@ -1443,12 +1443,14 @@
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
 
-        :else
-        (let [handle-path (str "handle" full-path)
+        :else ;; nfs
+        (let [handle-path (str "handle/" full-path)
               cached-url  (get @*assets-url-cache (keyword handle-path))]
           (if cached-url
             (p/resolved cached-url)
-            (p/let [handle (idb/get-item handle-path)
+            ;; Loading File from handle cache
+            ;; Use await file handle, to ensure all handles are loaded.
+            (p/let [handle (nfs/await-get-nfs-file-handle repo handle-path)
                     file   (and handle (.getFile handle))]
               (when file
                 (p/let [url (js/URL.createObjectURL file)]
