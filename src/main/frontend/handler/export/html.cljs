@@ -406,8 +406,7 @@
         (h/render-html hiccup)))))
 
 (defn export-blocks-as-html
-  "options:
-  :remove-options [:emphasis :page-ref :tag]"
+  "options: see also `export-blocks-as-markdown`"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}

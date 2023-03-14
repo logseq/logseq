@@ -49,6 +49,7 @@
     :remove-page-ref-brackets? false
     :remove-emphasis? false
     :remove-tags? false
+    :remove-properties? true
     :keep-only-level<=N :all
     :newline-after-block false}})
 

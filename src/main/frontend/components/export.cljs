@@ -168,10 +168,10 @@
                                     (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "remove #tags"]
+          "remove #tags"]]
 
+        [:div.flex.items-center
          (ui/checkbox {:style {:margin-right 6
-                               :margin-left "1em"
                                :visibility (if (#{:text} tp) "visible" "hidden")}
                        :checked (boolean (:newline-after-block @*text-other-options))
                        :on-change (fn [e]
@@ -180,7 +180,18 @@
                                     (reset! *text-other-options (state/get-export-block-text-other-options))
                                     (reset! *content (export-helper root-block-uuids-or-page-name)))})
          [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-          "newline after block"]]
+          "newline after block"]
+
+         (ui/checkbox {:style {:margin-right 6
+                               :margin-left "1em"
+                               :visibility (if (#{:text} tp) "visible" "hidden")}
+                       :checked (contains? @*text-remove-options :property)
+                       :on-change (fn [e]
+                                    (state/update-export-block-text-remove-options! e :property)
+                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
+         [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
+          "remove properties"]]
 
         [:div.flex.items-center
          [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}

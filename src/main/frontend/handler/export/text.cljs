@@ -81,6 +81,16 @@
                         (not in-list?))
                [(newline* 2)]))))
 
+(defn- block-property-drawer
+  [properties]
+  (when-not (get-in *state* [:export-options :remove-properties?])
+    (let [level (dec (get *state* :current-level 1))
+          indent (indent-with-2-spaces level)]
+      (reduce
+       (fn [r [k v]]
+         (conj r indent (raw-text k "::") space (raw-text v) (newline* 1)))
+       [] properties))))
+
 (defn- block-example
   [l]
   (let [level (dec (get *state* :current-level 1))]
@@ -335,7 +345,7 @@
          (block-heading ast-content)
          "List"
          (block-list ast-content)
-         ("Directive" "Results" "Property_Drawer" "Export" "CommentBlock" "Custom")
+         ("Directive" "Results" "Export" "CommentBlock" "Custom")
          nil
          "Example"
          (block-example ast-content)
@@ -351,9 +361,8 @@
          (block-displayed-math ast-content)
          "Drawer"
          (block-drawer (rest block))
-       ;; TODO: option: toggle Property_Drawer
-       ;; "Property_Drawer"
-       ;; (block-property-drawer ast-content)
+         "Property_Drawer"
+         (block-property-drawer ast-content)
          "Footnote_Definition"
          (block-footnote-definition (rest block))
          "Horizontal_Rule"
@@ -434,6 +443,7 @@
                                :remove-emphasis? (contains? remove-options :emphasis)
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)
+                               :remove-properties? (contains? remove-options :property)
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
@@ -465,8 +475,8 @@
 (defn export-blocks-as-markdown
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
-  :remove-options [:emphasis :page-ref :tag]
-  :other-options {:keep-only-level<=N int}"
+  :remove-options [:emphasis :page-ref :tag :property]
+  :other-options {:keep-only-level<=N int :newline-after-block bool}"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
