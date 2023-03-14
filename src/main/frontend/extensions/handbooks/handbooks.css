@@ -227,7 +227,7 @@
           }
 
           ul {
-            @apply absolute top-14 left-0 w-full list-none m-0 rounded py-2;
+            @apply absolute top-[58px] left-0 w-full list-none m-0 rounded-b py-2;
 
             background-color: var(--ls-secondary-background-color);
             transform: translateY(-5px);
@@ -235,7 +235,7 @@
             overflow: auto;
 
             li {
-              @apply list-none px-3 py-1 transition-colors;
+              @apply list-none px-3 py-1 transition-colors text-sm;
 
               &:hover {
                 background-color: var(--ls-tertiary-background-color);

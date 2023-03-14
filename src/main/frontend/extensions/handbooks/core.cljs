@@ -1,28 +1,27 @@
 (ns frontend.extensions.handbooks.core
-  (:require
-   [clojure.string :as string]
-   [rum.core :as rum]
-   [frontend.ui :as ui]
-   [frontend.state :as state]
-   [frontend.search :as search]
-   [frontend.config :as config]
-   [cljs-bean.core :as bean]
-   [promesa.core :as p]
-   [camel-snake-kebab.core :as csk]
-   [medley.core :as medley]
-   [frontend.util :as util]
-   [frontend.storage :as storage]
-   [frontend.extensions.video.youtube :as youtube]
-   [frontend.context.i18n :refer [t]]
-   [clojure.edn :as edn]))
+  (:require [clojure.string :as string]
+            [rum.core :as rum]
+            [frontend.ui :as ui]
+            [frontend.state :as state]
+            [frontend.search :as search]
+            [frontend.config :as config]
+            [cljs-bean.core :as bean]
+            [promesa.core :as p]
+            [camel-snake-kebab.core :as csk]
+            [medley.core :as medley]
+            [frontend.util :as util]
+            [frontend.storage :as storage]
+            [frontend.extensions.video.youtube :as youtube]
+            [frontend.context.i18n :refer [t]]
+            [clojure.edn :as edn]))
 
 (defn get-handbooks-endpoint
   [resource]
   (str
-   (if (storage/get :handbooks-dev-watch?)
-     "http://localhost:1337"
-     "https://handbooks.pages.dev")
-   resource))
+    (if (storage/get :handbooks-dev-watch?)
+      "http://localhost:1337"
+      "https://handbooks.pages.dev")
+    resource))
 
 (defn resolve-asset-url
   [path]
@@ -36,18 +35,18 @@
   (if-let [matches (and (not (string/blank? content))
                         (re-seq #"src=\"([^\"]+)\"" content))]
     (reduce
-     (fn [content matched]
-       (if-let [matched (second matched)]
-         (string/replace content matched (resolve-asset-url matched)) content))
-     content matches)
+      (fn [content matched]
+        (if-let [matched (second matched)]
+          (string/replace content matched (resolve-asset-url matched)) content))
+      content matches)
     content))
 
-(defn settle-parent-key
+(defn bind-parent-key
   [{:keys [key] :as node}]
   (cond-> node
-    (and (string? key)
-         (string/includes? key "/"))
-    (assoc :parent (subs key 0 (string/last-index-of key "/")))))
+          (and (string? key)
+               (string/includes? key "/"))
+          (assoc :parent (subs key 0 (string/last-index-of key "/")))))
 
 (defn load-glide-assets!
   []
@@ -67,8 +66,8 @@
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
   [:button.w-full.topic-card.flex.text-left
    (merge
-    {:key      key
-     :on-click nav-fn!} opts)
+     {:key      key
+      :on-click nav-fn!} opts)
    (when cover
      [:div.l.flex.items-center
       [:img {:src (resolve-asset-url cover)}]])
@@ -85,8 +84,8 @@
       (when-let [category (get handbook-nodes category-key)]
         (for [topic (:children category)]
           (rum/with-key
-           (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state) nil)
-           (:key topic)))))]])
+            (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state) nil)
+            (:key topic)))))]])
 
 (rum/defc media-render
   [src]
@@ -107,14 +106,14 @@
   [topic children on-select]
   (let [[open?, set-open?] (rum/use-state false)]
     (rum/use-effect!
-     (fn []
-       (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
-         (let [h #(when-not (some->> (.-target %)
-                                     (.contains (js/document.querySelector ".chapters-select")))
-                    (set-open? false))]
-           (.addEventListener el "click" h)
-           #(.removeEventListener el "click" h))))
-     [])
+      (fn []
+        (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
+          (let [h #(when-not (some->> (.-target %)
+                                      (.contains (js/document.querySelector ".chapters-select")))
+                     (set-open? false))]
+            (.addEventListener el "click" h)
+            #(.removeEventListener el "click" h))))
+      [])
 
     [:div.chapters-select.w-full
      [:a.select-trigger
@@ -130,7 +129,7 @@
         [:ul
          (for [c children]
            (when (and (seq c) (not= (:key c) (:key topic)))
-             [:li [:a {:tabIndex "0" :on-click #(on-select (:key c))}
+             [:li [:a.flex {:tabIndex "0" :on-click #(on-select (:key c))}
                    (or (:title c) (:key c))]]))])]]))
 
 (rum/defc pane-topic-detail
@@ -141,21 +140,21 @@
 
     ;; load deps assets
     (rum/use-effect!
-     (fn []
-       (set-deps-pending? true)
-       (-> (load-glide-assets!)
-           (p/then (fn [] (js/setTimeout
-                           #(when (js/document.getElementById (rum/deref *id-ref))
-                              (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
-           (p/finally #(set-deps-pending? false))))
-     [])
+      (fn []
+        (set-deps-pending? true)
+        (-> (load-glide-assets!)
+            (p/then (fn [] (js/setTimeout
+                             #(when (js/document.getElementById (rum/deref *id-ref))
+                                (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
+            (p/finally #(set-deps-pending? false))))
+      [])
 
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
         (let [chapters         (:children topic)
               has-chapters?    (seq chapters)
               topic            (if has-chapters? (first chapters) topic)
-              parent           (get handbook-nodes (:parent (settle-parent-key topic)))
+              parent           (get handbook-nodes (:parent (bind-parent-key topic)))
               chapters         (or chapters (:children parent))
               parent-key       (:key parent)
               parent-category? (not (string/includes? parent-key "/"))
@@ -170,15 +169,15 @@
              (when show-chapters?
                [:div.chapters-wrap.py-2
                 (chapter-select
-                 topic chapters
-                 (fn [k]
-                   (when-let [chapter (get handbook-nodes k)]
-                     (nav! [:topic-detail chapter (:title parent)] pane-state))))])
+                  topic chapters
+                  (fn [k]
+                    (when-let [chapter (get handbook-nodes k)]
+                      (nav! [:topic-detail chapter (:title parent)] pane-state))))])
 
              ;; demos gallery
              (when-let [demos (:demos topic)]
                (let [demos (cond-> demos
-                             (string? demos) (list))]
+                                   (string? demos) (list))]
                  (if (> (count demos) 1)
                    [:div.flex.demos.glide
                     {:id (rum/deref *id-ref)}
@@ -191,10 +190,10 @@
 
                     [:div.glide__bullets {:data-glide-el "controls[nav]"}
                      (map-indexed
-                      (fn [idx _]
-                        [:button.glide__bullet {:data-glide-dir (str "=" idx)}
-                         (inc idx)])
-                      demos)]]
+                       (fn [idx _]
+                         [:button.glide__bullet {:data-glide-dir (str "=" idx)}
+                          (inc idx)])
+                       demos)]]
 
                    [:div.flex.demos.pt-1
                     (media-render (resolve-asset-url (first demos)))])))
@@ -247,10 +246,10 @@
         [selected, set-selected!] (rum/use-state 0)
         select-fn! #(when-let [ldx (and (seq results) (dec (count results)))]
                       (set-selected!
-                       (case %
-                         :up (if (zero? selected) ldx (max (dec selected) 0))
-                         :down (if (= selected ldx) 0 (min (inc selected) ldx))
-                         :dune)))
+                        (case %
+                          :up (if (zero? selected) ldx (max (dec selected) 0))
+                          :down (if (= selected ldx) 0 (min (inc selected) ldx))
+                          :dune)))
 
         q          (util/trim-safe q)
         active?    (not (string/blank? (util/trim-safe q)))
@@ -258,28 +257,28 @@
         focus-q!   #(some-> (rum/deref *input-ref) (.focus))]
 
     (rum/use-effect!
-     #(focus-q!)
-     [pane-state])
+      #(focus-q!)
+      [pane-state])
 
     (rum/use-effect!
-     (fn []
-       (let [pane-nodes (:children (second pane-state))
-             pane-nodes (and (seq pane-nodes)
-                             (mapcat #(conj (:children %) %) pane-nodes))]
+      (fn []
+        (let [pane-nodes (:children (second pane-state))
+              pane-nodes (and (seq pane-nodes)
+                              (mapcat #(conj (:children %) %) pane-nodes))]
 
-         (set-search-state!
-          (merge search-state {:active? active?}))
+          (set-search-state!
+            (merge search-state {:active? active?}))
 
-         (if (and (seq handbooks-nodes) active?)
-           (-> (or pane-nodes
-                   ;; global
-                   (vals (dissoc handbooks-nodes "__root")))
-               (search/fuzzy-search q :limit 30 :extract-fn :title)
-               (set-results!))
-           (set-results! nil))
+          (if (and (seq handbooks-nodes) active?)
+            (-> (or pane-nodes
+                    ;; global
+                    (vals (dissoc handbooks-nodes "__root")))
+                (search/fuzzy-search q :limit 30 :extract-fn :title)
+                (set-results!))
+            (set-results! nil))
 
-         (set-selected! 0)))
-     [q])
+          (set-selected! 0)))
+      [q])
 
     [:div.search
      [:div.input-wrap.relative
@@ -330,9 +329,9 @@
         [:div.results-wrap
          (for [[idx topic] (medley/indexed results)]
            (rum/with-key
-            (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
-                        {:class (util/classnames [{:active (= selected idx)}])})
-            (:key topic)))]])]))
+             (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
+                         {:class (util/classnames [{:active (= selected idx)}])})
+             (:key topic)))]])]))
 
 ;(rum/defc related-topics
 ;  []
@@ -390,39 +389,39 @@
         handbooks-data       (:data handbooks-state)
         nav-to-pane!         (fn [pane-state prev-state]
                                (set-history-state!
-                                (conj (sequence history-state) prev-state))
+                                 (conj (sequence history-state) prev-state))
                                (set-active-pane0! pane-state))]
 
     ;; load handbooks
     (rum/use-effect!
-     #(load-handbooks!)
-     [])
+      #(load-handbooks!)
+      [])
 
     (rum/use-effect!
-     (fn []
-       (let [*cnt-len (atom 0)
-             check!   (fn []
-                        (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
-                              (when-let [cl (.get (.-headers res) "content-length")]
-                                (when (not= @*cnt-len cl)
-                                  (println "[Handbooks] dev reload!")
-                                  (load-handbooks!))
-                                (reset! *cnt-len cl)))
-                            (p/catch #(println "[Handbooks] dev check Error:" %))))
-             timer0   (if dev-watch?
-                        (js/setInterval check! 2000) 0)]
-         #(js/clearInterval timer0)))
-     [dev-watch?])
+      (fn []
+        (let [*cnt-len (atom 0)
+              check!   (fn []
+                         (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
+                               (when-let [cl (.get (.-headers res) "content-length")]
+                                 (when (not= @*cnt-len cl)
+                                   (println "[Handbooks] dev reload!")
+                                   (load-handbooks!))
+                                 (reset! *cnt-len cl)))
+                             (p/catch #(println "[Handbooks] dev check Error:" %))))
+              timer0   (if dev-watch?
+                         (js/setInterval check! 2000) 0)]
+          #(js/clearInterval timer0)))
+      [dev-watch?])
 
     (rum/use-effect!
-     (fn []
-       (when handbooks-data
-         (set-handbooks-nodes!
-          (->> (tree-seq map? :children handbooks-data)
-               (reduce #(assoc %1 (or (:key %2) "__root") (settle-parent-key %2)) {})))
-         ;; TODO: remove debug
-         (set! (.-handbook-nodes js/window) (bean/->js handbooks-nodes))))
-     [handbooks-data])
+      (fn []
+        (when handbooks-data
+          (set-handbooks-nodes!
+            (->> (tree-seq map? :children handbooks-data)
+                 (reduce #(assoc %1 (or (:key %2) "__root") (bind-parent-key %2)) {})))
+          ;; TODO: remove debug
+          (set! (.-handbook-nodes js/window) (bean/->js handbooks-nodes))))
+      [handbooks-data])
 
     [:div.cp__handbooks-content
      {:class (util/classnames [{:search-active (:active? search-state)}])}
@@ -435,8 +434,8 @@
           [:button.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
-                                          (nil? (seq prev))
-                                          [:dashboard])]
+                                                (nil? (seq prev))
+                                                [:dashboard])]
                                (set-active-pane0! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
