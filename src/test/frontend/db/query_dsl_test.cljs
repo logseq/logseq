@@ -45,20 +45,20 @@
 ;; Tests
 ;; =====
 
-(defn- pre-transform-test
-  []
-  (are [x y] (= (query-dsl/pre-transform x) y)
-    "#foo"
-    "#tag foo"
+(deftest pre-transform-test
+  (testing "page references should be quoted and tags should be handled"
+    (are [x y] (= (query-dsl/pre-transform x) y)
+     "#foo"
+     "#tag foo"
 
-    "(and #foo)"
-    "(and #tag foo)"
+     "(and #foo)"
+     "(and #tag foo)"
 
-    "[[test #foo]]"
-    "\"[[test #foo]]\""
+     "[[test #foo]]"
+     "\"[[test #foo]]\""
 
-    "(and [[test #foo]] (or #foo))"
-    "(and \"[[test #foo]]\" (or #tag foo))"))
+     "(and [[test #foo]] (or #foo))"
+     "(and \"[[test #foo]]\" (or #tag foo))")))
 
 (defn- block-property-queries-test
   []
