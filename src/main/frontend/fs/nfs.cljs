@@ -4,7 +4,7 @@
    Rationale:
    nfs-file-handles-cache stores all file & directory handle
    idb stores top-level directory handle
-   readdir/list-files is called by re-index and initial watcher to init all handles"
+   readdir/get-files is called by re-index and initial watcher to init all handles"
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]
@@ -293,7 +293,7 @@
            :path fpath
            :type (get-attr "type")}))
       (p/rejected "File not exists")))
-  (open-dir [_this _dir _ok-handler]
+  (open-dir [_this _dir]
     (p/let [files (utils/openDirectory #js {:recursive true
                                             :mode "readwrite"}
                                        (fn [path entry]
@@ -336,13 +336,13 @@
       {:path dir-name
        :files files}))
 
-  (list-files [_this dir _ok-handler]
+  (get-files [_this dir]
     (when (string/includes? dir "/")
-      (js/console.error "BUG: list-files(nfs) only accepts repo-dir"))
+      (js/console.error "BUG: get-files(nfs) only accepts repo-dir"))
     (p/let [handle-path (str "handle/" dir)
             handle (get-nfs-file-handle handle-path)
             files (list-and-reload-all-file-handles dir handle)]
-      (prn ::list-files files)
+      (prn ::get-files files)
       files))
 
   (watch-dir! [_this _dir _options]

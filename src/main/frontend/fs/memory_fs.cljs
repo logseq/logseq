@@ -89,9 +89,10 @@
   (stat [_this fpath]
     (let [fpath (fs2-path/url-to-path fpath)]
       (js/window.pfs.stat fpath)))
-  (open-dir [_this _dir _ok-handler]
+  
+  (open-dir [_this _dir]
     nil)
-  (list-files [_this _path-or-handle _ok-handler]
+  (get-files [_this _path-or-handle]
     nil)
   (watch-dir! [_this _dir _options]
     nil)

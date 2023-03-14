@@ -46,8 +46,6 @@
           contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
     (when-not contents-file-exist?
       (let [format (state/get-preferred-format)
-            ;;path (str pages-dir "/contents."
-            ;;          (config/get-file-extension format))
             file-rpath (str "pages/" "contents." (config/get-file-extension format))
             default-content (case (name format)
                               "org" (rc/inline "contents.org")
@@ -289,10 +287,9 @@
   [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
-  (prn ::load----file-objs file-objs)
   (state/set-parsing-state! {:graph-loading? true})
   (let [repo-dir (config/get-local-dir repo-url)
-        _ (prn ::repo-dir repo-dir)
+        _ (prn ::load-to-db-repo-dir repo-dir)
         config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))

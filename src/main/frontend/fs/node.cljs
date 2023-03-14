@@ -123,18 +123,18 @@
             stat (p/catch
                   (protocol/stat this fpath)
                   (fn [_e] :not-found))
-            sub-dir (first (util/get-dir-and-basename path)) ;; FIXME: todo dirname
-            _ (protocol/mkdir-recur! this sub-dir)]
+            parent-dir (fs2-path/parent fpath)
+            _ (protocol/mkdir-recur! this parent-dir)]
       (write-file-impl! repo dir path content opts stat)))
   (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
   (stat [_this fpath]
     (-> (ipc/ipc "stat" fpath)
         (p/then bean/->clj)))
-  (open-dir [_this dir _ok-handler]
+  (open-dir [_this dir]
     (p/then (open-dir dir)
             bean/->clj))
-  (list-files [_this dir _ok-handler]
+  (get-files [_this dir]
     (-> (ipc/ipc "getFiles" dir)
         (p/then bean/->clj)))
   (watch-dir! [_this dir options]
