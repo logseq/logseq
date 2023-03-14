@@ -8,6 +8,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.diff :as diff]
@@ -15,14 +16,15 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs2.path :as fs2-path]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.export.text :as export-text]
             [frontend.handler.export.html :as export-html]
+            [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.assets :as assets-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -54,8 +56,7 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.fs2.path :as fs2-path]))
+            [rum.core :as rum]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
