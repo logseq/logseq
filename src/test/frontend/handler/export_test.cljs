@@ -37,7 +37,8 @@
   (p/do!
    (are [expect block-uuid-s]
         (= expect
-           (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)] {}))
+           (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)]
+                                                  {:remove-options #{:property}}))
      "- 1\n\t- 2\n\t\t- 3\n\t\t- 3\n"
      "61506710-484c-46d5-9983-3d1651ec02c8"
 
@@ -48,7 +49,7 @@
   (p/do!
    (are [expect files]
         (= expect
-           (@#'export-text/export-files-as-markdown files nil))
+           (@#'export-text/export-files-as-markdown files {:remove-options #{:property}}))
      [["pages/page1.md" "- 1\n\t- 2\n\t\t- 3\n\t\t- 3\n- 4\n"]]
      [{:path "pages/page1.md" :content (:file/content (nth test-files 0)) :names ["page1"] :format :markdown}]
 
