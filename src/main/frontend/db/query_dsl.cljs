@@ -145,9 +145,6 @@
       (= current-filter 'not)
       (cons 'and clauses)
 
-      (and nested-and? (= 1 (count clauses)))
-      (first clauses)
-
       (or (= current-filter 'or)
           nested-and?)
       (cons 'and clauses)

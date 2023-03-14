@@ -1,7 +1,8 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [lambdaisland.glogi :as log]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
@@ -88,14 +89,25 @@
                (fn [v]
                  (vec-replace-item v (last loc) x)))))
 
+(defn- fallback-to-default [result default-value failed-data]
+  (if (empty? result)
+    (do
+      (log/error :query-builder/wrap-unwrap-operator-failed failed-data)
+      default-value)
+    result))
+
 (defn wrap-operator
   [q loc operator]
   {:pre [(seq q) (operators-set operator)]}
-  (if (or (= loc [0]) (empty? loc))
-    [operator q]
-    (when-let [x (get-in q loc)]
-      (let [x' [operator x]]
-        (replace-element q loc x')))))
+  (let [result (if (or (= loc [0]) (empty? loc))
+                 [operator q]
+                 (when-let [x (get-in q loc)]
+                   (let [x' [operator x]]
+                     (replace-element q loc x'))))]
+    (fallback-to-default result q {:op "wrap-operator"
+                                   :q q
+                                   :loc loc
+                                   :operator operator})))
 
 (defn unwrap-operator
   [q loc]
@@ -107,9 +119,9 @@
                               (seq (rest x)))
                      (let [x' (rest x)]
                        (replace-element q loc x')))))]
-    (if (empty? result)
-      q
-      result)))
+    (fallback-to-default result q {:op "unwrap-operator"
+                                   :q q
+                                   :loc loc})))
 
 (defn ->page-ref
   [x]
