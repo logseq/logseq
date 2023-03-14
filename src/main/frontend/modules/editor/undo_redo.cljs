@@ -4,12 +4,11 @@
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
             [frontend.util.page :as page-util]
-            [clojure.set :as set]
-            [rum.core :as rum]))
+            [clojure.set :as set]))
 
 ;;;; APIs
 
-(def ^:private undo-redo-states (atom {}))
+(def undo-redo-states (atom {}))
 (def *pause-listener (atom false))
 
 (defn- get-state
@@ -162,11 +161,3 @@
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
         (push-undo entity)))))
-
-(rum/defc history < rum/reactive
-  []
-  (let [paused? (rum/react *pause-listener)
-        state (rum/react undo-redo-states)]
-    (js/console.log state)
-    [:div 
-     [:div "Paused: " (str paused?)]]))

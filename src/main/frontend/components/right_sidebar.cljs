@@ -18,6 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.config :as config]
+            [frontend.db.utils :as db-utils]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -68,6 +69,20 @@
      [:div.ml-2
       (block-cp repo idx block)]]))
 
+(rum/defc history < rum/reactive
+  []
+  (let [repo (state/get-current-repo)
+        state (rum/react undo-redo/undo-redo-states)]
+    
+    [:div.ml-4
+     [:div.p-4 (mapv (fn [[page-id stacks]]
+                       (ui/foldable
+                        [:div [:span.font-bold (str page-id)] " - " (some-> (db-utils/pull page-id) :block/original-name)]
+                        [:div
+                         [:div.ml-2 "Undos (" (count  (rum/react (:undo-stack stacks))) ")"]
+                         [:div.ml-2 "Redos (" (count  (rum/react (:redo-stack stacks))) ")"]]
+                        {:default-collapsed? true})) (get state repo))]]))
+
 (defn build-sidebar-item
   [repo idx db-id block-type]
   (case block-type
@@ -84,7 +99,7 @@
 
     :history
     [(str (t :right-side-bar/history))
-     (undo-redo/history)]
+     (history)]
 
     :block-ref
     #_:clj-kondo/ignore
