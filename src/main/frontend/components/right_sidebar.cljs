@@ -71,10 +71,17 @@
 
 (rum/defc history-stack
   [label stack]
-  (ui/foldable
-   [:div.ml-2 label " (" (count stack) ")"]
-   (map-indexed (fn [index item] [:div.flex (str index) " " [:pre.code (str (:txs item))]]) stack)
-   {:default-collapsed? true}))
+  [:.ml-4 (ui/foldable
+   [:div label " (" (count stack) ")"]
+   (map-indexed (fn [index item] 
+                  [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
+                                       (map (fn [[k v]]
+                                              (when v [:.ml-4 (ui/foldable
+                                                               [:div (str k)]
+                                                               [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]
+                                                               {:default-collapsed? true})])) item)
+                                       {:default-collapsed? true})]) stack)
+   {:default-collapsed? true})])
 
 (rum/defc history < rum/reactive
   []
@@ -82,12 +89,12 @@
         state (rum/react undo-redo/undo-redo-states)]
     [:div.ml-4
      [:div.p-4 (mapv (fn [[page-id stacks]]
-                       (ui/foldable
+                       [:.ml-4.mb-2 (ui/foldable
                         [:div [:span.font-bold (str page-id)] " - " (some-> (db-utils/pull page-id) :block/original-name)]
                         [:div
                          (history-stack "Undos" (rum/react (:undo-stack stacks)))
                          (history-stack "Redos" (rum/react (:redo-stack stacks)))]
-                        {:default-collapsed? true})) (get state repo))]]))
+                        {:default-collapsed? true})]) (get state repo))]]))
 
 (defn build-sidebar-item
   [repo idx db-id block-type]
