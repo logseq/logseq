@@ -207,8 +207,8 @@
                         [:tuple [:= "Properties"] [:sequential :any]]]}}
    ::block])
 
-(def block-ast-with-pos-coll-schema
-  [:sequential [:cat block-ast-schema pos-schema]])
+;; (def block-ast-with-pos-coll-schema
+;;   [:sequential [:cat block-ast-schema pos-schema]])
 
 (def block-ast-coll-schema
   [:sequential block-ast-schema])

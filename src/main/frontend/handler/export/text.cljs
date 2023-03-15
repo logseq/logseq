@@ -422,6 +422,7 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+            _ (assert (m/validate ast-schema/block-ast-coll-schema ast))
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)
