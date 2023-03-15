@@ -173,7 +173,6 @@
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (prn ::mkdir dir)
     (let [dir (fs2-path/path-normalize dir)
           parent-dir (fs2-path/parent dir)
 
@@ -210,9 +209,7 @@
 
   (unlink! [this repo fpath _opts]
     (let [repo-dir (config/get-repo-dir repo)
-
           filename (fs2-path/filename fpath)
-  ;;        [dir basename] (util/get-dir-and-basename path)
           handle-path (str "handle/" fpath)
           recycle-dir (fs2-path/path-join repo-dir config/app-name config/recycle-dir)]
       (->
@@ -231,7 +228,6 @@
 
                parent-dir (fs2-path/parent fpath)
                parent-handle (get-nfs-file-handle (str "handle/" parent-dir))
-
                _ (when parent-handle
                    (.removeEntry ^js parent-handle filename))]
          (idb/remove-item! handle-path)
@@ -272,13 +268,12 @@
                  (not (contains? #{"excalidraw" "edn" "css"} ext))
                  (not (string/includes? path "/.recycle/")))
               (state/pub-event! [:file/not-matched-from-disk path disk-content content])
-              (do ;; actually writing
-                (p/let [_ (verify-permission repo true)
-                        _ (utils/writeFile file-handle content)
-                        file (.getFile file-handle)]
-                  (when file
-                    (db/set-file-content! repo path content)
-                    (nfs-saved-handler repo path file))))))
+              (p/let [_ (verify-permission repo true)
+                      _ (utils/writeFile file-handle content)
+                      file (.getFile file-handle)]
+                (when file
+                  (db/set-file-content! repo path content)
+                  (nfs-saved-handler repo path file)))))
           ;; file no-exist, write via parent dir handle
           (p/let [basename (fs2-path/filename fpath)
                   parent-dir (fs2-path/parent fpath)
@@ -304,30 +299,29 @@
                                         false)
                     (state/pub-event! [:file/alter repo path text]))))
 
-              ;; TODO: create parent directory and write
-              (js/console.error "file not exists in cache")))))))
+              ;; TODO(andelf): Create parent directory and write
+              ;; Normally directory are created layer by layer. So it's safe to leave this unimplemented.
+              (js/console.error "TODO: can not create directory hierarchy")))))))
 
   (rename! [this repo old-path new-path]
-    (p/let [parts (->> (string/split new-path "/")
-                       (remove string/blank?))
-            dir (str "/" (first parts))
-            new-path (->> (rest parts)
-                          util/string-join-path)
-            handle (idb/get-item (str "handle" old-path))
-            file (.getFile handle)
-            content (.text file)
-            _ (protocol/write-file! this repo dir new-path content nil)]
-      (protocol/unlink! this repo old-path nil)))
+    (p/let [repo-dir (config/get-repo-dir repo)
+            old-rpath (fs2-path/relative-path repo old-path)
+            new-rpath (fs2-path/relative-path repo new-path)
+            old-content (protocol/read-file this repo old-rpath nil)
+            _ (protocol/write-file! this repo repo-dir new-rpath old-content nil)
+            _ (protocol/unlink! this repo old-path nil)]))
+
   (stat [_this fpath]
     (prn ::stat fpath)
-    (if-let [file (get-nfs-file-handle (str "handle/" fpath))]
-      (p/let [file (.getFile file)]
+    (if-let [handle (get-nfs-file-handle (str "handle/" fpath))]
+      (p/let [file (.getFile handle)]
         (let [get-attr #(gobj/get file %)]
           {:last-modified-at (get-attr "lastModified")
            :size (get-attr "size")
            :path fpath
            :type (get-attr "type")}))
       (p/rejected "File not exists")))
+  
   (open-dir [_this _dir]
     (p/let [files (utils/openDirectory #js {:recursive true
                                             :mode "readwrite"}
