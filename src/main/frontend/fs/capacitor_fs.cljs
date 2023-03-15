@@ -13,8 +13,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.util :as gp-util]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 (when (mobile-util/native-ios?)
   (defn ios-ensure-documents!
@@ -31,22 +30,9 @@
         (p/do!
          (.requestPermissions Filesystem))))))
 
-
-;; FIXME: should distinguish between no-exist and error
-(defn- <file-exists?
-  [fpath]
-  (p/catch (p/let [fpath (fs2-path/path-normalize fpath)
-                   stat (.stat Filesystem (clj->js {:path fpath}))]
-             (-> stat
-                 bean/->clj
-                 :type
-                 (= "file")))
-           (fn [_error]
-             false)))
-
 (defn- <dir-exists?
   [fpath]
-  (p/catch (p/let [fpath (fs2-path/path-normalize fpath)
+  (p/catch (p/let [fpath (path/path-normalize fpath)
                    stat (.stat Filesystem (clj->js {:path fpath}))]
              (-> stat
                  bean/->clj
@@ -80,17 +66,10 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true)
-               :files)
+              #(js->clj % :keywordize-keys true)
+              :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
-                 nil))))
-
-(defn- <stat [path]
-  (-> (p/chain (.stat Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true))
-      (p/catch (fn [error]
-                 (js/console.error "stat Error: " path ": " error)
                  nil))))
 
 (defn- get-file-paths
@@ -221,7 +200,7 @@
 
 (defn- write-file-impl!
   [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (let [fpath (fs2-path/path-join dir rpath)]
+  (let [fpath (path/path-join dir rpath)]
     (if (or (string/blank? repo) skip-compare?)
       (p/catch
        (p/let [result (<write-file-with-utf8 fpath content)]
@@ -356,16 +335,16 @@
                    (log/error :mkdir-recur! {:path dir
                                              :error error})))))
   (readdir [_this dir]                  ; recursive
-    (let [dir (fs2-path/path-normalize dir)]
+    (let [dir (path/path-normalize dir)]
       (get-file-paths dir)))
   (unlink! [this repo fpath _opts]
     (p/let [_ (prn ::unlink fpath)
             repo-dir (config/get-local-dir repo)
-            recycle-dir (fs2-path/path-join repo-dir config/app-name ".recycle") ;; logseq/.recycle
+            recycle-dir (path/path-join repo-dir config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
-            file-name (-> (fs2-path/trim-dir-prefix repo-dir fpath)
+            file-name (-> (path/trim-dir-prefix repo-dir fpath)
                           (string/replace "/" "_"))
-            new-path (fs2-path/path-join recycle-dir file-name)
+            new-path (path/path-join recycle-dir file-name)
             _ (protocol/mkdir-recur! this recycle-dir)]
       (protocol/rename! this repo fpath new-path)))
   (rmdir! [_this _dir]
@@ -373,27 +352,26 @@
     nil)
   (read-file [_this dir path _options]
     (prn ::read-file dir path)
-    (let [fpath (fs2-path/path-join dir path)]
+    (let [fpath (path/path-join dir path)]
       (->
        (<read-file-with-utf8 fpath)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
   (write-file! [_this repo dir path content opts]
     (prn ::write-file dir path)
-    (let [fpath (fs2-path/path-join dir path)]
+    (let [fpath (path/path-join dir path)]
       (p/let [stat (p/catch
                     (.stat Filesystem (clj->js {:path fpath}))
                     (fn [_e] :not-found))]
         ;; `path` is full-path
         (write-file-impl! repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
-    (p/catch
-     (p/let [_ (.rename Filesystem
-                        (clj->js
-                         {:from old-path
-                          :to new-path}))])
-     (fn [error]
-       (log/error :rename-file-failed error))))
+    (-> (.rename Filesystem
+                 (clj->js
+                  {:from old-path
+                   :to new-path}))
+        (p/catch (fn [error]
+                   (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
     (-> (.copy Filesystem
                (clj->js

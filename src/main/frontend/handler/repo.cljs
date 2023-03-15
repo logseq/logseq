@@ -31,7 +31,7 @@
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -51,7 +51,7 @@
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
-        (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir pages-dir))
+        (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
             (file-common-handler/reset-file! repo-url file-rpath default-content)))))))
@@ -63,7 +63,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-rpath path
         default-content ""]
-    (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
         (file-common-handler/reset-file! repo-url path default-content)))))
@@ -73,7 +73,7 @@
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
-    (p/let [_ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir (config/get-pages-directory)))
+    (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
       (file-common-handler/reset-file! repo-url file-rpath content))))
 
@@ -99,13 +99,13 @@
 
                     :else
                     default-content)
-          file-rpath (fs2-path/path-join (config/get-journals-directory) (str file-name "."
+          file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
                                                                               (config/get-file-extension format)))
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir (config/get-journals-directory)))
+                _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-rpath)]
           (when-not file-exists?
             (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]

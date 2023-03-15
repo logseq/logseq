@@ -1,4 +1,4 @@
-(ns frontend.fs2.path
+(ns logseq.common.path
   "Path manipulation functions, use '/' on all platforms.
    Also handles URL paths."
   (:require [clojure.string :as string]
@@ -10,15 +10,14 @@
   (and (string? s)
        (or (string/starts-with? s "file://") ;; mobile platform
            (string/starts-with? s "content://") ;; android only
-           (string/starts-with? s "assets://") ;; FIXME: Electron asset, not urlencoded
+           (string/starts-with? s "assets://") ;; Electron asset, urlencoded
            (string/starts-with? s "logseq://") ;; reserved for future fs protocl
            (string/starts-with? s "memory://") ;; special memory fs
            (string/starts-with? s "s3://"))))
 
-
 (defn filename
   "File name of a path or URL.
-   Returns nil when it's a path."
+   Returns nil when it's a directory."
   [path]
   (let [fname (if (string/ends-with? path "/")
                 nil
@@ -26,7 +25,6 @@
     (if (and (not-empty fname) (is-file-url path))
       (gp-util/safe-decode-uri-component fname)
       fname)))
-
 
 (defn split-ext
   "Split file name into stem and extension, for both path and URL"
@@ -154,7 +152,7 @@
   "Join path segments, or URL base and path segments"
   [base & segments]
 
-  (cond 
+  (cond
     (nil? base)
     (println "path join global directory" segments)
     (= base "")
@@ -245,7 +243,6 @@
           (str base-prefix (string/join "/" remain-segs)))))))
 
 
-
 (defn parent
   "Parent, containing directory"
   [path]
@@ -253,7 +250,6 @@
     ;; ugly but works
     (path-normalize (str path "/.."))
     nil))
-
 
 
 (defn resolve-relative-path
@@ -285,3 +281,12 @@
       (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
       (str base-prefix (string/join "/" remain-segs)))))
 
+;; compat
+(defn basename
+  [path]
+  (let [path (string/replace path #"/$" "")]
+    (filename path)))
+
+(defn dirname
+  [path]
+  (parent path))

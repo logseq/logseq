@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [frontend.fs2.path :as fs2-path]
+            [logseq.common.path :as path]
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
@@ -16,7 +16,6 @@
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [promesa.core :as p]))
 
@@ -125,7 +124,7 @@
                         (map first)
                         (filter #(string/starts-with? % (config/get-repo-dir graph))))]
       (p/let [files (fs/readdir dir :path-only? true)
-              files (map #(fs2-path/relative-path dir %) files)
+              files (map #(path/relative-path dir %) files)
               files (remove #(fs-util/ignored-path? dir %) files)
               deleted-files (set/difference (set db-files) (set files))]
         (when (seq deleted-files)

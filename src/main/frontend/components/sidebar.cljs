@@ -37,11 +37,10 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
@@ -564,7 +563,7 @@
         width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
         display-filename (some-> (:current-parsing-file state)
                                  not-empty
-                                 fs2-path/filename)
+                                 path/filename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
                     [:div.hidden.md:flex.flex-row

@@ -8,7 +8,6 @@
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
             [logseq.db :as ldb]
-            [frontend.fs2.path :as fs2-path]
             [logseq.graph-parser.util :as gp-util]))
 
 (defonce conns (atom {}))
