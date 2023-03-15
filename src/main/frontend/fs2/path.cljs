@@ -153,9 +153,14 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-  (when (string/blank? base)
-    (js/console.error "BUG: SHOULD-NOT-JOIN-EMPTY")
-    (js/console.trace))
+
+  (cond 
+    (nil? base)
+    (println "path join global directory" segments)
+    (= base "")
+    (js/console.error "BUG: should not join with empty dir" segments)
+    :else
+    nil)
 
   (if (is-file-url base)
     (apply url-join base segments)
@@ -184,20 +189,6 @@
     (url-normalize path)
     (path-normalize-internal path)))
 
-(defn trim-dir-prefix
-  "Trim dir prefix from path"
-  [base-path sub-path]
-  (let [base-path (path-normalize base-path)
-        sub-path (path-normalize sub-path)
-        is-url? (is-file-url base-path)]
-    (if (string/starts-with? sub-path base-path)
-      (if is-url?
-        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-        (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-      (do
-        (js/console.error "unhandled trim-base" base-path sub-path)
-        sub-path))))
-
 (defn url-to-path
   "Extract path part of a URL, decoded.
    
@@ -214,6 +205,19 @@
       path)
     original-url))
 
+(defn trim-dir-prefix
+  "Trim dir prefix from path"
+  [base-path sub-path]
+  (let [base-path (path-normalize base-path)
+        sub-path (path-normalize sub-path)
+        is-url? (is-file-url base-path)]
+    (if (string/starts-with? sub-path base-path)
+      (if is-url?
+        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+        (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+      (do
+        (js/console.error "unhandled trim-base" base-path sub-path)
+        nil))))
 
 (defn relative-path
   "Get relative path from base path.

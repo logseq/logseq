@@ -37,16 +37,14 @@ when a plugin is installed, updated or removed"
                               rewrite/parse-string
                               (rewrite/assoc (keyword id) (select-keys plugin common-plugin-keys))
                               str)]
-         ;; fs protocols require repo and dir when they aren't necessary. For this component,
-         ;; neither is needed so these are nil and blank respectively
-         (fs/write-file! nil "" (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn remove-plugin
   "Removes a plugin from plugin.edn"
   [plugin-id]
   (p/let [content (fs/read-file "" (plugin-config-path))
           updated-content (-> content rewrite/parse-string (rewrite/dissoc (keyword plugin-id)) str)]
-         (fs/write-file! nil "" (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn- create-plugin-config-file-if-not-exists
   []
@@ -54,6 +52,7 @@ when a plugin is installed, updated or removed"
                     (update-vals #(select-keys % common-plugin-keys))
                     pprint/pprint
                     with-out-str)]
+    (prn ::plugin-dir @global-config-handler/root-dir (plugin-config-path))
     (fs/create-if-not-exists nil @global-config-handler/root-dir (plugin-config-path) content)))
 
 (defn- determine-plugins-to-change

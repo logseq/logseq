@@ -115,16 +115,27 @@
 (defn- write-file-aux!
   [repo path content write-file-options]
   (let [original-content (db/get-file repo path)
-        path-dir (if (and
-                      (config/global-config-enabled?)
-                      ;; Hack until we better understand failure in error handler
-                      (global-config-handler/global-config-dir-exists?)
-                      (= (path/dirname path) (global-config-handler/global-config-dir)))
-                   (global-config-handler/global-config-dir)
-                   (config/get-repo-dir repo))
+        path-dir (config/get-repo-dir repo)
+        ;;path-dir (if (and
+        ;;              (config/global-config-enabled?)
+         ;;             ;; Hack until we better understand failure in error handler
+          ;;            (global-config-handler/global-config-dir-exists?)
+          ;;            (= (path/dirname path) (global-config-handler/global-config-dir)))
+           ;;        (global-config-handler/global-config-dir)
+          ;;         (config/get-repo-dir repo))
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
     (fs/write-file! repo path-dir path content write-file-options')))
+
+(defn alter-global-file
+  "Write global file, e.g. global config"
+  [path content]
+  (p/let [_ (fs/write-file! "" nil path content {:skip-compare? true})]
+    (cond
+      (and (config/global-config-enabled?)
+           (= path (global-config-handler/global-config-path)))
+      (p/let [_ (global-config-handler/restore-global-config!)]
+        (state/pub-event! [:shortcut/refresh])))))
 
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
