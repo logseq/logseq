@@ -3,6 +3,7 @@
   {:clj-kondo/config {:linters {:private-call {:level :off}}}})
 
 (defprotocol Fs
+  ;; TODO(andelf): merge mkdir! & mkdir-recur!
   (mkdir! [this dir])
   (mkdir-recur! [this dir])
   ;; TODO(andelf): clarify the return value. How is this different from `get-files`?

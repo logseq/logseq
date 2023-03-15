@@ -173,26 +173,25 @@
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (let [parts (->> (string/split dir "/")
-                     (remove string/blank?))
-          root (->> (butlast parts)
-                    util/string-join-path)
-          new-dir (last parts)
-          root-handle (str "handle/" root)]
-      (->
-       (p/let [handle (idb/get-item root-handle)
-               _ (when handle (verify-handle-permission handle true))]
-         (when (and handle new-dir
-                    (not (string/blank? new-dir)))
-           (p/let [handle (.getDirectoryHandle ^js handle new-dir
-                                               #js {:create true})
-                   handle-path (str root-handle "/" new-dir)
-                   _ (idb/set-item! handle-path handle)]
-             (add-nfs-file-handle! handle-path handle)
-             (println "Stored handle: " (str root-handle "/" new-dir)))))
-       (p/catch (fn [error]
-                  (js/console.debug "mkdir error: " error ", dir: " dir)
-                  (throw error))))))
+    (prn ::mkdir dir)
+    (let [dir (fs2-path/path-normalize dir)
+          parent-dir (fs2-path/parent dir)
+
+          parent-handle-path (str "handle/" parent-dir)]
+      (-> (p/let [parent-handle (or (get-nfs-file-handle parent-handle-path)
+                                    (idb/get-item parent-handle-path))
+                  _ (when parent-handle (verify-handle-permission parent-handle true))]
+            (when parent-handle
+              (p/let [new-dir-name (fs2-path/filename dir)
+                      new-handle (.getDirectoryHandle ^js parent-handle new-dir-name
+                                                      #js {:create true})
+                      handle-path (str "handle/" dir)
+                      _ (idb/set-item! handle-path new-handle)]
+                (add-nfs-file-handle! handle-path new-handle)
+                (println "dir created: " dir))))
+          (p/catch (fn [error]
+                     (js/console.debug "mkdir error: " error ", dir: " dir)
+                     (throw error))))))
 
   (readdir [_this dir]
     ;; This method is only used for repo-dir and version-files dir
@@ -205,34 +204,40 @@
             _ (when handle
                 (verify-handle-permission handle true))
             fpaths (if (string/includes? dir "/")
-                    (js/console.error "ERROR: unimpl")
-                    (readdir-and-reload-all-handles dir handle))]
+                     (js/console.error "ERROR: unimpl")
+                     (readdir-and-reload-all-handles dir handle))]
       fpaths))
 
-  (unlink! [this repo path _opts]
-    (let [[dir basename] (util/get-dir-and-basename path)
-          handle-path (str "handle" path)]
+  (unlink! [this repo fpath _opts]
+    (let [repo-dir (config/get-repo-dir repo)
+
+          filename (fs2-path/filename fpath)
+  ;;        [dir basename] (util/get-dir-and-basename path)
+          handle-path (str "handle/" fpath)
+          recycle-dir (fs2-path/path-join repo-dir config/app-name config/recycle-dir)]
       (->
-       (p/let [recycle-dir (str "/" repo (util/format "/%s/%s" config/app-name config/recycle-dir))
-               _ (protocol/mkdir! this recycle-dir)
-               handle (idb/get-item handle-path)
+       (p/let [_ (protocol/mkdir! this recycle-dir)
+               handle (get-nfs-file-handle handle-path)
                file (.getFile handle)
                content (.text file)
-               handle (idb/get-item (str "handle" dir))
-               _ (idb/remove-item! handle-path)
-               file-name (-> (string/replace path (str "/" repo "/") "")
-                             (string/replace "/" "_")
-                             (string/replace "\\" "_"))
-               new-path (str recycle-dir "/" file-name)
-               _ (protocol/write-file! this repo
-                                       "/"
-                                       new-path
-                                       content nil)]
-         (when handle
-           (.removeEntry ^js handle basename))
+
+               bak-handle (get-nfs-file-handle (str "handle/" recycle-dir))
+               bak-filename (-> (fs2-path/relative-path repo-dir fpath)
+                                (string/replace "/" "_")
+                                (string/replace "\\" "_"))
+               _ (prn ::backup-file bak-filename)
+               file-handle (.getFileHandle ^js bak-handle bak-filename #js {:create true})
+               _ (utils/writeFile file-handle content)
+
+               parent-dir (fs2-path/parent fpath)
+               parent-handle (get-nfs-file-handle (str "handle/" parent-dir))
+
+               _ (when parent-handle
+                   (.removeEntry ^js parent-handle filename))]
+         (idb/remove-item! handle-path)
          (remove-nfs-file-handle! handle-path))
        (p/catch (fn [error]
-                  (log/error :unlink/path {:path path
+                  (log/error :unlink/path {:path fpath
                                            :error error}))))))
 
   (rmdir! [_this _dir]
