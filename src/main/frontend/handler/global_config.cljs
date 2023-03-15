@@ -9,7 +9,7 @@
             [shadow.resource :as rc]
             [clojure.edn :as edn]
             [electron.ipc :as ipc]
-            ["path" :as path]))
+            [logseq.common.path :as path]))
 
 ;; Use defonce to avoid broken state on dev reload
 ;; Also known as home directory a.k.a. '~'
@@ -24,11 +24,11 @@
 
 (defn global-config-dir
   []
-  (path/join @root-dir "config"))
+  (path/path-join @root-dir "config"))
 
 (defn global-config-path
   []
-  (path/join @root-dir "config" "config.edn"))
+  (path/path-join @root-dir "config" "config.edn"))
 
 (defn- set-global-config-state!
   [content]

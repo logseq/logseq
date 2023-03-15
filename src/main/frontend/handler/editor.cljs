@@ -15,7 +15,7 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
-            [frontend.fs2.path :as fs2-path]
+            [logseq.common.path :as path]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
@@ -1387,7 +1387,7 @@
   [repo]
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
-          _ (fs/mkdir-if-not-exists (fs2-path/path-join repo-dir assets-dir))]
+          _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
     (prn ::ensure-assets-dir repo-dir assets-dir)
     [repo-dir assets-dir]))
 
@@ -1395,7 +1395,7 @@
   "Get asset path from filename, ensure assets dir exists"
   [filename]
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
-    (fs2-path/path-join repo-dir assets-dir filename)))
+    (path/path-join repo-dir assets-dir filename)))
 
 (defn save-assets!
   "Save incoming(pasted) assets to assets directory.
@@ -1446,7 +1446,7 @@
 
           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                  (fs/write-file! repo dir file-rpath (.stream file) nil)
-                 [file-rpath file (fs2-path/path-join dir file-rpath) matched-alias])))))))
+                 [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
 
 (defonce *assets-url-cache (atom {}))
 
@@ -1470,7 +1470,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (fs2-path/path-join "assets://" full-path)
+        (path/path-join "assets://" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
@@ -1501,10 +1501,10 @@
                           (second (re-find #"\((.+)\)$" full-text)))]
         (let [block-file-rpath (db-model/get-block-file-path block)
               asset-fpath (if (string/starts-with? href "assets://")
-                            (fs2-path/url-to-path href)
+                            (path/url-to-path href)
                             (config/get-repo-fpath
                              repo
-                             (fs2-path/resolve-relative-path block-file-rpath href)))]
+                             (path/resolve-relative-path block-file-rpath href)))]
           (prn ::deleting href asset-fpath)
           (fs/unlink! repo asset-fpath nil))))))
 
@@ -1521,7 +1521,7 @@
                                      (config/get-repo-dir (state/get-current-repo))
                                      (config/get-pages-directory) "_.md")))]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-            current-file-fpath (fs2-path/path-join repo-dir current-file-rpath)]
+            current-file-fpath (path/path-join repo-dir current-file-rpath)]
         (util/get-relative-path current-file-fpath file-path))
     file-path))
 

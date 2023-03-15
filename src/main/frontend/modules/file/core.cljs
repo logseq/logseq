@@ -3,13 +3,14 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.file :as file-handler]
             [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
-            [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.file :as file-handler]
-            [frontend.db.model :as model]))
+            [frontend.util.property :as property]
+            [logseq.common.path :as path]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -107,7 +108,7 @@
 
 (defn- transact-file-tx-if-not-exists!
   [page-block ok-handler]
-  (when-let [repo (state/get-current-repo)]
+  (when-let [_repo (state/get-current-repo)]
     (when (:block/name page-block)
       (let [format (name (get page-block :block/format
                               (state/get-preferred-format)))
@@ -125,7 +126,7 @@
                       whiteboard-page? (config/get-whiteboards-directory)
                       :else            (config/get-pages-directory))
             ext (if (= format "markdown") "md" format)
-            file-rpath (str sub-dir "/" filename "." ext) ;; FIXME: use path-join
+            file-rpath (path/path-join sub-dir (str filename "." ext))
             file {:file/path file-rpath}
             tx [{:file/path file-rpath}
                 {:block/name (:block/name page-block)

@@ -20,8 +20,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.config :as gp-config]
-            ["path" :as path]))
+            [logseq.common.path :as path]
+            [logseq.graph-parser.config :as gp-config]))
 
 ;; TODO: extract all git ops using a channel
 

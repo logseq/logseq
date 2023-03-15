@@ -1,15 +1,11 @@
 (ns frontend.handler.common.file
   "Common file related fns for handlers"
-  (:require [frontend.util :as util]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.db :as db]
-            ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs :as fs]
             [frontend.context.i18n :refer [t]]
             [clojure.string :as string]
@@ -55,27 +51,7 @@
   ([repo-url file-path content]
    (reset-file! repo-url file-path content {}))
   ([repo-url file-path content {:keys [verbose] :as options}]
-   (let [electron-local-repo? (and (util/electron?)
-                                   (config/local-db? repo-url))
-         repo-dir (config/get-repo-dir repo-url)
-         ;; use relpath
-         _ (comment cond
-                (and electron-local-repo?
-                     util/win32?
-                     (utils/win32 file))
-                file
-
-                (and electron-local-repo? (or
-                                           util/win32?
-                                           (not= "/" (first file))))
-                (str repo-dir "/" file)
-
-                (mobile-util/native-platform?)
-                (capacitor-fs/normalize-file-protocol-path repo-dir file)
-
-                :else
-                file)
-         _ (prn ::reset-file file-path)
+   (let [_ (prn ::reset-file file-path)
          new? (nil? (db/entity [:file/path file-path]))
          options (merge (dissoc options :verbose)
                         {:new? new?
