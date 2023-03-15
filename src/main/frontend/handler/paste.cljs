@@ -197,9 +197,8 @@
        (if raw-paste?
          (utils/getClipText
           (fn [clipboard-data]
-            (when-let [_ (state/get-input)]
-              (let [text clipboard-data]
-                (paste-text-or-blocks-aux input e text nil))))
+            (when (state/get-input)
+              (paste-text-or-blocks-aux input e clipboard-data nil)))
           (fn [error]
             (js/console.error error)))
          (let [clipboard-data (gobj/get e "clipboardData")
