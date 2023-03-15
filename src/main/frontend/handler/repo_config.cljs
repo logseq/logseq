@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.fs2.path :as fs2-path]
+            [logseq.common.path :as path]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.notification :as notification]
             [frontend.spec :as spec]
@@ -41,7 +41,7 @@
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         app-dir config/app-name
-        dir (fs2-path/path-join repo-dir app-dir)]
+        dir (path/path-join repo-dir app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content
             path (str app-dir "/" config/config-file)]

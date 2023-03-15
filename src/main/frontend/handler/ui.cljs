@@ -15,7 +15,7 @@
             [rum.core :as rum]
             [electron.ipc :as ipc]
             [promesa.core :as p]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 (defn- get-css-var-value
   [var-name]
@@ -157,7 +157,7 @@
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
           (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-                rpath (fs2-path/relative-path repo-dir href)]
+                rpath (path/relative-path repo-dir href)]
             (p/let [exists? (fs/file-exists? repo-dir rpath)]
               (when exists?
                 (util/p-handle

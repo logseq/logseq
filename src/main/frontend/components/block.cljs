@@ -82,7 +82,7 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [datascript.impl.entity :as e]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 (defn safe-read-string
   ([s]
@@ -200,7 +200,7 @@
                     (if (and (gp-config/local-protocol-asset? src)
                              (file-sync/current-graph-sync-on?))
                       (let [*exist? (::exist? state)
-                            asset-path (fs2-path/url-to-path src)]
+                            asset-path (path/url-to-path src)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
                           ;; FIXME(andelf): possible bug here
@@ -396,7 +396,7 @@
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
-                               asset-url (fs2-path/path-join repo-dir rel-dir basename)]
+                               asset-url (path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]
 

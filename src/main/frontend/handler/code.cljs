@@ -8,8 +8,7 @@
             [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]
-            [frontend.fs2.path :as fs2-path]
-            [frontend.components.content :as content]))
+            [logseq.common.path :as path]))
 
 (defn save-code-editor!
   []
@@ -42,7 +41,7 @@
             (let [path (:file-path config)
                   repo (state/get-current-repo)
                   repo-dir (config/get-repo-dir repo)
-                  rpath (fs2-path/trim-dir-prefix repo-dir path)
+                  rpath (path/trim-dir-prefix repo-dir path)
                   ;; old-content (db/get-file rpath)
                   _ (prn ::calc rpath)]
               (if rpath

@@ -2,10 +2,10 @@
   "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [frontend.fs2.path :as fs2-path]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [shadow.resource :as rc]))
@@ -388,7 +388,7 @@
   [repo-url path]
   (if (and (or (util/electron?) (mobile-util/native-platform?))
            (local-db? repo-url))
-    (fs2-path/path-join (get-repo-dir repo-url) path)
+    (path/path-join (get-repo-dir repo-url) path)
     (util/node-path.join (get-repo-dir repo-url) path)))
 
 (defn get-file-path
@@ -399,7 +399,7 @@
     (let [path (cond
                  (demo-graph?)
                  (let [dir (get-repo-dir repo-url)
-                       r (fs2-path/path-join dir rpath)]
+                       r (path/path-join dir rpath)]
                    (js/console.error "get-file-path" r)
                    r)
 
@@ -412,7 +412,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (fs2-path/path-join dir rpath))
+                   (path/path-join dir rpath))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -443,33 +443,32 @@
    (get-repo-config-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (fs2-path/path-join repo-dir app-name config-file))))
+     (path/path-join repo-dir app-name config-file))))
 
 (defn get-custom-css-path
   ([]
    (get-custom-css-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (fs2-path/path-join repo-dir app-name custom-css-file))))
+     (path/path-join repo-dir app-name custom-css-file))))
 
 (defn get-export-css-path
   ([]
    (get-export-css-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (fs2-path/path-join repo-dir app-name  export-css-file))))
+     (path/path-join repo-dir app-name  export-css-file))))
 
 (defn expand-relative-assets-path
-  ;; resolve all relative links in custom.css to assets:// URL
+  "Resolve all relative links in custom.css to assets:// URL"
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (prn ::expand-relative-assets-path source)
   (let [protocol (and (string? source)
                       (not (string/blank? source))
                       (if (util/electron?) "assets://" "file://"))
-             ;; BUG: use "assets" as fake current directory
+        ;; BUG: use "assets" as fake current directory
         assets-link-fn (fn [_]
-                        (str (fs2-path/path-join protocol
+                        (str (path/path-join protocol
                                                  (get-repo-dir (state/get-current-repo)) "assets"))
                         "/")]
     (when (not-empty source)
@@ -480,14 +479,14 @@
   []
   (when-let [repo-dir (and (local-db? (state/get-current-repo))
                             (get-repo-dir (state/get-current-repo)))]
-    (fs2-path/path-join repo-dir "assets")))
+    (path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path
   ([]
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (fs2-path/path-join repo-dir app-name custom-js-file))))
+     (path/path-join repo-dir app-name custom-js-file))))
 
 (defn get-block-hidden-properties
   []

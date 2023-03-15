@@ -70,7 +70,7 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 ;; TODO: should we move all events here?
 
@@ -616,7 +616,7 @@
                     (update :path
                            (fn [path]
                              (when (string? path)
-                               (fs2-path/relative-path dir path)))))]
+                               (path/relative-path dir path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))

@@ -12,7 +12,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.fs2.path :as fs2-path]
+            [logseq.common.path :as path]
             [clojure.string :as string]
             [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]
@@ -157,7 +157,7 @@
   ([fpath]
    (protocol/stat (get-fs fpath) fpath))
   ([dir path]
-   (let [fpath (fs2-path/path-join dir path)]
+   (let [fpath (path/path-join dir path)]
      (protocol/stat (get-fs dir) fpath))))
 
 (defn open-dir
@@ -171,7 +171,7 @@
               dir path
               _ (prn ::open-dir dir)
               files (mapv (fn [entry]
-                            (assoc entry :path (fs2-path/relative-path dir (:path entry))))
+                            (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
           (prn :got-fixed files)
           {:path dir :files files})))))
@@ -190,7 +190,7 @@
               _ (prn ::prepare-rel-path dir)
               files (mapv (fn [entry]
                             ;; (prn ::xx entry)
-                            (assoc entry :path (fs2-path/relative-path dir (:path entry))))
+                            (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
           (prn :got files)
           {:path dir :files files})
@@ -242,7 +242,7 @@
   "href is from `make-asset-url`, so it's most likely a full-path"
   [href]
   (p/let [repo-dir (config/get-repo-dir (state/get-current-repo))
-          rpath (fs2-path/relative-path repo-dir href)
+          rpath (path/relative-path repo-dir href)
           exist? (file-exists? repo-dir rpath)]
     (prn ::href-exists href exist?)
     exist?))

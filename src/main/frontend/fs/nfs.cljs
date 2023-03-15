@@ -18,7 +18,7 @@
             [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 ;; Cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -173,15 +173,15 @@
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (let [dir (fs2-path/path-normalize dir)
-          parent-dir (fs2-path/parent dir)
+    (let [dir (path/path-normalize dir)
+          parent-dir (path/parent dir)
 
           parent-handle-path (str "handle/" parent-dir)]
       (-> (p/let [parent-handle (or (get-nfs-file-handle parent-handle-path)
                                     (idb/get-item parent-handle-path))
                   _ (when parent-handle (verify-handle-permission parent-handle true))]
             (when parent-handle
-              (p/let [new-dir-name (fs2-path/filename dir)
+              (p/let [new-dir-name (path/filename dir)
                       new-handle (.getDirectoryHandle ^js parent-handle new-dir-name
                                                       #js {:create true})
                       handle-path (str "handle/" dir)
@@ -209,9 +209,9 @@
 
   (unlink! [this repo fpath _opts]
     (let [repo-dir (config/get-repo-dir repo)
-          filename (fs2-path/filename fpath)
+          filename (path/filename fpath)
           handle-path (str "handle/" fpath)
-          recycle-dir (fs2-path/path-join repo-dir config/app-name config/recycle-dir)]
+          recycle-dir (path/path-join repo-dir config/app-name config/recycle-dir)]
       (->
        (p/let [_ (protocol/mkdir! this recycle-dir)
                handle (get-nfs-file-handle handle-path)
@@ -219,14 +219,14 @@
                content (.text file)
 
                bak-handle (get-nfs-file-handle (str "handle/" recycle-dir))
-               bak-filename (-> (fs2-path/relative-path repo-dir fpath)
+               bak-filename (-> (path/relative-path repo-dir fpath)
                                 (string/replace "/" "_")
                                 (string/replace "\\" "_"))
                _ (prn ::backup-file bak-filename)
                file-handle (.getFileHandle ^js bak-handle bak-filename #js {:create true})
                _ (utils/writeFile file-handle content)
 
-               parent-dir (fs2-path/parent fpath)
+               parent-dir (path/parent fpath)
                parent-handle (get-nfs-file-handle (str "handle/" parent-dir))
                _ (when parent-handle
                    (.removeEntry ^js parent-handle filename))]
@@ -241,7 +241,7 @@
 
   (read-file [_this dir path _options]
     (prn ::read-file dir path)
-    (let [fpath (fs2-path/path-join dir path)
+    (let [fpath (path/path-join dir path)
           handle-path (str "handle/" fpath)]
       (p/let [handle (or (get-nfs-file-handle handle-path)
                          (idb/get-item handle-path))
@@ -251,7 +251,7 @@
   (write-file! [_this repo dir path content opts]
     ;; TODO: file backup handling
     (prn ::write-file dir path)
-    (let [fpath (fs2-path/path-join dir path)
+    (let [fpath (path/path-join dir path)
           ext (util/get-file-ext path)
           file-handle-path (str "handle/" fpath)]
       (p/let [file-handle (get-nfs-file-handle file-handle-path)]
@@ -275,8 +275,8 @@
                   (db/set-file-content! repo path content)
                   (nfs-saved-handler repo path file)))))
           ;; file no-exist, write via parent dir handle
-          (p/let [basename (fs2-path/filename fpath)
-                  parent-dir (fs2-path/parent fpath)
+          (p/let [basename (path/filename fpath)
+                  parent-dir (path/parent fpath)
                   parent-dir-handle-path (str "handle/" parent-dir)
                   _ (prn ::debug-0 parent-dir-handle-path)
                   parent-dir-handle (get-nfs-file-handle parent-dir-handle-path)]
@@ -305,8 +305,8 @@
 
   (rename! [this repo old-path new-path]
     (p/let [repo-dir (config/get-repo-dir repo)
-            old-rpath (fs2-path/relative-path repo old-path)
-            new-rpath (fs2-path/relative-path repo new-path)
+            old-rpath (path/relative-path repo old-path)
+            new-rpath (path/relative-path repo new-path)
             old-content (protocol/read-file this repo old-rpath nil)
             _ (protocol/write-file! this repo repo-dir new-rpath old-content nil)
             _ (protocol/unlink! this repo old-path nil)]))
@@ -314,7 +314,8 @@
   (stat [_this fpath]
     (prn ::stat fpath)
     (if-let [handle (get-nfs-file-handle (str "handle/" fpath))]
-      (p/let [file (.getFile handle)]
+      (p/let [_ (verify-handle-permission handle true)
+              file (.getFile handle)]
         (let [get-attr #(gobj/get file %)]
           {:last-modified-at (get-attr "lastModified")
            :size (get-attr "size")

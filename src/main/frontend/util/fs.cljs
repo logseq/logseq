@@ -10,8 +10,7 @@
             [frontend.fs :as fs]
             [frontend.config :as config]
             [promesa.core :as p]
-            [cljs.reader :as reader]
-            [frontend.fs2.path :as fs2-path]))
+            [cljs.reader :as reader]))
 
 ;; NOTE: This is not the same ignored-path? as src/electron/electron/utils.cljs.
 ;;       The assets directory is ignored.

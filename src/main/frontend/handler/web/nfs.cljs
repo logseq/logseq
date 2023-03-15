@@ -1,7 +1,6 @@
 (ns frontend.handler.web.nfs
   "The File System Access API, https://web.dev/file-system-access/."
   (:require ["/frontend/utils" :as utils]
-            [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
@@ -210,7 +209,7 @@
    (when-let [dir-result-fn
               (and path (fn [{:keys [nfs?]}]
                           (p/let [files-result (fs/get-files path)]
-                            [path (:files files-result)])))]
+                            files-result)))]
      (ls-dir-files-with-handler!
       (:ok-handler opts)
       (merge {:dir-result-fn dir-result-fn} opts)))))

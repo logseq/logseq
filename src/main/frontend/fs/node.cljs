@@ -11,7 +11,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.fs2.path :as fs2-path]))
+            [logseq.common.path :as path]))
 
 (defn- contents-matched?
   [disk-content db-content]
@@ -33,7 +33,7 @@
 (defn- write-file-impl!
   [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (prn ::write-file-impl repo dir rpath)
-  (let [file-fpath (fs2-path/path-join dir rpath)]
+  (let [file-fpath (path/path-join dir rpath)]
     (if skip-compare?
       (p/catch
        (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
@@ -108,14 +108,14 @@
   (read-file [_this dir path _options]
     (let [path (if (nil? dir)
                  path
-                 (fs2-path/path-join dir path))]
+                 (path/path-join dir path))]
       (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content opts]
-    (p/let [fpath (fs2-path/path-join dir path)
+    (p/let [fpath (path/path-join dir path)
             stat (p/catch
                   (protocol/stat this fpath)
                   (fn [_e] :not-found))
-            parent-dir (fs2-path/parent fpath)
+            parent-dir (path/parent fpath)
             _ (protocol/mkdir-recur! this parent-dir)]
       (write-file-impl! repo dir path content opts stat)))
   (rename! [_this _repo old-path new-path]
