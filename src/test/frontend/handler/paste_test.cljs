@@ -87,4 +87,5 @@
          commands/simple-insert! (fn [_input text] (p/resolved text))
          util/get-selected-text (constantly nil)]
         (p/let [result ((paste-handler/editor-on-paste! nil true))]
-               (is (= expected-paste result)))))))
+               (is (= expected-paste result))
+               (reset))))))
