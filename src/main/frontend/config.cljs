@@ -8,8 +8,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]
-            [frontend.fs2.path :as path]))
+            [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -461,14 +460,21 @@
      (fs2-path/path-join repo-dir app-name  export-css-file))))
 
 (defn expand-relative-assets-path
+  ;; resolve all relative links in custom.css to assets:// URL
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (when-let [protocol (and (string? source)
-                           (not (string/blank? source))
-                           (if (util/electron?) "assets" "file"))]
-    (js/console.error "BUG: assets:// url handling")
-    (string/replace
-     source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
+  (prn ::expand-relative-assets-path source)
+  (let [protocol (and (string? source)
+                      (not (string/blank? source))
+                      (if (util/electron?) "assets://" "file://"))
+             ;; BUG: use "assets" as fake current directory
+        assets-link-fn (fn [_]
+                        (str (fs2-path/path-join protocol
+                                                 (get-repo-dir (state/get-current-repo)) "assets"))
+                        "/")]
+    (when (not-empty source)
+      (string/replace source #"\\.\\./assets/"
+                      assets-link-fn))))
 
 (defn get-current-repo-assets-root
   []
