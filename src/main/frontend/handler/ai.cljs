@@ -50,15 +50,13 @@
                                                         :create-first-block? false})
                             (:db/id (db/entity [:block/name (string/lower-case page)]))))
               multiple-choices? (> (count result) 1)]
-          (editor-handler/insert-block-tree-after-target
-           parent-id
-           false
-           [{:content q
-             :children (if multiple-choices?
-                         (map-indexed (fn [i text] (text->segments i text true)) result)
-                         (text->segments 0 (first result) false))}]
-           (state/get-preferred-format)
-           false)))
+          (let [children (if multiple-choices?
+                           (map-indexed (fn [i text] (text->segments i text true)) result)
+                           (text->segments 0 (first result) false))
+                data [{:content q
+                       :children (if (map? children) [children] children)}]
+                format (state/get-preferred-format)]
+            (editor-handler/insert-block-tree-after-target parent-id false data format false))))
       (p/catch (fn [error]
                  ;; TODO: UI
                  (log/error :exception error)))))
