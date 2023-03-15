@@ -3136,7 +3136,7 @@
         (log/error :exception @*query-error)
         [:div.warning.my-1 "Query failed: "
          [:p (.-message @*query-error)]])
-      [:div
+      [:div.custom-query-results
        (cond
          (and (seq result) view-f)
          (let [result (try
@@ -3247,7 +3247,7 @@
                     :built-in-query? built-in?}]
           [:div.custom-query (get config :attr {})
            (when-not built-in?
-             [:div.flex.flex-row.flex-1.items-center.justify-between.my-1.text-xs.opacity-90
+             [:div.th
               [:div.flex.flex-1.flex-row
                (ui/icon "search" {:size 14})
                [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]]
@@ -3290,7 +3290,7 @@
               (fn []
                 (custom-query-inner config q opts))
               {})
-             [:div
+             [:div.bd
               (query-title config title)
               (when-not collapsed?'
                 (custom-query-inner config q opts))])])))))

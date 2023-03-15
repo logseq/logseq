@@ -28,6 +28,10 @@
         padding: 0.5em 1em;
     }
 
+    .clauses-group {
+        @apply flex flex-row gap-1 flex-wrap items-center text-sm;
+    }
+
     a.query-clause, a.add-filter {
         color: var(--ls-primary-text-color);
     }

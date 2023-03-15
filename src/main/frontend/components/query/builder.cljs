@@ -377,7 +377,7 @@
   [*tree *find loc kind clauses]
   (let [parens? (and (= loc [0])
                      (> (count clauses) 1))]
-    [:div.flex.flex-row.gap-1.flex-wrap.items-center.text-sm
+    [:div.clauses-group
      (when parens? [:div.text-4xl.mr-1.font-thin "("])
      (when-not (and (= loc [0])
                     (= kind :and)
