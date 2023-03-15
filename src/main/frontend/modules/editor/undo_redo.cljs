@@ -12,9 +12,8 @@
 (def *pause-listener (atom false))
 
 (defn- get-state
-  []
-  (let [repo (state/get-current-repo)
-        page (page-util/get-editing-page-id)]
+  [page]
+  (let [repo (state/get-current-repo)]
     (assert (string? repo) "Repo should satisfy string?")
     (when page
       (if-let [state (get-in @undo-redo-states [repo page])]
@@ -25,17 +24,19 @@
           new-state)))))
 
 (defn- get-undo-stack
-  []
-  (-> (get-state) :undo-stack))
+  [page]
+  (-> (get-state page) :undo-stack))
 
 (defn- get-redo-stack
   []
-  (-> (get-state) :redo-stack))
+  (-> (get-state (page-util/get-editing-page-id)) :redo-stack))
 
 (defn push-undo
   [txs]
-  (let [undo-stack (get-undo-stack)]
-    (swap! undo-stack conj txs)))
+  (let [pages (reduce (fn [col unit] (conj col (:db/id (:block/page unit)))) #{} (:blocks txs))]
+    (js/console.log (str pages))
+    (mapv #(when-let [undo-stack (get-undo-stack %)]
+             (swap! undo-stack conj txs)) pages)))
 
 (comment
   (defn get-content-from-txs
@@ -55,7 +56,7 @@
 
 (defn pop-undo
   []
-  (let [undo-stack (get-undo-stack)]
+  (let [undo-stack (get-undo-stack (page-util/get-editing-page-id))]
     (when-let [stack @undo-stack]
       (when (seq stack)
         (let [removed-e (peek stack)
