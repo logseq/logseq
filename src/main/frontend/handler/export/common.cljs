@@ -99,10 +99,11 @@
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
   (mapv
-   (fn [[ast-type ast-content]]
-     (if (= ast-type "Heading")
-       [ast-type (update ast-content :level #(+ (dec %) origin-level))]
-       [ast-type ast-content]))
+   (fn [block-ast]
+     (let [[ast-type ast-content] block-ast]
+       (if (= ast-type "Heading")
+         [ast-type (update ast-content :level #(+ (dec %) origin-level))]
+         block-ast)))
    block-ast-coll))
 
 (defn- plain-indent-inline-ast

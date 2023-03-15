@@ -1,20 +1,19 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
-  (:require
-   [clojure.string :as string]
-   [frontend.db :as db]
-   [frontend.extensions.zip :as zip]
-   [frontend.handler.export.common :as common :refer
-    [*state*
-     simple-ast-malli-schema
-     raw-text space newline* indent simple-asts->string]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [mapcatv concatv removev]]
-   [goog.dom :as gdom]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [malli.core :as m]
-   [promesa.core :as p]))
+  (:require [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.extensions.zip :as zip]
+            [frontend.handler.export.common :as common :refer
+             [*state* indent newline* raw-text simple-ast-malli-schema
+              simple-asts->string space]]
+            [frontend.schema.handler.ast :as ast-schema]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [goog.dom :as gdom]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [malli.core :as m]
+            [promesa.core :as p]))
 
 
 ;;; block-ast, inline-ast -> simple-ast
@@ -306,7 +305,7 @@
          (indent-with-2-spaces (dec current-level)))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
-(m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
+(m/=> block-ast->simple-ast [:=> [:cat ast-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
   (removev
