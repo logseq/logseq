@@ -147,7 +147,7 @@
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
     (reset-redo)
-    (if (:compute-new-refs? tx-meta)
+    (if (:replace? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
         (push-undo entity))
