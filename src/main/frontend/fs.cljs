@@ -23,12 +23,28 @@
 (defonce node-backend (node/->Node))
 (defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
+(defn- get-native-backend
+  "Native FS backend of current platform"
+  []
+  (cond
+    (util/electron?)
+    node-backend
+
+    (mobile-util/native-platform?)
+    mobile-backend
+
+    :else
+    nfs-backend))
 
 (defn get-fs
   [dir]
-  (let [bfs-local? (or (string/starts-with? dir "/local")
-                       (string/starts-with? dir "local"))]
+  (let [bfs-local? (and dir
+                        (or (string/starts-with? dir "/local")
+                            (string/starts-with? dir "local")))]
     (cond
+      (nil? dir) ;; global file op, use native backend
+      (get-native-backend)
+
       (string/starts-with? dir "memory://")
       memory-backend
 
@@ -143,19 +159,6 @@
   ([dir path]
    (let [fpath (fs2-path/path-join dir path)]
      (protocol/stat (get-fs dir) fpath))))
-
-(defn- get-native-backend
-  "Native FS backend of current platform"
-  []
-  (cond
-    (util/electron?)
-    node-backend
-
-    (mobile-util/native-platform?)
-    mobile-backend
-
-    :else
-    nfs-backend))
 
 (defn open-dir
   [dir]

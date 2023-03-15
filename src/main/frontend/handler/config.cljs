@@ -26,8 +26,8 @@
 (defn set-config!
   ([k v]
    (set-config! (state/get-current-repo) k v))
-  ([repo k v]
-   (let [path (config/get-repo-config-path repo)]
+  ([_repo k v]
+   (let [path "logseq/config.edn"]
      (repo-config-set-key-value path k v))))
 
 (defn toggle-ui-show-brackets! []

@@ -129,6 +129,7 @@
      (cond
        ;; image type
        (and format (contains? (gp-config/img-formats) format))
+       ;; FIXME(andelf): bad path op
        [:img {:src (util/node-path.join "file://" path)}]
 
        (and format

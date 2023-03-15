@@ -106,7 +106,9 @@
     ;; Too dangerious!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (let [path (fs2-path/path-join dir path)]
+    (let [path (if (nil? dir)
+                 path
+                 (fs2-path/path-join dir path))]
       (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content opts]
     (p/let [fpath (fs2-path/path-join dir path)
