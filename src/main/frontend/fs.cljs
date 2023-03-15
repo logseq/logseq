@@ -61,6 +61,7 @@
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
   [repo fpath opts]
+  ;; TODO(andelf): better handle backup here, instead of fs impl
   (protocol/unlink! (get-fs fpath) repo fpath opts))
 
 (defn rmdir!
@@ -223,11 +224,16 @@
             false))))))
 
 (defn file-exists?
-  [dir path]
-  (util/p-handle
-   (stat dir path)
-   (fn [stat] (not (nil? stat)))
-   (fn [_e] false)))
+  ([fpath]
+   (util/p-handle
+    (stat fpath)
+    (fn [stat] (not (nil? stat)))
+    (fn [_e] false)))
+  ([dir path]
+   (util/p-handle
+    (stat dir path)
+    (fn [stat] (not (nil? stat)))
+    (fn [_e] false))))
 
 (defn asset-href-exists?
   "href is from `make-asset-url`, so it's most likely a full-path"
