@@ -14,7 +14,8 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [electron.ipc :as ipc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs2.path :as fs2-path]))
 
 (defn- get-css-var-value
   [var-name]
@@ -123,7 +124,7 @@
                     (some-> (db-model/get-custom-css)
                             (config/expand-relative-assets-path))
                     ;; (state/get-custom-css-link)
-)]
+                    )]
     (util/add-style! style)))
 (defn reset-custom-css!
   []
@@ -155,11 +156,12 @@
           (when (or (not should-ask?)
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (let [dir (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo)))]
-            (p/let [exists? (fs/file-exists? dir href)]
+          (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+                rpath (fs2-path/relative-path repo-dir href)]
+            (p/let [exists? (fs/file-exists? repo-dir rpath)]
               (when exists?
                 (util/p-handle
-                 (fs/read-file dir href)
+                 (fs/read-file repo-dir rpath)
                  #(when-let [scripts (and % (string/trim %))]
                     (when-not (string/blank? scripts)
                       (when (or (not should-ask?) (ask-allow))
