@@ -16,7 +16,6 @@
             ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
             [cljs.core.match :refer [match]]
-            [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]))
@@ -54,12 +53,7 @@
     (util/format "{{video %s}}" url)
 
     (string/includes? url "twitter.com")
-    (util/format "{{twitter %s}}" url)
-
-    :else
-    (do
-      (notification/show! (util/format "No macro is available for %s" url) :warning)
-      nil)))
+    (util/format "{{twitter %s}}" url)))
 
 (defn- try-parse-as-json
   "Result is not only to be an Object.
@@ -204,7 +198,7 @@
          (let [clipboard-data (gobj/get e "clipboardData")
                html (when-not raw-paste? (.getData clipboard-data "text/html"))
                text (.getData clipboard-data "text")
-               files (.-files clipboard-data)
+               files (.-files text)
                paste-file-if-exist (fn []
                                      (when id
                                        (let [_handled
@@ -218,4 +212,8 @@
            (cond
              (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
              (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
-             :else (paste-text-or-blocks-aux input e text html))))))))
+             :else
+             (let [text' (or (when (gp-util/url? text)
+                               (wrap-macro-url text))
+                             text)]
+               (paste-text-or-blocks-aux input e text' html)))))))))
