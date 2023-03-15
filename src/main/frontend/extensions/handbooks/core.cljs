@@ -41,6 +41,17 @@
       content matches)
     content))
 
+(defn parse-key-from-href
+  [href base]
+  (when (and (string? href)
+             (not (string/blank? href)))
+    (when-let [href (some-> href (string/trim) (string/replace (util/node-path.extname href) ""))]
+      (some-> (if (string/starts-with? href "@")
+                (string/replace href #"^[@\/]+" "")
+                (util/node-path.join base href))
+              (string/lower-case)
+              (csk/->snake_case_string)))))
+
 (defn bind-parent-key
   [{:keys [key] :as node}]
   (cond-> node
@@ -149,6 +160,12 @@
             (p/finally #(set-deps-pending? false))))
       [])
 
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout #(some-> (js/document.querySelector ".cp__handbooks-content")
+                                (.scrollTo 0 0))))
+      [pane-state])
+
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
         (let [chapters         (:children topic)
@@ -201,7 +218,15 @@
              [:div.content-wrap
               (when-let [content (:content topic)]
                 [:div.content.markdown-body
-                 {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}}])]]))))))
+                 {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}
+                  :on-click                (fn [^js e]
+                                             (when-let [target (.-target e)]
+                                               (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
+                                                 (when-not (string/starts-with? link "http")
+                                                   (if-let [to (get handbook-nodes (parse-key-from-href link parent-key))]
+                                                     (nav! [:topic-detail to (:title parent)] pane-state)
+                                                     (js/console.error "ERROR: handbook link resource not found: " link))
+                                                   (util/stop e)))))}])]]))))))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
