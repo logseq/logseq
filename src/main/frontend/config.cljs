@@ -481,7 +481,7 @@
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (fs2-path/path-join repo-dir app-name  custom-js-file))))
+     (fs2-path/path-join repo-dir app-name custom-js-file))))
 
 (defn get-block-hidden-properties
   []
