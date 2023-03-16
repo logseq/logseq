@@ -90,19 +90,20 @@
 (defn- await-permission-granted
   "Guard against File System Access API permission, avoiding early access before granted"
   [repo]
-  (js/Promise. (fn [resolve reject]
-                 (let [timer (atom nil)
-                       timer' (js/setInterval (fn []
-                                                (prn ::checking-nfs-permission)
-                                                (when (state/nfs-user-granted? repo)
-                                                  (js/clearInterval @timer)
-                                                  (resolve true)))
-                                              1000)
-                       _ (reset! timer timer')]
-                   (js/setTimeout (fn []
-                                    (js/clearInterval timer)
-                                    (reject false))
-                                  100000)))))
+  (if (state/nfs-user-granted? repo)
+    (p/resolved true)
+    (js/Promise. (fn [resolve reject]
+                   (let [timer (atom nil)
+                         timer' (js/setInterval (fn []
+                                                  (when (state/nfs-user-granted? repo)
+                                                    (js/clearInterval @timer)
+                                                    (resolve true)))
+                                                1000)
+                         _ (reset! timer timer')]
+                     (js/setTimeout (fn []
+                                      (js/clearInterval timer)
+                                      (reject false))
+                                    100000))))))
 
 (defn await-get-nfs-file-handle
   "for accessing File handle outside, ensuring user granted."
@@ -308,7 +309,7 @@
     (p/let [repo-dir (config/get-repo-dir repo)
             old-rpath (path/relative-path repo-dir old-path)
             new-rpath (path/relative-path repo-dir new-path)
-            old-content (protocol/read-file this repo old-rpath nil)
+            old-content (protocol/read-file this repo-dir old-rpath nil)
             _ (protocol/write-file! this repo repo-dir new-rpath old-content nil)
             _ (protocol/unlink! this repo old-path nil)]))
 
