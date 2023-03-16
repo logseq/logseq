@@ -52,12 +52,18 @@
               (string/lower-case)
               (csk/->snake_case_string)))))
 
+(defn parse-parent-key
+  [s]
+  (if (and (string? s) (string/includes? s "/"))
+    (subs s 0 (string/last-index-of s "/"))
+    s))
+
 (defn bind-parent-key
   [{:keys [key] :as node}]
   (cond-> node
           (and (string? key)
                (string/includes? key "/"))
-          (assoc :parent (subs key 0 (string/last-index-of key "/")))))
+          (assoc :parent (parse-parent-key key))))
 
 (defn load-glide-assets!
   []
@@ -223,7 +229,7 @@
                                              (when-let [target (.-target e)]
                                                (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
                                                  (when-let [to-k (and (not (string/starts-with? link "http"))
-                                                                    (parse-key-from-href link parent-key))]
+                                                                      (parse-key-from-href link parent-key))]
                                                    (if-let [to (get handbook-nodes to-k)]
                                                      (nav! [:topic-detail to (:title parent)] pane-state)
                                                      (js/console.error "ERROR: handbook link resource not found: " link))
@@ -413,10 +419,16 @@
         handbooks-loaded?    (and (seq (:data handbooks-state))
                                   (= :completed (:status handbooks-state)))
         handbooks-data       (:data handbooks-state)
-        nav-to-pane!         (fn [pane-state prev-state]
-                               (set-history-state!
-                                 (conj (sequence history-state) prev-state))
-                               (set-active-pane0! pane-state))]
+        nav-to-pane!         (fn [next-state prev-state]
+                               (let [next-key     (:key (second next-state))
+                                     prev-key     (:key (second prev-state))
+                                     in-chapters? (and prev-key next-key (string/includes? prev-key "/")
+                                                       (or (string/starts-with? next-key prev-key)
+                                                           (apply = (map parse-parent-key [prev-key next-key]))))]
+                                 (when-not in-chapters?
+                                   (set-history-state!
+                                     (conj (sequence history-state) prev-state))))
+                               (set-active-pane0! next-state))]
 
     ;; load handbooks
     (rum/use-effect!
