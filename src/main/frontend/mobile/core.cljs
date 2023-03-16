@@ -31,7 +31,8 @@
         (state/set-state! :mobile/container-urls paths)
         (println "iOS container path: " paths))))
 
-  (state/pub-event! [:validate-appId])
+  ;; Buggy, should not use
+  ;; (state/pub-event! [:validate-appId])
 
   (.addEventListener js/window
                      "load"

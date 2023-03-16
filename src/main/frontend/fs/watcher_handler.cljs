@@ -57,8 +57,11 @@
                  ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
                  (string/starts-with? dir "memory://") "local"
                  :else (config/get-local-repo dir))
+          repo-dir (config/get-local-dir repo)
           {:keys [mtime]} stat
-          db-content (or (db/get-file repo path) "")]
+          db-content (db/get-file repo path)
+          exists-in-db? (not (nil? db-content))
+          db-content (or db-content "")]
 
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
@@ -76,17 +79,8 @@
           (let [backup? (not (string/blank? db-content))]
             (handle-add-and-change! repo path content db-content mtime backup?))
 
-          ;; global config handling
           (and (= "change" type)
-               (= dir (global-config-handler/global-config-dir)))
-          (when (= path "config.edn")
-            (global-config-handler/set-global-config-state! content))
-
-          (and (= "change" type)
-               (not (db/file-exists? repo path)))
-          (js/console.error "Can't get file in the db: " path)
-
-          (and (= "change" type)
+               (= dir repo-dir)
                (not= (string/trim content) (string/trim db-content))
                (not (gp-config/local-asset? path)))
           (when-not (and
@@ -99,12 +93,22 @@
             (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)
-               (db/file-exists? repo path))
+               exists-in-db?)
           (p/let [dir-exists? (fs/file-exists? dir "")]
             (when dir-exists?
               (when-let [page-name (db/get-file-page path)]
                 (println "Delete page: " page-name ", file path: " path ".")
                 (page-handler/delete! page-name #() :delete-file? false))))
+
+          ;; global config handling
+          (and (= "change" type)
+               (= dir (global-config-handler/global-config-dir)))
+          (when (= path "config.edn")
+            (global-config-handler/set-global-config-state! content))
+
+          (and (= "change" type)
+               (not exists-in-db?))
+          (js/console.error "Can't get file in the db: " path)
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))

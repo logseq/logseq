@@ -236,7 +236,7 @@
             base-segs (drop (count common-segs) base-segs)
             remain-segs (drop (count common-segs) path-segs)
             base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
-        (js/console.error (js/Error. "buggy relative-path"))
+        (js/console.error (js/Error. "buggy relative-path") base-path sub-path)
         #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
         (if is-url?
           (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
