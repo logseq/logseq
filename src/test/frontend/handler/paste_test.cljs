@@ -85,26 +85,34 @@
         reset
         [utils/getClipText (fn [cb] (cb clipboard))
          state/get-input (constantly #js {:value "block"})
-         commands/delete-selection! (constantly nil)
-         commands/simple-insert! (fn [_input text] (p/resolved text))
-         util/get-selected-text (constantly nil)]
+         editor-handler/insert (fn [text _] (p/resolved text))]
         (p/let [result ((paste-handler/editor-on-paste! nil true))]
                (is (= expected-paste result))
                (reset))))))
 
-(deftest-async editor-on-paste-normal-with-link
-  (testing "Normal paste for link should paste macro wrapped link"
+(deftest-async ^:focus editor-on-paste-raw-with-multi-line
+  (let [clipboard "a\n\na"
+        expected-paste "a\n\na"]
+    (test-helper/with-reset
+      reset
+      [utils/getClipText (fn [cb] (cb clipboard))
+       state/get-input (constantly #js {:value "block"})
+       editor-handler/insert (fn [text _] (p/resolved text))]
+      (p/let [result ((paste-handler/editor-on-paste! nil true))]
+             (is (= expected-paste result))
+             (reset)))))
+
+(deftest-async editor-on-paste-with-link
+  (testing "Formatted paste for link should paste macro wrapped link"
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (test-helper/with-reset
         reset
-        ;; These redefs are like above
         [utils/getClipText (fn [cb] (cb clipboard))
          state/get-input (constantly #js {:value "block"})
+         ;; paste-copied-blocks-or-text mocks below
          commands/delete-selection! (constantly nil)
          commands/simple-insert! (fn [_input text] (p/resolved text))
-         util/get-selected-text (constantly nil)
-         ;; Specific redefs to normal paste
          util/stop (constantly nil)
          html-parser/convert (constantly nil)]
         (p/let [result ((paste-handler/editor-on-paste! nil)
@@ -112,19 +120,20 @@
                (is (= expected-paste result))
                (reset))))))
 
-(deftest-async editor-on-paste-raw-with-selection
+(deftest-async editor-on-paste-with-selection-in-property
   (let [clipboard "after"
         expected-paste "after"
-        selected-text "before"
         block-content "test:: before"]
     (test-helper/with-reset
       reset
       [utils/getClipText (fn [cb] (cb clipboard))
        state/get-input (constantly #js {:value block-content})
-       editor-handler/get-selection-and-format (constantly {:value block-content})
+       ;; paste-copied-blocks-or-text mocks below
        commands/delete-selection! (constantly nil)
        commands/simple-insert! (fn [_input text] (p/resolved text))
-       util/get-selected-text (constantly selected-text)]
-      (p/let [result ((paste-handler/editor-on-paste! nil true))]
+       util/stop (constantly nil)
+       html-parser/convert (constantly nil)]
+      (p/let [result ((paste-handler/editor-on-paste! nil)
+                      #js {:clipboardData #js {:getData (constantly clipboard)}})]
              (is (= expected-paste result))
              (reset)))))

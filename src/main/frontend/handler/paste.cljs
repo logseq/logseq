@@ -192,7 +192,7 @@
          (utils/getClipText
           (fn [clipboard-data]
             (when (state/get-input)
-              (paste-text-or-blocks-aux input e clipboard-data nil)))
+              (editor-handler/insert clipboard-data true)))
           (fn [error]
             (js/console.error error)))
          (let [clipboard-data (gobj/get e "clipboardData")
