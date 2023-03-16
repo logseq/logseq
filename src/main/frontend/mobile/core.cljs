@@ -23,13 +23,13 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
-    (when-let [path' (bean/->clj path)]
-      (state/set-state! :mobile/container-urls
-                        (update-vals path' #(cond-> %
-                                              string?
-                                              (js/decodeURIComponent))))
-      (println "iOS container path: " path')))
+  (p/let [^js paths (capacitor-fs/ios-ensure-documents!)]
+    (when paths
+      (let [paths (-> paths
+                      bean/->clj
+                      (update-vals capacitor-fs/ios-force-include-private))]
+        (state/set-state! :mobile/container-urls paths)
+        (println "iOS container path: " paths))))
 
   (state/pub-event! [:validate-appId])
 

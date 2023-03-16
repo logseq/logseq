@@ -51,9 +51,8 @@
     (set-router!)
     (rum/mount (page/current-page) node)
     (display-welcome-message)
-    (persist-var/load-vars)
-    (when config/dev?
-      (js/setTimeout #(sync/<sync-start) 1000))))
+    ;; NO repo state here, better not add init logic here
+    ))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

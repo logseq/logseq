@@ -11,7 +11,7 @@
        (or (string/starts-with? s "file://") ;; mobile platform
            (string/starts-with? s "content://") ;; android only
            (string/starts-with? s "assets://") ;; Electron asset, urlencoded
-           (string/starts-with? s "logseq://") ;; reserved for future fs protocl
+           (string/starts-with? s "logseq://") ;; reserved for future fs protocol
            (string/starts-with? s "memory://") ;; special memory fs
            (string/starts-with? s "s3://"))))
 
@@ -154,7 +154,7 @@
 
   (cond
     (nil? base)
-    (println "path join global directory" segments)
+    (js/console.error "path join global directory" segments)
     (= base "")
     (js/console.error "BUG: should not join with empty dir" segments)
     :else
@@ -190,7 +190,7 @@
 (defn url-to-path
   "Extract path part of a URL, decoded.
    
-   The reverse operation is (path-join protocl:// path)"
+   The reverse operation is (path-join protocol:// path)"
   [original-url]
   (if (is-file-url original-url)
     ;; NOTE: URL type is not consistent across all protocols

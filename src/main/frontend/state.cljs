@@ -750,10 +750,10 @@ Similar to re-frame subscriptions"
   (get-in (get-route-match) [:query-params :p]))
 
 (defn get-current-repo
+  "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+      "local")) 
 
 (defn get-remote-graphs
   []
@@ -798,6 +798,7 @@ Similar to re-frame subscriptions"
 
 (defn set-current-repo!
   [repo]
+  (prn ::set-current-rep repo)
   (swap! state assoc :git/current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)
