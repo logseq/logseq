@@ -1,6 +1,13 @@
 (ns frontend.handler.paste-test
-  (:require [cljs.test :refer [deftest are]]
+  (:require [cljs.test :refer [deftest are is testing]]
+            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [goog.object :as gobj]
+            ["/frontend/utils" :as utils]
+            [frontend.state :as state]
+            [frontend.commands :as commands]
+            [frontend.util :as util]
+            [promesa.core :as p]
+            [frontend.extensions.html-parser :as html-parser]
             [frontend.handler.paste :as paste-handler]))
 
 (deftest try-parse-as-json-result-parse-test
@@ -30,7 +37,7 @@
     "[{\"number\": 1234}]" nil nil
     ;; invalid JSON
     "{number: 1234}" nil nil))
-  
+
 (deftest selection-within-link-test
   (are [x y] (= (#'paste-handler/selection-within-link? x) y)
     {:format :markdown
@@ -67,4 +74,39 @@
      :value "[logseq](https://logseq.com) is developed with [Clojure](https://clojure.org)"
      :selection-start 9
      :selection-end 76
-     :selection "https://logseq.com) is developed with [Clojure](https://clojure.org"} false)) 
+     :selection "https://logseq.com) is developed with [Clojure](https://clojure.org"} false))
+
+(deftest-async editor-on-paste-raw-with-link
+  (testing "Raw paste for link should just paste link"
+    (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
+          expected-paste "https://www.youtube.com/watch?v=xu9p5ynlhZk"]
+      (test-helper/with-reset
+        reset
+        [utils/getClipText (fn [cb] (cb clipboard))
+         state/get-input (constantly #js {:value "block"})
+         commands/delete-selection! (constantly nil)
+         commands/simple-insert! (fn [_input text] (p/resolved text))
+         util/get-selected-text (constantly nil)]
+        (p/let [result ((paste-handler/editor-on-paste! nil true))]
+               (is (= expected-paste result))
+               (reset))))))
+
+(deftest-async editor-on-paste-normal-with-link
+  (testing "Normal paste for link should paste macro wrapped link"
+    (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
+          expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
+      (test-helper/with-reset
+        reset
+        ;; These redefs are like above
+        [utils/getClipText (fn [cb] (cb clipboard))
+         state/get-input (constantly #js {:value "block"})
+         commands/delete-selection! (constantly nil)
+         commands/simple-insert! (fn [_input text] (p/resolved text))
+         util/get-selected-text (constantly nil)
+         ;; Specific redefs to normal paste
+         util/stop (constantly nil)
+         html-parser/convert (constantly nil)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (constantly clipboard)}})]
+               (is (= expected-paste result))
+               (reset))))))
