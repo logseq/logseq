@@ -787,7 +787,11 @@
           (edit-block! block pos id
                        {:custom-content new-value
                         :tail-len tail-len
-                        :move-cursor? false}))))))
+                        :move-cursor? false})
+          {:prev-block block
+           :new-content new-value})))))
+
+(declare save-block!)
 
 (defn delete-block!
   ([repo]
@@ -810,9 +814,12 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
-                   (delete-block-aux! block delete-children?)
-                   (move-to-prev-block repo sibling-block format id value)))))))))
+                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)]
+                   (outliner-tx/transact! {}
+                     (when (and prev-block new-content)
+                       (save-block! repo prev-block new-content))
+                     (delete-block-aux! block delete-children?))))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
