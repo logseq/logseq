@@ -84,16 +84,31 @@ test('draw a rectangle', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
 })
 
+test('undo the rectangle action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
+})
+
+test('redo the rectangle action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+Shift+z')
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+})
+
 test('clone the rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.move(bounds.x + 20, bounds.y + 20, {steps: 5})
 
   await page.keyboard.down('Alt')
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 100, bounds.y + 100)
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5})
   await page.mouse.up()
   await page.keyboard.up('Alt')
 
@@ -117,10 +132,10 @@ test('connect rectangles with an arrow', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
 })
 
-test('undo the rectangle action', async ({ page }) => {
-  await page.keyboard.press(modKey + '+z')
-
-  await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
+test('cleanup the shapes', async ({ page }) => {
+  await page.keyboard.press(`${modKey}+a`)
+  await page.keyboard.press('Delete')
+  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('create a block', async ({ page }) => {
@@ -213,12 +228,6 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   await page.keyboard.press(modKey + '+v')
 
   await expect(page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
-})
-
-test('cleanup the shapes', async ({ page }) => {
-  await page.keyboard.press(`${modKey}+a`)
-  await page.keyboard.press('Delete')
-  await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('zoom in', async ({ page }) => {
