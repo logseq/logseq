@@ -340,6 +340,11 @@
 (defn get-repo-dir
   [repo-url]
   (cond
+    (nil? repo-url)
+    (do
+      (js/console.error "BUG: nil repo")
+      nil)
+
     (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 

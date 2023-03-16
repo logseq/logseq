@@ -143,7 +143,6 @@
         (when-not (or (state/home?) (state/setups-picker?))
           (route-handler/redirect-to-home! false))
         (reset! *repo repo)
-        (prn ::begin-hanlding-files root-dir)
         (when-not (string/blank? root-dir)
           (p/let [files (:files result)
                   files (-> (->db-files files nfs?)
@@ -163,7 +162,8 @@
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
                               (p/do! (repo-handler/start-repo-db-if-not-exists! repo)
-                                     (global-config-handler/restore-global-config!)
+                                     (when (config/global-config-enabled?)
+                                       (global-config-handler/restore-global-config!))
                                      (repo-handler/load-new-repo-to-db! repo
                                                                         {:new-graph?   true
                                                                          :empty-graph? (nil? (seq markup-files))

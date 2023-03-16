@@ -181,7 +181,6 @@
   []
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
     (state/set-state! :ui/shortcut-handler-refreshing? true)
-    (log/info :shortcut/refresh @*installed)
 
     (doseq [id (keys @*installed)]
       (uninstall-shortcut! id))
