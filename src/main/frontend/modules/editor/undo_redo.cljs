@@ -59,6 +59,29 @@
   (debug/pprint "pop entity" (get-content-from-txs (:txs removed-e)))
   (debug/pprint "undo-stack" (get-content-from-stack @undo-stack)))
 
+(defn- valid-context?
+  "Checks if the current container is the same or includes the previous container"
+  [txs]
+  (let [prev-container (:container (:editor-cursor (:tx-meta txs)))
+        container (:container (state/get-current-edit-block-and-position))]
+    (or (not (and prev-container container))
+        (= prev-container container)
+        (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']")))))
+
+(defn- should-undo?
+  []
+  (let [undo-stack (get-undo-stack (page-util/get-editing-page-id))]
+    (when-let [stack @undo-stack]
+      (when (seq stack)
+        (valid-context? (peek stack))))))
+
+(defn- should-redo?
+  []
+  (let [redo-stack (get-redo-stack)]
+    (when-let [stack @redo-stack]
+        (when (seq stack)
+          (valid-context? (peek stack))))))
+
 (defn pop-undo
   []
   (let [undo-stack (get-undo-stack (page-util/get-editing-page-id))]
@@ -108,35 +131,37 @@
 
 (defn undo
   []
-  (let [[e prev-e] (pop-undo)]
-    (when e
-      (let [{:keys [txs tx-meta]} e
-            new-txs (get-txs false txs)
-            editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
-                                 (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
-                            (:editor-cursor prev-e)
-                            (:editor-cursor e))]
-        (push-redo e)
-        (transact! new-txs (merge {:undo? true}
-                                  tx-meta
-                                  (select-keys e [:pagination-blocks-range])))
-        (when (:whiteboard/transact? tx-meta)
-          (state/pub-event! [:whiteboard/undo e]))
-        (assoc e
-               :txs-op new-txs
-               :editor-cursor editor-cursor)))))
+  (when (should-undo?)
+    (let [[e prev-e] (pop-undo)]
+      (when e
+        (let [{:keys [txs tx-meta]} e
+              new-txs (get-txs false txs)
+              editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
+                                   (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
+                              (:editor-cursor prev-e)
+                              (:editor-cursor e))]
+          (push-redo e)
+          (transact! new-txs (merge {:undo? true}
+                                    tx-meta
+                                    (select-keys e [:pagination-blocks-range])))
+          (when (:whiteboard/transact? tx-meta)
+            (state/pub-event! [:whiteboard/undo e]))
+          (assoc e
+                 :txs-op new-txs
+                 :editor-cursor editor-cursor))))))
 
 (defn redo
   []
-  (when-let [{:keys [txs tx-meta] :as e} (pop-redo)]
-    (let [new-txs (get-txs true txs)]
-      (push-undo e)
-      (transact! new-txs (merge {:redo? true}
-                                tx-meta
-                                (select-keys e [:pagination-blocks-range])))
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/redo e]))
-      (assoc e :txs-op new-txs))))
+  (when (should-redo?) 
+    (when-let [{:keys [txs tx-meta] :as e} (pop-redo)]
+      (let [new-txs (get-txs true txs)]
+        (push-undo e)
+        (transact! new-txs (merge {:redo? true}
+                                  tx-meta
+                                  (select-keys e [:pagination-blocks-range])))
+        (when (:whiteboard/transact? tx-meta)
+          (state/pub-event! [:whiteboard/redo e]))
+        (assoc e :txs-op new-txs)))))
 
 (defn pause-listener!
   []
