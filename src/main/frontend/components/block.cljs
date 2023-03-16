@@ -202,7 +202,8 @@
                       (let [*exist? (::exist? state)
                             ;; special handling for asset:// protcol
                             ;; Capacitor uses a special URL for assets loading
-                            asset-path (gp-config/remove-asset-protocol src)]
+                            asset-path (gp-config/remove-asset-protocol src)
+                            asset-path (fs/asset-path-normalize asset-path)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
                           ;; FIXME(andelf): possible bug here
@@ -313,7 +314,7 @@
           :title   title}
          metadata)]
        [:.asset-overlay]
-       (let [image-src (string/replace src #"^assets://" "")]
+       (let [image-src (fs/asset-path-normalize src)]
          [:.asset-action-bar {:aria-hidden "true"}
           ;; the image path bar
           (when (util/electron?)
