@@ -18,17 +18,18 @@
             [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.extensions.srs :as srs]
+            [frontend.fs.sync :as sync]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -237,6 +238,8 @@
    (when (util/electron?)
      (el/listen!))
    (persist-var/load-vars)
+   (when config/dev?
+     (js/setTimeout #(sync/<sync-start) 1000))
    (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
