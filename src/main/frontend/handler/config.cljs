@@ -3,7 +3,6 @@
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.config :as config]
             [frontend.db :as db]
             [borkdude.rewrite-edn :as rewrite]))
 
