@@ -41,7 +41,8 @@
             (let [path (:file-path config)
                   repo (state/get-current-repo)
                   repo-dir (config/get-repo-dir repo)
-                  rpath (path/trim-dir-prefix repo-dir path)]
+                  rpath (when (string/starts-with? path repo-dir)
+                          (path/trim-dir-prefix repo-dir path))]
               (if rpath
                 ;; in-db file
                 (let [db-content (db/get-file rpath)
