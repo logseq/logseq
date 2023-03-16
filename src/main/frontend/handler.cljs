@@ -18,7 +18,6 @@
             [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.extensions.srs :as srs]
-            [frontend.fs.sync :as sync]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]

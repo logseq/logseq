@@ -288,20 +288,14 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [repo-dir (config/get-local-dir repo-url)
-        _ (prn ::load-to-db-repo-dir repo-dir)
-        config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) file-objs))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
-        _ (prn ::repo-config config)
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
-        relate-path-fn (fn [m k]
-                         (some-> (get m k)
-                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
-        nfs-files (common-handler/remove-hidden-files file-objs config #(relate-path-fn % :file/path))
-        diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
+        nfs-files (common-handler/remove-hidden-files file-objs config :file/path)
+        diffs (common-handler/remove-hidden-files diffs config :path)
         load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
@@ -356,7 +350,7 @@
                         (when graph-exists? (ipc/ipc "graphUnlinked" repo))
                         (when (= current-repo url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
-    (when (or (config/local-db? url) (= url "local"))
+    (when (or (config/local-db? url) (config/demo-graph? url))
       (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
             )
           (p/finally delete-db-f)))))

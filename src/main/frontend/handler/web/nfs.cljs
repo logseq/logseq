@@ -19,7 +19,6 @@
             [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]))
 
@@ -86,34 +85,6 @@
             (contains? (set/union config/markup-formats #{:css :edn})
                        (keyword (util/get-file-ext (:file/path file)))))
           files))
-
-(defn- set-batch!
-  [handles]
-  (let [handles (map (fn [[path handle]]
-                       {:key   path
-                        :value handle}) handles)]
-    (idb/set-batch! handles)))
-
-(defn- set-files-aux!
-  [handles]
-  (when (seq handles)
-    (let [[h t] (split-at 50 handles)]
-      (p/let [_ (p/promise (fn [_]
-                             (js/setTimeout (fn []
-                                              (p/resolved nil)) 10)))
-              _ (set-batch! h)]
-        (when (seq t)
-          (set-files-aux! t))))))
-
-(defn- set-files!
-  [handles]
-  (let [handles (map (fn [[path handle]]
-                       (let [handle-path (str config/local-handle-prefix path)]
-                         [handle-path handle]))
-                     handles)]
-    (doseq [[path handle] handles]
-      (nfs/add-nfs-file-handle! path handle))
-    (set-files-aux! handles)))
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ls-dir-files-with-handler!
@@ -192,7 +163,7 @@
   ([path] (ls-dir-files-with-path! path nil))
   ([path opts]
    (when-let [dir-result-fn
-              (and path (fn [{:keys [nfs?]}]
+              (and path (fn [{:keys [_nfs?]}]
                           (p/let [files-result (fs/get-files path)]
                             files-result)))]
      (ls-dir-files-with-handler!
@@ -260,8 +231,7 @@
                                                           :nfs-files modified-files
                                                           :refresh? (not re-index?)
                                                           :new-graph? re-index?})
-                          (p/then (fn [state]
-                                    (prn :load-repo-to-db! state)
+                          (p/then (fn [_state]
                                     (ok-handler)))
                           (p/catch (fn [error]
                                      (js/console.error "load-repo-to-db" error)))))
