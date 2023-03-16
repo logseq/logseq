@@ -29,7 +29,7 @@
   []
   (path/path-join @root-dir "config" "config.edn"))
 
-(defn- set-global-config-state!
+(defn set-global-config-state!
   [content]
   (let [config (edn/read-string content)]
     (state/set-global-config! config)

@@ -116,13 +116,6 @@
   [repo path content write-file-options]
   (let [original-content (db/get-file repo path)
         path-dir (config/get-repo-dir repo)
-        ;;path-dir (if (and
-        ;;              (config/global-config-enabled?)
-         ;;             ;; Hack until we better understand failure in error handler
-          ;;            (global-config-handler/global-config-dir-exists?)
-          ;;            (= (path/dirname path) (global-config-handler/global-config-dir)))
-           ;;        (global-config-handler/global-config-dir)
-          ;;         (config/get-repo-dir repo))
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
     (fs/write-file! repo path-dir path content write-file-options')))
@@ -138,6 +131,7 @@
         (state/pub-event! [:shortcut/refresh])))))
 
 (defn alter-file
+  "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
                              skip-db-transact? extracted-block-ids]
                       :or {reset? true

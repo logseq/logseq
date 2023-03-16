@@ -17,7 +17,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.global-config :as global-config-handler]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -75,6 +76,12 @@
           (let [backup? (not (string/blank? db-content))]
             (handle-add-and-change! repo path content db-content mtime backup?))
 
+          ;; global config handling
+          (and (= "change" type)
+               (= dir (global-config-handler/global-config-dir)))
+          (when (= path "config.edn")
+            (global-config-handler/set-global-config-state! content))
+
           (and (= "change" type)
                (not (db/file-exists? repo path)))
           (js/console.error "Can't get file in the db: " path)
@@ -89,7 +96,6 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
-            (prn ::fuck!!)
             (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)

@@ -1,10 +1,10 @@
-(ns ^:no-doc frontend.fs.nfs
+(ns frontend.fs.nfs
   "Browser File System API based fs implementation.
    
    Rationale:
-   nfs-file-handles-cache stores all file & directory handle
-   idb stores top-level directory handle
-   readdir/get-files is called by re-index and initial watcher to init all handles"
+   - nfs-file-handles-cache stores all file & directory handle
+   - idb stores top-level directory handle
+   - readdir/get-files is called by re-index and initial watcher to init all handles"
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]

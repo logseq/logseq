@@ -44,7 +44,7 @@
                   rpath (path/trim-dir-prefix repo-dir path)]
               (if rpath
                 ;; in-db file
-                (let [old-content (db/get-file rpath)]
+                (let [old-content (or (db/get-file rpath) "")]
                   (when (and
                          (not (string/blank? value))
                          (not= (string/trim value) (string/trim old-content)))
