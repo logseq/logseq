@@ -23,11 +23,13 @@
 
 (defn global-config-dir
   []
-  (path/path-join @root-dir "config"))
+  (when @root-dir
+    (path/path-join @root-dir "config")))
 
 (defn global-config-path
   []
-  (path/path-join @root-dir "config" "config.edn"))
+  (when @root-dir
+    (path/path-join @root-dir "config" "config.edn")))
 
 (defn set-global-config-state!
   [content]
