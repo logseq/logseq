@@ -18,21 +18,8 @@
   (when (and (string? disk-content) (string? db-content))
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
-(defn- write-file-without-backup
-  [repo dir path content ok-handler error-handler]
-  (p/catch
-   (p/let [result (ipc/ipc "writeFile" repo path content)]
-     (when ok-handler
-       (ok-handler repo path result)))
-   (fn [error]
-     (if error-handler
-       (error-handler error)
-       (log/error :write-file-failed error))))
-  )
-
 (defn- write-file-impl!
   [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (prn ::write-file-impl repo dir rpath)
   (let [file-fpath (path/path-join dir rpath)]
     (if skip-compare?
       (p/catch

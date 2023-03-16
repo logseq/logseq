@@ -200,7 +200,7 @@
                     (if (and (gp-config/local-protocol-asset? src)
                              (file-sync/current-graph-sync-on?))
                       (let [*exist? (::exist? state)
-                            ;; special handling for asset:// protcol
+                            ;; special handling for asset:// protocol
                             ;; Capacitor uses a special URL for assets loading
                             asset-path (gp-config/remove-asset-protocol src)
                             asset-path (fs/asset-path-normalize asset-path)]

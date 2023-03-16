@@ -32,7 +32,7 @@
         (state/set-state! :mobile/container-urls paths)
         (println "iOS container path: " paths))))
 
-  ;; Fix iOS App direcotry change accross installation
+  ;; Fix iOS App directory change across installation
   (when (not (config/demo-graph?))
     (state/pub-event! [:validate-appId]))
 
