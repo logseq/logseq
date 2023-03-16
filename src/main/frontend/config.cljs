@@ -395,6 +395,9 @@
     (local-db? repo-url)
     (string/replace-first repo-url local-db-prefix "")
 
+    (= repo-url "test-db")
+    "/test-db"
+
     :else
     (do
       (js/console.error "BUG: This should be unreachable! get-repo-dir" repo-url)

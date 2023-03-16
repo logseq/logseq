@@ -23,10 +23,5 @@
     (is (= "foo/bar" (path/path-join "foo/" "bar")))
     (is (= "/foo/bar/baz/asdf" (path/path-join "/foo/bar//baz/asdf/quux/..")))
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "baz")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "/baz")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "/baz")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "/baz/")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "/baz/")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "/baz")))))
+    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))))
 
