@@ -1,4 +1,5 @@
-(ns logseq.graph-parser.schema)
+(ns logseq.graph-parser.schema
+  "Schema for mldoc AST")
 
 (defn- field-optional-and-maybe-nil
   [k v]
@@ -34,6 +35,27 @@
     :any)
    [:active :boolean]])
 
+(def ^:private time-range-schema
+  [:map
+   [:start [:ref ::timestamp]]
+   [:stop [:ref ::timestamp]]])
+
+(def ^:private link-schema
+  [:map
+   [:url [:or
+          [:cat [:= "File"] :string]
+          [:cat [:= "Search"] :string]
+          [:cat [:= "Complex"] [:map
+                                [:protocol :string]
+                                [:link :string]]]
+          [:cat [:= "Page_ref"] :string]
+          [:cat [:= "Block_ref"] :string]
+          [:cat [:= "Embed_data"] :string]]]
+   [:label [:sequential [:ref ::inline]]]
+   (field-optional-and-maybe-nil :title :string)
+   [:full_text :string]
+   [:metadata :string]])
+
 (def latex-fragment-schema
   [:or
    [:tuple [:= "Inline"] :string]
@@ -41,26 +63,8 @@
 
 (def inline-ast-schema
   [:schema {:registry {::timestamp timestamp-schema
-                       ::time-range
-                       [:map
-                        [:start [:ref ::timestamp]]
-                        [:stop [:ref ::timestamp]]]
-                       ::link
-                       [:map
-                        [:url [:or
-                               [:cat [:= "File"] :string]
-                               [:cat [:= "Search"] :string]
-                               [:cat [:= "Complex"] [:map
-                                                     [:protocol :string]
-                                                     [:link :string]]]
-                               [:cat [:= "Page_ref"] :string]
-                               [:cat [:= "Block_ref"] :string]
-                               [:cat [:= "Embed_data"] :string]]]
-                        [:label [:sequential [:ref ::inline]]]
-                        (field-optional-and-maybe-nil :title :string)
-                        [:full_text :string]
-                        [:metadata :string]]
-
+                       ::time-range time-range-schema
+                       ::link link-schema
                        ::inline
                        [:or
                         [:tuple [:= "Emphasis"]
@@ -121,40 +125,42 @@
                         [:tuple [:= "Inline_Html"] :string]]}}
    ::inline])
 
+(def ^:private list-item-schema
+  [:map
+   [:content [:sequential [:ref ::block]]]
+   [:items [:sequential [:ref ::list-item]]]
+   (field-optional-and-maybe-nil
+    :number :int)
+   [:name [:sequential [:ref ::inline]]]
+   (field-optional-and-maybe-nil
+    :checkbox :boolean)
+   [:indent :int]
+   [:ordered :boolean]])
 
+(def ^:private heading-schema
+  [:map
+   [:title [:sequential [:ref ::inline]]]
+   [:tags [:sequential :string]]
+   (field-optional-and-maybe-nil
+    :marker :string)
+   [:level :int]
+   (field-optional-and-maybe-nil
+    :numbering [:sequential :int])
+   (field-optional-and-maybe-nil
+    :priority :string)
+   [:anchor :string]
+   [:meta :map]
+   (field-optional-and-maybe-nil
+    :size :int)])
 
 (def block-ast-schema
   [:schema {:registry {::inline inline-ast-schema
-                       ::list-item
-                       [:map
-                        [:content [:sequential [:ref ::block]]]
-                        [:items [:sequential [:ref ::list-item]]]
-                        (field-optional-and-maybe-nil
-                         :number :int)
-                        [:name [:sequential [:ref ::inline]]]
-                        (field-optional-and-maybe-nil
-                         :checkbox :boolean)
-                        [:indent :int]
-                        [:ordered :boolean]]
-
+                       ::list-item list-item-schema
                        ::block
                        [:or
                         [:tuple [:= "Paragraph"] [:sequential [:ref ::inline]]]
                         [:tuple [:= "Paragraph_Sep"] :int]
-                        [:tuple [:= "Heading"] [:map
-                                                [:title [:sequential [:ref ::inline]]]
-                                                [:tags [:sequential :string]]
-                                                (field-optional-and-maybe-nil
-                                                 :marker :string)
-                                                [:level :int]
-                                                (field-optional-and-maybe-nil
-                                                 :numbering [:sequential :int])
-                                                (field-optional-and-maybe-nil
-                                                 :priority :string)
-                                                [:anchor :string]
-                                                [:meta :map]
-                                                (field-optional-and-maybe-nil
-                                                 :size :int)]]
+                        [:tuple [:= "Heading"] heading-schema]
                         [:tuple [:= "List"] [:sequential [:ref ::list-item]]]
                         [:tuple [:= "Directive"] :string :string]
                         [:tuple [:= "Results"]]
