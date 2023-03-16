@@ -344,6 +344,7 @@
 ;; - `logseq_local_/absolute/path/to/graph` => local graph, native fs backend
 ;; - `logseq_local_x:/absolute/path/to/graph` => local graph, native fs backend, on Windows
 ;; - `logseq_local_GraphName` => local graph, browser fs backend
+;; - Use `""` while writing global files
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
