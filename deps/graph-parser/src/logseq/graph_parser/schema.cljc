@@ -1,4 +1,4 @@
-(ns ^:bb-compatible frontend.schema.handler.ast)
+(ns logseq.graph-parser.schema)
 
 (defn- field-optional-and-maybe-nil
   [k v]
@@ -207,8 +207,8 @@
                         [:tuple [:= "Properties"] [:sequential :any]]]}}
    ::block])
 
-;; (def block-ast-with-pos-coll-schema
-;;   [:sequential [:cat block-ast-schema pos-schema]])
+(def block-ast-with-pos-coll-schema
+  [:sequential [:cat block-ast-schema [:maybe pos-schema]]])
 
 (def block-ast-coll-schema
   [:sequential block-ast-schema])

@@ -7,7 +7,7 @@
             [frontend.handler.export.common :as common :refer
              [*state* indent newline* raw-text simple-ast-malli-schema
               simple-asts->string space]]
-            [frontend.schema.handler.ast :as ast-schema]
+            [logseq.graph-parser.schema :as gp-schema]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
@@ -305,7 +305,7 @@
          (indent-with-2-spaces (dec current-level)))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
-(m/=> block-ast->simple-ast [:=> [:cat ast-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
+(m/=> block-ast->simple-ast [:=> [:cat gp-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
   (removev
@@ -422,7 +422,7 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)}})]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
-            _ (assert (m/validate ast-schema/block-ast-coll-schema ast))
+            _ (assert (m/validate gp-schema/block-ast-coll-schema ast))
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)
