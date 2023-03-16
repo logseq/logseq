@@ -78,6 +78,7 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
+    (prn "restore-and-setup!" repo)
     (-> (db/restore! repo)
         (p/then
          (fn []
@@ -214,28 +215,29 @@
 
   (events/run!)
 
-  (-> (p/let [repos (get-repos)
-              _ (state/set-repos! repos)
-              _ (restore-and-setup! repos)]
-        (when (mobile-util/native-platform?)
-          (p/do!
-           (mobile-util/hide-splash)
-           (state/restore-mobile-theme!))))
-      (p/catch (fn [e]
-                 (js/console.error "Error while restoring repos: " e)))
-      (p/finally (fn []
-                   (state/set-db-restoring! false))))
+  (p/do!
+   (-> (p/let [repos (get-repos)
+               _ (state/set-repos! repos)
+               _ (restore-and-setup! repos)]
+         (when (mobile-util/native-platform?)
+           (p/do!
+            (mobile-util/hide-splash)
+            (state/restore-mobile-theme!))))
+       (p/catch (fn [e]
+                  (js/console.error "Error while restoring repos: " e)))
+       (p/finally (fn []
+                    (state/set-db-restoring! false))))
 
-  (db/run-batch-txs!)
-  (file/<ratelimit-file-writes!)
-  (util/<app-wake-up-from-sleep-loop (atom false))
+   (db/run-batch-txs!)
+   (file/<ratelimit-file-writes!)
+   (util/<app-wake-up-from-sleep-loop (atom false))
 
-  (when config/dev?
-    (enable-datalog-console))
-  (when (util/electron?)
-    (el/listen!))
-  (persist-var/load-vars)
-  (js/setTimeout instrument! (* 60 1000)))
+   (when config/dev?
+     (enable-datalog-console))
+   (when (util/electron?)
+     (el/listen!))
+   (persist-var/load-vars)
+   (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))

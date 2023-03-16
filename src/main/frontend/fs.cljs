@@ -88,7 +88,7 @@
     (when (= fs memory-backend)
       (protocol/rmdir! fs dir))))
 
-;; TODO(andelf): distingush from graph file writing and global file write
+;; TODO(andelf): distinguish from graph file writing and global file write
 (defn write-file!
   [repo dir rpath content opts]
   (when content
@@ -163,7 +163,6 @@
 (defn open-dir
   [dir]
   (let [record (get-native-backend)]
-    (prn ::open-dir record)
     (p/let [result (protocol/open-dir record dir)]
       (prn ::open-dir-stage-1 result)
       (when result

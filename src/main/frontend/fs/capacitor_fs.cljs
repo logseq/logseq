@@ -247,7 +247,7 @@
                         (error-handler error)
                         (log/error :write-file-failed error))))))))))
 
-(defn- ios-force-include-private
+(defn ios-force-include-private
   "iOS sometimes return paths without the private part."
   [path]
   (if (mobile-util/native-ios?)
@@ -306,8 +306,8 @@
                   path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
           files (get-files path)]
-    ;; FIXME: wrong stucture returned
-    (into [] (concat [{:path path}] files))))
+    {:path path
+     :files (into [] files)}))
 
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
