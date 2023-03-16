@@ -1,9 +1,16 @@
 (ns logseq.common.path
-  "Path manipulation functions, use '/' on all platforms.
+  "Path manipulation functions, use '/' sep on all platforms.
    Also handles URL paths."
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]))
+  (:require [clojure.string :as string]))
 
+
+(defn- safe-decode-uri-component
+  [uri]
+  (try
+    (js/decodeURIComponent uri)
+    (catch :default _
+      (js/console.error "decode-uri-component-failed" uri)
+      uri)))
 
 (defn is-file-url
   [s]
@@ -22,8 +29,8 @@
   (let [fname (if (string/ends-with? path "/")
                 nil
                 (last (string/split path #"/")))]
-    (if (and (not-empty fname) (is-file-url path))
-      (gp-util/safe-decode-uri-component fname)
+    (if (and (seq fname) (is-file-url path))
+      (safe-decode-uri-component fname)
       fname)))
 
 (defn split-ext
@@ -75,7 +82,7 @@
                     [""] "/"
                     #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
                     (string/join "/" segs)))]
-    (->> (filter not-empty segments)
+    (->> (filter seq segments)
          (mapcat split-fn)
          (reduce (fn [acc segment]
                    (cond
@@ -114,7 +121,7 @@
                     [""] "/"
                     #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
                     (string/join "/" segs)))]
-    (->> (filter not-empty segments)
+    (->> (filter seq segments)
          (mapcat split-fn)
          (map #(js/encodeURIComponent %))
          (reduce (fn [acc segment]
@@ -143,7 +150,7 @@
   (let [^js url (js/URL. base-url)
         scheme (.-protocol url)
         domain (or (not-empty (.-host url)) "")
-        path (gp-util/safe-decode-uri-component (.-pathname url))
+        path (safe-decode-uri-component (.-pathname url))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
 
@@ -176,7 +183,7 @@
   (let [^js url (js/URL. origin-url)
         scheme (.-protocol url)
         domain (or (not-empty (.-host url)) "")
-        path (gp-util/safe-decode-uri-component (.-pathname url))
+        path (safe-decode-uri-component (.-pathname url))
         encoded-new-path (uri-path-join-internal path)]
     (str scheme "//" domain encoded-new-path)))
 
@@ -196,7 +203,7 @@
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
     (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
-          path (gp-util/safe-decode-uri-component (.-pathname url))
+          path (safe-decode-uri-component (.-pathname url))
           path (if (string/starts-with? path "///")
                  (subs path 2)
                  path)
@@ -214,7 +221,7 @@
         is-url? (is-file-url base-path)]
     (if (string/starts-with? sub-path base-path)
       (if is-url?
-        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+        (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
         (string/replace (subs sub-path (count base-path)) #"^/+", ""))
       (do
         (js/console.error "unhandled trim-base" base-path sub-path)
@@ -229,7 +236,7 @@
         is-url? (is-file-url base-path)]
     (if (string/starts-with? sub-path base-path)
       (if is-url?
-        (gp-util/safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
+        (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
         (string/replace (subs sub-path (count base-path)) #"^/+", ""))
        ;; append as many .. 
       ;; NOTE: buggy impl
@@ -242,7 +249,7 @@
         (js/console.error (js/Error. "buggy relative-path") base-path sub-path)
         #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
         (if is-url?
-          (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
+          (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
           (str base-prefix (string/join "/" remain-segs)))))))
 
 
@@ -281,7 +288,7 @@
         base-prefix (apply str (repeat (max 0 (count base-segs)) "../"))]
     #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
     (if is-url?
-      (gp-util/safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
+      (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
       (str base-prefix (string/join "/" remain-segs)))))
 
 ;; compat

@@ -73,15 +73,6 @@
         (add-nfs-file-handle! handle-path handle)
         (verify-permission repo true)))))
 
-(defn save-root-handle-to-idb!
-  "Save root handle to idb, keep alive across browser refresh/restart"
-  [repo repo-dir]
-  (let [handle-path (str "handle/" repo-dir)
-        handle (get-nfs-file-handle handle-path)]
-    (prn ::saving-to-idb repo repo-dir handle)
-    (when handle
-      (idb/set-item! handle-path handle))))
-
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))

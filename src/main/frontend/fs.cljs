@@ -162,15 +162,12 @@
   [dir]
   (let [record (get-native-backend)]
     (p/let [result (protocol/open-dir record dir)]
-      (prn ::open-dir-stage-1 result)
       (when result
         (let [{:keys [path files]} result
               dir path
-              _ (prn ::open-dir dir)
               files (mapv (fn [entry]
                             (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
-          (prn :got-fixed files)
           {:path dir :files files})))))
 
 (defn get-files
@@ -180,16 +177,13 @@
   [dir]
   (let [fs-record (get-native-backend)]
     (p/let [result (protocol/get-files fs-record dir)]
-      (prn ::get-files (first result) "....")
+      (println ::get-files (count result) "files")
       (if (seq result) ;; electron, mobile, nfs
-        (let [files result ;; TODO(andelf): rm first item from electron
-              dir dir
-              _ (prn ::prepare-rel-path dir)
+        (let [files result
               files (mapv (fn [entry]
                             ;; (prn ::xx entry)
                             (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
-          (prn :got files)
           {:path dir :files files})
         result))))
 

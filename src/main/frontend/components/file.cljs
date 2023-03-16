@@ -84,7 +84,11 @@
                                     (string/starts-with? path (global-config-handler/global-config-dir))
                                     [nil path]
 
-                                    ;; local file
+                                    ;; in-repo file, absolute path
+                                    (string/starts-with? path repo-dir)
+                                    [nil path]
+
+                                    ;; assume local file, relative path
                                     (not (string/starts-with? path "/"))
                                     [repo-dir path]
 
@@ -92,7 +96,7 @@
                                     [nil path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file dir path)]
-                       (prn ::read-content content)
+                       (prn ::read-content dir path content)
                        (reset! *content (or content ""))))
                    (assoc state ::file-content *content)))
    :did-mount (fn [state]
@@ -107,11 +111,9 @@
                    (path/trim-dir-prefix repo-dir path))
         original-name (db/get-file-page (or path rel-path))
         in-db? (boolean (db/get-file (or path rel-path)))
-
         file-fpath (if in-db?
                      (path/path-join repo-dir path)
                      path)
-
         random-id (str (d/squuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
