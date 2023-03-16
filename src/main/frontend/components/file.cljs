@@ -20,7 +20,8 @@
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.path :as path]))
 
 (defn- get-path
   [state]
@@ -100,12 +101,14 @@
                    state)}
   [state path format]
   (let [original-name (db/get-file-page path)
+        repo-dir (config/get-repo-dir (state/get-current-repo))
+        rel-path (path/trim-dir-prefix repo-dir path)
         random-id (str (d/squuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi (or original-name path)]]
+      [:bdi (or original-name rel-path path)]]
      (when original-name
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
