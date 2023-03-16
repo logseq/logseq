@@ -2,7 +2,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { expect } from '@playwright/test'
 import { test } from './fixtures';
-import { searchPage, captureConsoleWithPrefix, closeSearchBox } from './utils';
+import { searchPage, captureConsoleWithPrefix, closeSearchBox, createPage, IsWindows } from './utils';
 
 test('create file on disk then delete', async ({ page, block, graphDir }) => {
   // Since have to wait for file watchers
@@ -10,15 +10,17 @@ test('create file on disk then delete', async ({ page, block, graphDir }) => {
 
   // Special page names: namespaced, chars require escaping, chars require unicode normalization, "%" chars, "%" with 2 hexdigests
   const testCases = [
-    {pageTitle: "User:John", fileName: "User:John"},
+    {pageTitle: "User:John", fileName: "User%3AJohn"},
     // invalid url decode escaping as %ff is not parsable but match the common URL encode regex
-    {pageTitle: ":#%ff", fileName: ":#%ff"},
+    {pageTitle: "#%ff", fileName: "#%ff"},
     // valid url decode escaping
-    {pageTitle: ":#%23", fileName: ":#%2523"},
+    {pageTitle: "#%23", fileName: "#%2523"},
     {pageTitle: "@!#%", fileName: "@!#%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
-    {pageTitle: ":#%gggg", fileName: ":#%gggg"}
+    {pageTitle: "#%gggg", fileName: "#%gggg"}
   ]
+  if (!IsWindows)
+    testCases.push({pageTitle: "User:Bob", fileName: "User:Bob"})
 
   function getFullPath(fileName: string) {
     return path.join(graphDir, "pages", `${fileName}.md`);
@@ -60,12 +62,15 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
 
   const testCases = [
     // Normal -> NameSpace
-    {pageTitle: "User:John", fileName: "User:John", 
+    {pageTitle: "User:John", fileName: "User%3AJohn", 
     newPageTitle: "User/John", newFileName: "User___John"},
     // NameSpace -> Normal
-    {pageTitle: ":#/%23", fileName: ":#___%2523",
-    newPageTitle: ":#%23", newFileName: ":#%2523"}
+    {pageTitle: "#/%23", fileName: "#___%2523",
+    newPageTitle: "#%23", newFileName: "#%2523"}
   ]
+  if (!IsWindows)
+    testCases.push({pageTitle: "User:Bob", fileName: "User:Bob",
+      newPageTitle: "User/Bob", newFileName: "User___Bob"})
 
   function getFullPath(fileName: string) {
     return path.join(graphDir, "pages", `${fileName}.md`);
@@ -103,3 +108,31 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
     await closeSearchBox(page);
   }
 })
+
+test('special page names', async ({ page, block, graphDir }) => {
+  const testCases = [
+    {pageTitle: "User:John", fileName: "User%3AJohn"},
+    // FIXME: Logseq can't creat page starting with "#" in search panel
+    {pageTitle: "_#%ff", fileName: "_%23%25ff"},
+    {pageTitle: "_#%23", fileName: "_%23%2523"},
+    {pageTitle: "@!#%", fileName: "@!%23%"},
+    {pageTitle: "aàáâ", fileName: "aàáâ"},
+    {pageTitle: "_#%gggg", fileName: "_%23%gggg"}
+  ]
+
+  // Test putting files on disk
+  for (const {pageTitle, fileName} of testCases) {
+    // Create page in Logseq
+    await createPage(page, pageTitle)
+    const text = `content for ${pageTitle}`
+    await block.mustFill(text)
+    await page.keyboard.press("Enter")
+    
+    // Wait for the file to be created on disk
+    await page.waitForTimeout(2000);
+    // Validate that the file is created on disk with the content
+    const filePath = path.join(graphDir, "pages", `${fileName}.md`);
+    const fileContent = await fsp.readFile(filePath, "utf8");
+    expect(fileContent).toContain(text);
+  }
+});
