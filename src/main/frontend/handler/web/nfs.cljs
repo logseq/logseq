@@ -116,7 +116,7 @@
     (set-files-aux! handles)))
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
-(defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
+(defn ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
   ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir]}]
@@ -147,11 +147,11 @@
         (prn ::begin-hanlding-files dir-name)
         (when-not (string/blank? dir-name)
           (p/let [; handle/logseq_local_dir-name
-                  _ (when-let [root-handle-path (and nfs?
-                                                     (str config/local-handle-prefix dir-name))]
-                      (prn ::saving-handle-to-idb)
+                  ;;_ (when-let [root-handle-path (and nfs?
+                    ;;                                 (str config/local-handle-prefix dir-name))]
+                      ;;(prn ::saving-handle-to-idb)
                       ; (idb/set-item! root-handle-path (str "handle/" root-handle)))
-                      (nfs/save-root-handle-to-idb! repo root-handle))
+                      ; (nfs/save-root-handle-to-idb! repo root-handle))
                  ;      (idb/set-item! root-handle-path (str "handle/" root-handle))
                  ;     ; (nfs/add-nfs-file-handle! root-handle-path root-handle)
                  ;     )
@@ -243,7 +243,6 @@
 (defn- handle-diffs!
   "Compute directory diffs and handle them."
   [repo nfs? old-files new-files re-index? ok-handler]
-  (prn ::handle-diff repo old-files new-files)
   (let [get-last-modified-at (fn [path] (some (fn [file]
                                                 (when (= path (:file/path file))
                                                   (:file/last-modified-at file)))

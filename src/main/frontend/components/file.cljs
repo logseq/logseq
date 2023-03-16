@@ -86,8 +86,8 @@
                                     (not (string/starts-with? path "/"))
                                     [repo-dir path]
 
-                                    :else
-                                    ["" path])]
+                                    :else ;; global file on native platform
+                                    [nil path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file dir path)]
                        (reset! *content (or content ""))))
@@ -105,7 +105,7 @@
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi path]]
+      [:bdi (or original-name path)]]
      (when original-name
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

@@ -215,7 +215,9 @@
         (mkdir! dir))))
    (p/catch (fn [error] (js/console.error error)))))
 
+;; FIXME: counterintuitive return value
 (defn create-if-not-exists
+  "Create a file if it doesn't exist. return false on written, true on already exists"
   ([repo dir path]
    (create-if-not-exists repo dir path ""))
   ([repo dir path initial-content]
