@@ -83,8 +83,7 @@
   [s]
   (and (string? s)
        (try
-         (js/URL. s)
-         true
+         (not (contains? #{nil "null"} (.-origin (js/URL. s))))
          (catch :default _e
            false))))
 
