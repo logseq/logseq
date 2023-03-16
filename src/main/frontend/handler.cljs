@@ -79,7 +79,6 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (prn "restore-and-setup!" repo)
     (-> (db/restore! repo)
         (p/then
          (fn []
@@ -90,7 +89,8 @@
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
                      (global-config-handler/start {:repo repo}))
-                   (when (config/plugin-config-enabled?) (plugin-config-handler/start)))
+                   (when (config/plugin-config-enabled?)
+                     (plugin-config-handler/start)))
             (p/finally
               (fn []
                 ;; install after config is restored
