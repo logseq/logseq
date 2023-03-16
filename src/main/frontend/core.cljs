@@ -52,7 +52,8 @@
     (rum/mount (page/current-page) node)
     (display-welcome-message)
     ;; NO repo state here, better not add init logic here
-    ))
+    (when config/dev?
+      (js/setTimeout #(sync/<sync-start) 1000))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

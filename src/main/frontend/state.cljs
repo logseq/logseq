@@ -794,7 +794,6 @@ Similar to re-frame subscriptions"
 
 (defn set-current-repo!
   [repo]
-  (prn ::set-current-rep repo)
   (swap! state assoc :git/current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)

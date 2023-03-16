@@ -238,8 +238,6 @@
    (when (util/electron?)
      (el/listen!))
    (persist-var/load-vars)
-   (when config/dev?
-     (js/setTimeout #(sync/<sync-start) 1000))
    (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
