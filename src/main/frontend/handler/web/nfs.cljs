@@ -135,58 +135,43 @@
               _ (when (fn? on-open-dir)
                   (prn ::calling-on-open-dir-fn)
                   (on-open-dir result))
-              root-handle (:path result)
-              _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
-              dir-name root-handle
-              repo (str config/local-db-prefix root-handle)]
-
+              root-dir (:path result)
+              ;; calling when root picked
+              _ (when (fn? picked-root-fn) (picked-root-fn root-dir))
+              repo (str config/local-db-prefix root-dir)]
         (state/set-loading-files! repo true)
         (when-not (or (state/home?) (state/setups-picker?))
           (route-handler/redirect-to-home! false))
         (reset! *repo repo)
-        (prn ::begin-hanlding-files dir-name)
-        (when-not (string/blank? dir-name)
-          (p/let [; handle/logseq_local_dir-name
-                  ;;_ (when-let [root-handle-path (and nfs?
-                    ;;                                 (str config/local-handle-prefix dir-name))]
-                      ;;(prn ::saving-handle-to-idb)
-                      ; (idb/set-item! root-handle-path (str "handle/" root-handle)))
-                      ; (nfs/save-root-handle-to-idb! repo root-handle))
-                 ;      (idb/set-item! root-handle-path (str "handle/" root-handle))
-                 ;     ; (nfs/add-nfs-file-handle! root-handle-path root-handle)
-                 ;     )
-                  files (:files result)
+        (prn ::begin-hanlding-files root-dir)
+        (when-not (string/blank? root-dir)
+          (p/let [files (:files result)
                   files (-> (->db-files files nfs?)
                             ;; NOTE: filter, in case backend does not handle this
-                            (remove-ignore-files dir-name nfs?))
+                            (remove-ignore-files root-dir nfs?))
                   _ (prn ::remain-files files)
                   markup-files (filter-markup-and-built-in-files files)]
             (-> files
                 (p/then (fn [result]
                           ;; handle graphs txid
                           (p/let [files (mapv #(dissoc % :file/file) result)
-                                  graphs-txid-meta (util-fs/read-graphs-txid-info dir-name)
+                                  graphs-txid-meta (util-fs/read-graphs-txid-info root-dir)
                                   graph-uuid (and (vector? graphs-txid-meta) (second graphs-txid-meta))]
                             (if-let [exists-graph (state/get-sync-graph-by-id graph-uuid)]
                               (state/pub-event!
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (do
-                                (prn ::prepare-load-new-repo files)
-                                (repo-handler/start-repo-db-if-not-exists! repo)
-                                (prn ::dd (nil? (seq markup-files)))
-                                (p/do!
-                                 (repo-handler/load-new-repo-to-db! repo
-                                                                    {:new-graph?   true
-                                                                     :empty-graph? (nil? (seq markup-files))
-                                                                     :file-objs    files})
-                                 (prn ::debug-2.5)
-                                 (state/add-repo! {:url repo :nfs? true})
-                                 (prn ::debug-33333)
-                                 (state/set-loading-files! repo false)
-                                 (when ok-handler (ok-handler {:url repo}))
-                                 (db/persist-if-idle! repo)))))))
+                              (p/do! (repo-handler/start-repo-db-if-not-exists! repo)
+                                     (global-config-handler/restore-global-config!)
+                                     (repo-handler/load-new-repo-to-db! repo
+                                                                        {:new-graph?   true
+                                                                         :empty-graph? (nil? (seq markup-files))
+                                                                         :file-objs    files})
+                                     (state/add-repo! {:url repo :nfs? true})
+                                     (state/set-loading-files! repo false)
+                                     (when ok-handler (ok-handler {:url repo}))
+                                     (db/persist-if-idle! repo))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)
                            (log/error :exception error)))))))
@@ -241,7 +226,7 @@
      :deleted  deleted}))
 
 (defn- handle-diffs!
-  "Compute directory diffs and handle them."
+  "Compute directory diffs and (re)load repo"
   [repo nfs? old-files new-files re-index? ok-handler]
   (let [get-last-modified-at (fn [path] (some (fn [file]
                                                 (when (= path (:file/path file))
@@ -270,7 +255,6 @@
                                (rename-f "modify" modified))]
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
-                      (comment "re-index a local graph is handled here")
                       (-> (repo-handler/load-repo-to-db! repo
                                                          {:diffs     diffs
                                                           :nfs-files modified-files
@@ -289,7 +273,6 @@
   "Handle refresh and re-index"
   [repo {:keys [re-index? ok-handler]
          :or {re-index? false}}]
-  (prn ::reload-dir)
   (when (and repo (config/local-db? repo))
     (let [old-files (db/get-files-full repo)
           repo-dir (config/get-local-dir repo)
@@ -302,33 +285,14 @@
         (state/set-graph-syncing? true))
       (->
        (p/let [handle (when-not electron? (idb/get-item handle-path))]
-         (prn ::handle handle)
          (when (or handle electron? mobile-native?)
            (p/let [_ (when nfs? (nfs/verify-permission repo true))
                    local-files-result (fs/get-files repo-dir)
-                   _ (prn ::reading-local-fils local-files-result)
+                   _ (when (config/global-config-enabled?)
+                       ;; reload global config into state
+                       (global-config-handler/restore-global-config!))
                    new-files (-> (->db-files (:files local-files-result) nfs?)
-                                       (remove-ignore-files repo-dir nfs?))
-                   _ (prn ::new-local-files new-files)
-                  ;; new-global-files (if (and (config/global-config-enabled?)
-                   ;;                          ;; Hack until we better understand failure in frontend.handler.file/alter-file
-                    ;;                         (global-config-handler/global-config-dir-exists?))
-                     ;;                 (p/let [global-files-result (fs/get-files
-                      ;;                                             (global-config-handler/global-config-dir)
-                       ;;                                            (constantly nil))
-                        ;;                      global-files (-> (->db-files (global-config-handler/global-config-dir) global-files-result)
-                         ;;                                      (remove-ignore-files (global-config-handler/global-config-dir) nfs?))]
-                          ;;              global-files)
-                           ;;           (p/resolved [])) 
-                   _ (comment when nfs?
-                              (let [file-paths (set (map :file/path new-files))]
-                                (swap! path-handles (fn [handles]
-                                                      (->> handles
-                                                           (filter (fn [[path _handle]]
-                                                                     (contains? file-paths
-                                                                                (string/replace-first path (str dir-name "/") ""))))
-                                                           (into {})))))
-                              (set-files! @path-handles))]
+                                 (remove-ignore-files repo-dir nfs?))]
              (handle-diffs! repo nfs? old-files new-files re-index? ok-handler))))
        (p/catch (fn [error]
                   (log/error :nfs/load-files-error repo)

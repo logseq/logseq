@@ -46,13 +46,11 @@
   (graph-parser/get-blocks-to-delete db file-page file-path retain-uuid-blocks))
 
 (defn reset-file!
-  "Main fn for updating a db with the results of a parsed file.
- "
+  "Main fn for updating a db with the results of a parsed file"
   ([repo-url file-path content]
    (reset-file! repo-url file-path content {}))
   ([repo-url file-path content {:keys [verbose] :as options}]
-   (let [_ (prn ::reset-file file-path)
-         new? (nil? (db/entity [:file/path file-path]))
+   (let [new? (nil? (db/entity [:file/path file-path]))
          options (merge (dissoc options :verbose)
                         {:new? new?
                          :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
@@ -61,7 +59,6 @@
                                             :date-formatter (state/get-date-formatter)
                                             :block-pattern (config/get-block-pattern (gp-util/get-format file-path))
                                             :supported-formats (gp-config/supported-formats)
-                                           ;; :uri-encoded? (boolean (mobile-util/native-platform?))
                                             :filename-format (state/get-filename-format repo-url)
                                             :extracted-block-ids (:extracted-block-ids options)}
                                            (when (some? verbose) {:verbose verbose}))})]
