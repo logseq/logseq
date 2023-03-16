@@ -28,15 +28,20 @@
   (-> (get-state page) :undo-stack))
 
 (defn- get-redo-stack
-  []
-  (-> (get-state (page-util/get-editing-page-id)) :redo-stack))
+  ([]
+   (get-redo-stack (page-util/get-editing-page-id)))
+  ([page]
+   (-> (get-state page) :redo-stack)))
+
+(defn- get-updated-pages
+  [txs]
+  (let [pages (reduce (fn [col unit] (conj col (:db/id (:block/page unit)))) #{} (:blocks txs))]
+    (remove nil? (conj pages (:from-page (:tx-meta txs))))))
 
 (defn push-undo
   [txs]
-  (let [pages (reduce (fn [col unit] (conj col (:db/id (:block/page unit)))) #{} (:blocks txs))]
-    (js/console.log (str pages))
-    (mapv #(when-let [undo-stack (get-undo-stack %)]
-             (swap! undo-stack conj txs)) pages)))
+  (mapv #(when-let [undo-stack (get-undo-stack %)]
+           (swap! undo-stack conj txs)) (get-updated-pages txs)))
 
 (comment
   (defn get-content-from-txs
@@ -44,7 +49,7 @@
     [txs]
     (filterv (fn [[_ a & y]]
                (= :block/content a))
-      txs))
+             txs))
 
   (defn get-content-from-stack
     "For test."
@@ -68,18 +73,18 @@
 (defn push-redo
   [txs]
   (let [redo-stack (get-redo-stack)]
-   (swap! redo-stack conj txs)))
+    (swap! redo-stack conj txs)))
 
 (defn pop-redo
   []
   (let [redo-stack (get-redo-stack)]
-   (when-let [removed-e (peek @redo-stack)]
-     (swap! redo-stack pop)
-     removed-e)))
+    (when-let [removed-e (peek @redo-stack)]
+      (swap! redo-stack pop)
+      removed-e)))
 
 (defn reset-redo
-  []
-  (let [redo-stack (get-redo-stack)]
+  [page]
+  (let [redo-stack (get-redo-stack page)]
     (reset! redo-stack [])))
 
 (defn get-txs
@@ -92,7 +97,7 @@
                        (and redo? (not add?)) :db/retract
                        (and (not redo?) (not add?)) :db/add)]
               [op id attr value tx]))
-      txs)))
+          txs)))
 
 ;;;; Invokes
 
@@ -150,15 +155,18 @@
              (not (set/subset?
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
-    (reset-redo)
     (if (:replace? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
-        (push-undo entity))
+        (doall
+         (map reset-redo (get-updated-pages entity))
+         (push-undo entity)))
       (let [updated-blocks (db-report/get-blocks tx-report)
             entity {:blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
-        (push-undo entity)))))
+        (doall
+         (map reset-redo (get-updated-pages entity))
+         (push-undo entity))))))
