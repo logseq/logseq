@@ -9,14 +9,15 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 
-let repoName = randomString(10)
+// For testing special characters in graph name / path
+let repoName = "@" + randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
   fs.rmSync(testTmpDir, { recursive: true })
 }
 
-export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
+export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 
 // NOTE: This following is a console log watcher for error logs.
 // Save and print all logs when error happens.
