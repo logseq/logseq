@@ -612,9 +612,8 @@
 
 (defn- delete-block
   "Delete block from the tree."
-  [txs-state block' children?]
-  (let [node (block block')
-        right-node (tree/-get-right node)]
+  [txs-state node children?]
+  (let [right-node (tree/-get-right node)]
     (tree/-del node txs-state children?)
     (when (tree/satisfied-inode? right-node)
       (let [left-node (tree/-get-left node)
@@ -647,7 +646,7 @@
          (= 1 (count blocks))
          (= start-node end-node)
          self-block?)
-      (delete-block txs-state start-block children?)
+      (delete-block txs-state start-node children?)
       (let [sibling? (= (tree/-get-parent-id start-node)
                         (tree/-get-parent-id end-node))
             right-node (tree/-get-right end-node)]
