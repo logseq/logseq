@@ -1,5 +1,5 @@
-(ns logseq.graph-parser.schema
-  "Schema for mldoc AST")
+(ns logseq.graph-parser.schema.mldoc
+  "Malli schema for mldoc AST")
 
 (defn- field-optional-and-maybe-nil
   [k v]

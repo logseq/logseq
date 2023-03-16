@@ -7,7 +7,7 @@
             [frontend.handler.export.common :as common :refer
              [*state* indent newline* raw-text simple-ast-malli-schema
               simple-asts->string space]]
-            [logseq.graph-parser.schema :as gp-schema]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
@@ -305,7 +305,7 @@
          (indent-with-2-spaces (dec current-level)))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
-(m/=> block-ast->simple-ast [:=> [:cat gp-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
+(m/=> block-ast->simple-ast [:=> [:cat mldoc-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
   (removev
