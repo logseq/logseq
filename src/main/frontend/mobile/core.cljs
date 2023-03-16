@@ -11,7 +11,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -31,8 +32,9 @@
         (state/set-state! :mobile/container-urls paths)
         (println "iOS container path: " paths))))
 
-  ;; Buggy, should not use
-  ;; (state/pub-event! [:validate-appId])
+  ;; Fix iOS App direcotry change accross installation
+  (when (not (config/demo-graph?))
+    (state/pub-event! [:validate-appId]))
 
   (.addEventListener js/window
                      "load"
