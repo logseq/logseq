@@ -45,7 +45,7 @@
   [href base]
   (when (and (string? href)
              (not (string/blank? href)))
-    (when-let [href (some-> href (string/trim) (string/replace (util/node-path.extname href) ""))]
+    (when-let [href (some-> href (string/trim) (string/replace #".edn$" ""))]
       (some-> (if (string/starts-with? href "@")
                 (string/replace href #"^[@\/]+" "")
                 (util/node-path.join base href))
@@ -222,8 +222,9 @@
                   :on-click                (fn [^js e]
                                              (when-let [target (.-target e)]
                                                (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
-                                                 (when-not (string/starts-with? link "http")
-                                                   (if-let [to (get handbook-nodes (parse-key-from-href link parent-key))]
+                                                 (when-let [to-k (and (not (string/starts-with? link "http"))
+                                                                    (parse-key-from-href link parent-key))]
+                                                   (if-let [to (get handbook-nodes to-k)]
                                                      (nav! [:topic-detail to (:title parent)] pane-state)
                                                      (js/console.error "ERROR: handbook link resource not found: " link))
                                                    (util/stop e)))))}])]]))))))
