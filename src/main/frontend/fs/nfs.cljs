@@ -305,8 +305,8 @@
 
   (rename! [this repo old-path new-path]
     (p/let [repo-dir (config/get-repo-dir repo)
-            old-rpath (path/relative-path repo old-path)
-            new-rpath (path/relative-path repo new-path)
+            old-rpath (path/relative-path repo-dir old-path)
+            new-rpath (path/relative-path repo-dir new-path)
             old-content (protocol/read-file this repo old-rpath nil)
             _ (protocol/write-file! this repo repo-dir new-rpath old-content nil)
             _ (protocol/unlink! this repo old-path nil)]))
