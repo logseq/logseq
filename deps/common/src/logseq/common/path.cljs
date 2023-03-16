@@ -199,6 +199,9 @@
           path (gp-util/safe-decode-uri-component (.-pathname url))
           path (if (string/starts-with? path "///")
                  (subs path 2)
+                 path)
+          path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
+                 (subs path 1)
                  path)]
       path)
     original-url))

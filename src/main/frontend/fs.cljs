@@ -246,6 +246,18 @@
     (prn ::href-exists href exist?)
     exist?))
 
+(defn asset-path-normalize
+  [path]
+  (cond
+    (util/electron?)
+    (path/url-to-path path)
+
+    (mobile-util/native-platform?)
+    path
+
+    :else
+    path))
+
 (defn dir-exists?
   [dir]
   (file-exists? dir ""))
