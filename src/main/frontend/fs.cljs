@@ -131,12 +131,10 @@
       (p/resolved nil)
 
       :else
-      (let [[old-path new-path]
-            (map #(if (or (util/electron?) (mobile-util/native-platform?))
-                    %
-                    (str (config/get-repo-dir repo) "/" %))
-                 [old-path new-path])]
-        (protocol/rename! (get-fs old-path) repo old-path new-path)))))
+      (let [repo-dir (config/get-repo-dir repo)
+            old-fpath (path/path-join repo-dir old-path)
+            new-fpath (path/path-join repo-dir new-path)]
+        (protocol/rename! (get-fs old-fpath) repo old-fpath new-fpath)))))
 
 (defn copy!
   "Only used by Logseq Sync"
