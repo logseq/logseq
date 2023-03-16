@@ -8,6 +8,7 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [frontend.extensions.html-parser :as html-parser]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]))
 
 (deftest try-parse-as-json-result-parse-test
@@ -110,3 +111,20 @@
                         #js {:clipboardData #js {:getData (constantly clipboard)}})]
                (is (= expected-paste result))
                (reset))))))
+
+(deftest-async editor-on-paste-raw-with-selection
+  (let [clipboard "after"
+        expected-paste "after"
+        selected-text "before"
+        block-content "test:: before"]
+    (test-helper/with-reset
+      reset
+      [utils/getClipText (fn [cb] (cb clipboard))
+       state/get-input (constantly #js {:value block-content})
+       editor-handler/get-selection-and-format (constantly {:value block-content})
+       commands/delete-selection! (constantly nil)
+       commands/simple-insert! (fn [_input text] (p/resolved text))
+       util/get-selected-text (constantly selected-text)]
+      (p/let [result ((paste-handler/editor-on-paste! nil true))]
+             (is (= expected-paste result))
+             (reset)))))
