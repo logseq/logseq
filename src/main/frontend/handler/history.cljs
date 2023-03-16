@@ -24,7 +24,8 @@
   (state/clear-editor-action!)
   (editor/save-current-block!)
   (let [{:keys [editor-cursor]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor))
+    ;; Rendering may not be finished
+    (js/setTimeout #(restore-cursor! editor-cursor) 10))
   (state/set-editor-op! nil))
 
 (defn redo!
@@ -33,5 +34,5 @@
   (state/set-editor-op! :redo)
   (state/clear-editor-action!)
   (let [{:keys [editor-cursor]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor))
+    (js/setTimeout #(restore-cursor! editor-cursor) 10))
   (state/set-editor-op! nil))

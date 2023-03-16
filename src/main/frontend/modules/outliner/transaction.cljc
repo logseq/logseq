@@ -18,7 +18,7 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  (assert (map? opts))
+  (assert (or (map? opts) (symbol? opts)) (str "opts is not a map or symbol, type: " (type opts) ))
   `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
          opts# (if transact-data#
                  (assoc ~opts :nested-transaction? true)

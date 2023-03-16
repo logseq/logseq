@@ -815,9 +815,15 @@
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)]
-                   (outliner-tx/transact! {}
-                     (when (and prev-block new-content)
+                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                       concat-prev-block? (boolean (and prev-block new-content))
+                       transact-opts (cond->
+                                       {:outliner-op :delete-block}
+                                       concat-prev-block?
+                                       (assoc :concat-data
+                                              {:deleted-block (:block/uuid block)}))]
+                   (outliner-tx/transact! transact-opts
+                     (when concat-prev-block?
                        (save-block! repo prev-block new-content))
                      (delete-block-aux! block delete-children?))))))))))
    (state/set-editor-op! nil)))
