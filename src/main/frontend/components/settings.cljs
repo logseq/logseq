@@ -378,6 +378,12 @@
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
+(defn auto-expand-block-refs [t auto-expand-block-refs?]
+  (toggle "auto_expand_block_refs"
+          (t :settings-page/auto-expand-block-refs)
+          auto-expand-block-refs?
+          config-handler/toggle-auto-expand-block-refs!))
+
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
           (t :settings-page/enable-tooltip)
@@ -615,6 +621,7 @@
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
+        auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -631,6 +638,7 @@
      (outdenting-row t logical-outdenting?)
      (showing-full-blocks t show-full-blocks?)
      (preferred-pasting-file t preferred-pasting-file?)
+     (auto-expand-block-refs t auto-expand-block-refs?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))

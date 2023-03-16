@@ -674,6 +674,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/preferred-pasting-file? (sub-config)))
 
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
+
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
