@@ -821,7 +821,7 @@
                                        {:outliner-op :delete-block}
                                        concat-prev-block?
                                        (assoc :concat-data
-                                              {:deleted-block (:block/uuid block)}))]
+                                              {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
                      (when concat-prev-block?
                        (save-block! repo prev-block new-content))
@@ -2597,9 +2597,18 @@
       nil
 
       :else
-      (do
-        (delete-block-aux! next-block false)
-        (state/set-edit-content! input-id (str value "" (:block/content next-block)))
+      (let [edit-block (state/get-edit-block)
+            transact-opts (cond->
+                            {:outliner-op :delete-block
+                             :concat-data {:last-edit-block (:block/uuid edit-block)
+                                           :end? true}})
+            new-content (str value "" (:block/content next-block))
+            repo (state/get-current-repo)]
+        (outliner-tx/transact! transact-opts
+          (save-block! repo edit-block new-content)
+          (delete-block-aux! next-block false))
+
+        (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))
 
 (defn keydown-delete-handler

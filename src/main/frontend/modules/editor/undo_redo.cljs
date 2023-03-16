@@ -110,8 +110,8 @@
                             undo-delete-concat-block?
                             (let [data (:concat-data tx-meta)]
                               (assoc (:editor-cursor e)
-                                     :last-edit-block {:block/uuid (:deleted-block data)}
-                                     :pos 0))
+                                     :last-edit-block {:block/uuid (:last-edit-block data)}
+                                     :pos (if (:end? data) :max 0)))
 
                             ;; same block
                             (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
