@@ -174,14 +174,18 @@
 
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
-        (let [chapters         (:children topic)
-              has-chapters?    (seq chapters)
-              topic            (if has-chapters? (first chapters) topic)
-              parent           (get handbook-nodes (:parent (bind-parent-key topic)))
-              chapters         (or chapters (:children parent))
-              parent-key       (:key parent)
-              parent-category? (not (string/includes? parent-key "/"))
-              show-chapters?   (and (not parent-category?) (seq chapters))]
+        (let [chapters            (:children topic)
+              has-chapters?       (seq chapters)
+              topic               (if has-chapters? (first chapters) topic)
+              parent              (get handbook-nodes (:parent (bind-parent-key topic)))
+              chapters            (or chapters (:children parent))
+              parent-key          (:key parent)
+              parent-category?    (not (string/includes? parent-key "/"))
+              show-chapters?      (and (not parent-category?) (seq chapters))
+
+              chapters-len        (count chapters)
+              chapter-current-idx (when-not (zero? chapters-len)
+                                    (util/find-index #(= (:key %) (:key topic)) chapters))]
 
           (when-not deps-pending?
             [:div.pane.pane-topic-detail
@@ -223,17 +227,28 @@
 
              [:div.content-wrap
               (when-let [content (:content topic)]
-                [:div.content.markdown-body
-                 {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}
-                  :on-click                (fn [^js e]
-                                             (when-let [target (.-target e)]
-                                               (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
-                                                 (when-let [to-k (and (not (string/starts-with? link "http"))
-                                                                      (parse-key-from-href link parent-key))]
-                                                   (if-let [to (get handbook-nodes to-k)]
-                                                     (nav! [:topic-detail to (:title parent)] pane-state)
-                                                     (js/console.error "ERROR: handbook link resource not found: " link))
-                                                   (util/stop e)))))}])]]))))))
+                [:<>
+                 [:div.content.markdown-body
+                  {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}
+                   :on-click                (fn [^js e]
+                                              (when-let [target (.-target e)]
+                                                (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
+                                                  (when-let [to-k (and (not (string/starts-with? link "http"))
+                                                                       (parse-key-from-href link parent-key))]
+                                                    (if-let [to (get handbook-nodes to-k)]
+                                                      (nav! [:topic-detail to (:title parent)] pane-state)
+                                                      (js/console.error "ERROR: handbook link resource not found: " link))
+                                                    (util/stop e)))))}]
+
+                 (when-let [idx (and (> chapters-len 1) chapter-current-idx)]
+                   (let [prev (when-not (zero? idx) (dec idx))
+                         next (when-not (= idx (dec chapters-len)) (inc idx))]
+
+                     [:div.controls.flex.justify-between.pt-4
+                      [:div (when prev (ui/button [:span.flex.items-center (ui/icon "arrow-left") "Prev chapter"]
+                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters prev) (:title parent)] pane-state)))]
+                      [:div (when next (ui/button [:span.flex.items-center "Next chapter" (ui/icon "arrow-right")]
+                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters next) (:title parent)] pane-state)))]]))])]]))))))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]

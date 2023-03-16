@@ -982,7 +982,7 @@
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
         klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
+        klass (if small? (str klass ".is-small") klass)
         klass (if large? (str klass ".text-base") klass)
         klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
