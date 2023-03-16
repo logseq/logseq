@@ -21,7 +21,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.handler.global-config :as global-config-handler]))
 
 (defn- get-path
   [state]
@@ -73,17 +74,17 @@
    (files-all)
    ])
 
+;; FIXME: misuse of rpath and fpath
 (rum/defcs file-inner < rum/reactive
   {:will-mount (fn [state]
                  (let [*content (atom nil)
                        [path format] (:rum/args state)
                        repo-dir (config/get-repo-dir (state/get-current-repo))
                        [dir path] (cond
-                                    (string/starts-with? path repo-dir)
-                                    [repo-dir (-> (string/replace-first path repo-dir "")
-                                                  (string/replace #"^/+" ""))]
+                                    (string/starts-with? path (global-config-handler/global-config-dir))
+                                    [nil path]
 
-                                    ;; browser-fs
+                                    ;; local file
                                     (not (string/starts-with? path "/"))
                                     [repo-dir path]
 
@@ -91,6 +92,7 @@
                                     [nil path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (fs/read-file dir path)]
+                       (prn ::read-content content)
                        (reset! *content (or content ""))))
                    (assoc state ::file-content *content)))
    :did-mount (fn [state]
@@ -100,9 +102,16 @@
                    (state/clear-file-component!)
                    state)}
   [state path format]
-  (let [original-name (db/get-file-page path)
-        repo-dir (config/get-repo-dir (state/get-current-repo))
-        rel-path (path/trim-dir-prefix repo-dir path)
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+        rel-path (when (string/starts-with? path repo-dir)
+                   (path/trim-dir-prefix repo-dir path))
+        original-name (db/get-file-page (or path rel-path))
+        in-db? (boolean (db/get-file (or path rel-path)))
+
+        file-fpath (if in-db?
+                     (path/path-join repo-dir path)
+                     path)
+
         random-id (str (d/squuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
@@ -141,7 +150,7 @@
        (let [content' (string/trim content)
              mode (util/get-file-ext path)]
          (lazy-editor/editor {:file?     true
-                              :file-path path}
+                              :file-path file-fpath}
                              (str "file-edit-" random-id)
                              {:data-lang mode}
                              content'

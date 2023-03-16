@@ -241,8 +241,10 @@
 
   (read-file [_this dir path _options]
     (prn ::read-file dir path)
-    (let [fpath (path/path-join dir path)
-          handle-path (str "handle/" fpath)]
+    (p/let [_ (when-not (string/includes? dir "/")
+                (await-get-nfs-file-handle (str "logseq_local_" dir) (str "handle/" dir)))
+            fpath (path/path-join dir path)
+            handle-path (str "handle/" fpath)]
       (p/let [handle (or (get-nfs-file-handle handle-path)
                          (idb/get-item handle-path))
               local-file (and handle (.getFile handle))]
@@ -278,7 +280,6 @@
           (p/let [basename (path/filename fpath)
                   parent-dir (path/parent fpath)
                   parent-dir-handle-path (str "handle/" parent-dir)
-                  _ (prn ::debug-0 parent-dir-handle-path)
                   parent-dir-handle (get-nfs-file-handle parent-dir-handle-path)]
 
             (if parent-dir-handle
