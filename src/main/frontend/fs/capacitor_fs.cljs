@@ -365,11 +365,11 @@
                     (fn [_e] :not-found))]
         ;; `path` is full-path
         (write-file-impl! repo dir path content opts stat))))
-  (rename! [_this _repo old-path new-path]
+  (rename! [_this _repo old-fpath new-fpath]
     (-> (.rename Filesystem
                  (clj->js
-                  {:from old-path
-                   :to new-path}))
+                  {:from old-fpath
+                   :to new-fpath}))
         (p/catch (fn [error]
                    (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
