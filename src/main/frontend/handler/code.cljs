@@ -44,10 +44,13 @@
                   rpath (path/trim-dir-prefix repo-dir path)]
               (if rpath
                 ;; in-db file
-                (let [old-content (or (db/get-file rpath) "")]
-                  (when (and
-                         (not (string/blank? value))
-                         (not= (string/trim value) (string/trim old-content)))
+                (let [db-content (db/get-file rpath)
+                      not-in-db? (nil? db-content)
+                      old-content (or db-content "")
+                      contents-matched? (= (string/trim value) (string/trim old-content))]
+                  (when (or
+                         (and not-in-db? (not-empty value))
+                         (not contents-matched?))
                     (file-handler/alter-file (state/get-current-repo)
                                              rpath
                                              (str (string/trim value) "\n")
