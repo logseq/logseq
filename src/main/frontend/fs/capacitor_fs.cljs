@@ -380,8 +380,15 @@
         (p/catch (fn [error]
                    (log/error :copy-file-failed error)))))
   (stat [_this fpath]
-    (p/chain (.stat Filesystem (clj->js {:path fpath}))
-             #(js->clj % :keywordize-keys true)))
+    (-> (p/chain (.stat Filesystem (clj->js {:path fpath}))
+                 #(js->clj % :keywordize-keys true))
+        (p/catch (fn [error]
+                   (let [errstr (if error (.toString error) "")]
+                     (when (string/includes? errstr "because you don’t have permission to view it")
+                       (state/pub-event! [:notification/show
+                                          {:content "No permission, please clear cache and re-open graph folder."
+                                           :status :error}]))
+                     (p/rejected error))))))
   (open-dir [_this dir]
     (open-dir dir))
   (get-files [_this dir]

@@ -200,7 +200,9 @@
                     (if (and (gp-config/local-protocol-asset? src)
                              (file-sync/current-graph-sync-on?))
                       (let [*exist? (::exist? state)
-                            asset-path (path/url-to-path src)]
+                            ;; special handling for asset:// protcol
+                            ;; Capacitor uses a special URL for assets loading
+                            asset-path (gp-config/remove-asset-protocol src)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
                           ;; FIXME(andelf): possible bug here

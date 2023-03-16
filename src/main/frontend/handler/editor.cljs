@@ -1457,10 +1457,11 @@
     path
     (let [repo      (state/get-current-repo)
           repo-dir  (config/get-repo-dir repo)
-          path      (string/replace path "../" "/")
-          full-path (util/node-path.join repo-dir path)
+          ;; Hack for path calculation
+          path      (str "./" (string/replace path "../" "/"))
+          full-path (path/path-join repo-dir path)
           data-url? (string/starts-with? path "data:")]
-      (prn ::make-asset-url full-path)
+      (prn ::make-asset-url full-path path)
       (cond
         data-url?
         path ;; just return the original
