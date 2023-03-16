@@ -52,14 +52,17 @@
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
-            (p/catch (fn [error] (println "Mkdir error: " error)))))))
+            (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
   (readdir [_this dir]
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
         (-> (<readdir fpath)
             (p/then (fn [rpaths]
                       (prn ::debug rpaths)
-                      (mapv #(path/path-join "memory://" %) rpaths)))))))
+                      (mapv #(path/path-join "memory://" %) rpaths)))
+            (p/catch (fn [error]
+                       (println "(memory-fs)Readdir error: " error)
+                       (p/rejected error)))))))
 
   (unlink! [_this _repo path opts]
     (when js/window.pfs
@@ -88,7 +91,7 @@
   (stat [_this fpath]
     (let [fpath (path/url-to-path fpath)]
       (js/window.pfs.stat fpath)))
-  
+
   (open-dir [_this _dir]
     nil)
   (get-files [_this _path-or-handle]

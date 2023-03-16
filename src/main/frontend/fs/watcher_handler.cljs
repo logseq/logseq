@@ -129,14 +129,29 @@
 (defn load-graph-files!
   [graph]
   (when graph
-    (let [dir (config/get-repo-dir graph)
+    (let [repo-dir (config/get-repo-dir graph)
           db-files (->> (db/get-files graph)
-                        (map first)
-                        (filter #(string/starts-with? % (config/get-repo-dir graph))))]
-      (p/let [files (fs/readdir dir :path-only? true)
-              files (map #(path/relative-path dir %) files)
-              files (remove #(fs-util/ignored-path? dir %) files)
-              deleted-files (set/difference (set db-files) (set files))]
+                        (map first))]
+      ;; read all files in the repo dir, notify if readdir error
+      (p/let [[files deleted-files]
+              (-> (fs/readdir repo-dir :path-only? true)
+                  (p/chain (fn [files]
+                             (->> files
+                                  (map #(path/relative-path repo-dir %))
+                                  (remove #(fs-util/ignored-path? repo-dir %))))
+                           (fn [files]
+                             (let [deleted-files (set/difference (set db-files) (set files))]
+                               [files deleted-files])))
+                  (p/catch (fn [error]
+                             (when-not (config/demo-graph? graph)
+                               (js/console.error "reading" graph)
+                               (state/pub-event! [:notification/show
+                                                  {:content (str "The graph " graph " can not be read:" error)
+                                                   :status :error
+                                                   :clear? false}]))
+                             [nil nil])))]
+        (prn ::init-watcher repo-dir {:deleted (count deleted-files)
+                                      :total (count files)})
         (when (seq deleted-files)
           (let [delete-tx-data (->> (db/delete-files deleted-files)
                                     (concat (db/delete-blocks graph deleted-files nil))
@@ -146,13 +161,13 @@
           (prn ::init-watcher file-rpath)
           (when-let [_ext (util/get-file-ext file-rpath)]
             (->
-             (p/let [content (fs/read-file dir file-rpath)
-                     stat (fs/stat dir file-rpath)
+             (p/let [content (fs/read-file repo-dir file-rpath)
+                     stat (fs/stat repo-dir file-rpath)
                      type (if (db/file-exists? graph file-rpath)
                             "change"
                             "add")]
                (handle-changed! type
-                                {:dir dir
+                                {:dir repo-dir
                                  :path file-rpath
                                  :content content
                                  :stat stat}))

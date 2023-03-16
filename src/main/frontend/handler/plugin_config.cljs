@@ -4,7 +4,7 @@
   global-config and plugin components are enabled. plugin.edn is automatically updated
 when a plugin is installed, updated or removed"
   (:require [frontend.handler.global-config :as global-config-handler]
-            ["path" :as path]
+            [logseq.common.path :as path]
             [promesa.core :as p]
             [borkdude.rewrite-edn :as rewrite]
             [frontend.fs :as fs]
@@ -23,7 +23,7 @@ when a plugin is installed, updated or removed"
 (defn plugin-config-path
   "Full path to plugins.edn"
   []
-  (path/join (global-config-handler/global-config-dir) "plugins.edn"))
+  (path/path-join (global-config-handler/global-config-dir) "plugins.edn"))
 
 (def common-plugin-keys
   "Vec of plugin keys to store in plugins.edn and to compare with installed-plugins state"
@@ -32,7 +32,7 @@ when a plugin is installed, updated or removed"
 (defn add-or-update-plugin
   "Adds or updates a plugin from plugin.edn"
   [{:keys [id] :as plugin}]
-  (p/let [content (fs/read-file "" (plugin-config-path))
+  (p/let [content (fs/read-file nil (plugin-config-path))
           updated-content (-> content
                               rewrite/parse-string
                               (rewrite/assoc (keyword id) (select-keys plugin common-plugin-keys))
@@ -52,8 +52,7 @@ when a plugin is installed, updated or removed"
                     (update-vals #(select-keys % common-plugin-keys))
                     pprint/pprint
                     with-out-str)]
-    (prn ::plugin-dir @global-config-handler/root-dir (plugin-config-path))
-    (fs/create-if-not-exists nil @global-config-handler/root-dir (plugin-config-path) content)))
+    (fs/create-if-not-exists "" nil (plugin-config-path) content)))
 
 (defn- determine-plugins-to-change
   "Given installed plugins state and plugins from plugins.edn,
@@ -76,7 +75,7 @@ returns map of plugins to install and uninstall"
 (defn open-replace-plugins-modal
   []
   (p/catch
-   (p/let [edn-plugins* (fs/read-file "" (plugin-config-path))
+   (p/let [edn-plugins* (fs/read-file nil (plugin-config-path))
            edn-plugins (edn/read-string edn-plugins*)]
           (if-let [errors (->> edn-plugins (m/explain plugin-config-schema/Plugins-edn) me/humanize)]
             (do

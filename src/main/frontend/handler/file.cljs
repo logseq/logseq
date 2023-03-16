@@ -139,9 +139,7 @@
                            from-disk? false
                            skip-compare? false}}]
   (let [path (gp-util/path-normalize path)
-        _ (prn ::alter-file path)
-        ;; _ (js/console.trace)
-        config-file? (= path "logseq/config.edn") ; (string/ends-with? path config/config-file)
+        config-file? (= path "logseq/config.edn")
         _ (when config-file?
             (detect-deprecations repo path content))
         config-valid? (and config-file? (validate-file repo path content))]

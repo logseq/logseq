@@ -122,9 +122,7 @@
   (when-let [style (or
                     (state/get-custom-css-link)
                     (some-> (db-model/get-custom-css)
-                            (config/expand-relative-assets-path))
-                    ;; (state/get-custom-css-link)
-                    )]
+                            (config/expand-relative-assets-path)))]
     (util/add-style! style)))
 (defn reset-custom-css!
   []
