@@ -120,14 +120,17 @@
 
                             :else
                             (:editor-cursor e))]
+
         (push-redo e)
         (transact! new-txs (merge {:undo? true}
                                   tx-meta
                                   (select-keys e [:pagination-blocks-range])))
+
         (when undo-delete-concat-block?
           (when-let [block (state/get-edit-block)]
             (state/set-edit-content! (state/get-edit-input-id)
                                      (:block/content (db/entity (:db/id block))))))
+
         (when (:whiteboard/transact? tx-meta)
           (state/pub-event! [:whiteboard/undo e]))
         (assoc e
