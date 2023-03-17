@@ -23,64 +23,64 @@
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [graph (storage/get :git/current-repo)]
-                        (when graph (ipc/ipc "setCurrentGraph" graph))
-                        graph)]
-   (atom
-    {:route-match                           nil
-     :today                                 nil
-     :system/events                         (async/chan 1000)
-     :db/batch-txs                          (async/chan 1000)
-     :file/writes                           (async/chan 10000)
-     :file/unlinked-dirs                    #{}
-     :reactive/custom-queries               (async/chan 1000)
-     :notification/show?                    false
-     :notification/content                  nil
-     :repo/loading-files?                   {}
-     :nfs/user-granted?                     {}
-     :nfs/refreshing?                       nil
-     :instrument/disabled?                  (storage/get "instrument-disabled")
+                         (when graph (ipc/ipc "setCurrentGraph" graph))
+                         graph)]
+    (atom
+     {:route-match                           nil
+      :today                                 nil
+      :system/events                         (async/chan 1000)
+      :db/batch-txs                          (async/chan 1000)
+      :file/writes                           (async/chan 10000)
+      :file/unlinked-dirs                    #{}
+      :reactive/custom-queries               (async/chan 1000)
+      :notification/show?                    false
+      :notification/content                  nil
+      :repo/loading-files?                   {}
+      :nfs/user-granted?                     {}
+      :nfs/refreshing?                       nil
+      :instrument/disabled?                  (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
-     :network/online?         true
-     :indexeddb/support?      true
-     :me                      nil
-     :git/current-repo        current-graph
-     :draw?                   false
-     :db/restoring?           nil
+      :network/online?         true
+      :indexeddb/support?      true
+      :me                      nil
+      :git/current-repo        current-graph
+      :draw?                   false
+      :db/restoring?           nil
 
-     :journals-length                       3
+      :journals-length                       3
 
-     :search/q                              ""
-     :search/mode                           :global  ;; inner page or full graph? {:page :global}
-     :search/result                         nil
-     :search/graph-filters                  []
-     :search/engines                        {}
+      :search/q                              ""
+      :search/mode                           :global  ;; inner page or full graph? {:page :global}
+      :search/result                         nil
+      :search/graph-filters                  []
+      :search/engines                        {}
 
      ;; modals
-     :modal/dropdowns                       {}
-     :modal/id                              nil
-     :modal/label                           ""
-     :modal/show?                           false
-     :modal/panel-content                   nil
-     :modal/fullscreen?                     false
-     :modal/close-btn?                      nil
-     :modal/close-backdrop?                 true
-     :modal/subsets                         []
+      :modal/dropdowns                       {}
+      :modal/id                              nil
+      :modal/label                           ""
+      :modal/show?                           false
+      :modal/panel-content                   nil
+      :modal/fullscreen?                     false
+      :modal/close-btn?                      nil
+      :modal/close-backdrop?                 true
+      :modal/subsets                         []
 
      ;; ui
-     :ui/viewport                           {}
+      :ui/viewport                           {}
 
      ;; left sidebar
-     :ui/navigation-item-collapsed?         {}
+      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
-     :ui/fullscreen?                        false
-     :ui/settings-open?                     false
-     :ui/sidebar-open?                      false
-     :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) "light")
-     :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
-     :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      :ui/fullscreen?                        false
+      :ui/settings-open?                     false
+      :ui/sidebar-open?                      false
+      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+      :ui/theme                              (or (storage/get :ui/theme) "light")
+      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
+      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -88,173 +88,173 @@
      ;; 3. queries
      ;; 4. references
      ;; graph => {:block-id bool}
-     :ui/collapsed-blocks                   {}
-     :ui/sidebar-collapsed-blocks           {}
-     :ui/root-component                     nil
-     :ui/file-component                     nil
-     :ui/custom-query-components            {}
-     :ui/show-recent?                       false
-     :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
-                                                false)
+      :ui/collapsed-blocks                   {}
+      :ui/sidebar-collapsed-blocks           {}
+      :ui/root-component                     nil
+      :ui/file-component                     nil
+      :ui/custom-query-components            {}
+      :ui/show-recent?                       false
+      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
+                                                 false)
      ;; remember scroll positions of visited paths
-     :ui/paths-scroll-positions             {}
-     :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
-                                              false
-                                              true)
-     :ui/scrolling?                         false
-     :document/mode?                        document-mode?
+      :ui/paths-scroll-positions             {}
+      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
+                                               false
+                                               true)
+      :ui/scrolling?                         false
+      :document/mode?                        document-mode?
 
-     :config                                {}
-     :block/component-editing-mode?         false
-     :editor/hidden-editors                 #{}             ;; page names
-     :editor/draw-mode?                     false
-     :editor/action                         nil
-     :editor/action-data                    nil
+      :config                                {}
+      :block/component-editing-mode?         false
+      :editor/hidden-editors                 #{}             ;; page names
+      :editor/draw-mode?                     false
+      :editor/action                         nil
+      :editor/action-data                    nil
      ;; With label or other data
-     :editor/last-saved-cursor              nil
-     :editor/editing?                       nil
-     :editor/in-composition?                false
-     :editor/content                        {}
-     :editor/block                          nil
-     :editor/block-dom-id                   nil
-     :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
-     :editor/last-input-time                nil
-     :editor/document-mode?                 document-mode?
-     :editor/args                           nil
-     :editor/on-paste?                      false
-     :editor/last-key-code                  nil
+      :editor/last-saved-cursor              nil
+      :editor/editing?                       nil
+      :editor/in-composition?                false
+      :editor/content                        {}
+      :editor/block                          nil
+      :editor/block-dom-id                   nil
+      :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
+      :editor/last-input-time                nil
+      :editor/document-mode?                 document-mode?
+      :editor/args                           nil
+      :editor/on-paste?                      false
+      :editor/last-key-code                  nil
 
      ;; for audio record
-     :editor/record-status                  "NONE"
+      :editor/record-status                  "NONE"
 
      ;; Whether to skip saving the current block
-     :editor/skip-saving-current-block?     false
+      :editor/skip-saving-current-block?     false
 
-     :editor/code-block-context             {}
+      :editor/code-block-context             {}
 
-     :db/last-transact-time                 {}
+      :db/last-transact-time                 {}
      ;; whether database is persisted
-     :db/persisted?                         {}
+      :db/persisted?                         {}
 
-     :cursor-range                          nil
+      :cursor-range                          nil
 
-     :selection/mode                        false
+      :selection/mode                        false
      ;; Warning: blocks order is determined when setting this attribute
-     :selection/blocks                      []
-     :selection/start-block                 nil
+      :selection/blocks                      []
+      :selection/start-block                 nil
      ;; either :up or :down, defaults to down
      ;; used to determine selection direction when two or more blocks are selected
-     :selection/direction                   :down
-     :selection/selected-all?               false
-     :custom-context-menu/show?             false
-     :custom-context-menu/links             nil
-     :custom-context-menu/position          nil
+      :selection/direction                   :down
+      :selection/selected-all?               false
+      :custom-context-menu/show?             false
+      :custom-context-menu/links             nil
+      :custom-context-menu/position          nil
 
      ;; pages or blocks in the right sidebar
      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
-     :sidebar/blocks                        '()
+      :sidebar/blocks                        '()
 
-     :preferred-language                    (storage/get :preferred-language)
+      :preferred-language                    (storage/get :preferred-language)
 
      ;; electron
-     :electron/auto-updater-downloaded      false
-     :electron/updater-pending?             false
-     :electron/updater                      {}
-     :electron/user-cfgs                    nil
-     :electron/server                       nil
+      :electron/auto-updater-downloaded      false
+      :electron/updater-pending?             false
+      :electron/updater                      {}
+      :electron/user-cfgs                    nil
+      :electron/server                       nil
 
      ;; assets
-     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
-     :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
+      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
      ;; mobile
-     :mobile/container-urls                 nil
-     :mobile/show-action-bar?               false
-     :mobile/actioned-block                 nil
-     :mobile/show-toolbar?                  false
-     :mobile/show-recording-bar?            false
-     :mobile/show-tabbar?                   false
+      :mobile/container-urls                 nil
+      :mobile/show-action-bar?               false
+      :mobile/actioned-block                 nil
+      :mobile/show-toolbar?                  false
+      :mobile/show-recording-bar?            false
+      :mobile/show-tabbar?                   false
      ;;; Used to monitor mobile app status,
      ;;; value spec:
      ;;; {:is-active? bool, :timestamp int}
-     :mobile/app-state-change                 (atom nil)
+      :mobile/app-state-change                 (atom nil)
 
      ;; plugin
-     :plugin/enabled                        (and (util/electron?)
+      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
-     :plugin/preferences                    nil
-     :plugin/indicator-text                 nil
-     :plugin/installed-plugins              {}
-     :plugin/installed-themes               []
-     :plugin/installed-slash-commands       {}
-     :plugin/installed-ui-items             {}
-     :plugin/installed-resources            {}
-     :plugin/installed-hooks                {}
-     :plugin/installed-services             {}
-     :plugin/simple-commands                {}
-     :plugin/selected-theme                 nil
-     :plugin/selected-unpacked-pkg          nil
-     :plugin/marketplace-pkgs               nil
-     :plugin/marketplace-stats              nil
-     :plugin/installing                     nil
-     :plugin/active-readme                  nil
-     :plugin/updates-pending                {}
-     :plugin/updates-coming                 {}
-     :plugin/updates-downloading?           false
-     :plugin/updates-unchecked              #{}
-     :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil ;; plugin id
+                                                  ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
+      :plugin/preferences                    nil
+      :plugin/indicator-text                 nil
+      :plugin/installed-plugins              {}
+      :plugin/installed-themes               []
+      :plugin/installed-slash-commands       {}
+      :plugin/installed-ui-items             {}
+      :plugin/installed-resources            {}
+      :plugin/installed-hooks                {}
+      :plugin/installed-services             {}
+      :plugin/simple-commands                {}
+      :plugin/selected-theme                 nil
+      :plugin/selected-unpacked-pkg          nil
+      :plugin/marketplace-pkgs               nil
+      :plugin/marketplace-stats              nil
+      :plugin/installing                     nil
+      :plugin/active-readme                  nil
+      :plugin/updates-pending                {}
+      :plugin/updates-coming                 {}
+      :plugin/updates-downloading?           false
+      :plugin/updates-unchecked              #{}
+      :plugin/navs-settings?                 true
+      :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
-     :pdf/system-win?                       false
-     :pdf/current                           nil
-     :pdf/ref-highlight                     nil
-     :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+      :pdf/system-win?                       false
+      :pdf/current                           nil
+      :pdf/ref-highlight                     nil
+      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
 
      ;; all notification contents as k-v pairs
-     :notification/contents                 {}
-     :graph/syncing?                        false
+      :notification/contents                 {}
+      :graph/syncing?                        false
      ;; graph -> state
-     :graph/parsing-state                   {}
+      :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil
-                                             :copy/graph nil
-                                             :copy/blocks nil}
+      :copy/blocks                           {:copy/content nil
+                                              :copy/graph nil
+                                              :copy/blocks nil}
 
-     :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
-                                                "dashes")
-     :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
-                                                #{})
-     :date-picker/date                      nil
+      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
+                                                 "dashes")
+      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
+                                                 #{})
+      :date-picker/date                      nil
 
-     :youtube/players                       {}
+      :youtube/players                       {}
 
      ;; command palette
-     :command-palette/commands              []
+      :command-palette/commands              []
 
-     :view/components                       {}
+      :view/components                       {}
 
-     :favorites/dragging                    nil
+      :favorites/dragging                    nil
 
-     :srs/mode?                             false
+      :srs/mode?                             false
 
-     :srs/cards-due-count                   nil
+      :srs/cards-due-count                   nil
 
-     :reactive/query-dbs                    {}
+      :reactive/query-dbs                    {}
 
      ;; login, userinfo, token, ...
-     :auth/refresh-token                    (storage/get "refresh-token")
-     :auth/access-token                     nil
-     :auth/id-token                         nil
+      :auth/refresh-token                    (storage/get "refresh-token")
+      :auth/access-token                     nil
+      :auth/id-token                         nil
 
      ;; file-sync
-     :file-sync/jstour-inst                   nil
-     :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
-                                                {:welcome false})
-     :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/set-remote-graph-password-result {}
+      :file-sync/jstour-inst                   nil
+      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
+                                                 {:welcome false})
+      :file-sync/remote-graphs               {:loading false :graphs nil}
+      :file-sync/set-remote-graph-password-result {}
 
      ;; graph-uuid -> {:graphs-txid {}
      ;;                :file-sync/sync-manager {}
@@ -263,24 +263,24 @@
      ;;                :file-sync/progress {}
      ;;                :file-sync/start-time {}
      ;;                :file-sync/last-synced-at {}}
-     :file-sync/graph-state                 {:current-graph-uuid nil
+      :file-sync/graph-state                 {:current-graph-uuid nil
                                              ;; graph-uuid -> ...
-                                             }
-     :user/info                             {:UserGroups (storage/get :user-groups)}
-     :encryption/graph-parsing?             false
+                                              }
+      :user/info                             {:UserGroups (storage/get :user-groups)}
+      :encryption/graph-parsing?             false
 
-     :ui/loading?                           {}
-     :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+      :ui/loading?                           {}
+      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
-     :file/rename-event-chan                (async/chan 100)
-     :ui/find-in-page                       nil
-     :graph/importing                       nil
-     :graph/importing-state                 {}
+      :file/rename-event-chan                (async/chan 100)
+      :ui/find-in-page                       nil
+      :graph/importing                       nil
+      :graph/importing-state                 {}
 
-     :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
-     :whiteboard/last-persisted-at          {}
-     :whiteboard/pending-tx-data            {}})))
+      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
+      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
+      :whiteboard/last-persisted-at          {}
+      :whiteboard/pending-tx-data            {}})))
 
 ;; Block ast state
 ;; ===============
@@ -330,10 +330,10 @@
   (->> configs
        (filter map?)
        (apply merge-with
-         (fn merge-config [current new]
-           (if (and (map? current) (map? new))
-             (merge current new)
-             new)))))
+              (fn merge-config [current new]
+                (if (and (map? current) (map? new))
+                  (merge current new)
+                  new)))))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -361,13 +361,13 @@ should be done through this fn in order to get global config and config defaults
   (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
-         {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
+  {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
 
 (defn get-macros
   []
   (merge
-    built-in-macros
-    (:macros (get-config))))
+   built-in-macros
+   (:macros (get-config))))
 
 (defn set-assets-alias-enabled!
   [v]
@@ -413,11 +413,11 @@ should be done through this fn in order to get global config and config defaults
    (get-preferred-format (get-current-repo)))
   ([repo-url]
    (keyword
-     (or
-       (when-let [fmt (:preferred-format (get-config repo-url))]
-         (string/lower-case (name fmt)))
+    (or
+     (when-let [fmt (:preferred-format (get-config repo-url))]
+       (string/lower-case (name fmt)))
 
-       (get-in @state [:me :preferred_format] "markdown")))))
+     (get-in @state [:me :preferred_format] "markdown")))))
 
 ;; TODO: consider adding a pane in Settings to set this through the GUI (rather
 ;; than having to go through the config.edn file)
@@ -425,8 +425,8 @@ should be done through this fn in order to get global config and config defaults
   ([] (get-editor-command-trigger (get-current-repo)))
   ([repo-url]
    (or
-     (:editor/command-trigger (get-config repo-url))        ;; Get from user config
-     "/")))                                                 ;; Set the default
+    (:editor/command-trigger (get-config repo-url))        ;; Get from user config
+    "/")))                                                 ;; Set the default
 
 (defn markdown?
   []
@@ -436,16 +436,16 @@ should be done through this fn in order to get global config and config defaults
 (defn get-pages-directory
   []
   (or
-    (when-let [repo (get-current-repo)]
-      (:pages-directory (get-config repo)))
-    "pages"))
+   (when-let [repo (get-current-repo)]
+     (:pages-directory (get-config repo)))
+   "pages"))
 
 (defn get-journals-directory
   []
   (or
-    (when-let [repo (get-current-repo)]
-      (:journals-directory (get-config repo)))
-    "journals"))
+   (when-let [repo (get-current-repo)]
+     (:journals-directory (get-config repo)))
+   "journals"))
 
 (defn get-whiteboards-directory
   []
@@ -466,13 +466,13 @@ should be done through this fn in order to get global config and config defaults
 (defn get-preferred-workflow
   []
   (keyword
-    (or
-      (when-let [workflow (:preferred-workflow (get-config))]
-        (let [workflow (name workflow)]
-          (if (util/safe-re-find #"now|NOW" workflow)
-            :now
-            :todo)))
-      (get-in @state [:me :preferred_workflow] :now))))
+   (or
+    (when-let [workflow (:preferred-workflow (get-config))]
+      (let [workflow (name workflow)]
+        (if (util/safe-re-find #"now|NOW" workflow)
+          :now
+          :todo)))
+    (get-in @state [:me :preferred_workflow] :now))))
 
 (defn get-preferred-todo
   []
@@ -510,18 +510,18 @@ should be done through this fn in order to get global config and config defaults
 (defn get-ref-open-blocks-level
   []
   (or
-    (when-let [value (:ref/default-open-blocks-level (get-config))]
-      (when (integer? value)
-        value))
-    2))
+   (when-let [value (:ref/default-open-blocks-level (get-config))]
+     (when (integer? value)
+       value))
+   2))
 
 (defn get-linked-references-collapsed-threshold
   []
   (or
-    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
-      (when (integer? value)
-        value))
-    100))
+   (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+     (when (integer? value)
+       value))
+   100))
 
 (defn get-export-bullet-indentation
   []
@@ -640,9 +640,9 @@ Similar to re-frame subscriptions"
   [block-uuid]
   (rum/react
    (rum/derived-atom [state] [::select-block block-uuid]
-     (fn [state]
-       (contains? (set (get-selected-block-ids (:selection/blocks state)))
-                  block-uuid)))))
+                     (fn [state]
+                       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                                  block-uuid)))))
 
 (defn block-content-max-length
   [repo]
@@ -959,11 +959,17 @@ Similar to re-frame subscriptions"
    (when (seq blocks)
      (let [container (util/get-block-container (first blocks))
            blocks (filter #(= container (util/get-block-container %)) blocks)
+           ;; Filter out blocks from different containers
+           first-selected-block-id (.getAttribute (first blocks) "blockid")
+           first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
+           page-id (get-in first-selected-block [:block/page :db/id])
+           ;; Filter out blocks from different pages
+           blocks (filter #(= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (.getAttribute % "blockid")) [:block/page :db/id])) blocks)
            blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
-             :selection/mode true
-             :selection/blocks blocks
-             :selection/direction direction)))))
+              :selection/mode true
+              :selection/blocks blocks
+              :selection/direction direction)))))
 
 (defn into-selection-mode!
   []
@@ -1229,12 +1235,12 @@ Similar to re-frame subscriptions"
   []
   (when (util/electron?)
     (js/window.apis.setUpdatesCallback
-      (fn [_ args]
-        (let [data (bean/->clj args)
-              pending? (not= (:type data) "completed")]
-          (set-state! :electron/updater-pending? pending?)
-          (when pending? (set-state! :electron/updater data))
-          nil)))))
+     (fn [_ args]
+       (let [data (bean/->clj args)
+             pending? (not= (:type data) "completed")]
+         (set-state! :electron/updater-pending? pending?)
+         (when pending? (set-state! :electron/updater data))
+         nil)))))
 
 (defn set-file-component!
   [component]
@@ -1315,13 +1321,13 @@ Similar to re-frame subscriptions"
            idx (and id (first (keep-indexed #(when (= (:modal/id %2) id) %1)
                                             modals)))
            input (medley/filter-vals
-                   #(not (nil? %1))
-                   {:modal/id            id
-                    :modal/label         (or label (if center? "ls-modal-align-center" ""))
-                    :modal/show?         (if (boolean? show?) show? true)
-                    :modal/panel-content panel-content
-                    :modal/close-btn?    close-btn?
-                    :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
+                  #(not (nil? %1))
+                  {:modal/id            id
+                   :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                   :modal/show?         (if (boolean? show?) show? true)
+                   :modal/panel-content panel-content
+                   :modal/close-btn?    close-btn?
+                   :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
               [:modal/subsets (or idx (count modals))]
               merge input)
@@ -1338,7 +1344,7 @@ Similar to re-frame subscriptions"
        (if (and id (not (string/blank? mid)) (= id mid))
          (close-modal!)
          (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                          (dec (count modals)))]
+                            (dec (count modals)))]
            (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
    (:modal/subsets @state)))
 
@@ -1404,7 +1410,7 @@ Similar to re-frame subscriptions"
 (defn toggle-left-sidebar!
   []
   (set-left-sidebar-open!
-    (not (get-left-sidebar-open?))))
+   (not (get-left-sidebar-open?))))
 
 (defn set-developer-mode!
   [value]
@@ -1489,7 +1495,7 @@ Similar to re-frame subscriptions"
   (when-let [resource (get-plugin-resource pid type key)]
     (let [resource (assoc resource (keyword attr) val)]
       (set-state!
-        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+       [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
       resource)))
 
 (defn get-plugin-services
@@ -1554,8 +1560,8 @@ Similar to re-frame subscriptions"
      (set-state!
       [:plugin/installed-hooks hook]
       (assoc
-        ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
-        pid opts)) true)))
+       ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
+       pid opts)) true)))
 
 (defn uninstall-plugin-hook
   [pid hook-or-all]
@@ -1809,36 +1815,36 @@ Similar to re-frame subscriptions"
          (util/scroll-to-element (gobj/get (first elements) "id")))
        (exit-editing-and-set-selected-blocks! elements))
      (when (and edit-input-id block
-               (or
-                (publishing-enable-editing?)
-                (not @publishing?)))
-      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-            container (util/get-block-container block-element)
-            block (if container
-                    (assoc block
-                           :block/container (gobj/get container "id"))
-                    block)
-            content (string/trim (or content ""))]
-        (swap! state
-               (fn [state]
-                 (-> state
-                     (assoc-in [:editor/content edit-input-id] content)
-                     (assoc
-                      :editor/block block
-                      :editor/editing? {edit-input-id true}
-                      :editor/last-key-code nil
-                      :editor/set-timestamp-block nil
-                      :cursor-range cursor-range))))
-        (when-let [input (gdom/getElement edit-input-id)]
-          (let [pos (count cursor-range)]
-            (when content
-              (util/set-change-value input content))
+                (or
+                 (publishing-enable-editing?)
+                 (not @publishing?)))
+       (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+             container (util/get-block-container block-element)
+             block (if container
+                     (assoc block
+                            :block/container (gobj/get container "id"))
+                     block)
+             content (string/trim (or content ""))]
+         (swap! state
+                (fn [state]
+                  (-> state
+                      (assoc-in [:editor/content edit-input-id] content)
+                      (assoc
+                       :editor/block block
+                       :editor/editing? {edit-input-id true}
+                       :editor/last-key-code nil
+                       :editor/set-timestamp-block nil
+                       :cursor-range cursor-range))))
+         (when-let [input (gdom/getElement edit-input-id)]
+           (let [pos (count cursor-range)]
+             (when content
+               (util/set-change-value input content))
 
-            (when move-cursor?
-              (cursor/move-cursor-to input pos))
+             (when move-cursor?
+               (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
-              (set-state! :mobile/show-action-bar? false)))))))))
+             (when (or (util/mobile?) (mobile-util/native-platform?))
+               (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn remove-watch-state [key]
   (remove-watch state key))
@@ -1869,10 +1875,10 @@ Similar to re-frame subscriptions"
   ([theme?] (get-enabled?-installed-plugins theme? true false false))
   ([theme? enabled? include-unpacked? include-all?]
    (filterv
-     #(and (if include-unpacked? true (:iir %))
-           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (= (boolean theme?) (:theme %))))
-     (vals (:plugin/installed-plugins @state)))))
+    #(and (if include-unpacked? true (:iir %))
+          (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
+          (or include-all? (= (boolean theme?) (:theme %))))
+    (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
   []
@@ -2024,7 +2030,7 @@ Similar to re-frame subscriptions"
   [m]
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
-                   (fn [old-value] (merge old-value m)))))
+                     (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
   (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
