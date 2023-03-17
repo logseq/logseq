@@ -143,15 +143,13 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
 
   // If there is an error notification from a previous test graph being deleted,
   // close it first so it doesn't cover up the UI
-  let locator = page.locator('.notification-close-button').first()
-  while (await locator?.isVisible()) {
-    try { // don't fail if unable to click (likely disappeared already)
-      await locator.click()
-    } catch (error) {}
-    await page.waitForTimeout(250)
-
-    expect(locator.isVisible()).resolves.toBe(false)
+  let n = await page.locator('.notification-close-button').count()
+  if (n > 1) {
+    await page.locator('button >> text="Clear all"').click()
+  } else if (n == 1) {
+    await page.locator('.notification-close-button').click()
   }
+  await expect(page.locator('.notification-close-button').first()).not.toBeVisible({ timeout: 2000 })
 
   console.log('Graph loaded for ' + path)
 }

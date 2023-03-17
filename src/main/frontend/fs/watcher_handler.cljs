@@ -158,7 +158,6 @@
                                     (remove nil?))]
             (db/transact! graph delete-tx-data {:delete-files? true})))
         (doseq [file-rpath files]
-          (prn ::init-watcher file-rpath)
           (when-let [_ext (util/get-file-ext file-rpath)]
             (->
              (p/let [content (fs/read-file repo-dir file-rpath)

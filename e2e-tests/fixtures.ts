@@ -121,12 +121,6 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
-    /*
-    const locator = page.locator('.notification-close-button').first()
-    while (await locator.isVisible()) {
-      locator.click() // ignore error
-    }
-    */
     await expect(page.locator('.notification-close-button')).not.toBeVisible()
 
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
@@ -297,7 +291,7 @@ export let traceAll = function(){
   test.beforeAll(async () => {
     await context.tracing.startChunk();
   })
-  
+
   test.afterAll(async () => {
     await context.tracing.stopChunk({ path: getTracingFilePath() });
   })

@@ -131,7 +131,6 @@
 (defn- get-files-and-reload-all-handles
   "Return list of file objects"
   [root-dir root-handle]
-  (prn ::get-files-and-reload-all-file-handles root-handle)
   (p/let [files (utils/getFiles root-handle
                                 true
                                 (fn [path entry]
@@ -214,7 +213,6 @@
                bak-filename (-> (path/relative-path repo-dir fpath)
                                 (string/replace "/" "_")
                                 (string/replace "\\" "_"))
-               _ (prn ::backup-file bak-filename)
                file-handle (.getFileHandle ^js bak-handle bak-filename #js {:create true})
                _ (utils/writeFile file-handle content)
 
@@ -232,7 +230,6 @@
     nil)
 
   (read-file [_this dir path _options]
-    (prn ::read-file dir path)
     (p/let [_ (when-not (string/includes? dir "/")
                 (await-get-nfs-file-handle (str "logseq_local_" dir) (str "handle/" dir)))
             fpath (path/path-join dir path)
@@ -244,7 +241,6 @@
 
   (write-file! [_this repo dir path content opts]
     ;; TODO: file backup handling
-    (prn ::write-file dir path)
     (let [fpath (path/path-join dir path)
           ext (util/get-file-ext path)
           file-handle-path (str "handle/" fpath)]
@@ -305,7 +301,6 @@
             _ (protocol/unlink! this repo old-path nil)]))
 
   (stat [_this fpath]
-    (prn ::stat fpath)
     (if-let [handle (get-nfs-file-handle (str "handle/" fpath))]
       (p/let [_ (verify-handle-permission handle true)
               file (.getFile handle)]
