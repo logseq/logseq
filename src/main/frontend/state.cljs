@@ -957,10 +957,8 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [first-selected-block-id (.getAttribute (first blocks) "blockid")
-           first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
-           page-id (get-in first-selected-block [:block/page :db/id])
-           blocks (filter #(= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (.getAttribute % "blockid")) [:block/page :db/id])) blocks)
+     (let [container (util/get-block-container (first blocks))
+           blocks (filter #(= container (util/get-block-container %)) blocks)
            blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
              :selection/mode true
