@@ -263,7 +263,7 @@
   [repo-url {:keys [file-objs new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
-  (prn ::load---new-file-objs repo-url)
+  (prn ::load-new-repo repo-url :empty-graph? empty-graph? :new-graph? new-graph?)
   (state/set-parsing-state! {:graph-loading? true})
   (let [repo-dir (config/get-local-dir repo-url)
         _ (prn ::repo-dir repo-dir)
