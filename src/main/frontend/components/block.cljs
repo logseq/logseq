@@ -1611,7 +1611,7 @@
 
          ["Cookie" ["Percent" n]]
          [:span {:class "cookie-percent"}
-          (util/format "[d%%]" n)]
+          (util/format "[%d%%]" n)]
          ["Cookie" ["Absolute" current total]]
          [:span {:class "cookie-absolute"}
           (util/format "[%d/%d]" current total)]
