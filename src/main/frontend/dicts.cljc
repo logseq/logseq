@@ -1459,7 +1459,7 @@
            :settings-page/preferred-file-format "首选文件格式"
            :settings-page/preferred-workflow "首选工作流"
            :settings-page/preferred-pasting-file "保存链接为文件"
-           :settings-page/auto-expand-block-refs "聚焦 block 自动展开引用"
+           :settings-page/auto-expand-block-refs "自动展开聚焦 block 的引用"
            :settings-page/enable-timetracking "开启 timetracking"
            :settings-page/enable-tooltip "开启提示框"
            :settings-page/enable-journals "开启日记"
