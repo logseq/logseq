@@ -395,6 +395,7 @@
     (local-db? repo-url)
     (string/replace-first repo-url local-db-prefix "")
 
+    ;; unit test
     (= repo-url "test-db")
     "/test-db"
 

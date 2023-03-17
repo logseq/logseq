@@ -104,7 +104,7 @@
           (and (= "change" type)
                (= dir (global-config-handler/global-config-dir)))
           (when (= path "config.edn")
-            (global-config-handler/set-global-config-state! content))
+            (file-handler/alter-global-file path content))
 
           (and (= "change" type)
                (not exists-in-db?))
