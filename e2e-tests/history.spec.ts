@@ -1,15 +1,14 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createPage, modKey, searchAndJumpToPage } from './utils'
+import { createRandomPage, modKey, searchAndJumpToPage } from './utils'
 
 test('undo/redo stack should be different for each page', async ({ page, block }) => {
-  const page1 = "Page 1"
-  await createPage(page, page1)
+  const page1 = await createRandomPage(page)
 
   await block.mustType('text 1')
   await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
 
-  await createPage(page, "Page 2")
+  const page2 = await createRandomPage(page)
 
   await page.keyboard.press(modKey + '+z')
   await page.waitForTimeout(100)
@@ -18,4 +17,40 @@ test('undo/redo stack should be different for each page', async ({ page, block }
   await page.waitForTimeout(500)
 
   await expect(page.locator('text="text 1"')).toHaveCount(1)
+})
+
+test('undo/redo of a page should be not be allowed on block context', async ({ page, block }) => {
+  const page1 = await createRandomPage(page)
+
+  await block.mustType('text 1')
+  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
+
+  await page.locator('span.bullet-container >> nth=0').click()
+  await page.waitForTimeout(200)
+
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+
+  await searchAndJumpToPage(page, page1)
+  await page.waitForTimeout(500)
+
+  await expect(page.locator('text="text 1"')).toHaveCount(1)
+})
+
+test('undo/redo of a block should allowed on page context', async ({ page, block }) => {
+  const page1 = await createRandomPage(page)
+
+  await page.locator('span.bullet-container >> nth=0').click()
+  await page.waitForTimeout(200)
+
+  await block.mustType('text 1')
+  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
+
+  await searchAndJumpToPage(page, page1)
+  await page.waitForTimeout(500)
+
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('text="text 1"')).toHaveCount(0)
 })
