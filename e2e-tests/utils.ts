@@ -8,6 +8,7 @@ import * as pathlib from 'path'
 // Criteria: If the same selector is shared in multiple functions, they should be in the same file
 export * from './util/basic'
 export * from './util/search-modal'
+export * from './util/page'
 
 /**
 * Locate the last block in the inner editor
@@ -161,11 +162,6 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   console.log('Graph loaded for ' + path)
 }
 
-export async function activateNewPage(page: Page) {
-  await page.click('.ls-block >> nth=0')
-  await page.waitForTimeout(500)
-}
-
 export async function editFirstBlock(page: Page) {
   await page.click('.ls-block .block-content >> nth=0')
 }
@@ -173,8 +169,8 @@ export async function editFirstBlock(page: Page) {
 /**
  * Wait for a console message with a given prefix to appear, and return the full text of the message
  * Or reject after a timeout
- * 
- * @param page 
+ *
+ * @param page
  * @param prefix - the prefix to look for
  * @param timeout - the timeout in ms
  * @returns the full text of the console message
