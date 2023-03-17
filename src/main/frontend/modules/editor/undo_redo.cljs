@@ -117,6 +117,14 @@
   (when-let [redo-stack (get-redo-stack page)]
     (reset! redo-stack [])))
 
+(defn reset-history
+  [page]
+  (when page
+    (let [repo (state/get-current-repo)]
+      (assert (string? repo) "Repo should satisfy string?")
+      (swap! undo-redo-states assoc-in [repo page] {:undo-stack (atom [])
+                                                    :redo-stack (atom [])}))))
+
 (defn get-txs
   [redo? txs]
   (let [txs (if redo? txs (reverse txs))]

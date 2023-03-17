@@ -34,6 +34,7 @@
             [frontend.util.page :as page-util]
             [frontend.util.property :as property]
             [frontend.util.url :as url-util]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -376,6 +377,8 @@
             (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])))
 
         (unfavorite-page! page-name)
+
+        (undo-redo/reset-history (:db/id page))
 
         (when (fn? ok-handler) (ok-handler))
         (ui-handler/re-render-root!)))))
