@@ -168,7 +168,7 @@
               files (mapv (fn [entry]
                             (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
-          {:path dir :files files})))))
+          {:path path :files files})))))
 
 (defn get-files
   "List all files in the directory, recursively.
