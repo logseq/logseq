@@ -71,7 +71,9 @@
     (or (not (and prev-container container)) ; not enough info to block
         (db-model/page? container) ; always allow on pages
         (= prev-container container) ; allow same context
-        (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']")))))
+        (try (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']"))
+             (catch :default _
+               false)))))
 
 (defn- should-undo?
   []
