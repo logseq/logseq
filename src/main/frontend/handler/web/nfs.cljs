@@ -95,8 +95,7 @@
          mobile-native? (mobile-util/native-platform?)
          nfs? (and (not electron?)
                    (not mobile-native?))
-         *repo (atom nil)
-         dir (or dir nil)]
+         *repo (atom nil)]
      ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
       (p/let [_ (prn :xxx-dir-result-fn dir-result-fn)

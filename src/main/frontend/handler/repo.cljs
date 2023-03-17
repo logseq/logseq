@@ -119,13 +119,13 @@
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
-            _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
-            _ (repo-config-handler/create-config-file-if-not-exists repo-url)
-            _ (create-contents-file repo-url)
-            _ (create-custom-theme repo-url)]
-      (state/pub-event! [:page/create-today-journal repo-url]))))
+    (p/do! (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
+           (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name config/recycle-dir))
+           (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
+           (repo-config-handler/create-config-file-if-not-exists repo-url)
+           (create-contents-file repo-url)
+           (create-custom-theme repo-url)
+           (state/pub-event! [:page/create-today-journal repo-url]))))
 
 (defonce *file-tx (atom nil))
 
@@ -276,10 +276,11 @@
         _ (state/set-config! repo-url config)
         ;; remove :hidden files from file-objs, :hidden
         file-objs (common-handler/remove-hidden-files file-objs config :file/path)]
-    (if (seq file-objs)
-      (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
-                                                       :empty-graph? empty-graph?})
-      (state/set-parsing-state! {:graph-loading? false}))))
+
+    ;; Load to db even it's empty, (will create default files)
+    (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
+                                                     :empty-graph? empty-graph?})
+    (state/set-parsing-state! {:graph-loading? false})))
 
 
 
