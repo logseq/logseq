@@ -89,8 +89,8 @@
     nil))
 
 (defn- detect-deprecations
-  [repo path content]
-  (when (or (= path (config/get-repo-config-path repo))
+  [path content]
+  (when (or (= path "logseq/config.edn")
             (and
              (config/global-config-enabled?)
              (= (path/dirname path) (global-config-handler/global-config-dir))))
@@ -123,12 +123,26 @@
 (defn alter-global-file
   "Write global file, e.g. global config"
   [path content]
-  (p/let [_ (fs/write-file! "" nil path content {:skip-compare? true})]
-    (cond
-      (and (config/global-config-enabled?)
-           (= path (global-config-handler/global-config-path)))
-      (p/let [_ (global-config-handler/restore-global-config!)]
-        (state/pub-event! [:shortcut/refresh])))))
+  (-> (p/let [repo (state/get-current-repo)
+              _ (fs/write-file! "" nil path content {:skip-compare? true})]
+        (cond
+          (and (config/global-config-enabled?)
+               (= path (global-config-handler/global-config-path)))
+          (p/do! (detect-deprecations path content)
+                 (global-config-handler/restore-global-config!)
+                 (validate-file repo path content)
+                 (state/pub-event! [:shortcut/refresh]))
+          ;; Add future global file handler here
+          ))
+      (p/catch (fn [error]
+                 (state/pub-event! [:notification/show
+                                    {:content (str "Failed to write to file " path ", error: " error)
+                                     :status :error}])
+                 (println "Write file failed, path: " path ", content: " content)
+                 (log/error :write/failed error)
+                 (state/pub-event! [:capture-error
+                                    {:error error
+                                     :payload {:type :write-file/failed-for-alter-file}}])))))
 
 (defn alter-file
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
@@ -141,7 +155,7 @@
   (let [path (gp-util/path-normalize path)
         config-file? (= path "logseq/config.edn")
         _ (when config-file?
-            (detect-deprecations repo path content))
+            (detect-deprecations path content))
         config-valid? (and config-file? (validate-file repo path content))]
     (when (or config-valid? (not config-file?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
@@ -170,12 +184,6 @@
 
                 (= path "logseq/config.edn")
                 (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-                  (state/pub-event! [:shortcut/refresh]))
-
-                ;; FIXME: global config
-                (and (config/global-config-enabled?)
-                     (= path (global-config-handler/global-config-path)))
-                (p/let [_ (global-config-handler/restore-global-config!)]
                   (state/pub-event! [:shortcut/refresh]))))
             (p/catch
              (fn [error]
