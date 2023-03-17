@@ -58,7 +58,6 @@
       (let [fpath (path/url-to-path dir)]
         (-> (<readdir fpath)
             (p/then (fn [rpaths]
-                      (prn ::debug rpaths)
                       (mapv #(path/path-join "memory://" %) rpaths)))
             (p/catch (fn [error]
                        (println "(memory-fs)Readdir error: " error)

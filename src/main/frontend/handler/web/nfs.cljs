@@ -98,12 +98,10 @@
          *repo (atom nil)]
      ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
-      (p/let [_ (prn :xxx-dir-result-fn dir-result-fn)
-              result (if (fn? dir-result-fn)
+      (p/let [result (if (fn? dir-result-fn)
                        (dir-result-fn {:nfs? nfs?})
                        (fs/open-dir dir))
               _ (when (fn? on-open-dir)
-                  (prn ::calling-on-open-dir-fn)
                   (on-open-dir result))
               root-dir (:path result)
               ;; calling when root picked
@@ -116,9 +114,8 @@
         (when-not (string/blank? root-dir)
           (p/let [files (:files result)
                   files (-> (->db-files files nfs?)
-                            ;; NOTE: filter, in case backend does not handle this
+                            ;; filter again, in case fs backend does not handle this
                             (remove-ignore-files root-dir nfs?))
-                  _ (prn ::remain-files files)
                   markup-files (filter-markup-and-built-in-files files)]
             (-> files
                 (p/then (fn [result]
@@ -155,7 +152,6 @@
                    (throw error))))
       (p/finally
         (fn []
-          (prn ::set-loading-files false)
           (state/set-loading-files! @*repo false)))))))
 
 (defn ls-dir-files-with-path!

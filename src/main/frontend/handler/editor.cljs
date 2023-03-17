@@ -1388,7 +1388,6 @@
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
           _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
-    (prn ::ensure-assets-dir repo-dir assets-dir)
     [repo-dir assets-dir]))
 
 (defn get-asset-path
@@ -1505,7 +1504,7 @@
                             (config/get-repo-fpath
                              repo
                              (path/resolve-relative-path block-file-rpath href)))]
-          (prn ::deleting href asset-fpath)
+          (prn ::deleting-asset href asset-fpath)
           (fs/unlink! repo asset-fpath nil))))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
