@@ -211,7 +211,9 @@
 
 (defmethod handle :getFiles [_window [_ path]]
   (logger/debug ::get-files {:path path})
-  (get-files path))
+  (p/let [files (get-files path)]
+    (bean/->js {:path path
+                :files files})))
 
 (defn- sanitize-graph-name
   [graph-name]

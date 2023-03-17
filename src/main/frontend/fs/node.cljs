@@ -71,9 +71,11 @@
   [dir]
   (p/let [dir-path (or dir (util/mocked-open-dir-path))
           result (if dir-path
-                   (ipc/ipc "getFiles" dir-path)
-                   (ipc/ipc "openDir" {}))]
-    (prn ::open-dir result)
+                   (do
+                     (println "NOTE: Using mocked dir" dir-path)
+                     (ipc/ipc "getFiles" dir-path))
+                   (ipc/ipc "openDir" {}))
+          result (bean/->clj result)]
     result))
 
 (defrecord Node []
@@ -111,8 +113,7 @@
     (-> (ipc/ipc "stat" fpath)
         (p/then bean/->clj)))
   (open-dir [_this dir]
-    (p/then (open-dir dir)
-            bean/->clj))
+    (open-dir dir))
   (get-files [_this dir]
     (-> (ipc/ipc "getFiles" dir)
         (p/then bean/->clj)))
