@@ -4,6 +4,7 @@
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
             [frontend.util.page :as page-util]
+            [frontend.db.model :as db-model]
             [clojure.set :as set]))
 
 ;;;; APIs
@@ -24,8 +25,10 @@
           new-state)))))
 
 (defn- get-undo-stack
-  [page]
-  (-> (get-state page) :undo-stack))
+  ([]
+   (get-undo-stack (page-util/get-editing-page-id)))
+  ([page]
+   (-> (get-state page) :undo-stack)))
 
 (defn- get-redo-stack
   ([]
@@ -63,28 +66,30 @@
   "Checks if the current container is the same or includes the previous container"
   [txs]
   (let [prev-container (:container (:editor-cursor (:tx-meta txs)))
-        container (:container (state/get-current-edit-block-and-position))]
-    (or (not (and prev-container container))
-        (= prev-container container)
+        container (:container (state/get-current-edit-block-and-position))
+        container (or container (page-util/get-current-page-name))]
+    (or (not (and prev-container container)) ; not enogh info to block
+        (db-model/page? container) ; always allow on pages
+        (= prev-container container) ; allow same context
         (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']")))))
 
 (defn- should-undo?
   []
-  (let [undo-stack (get-undo-stack (page-util/get-editing-page-id))]
+  (when-let [undo-stack (get-undo-stack)]
     (when-let [stack @undo-stack]
       (when (seq stack)
         (valid-context? (peek stack))))))
 
 (defn- should-redo?
   []
-  (let [redo-stack (get-redo-stack)]
+  (when-let [redo-stack (get-redo-stack)]
     (when-let [stack @redo-stack]
         (when (seq stack)
           (valid-context? (peek stack))))))
 
 (defn pop-undo
   []
-  (let [undo-stack (get-undo-stack (page-util/get-editing-page-id))]
+  (when-let [undo-stack (get-undo-stack)]
     (when-let [stack @undo-stack]
       (when (seq stack)
         (let [removed-e (peek stack)
@@ -95,19 +100,19 @@
 
 (defn push-redo
   [txs]
-  (let [redo-stack (get-redo-stack)]
+  (when-let [redo-stack (get-redo-stack)]
     (swap! redo-stack conj txs)))
 
 (defn pop-redo
   []
-  (let [redo-stack (get-redo-stack)]
+  (when-let [redo-stack (get-redo-stack)]
     (when-let [removed-e (peek @redo-stack)]
       (swap! redo-stack pop)
       removed-e)))
 
 (defn reset-redo
   [page]
-  (let [redo-stack (get-redo-stack page)]
+  (when-let [redo-stack (get-redo-stack page)]
     (reset! redo-stack [])))
 
 (defn get-txs
