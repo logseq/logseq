@@ -133,7 +133,6 @@
   "Accept: .md, .org, .edn, .css"
   [repo-url file {:keys [new-graph? verbose skip-db-transact? extracted-block-ids]
                   :or {skip-db-transact? true}}]
-  ;; (prn ::parse-and-load-file file)
   (try
     (reset! *file-tx
             (file-handler/alter-file repo-url
@@ -265,9 +264,7 @@
   (route-handler/redirect-to-home!)
   (prn ::load-new-repo repo-url :empty-graph? empty-graph? :new-graph? new-graph?)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [repo-dir (config/get-local-dir repo-url)
-        _ (prn ::repo-dir repo-dir)
-        config (or (when-let [content (some-> (first (filter #(= "logseq/config.edn" (:file/path %)) file-objs))
+  (let [config (or (when-let [content (some-> (first (filter #(= "logseq/config.edn" (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))

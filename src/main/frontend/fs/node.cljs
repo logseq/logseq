@@ -25,7 +25,6 @@
       (p/catch
        (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
          (when ok-handler
-           (prn ::fuck :why-are-you-using-ok-handler)
            (ok-handler repo rpath result)))
        (fn [error]
          (if error-handler

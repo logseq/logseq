@@ -181,7 +181,6 @@
       (if (seq result) ;; electron, mobile, nfs
         (let [files result
               files (mapv (fn [entry]
-                            ;; (prn ::xx entry)
                             (assoc entry :path (path/relative-path dir (:path entry))))
                           files)]
           {:path dir :files files})
@@ -237,7 +236,6 @@
   (p/let [repo-dir (config/get-repo-dir (state/get-current-repo))
           rpath (path/relative-path repo-dir href)
           exist? (file-exists? repo-dir rpath)]
-    (prn ::href-exists href exist?)
     exist?))
 
 (defn asset-path-normalize

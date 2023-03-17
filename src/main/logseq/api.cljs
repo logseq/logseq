@@ -326,7 +326,6 @@
   (fn []
     (p/let [repo ""
             path (plugin-handler/get-ls-dotdir-root)
-            _ (prn ::dotdir path)
             path (util/node-path.join path "preferences.json")
             _    (fs/create-if-not-exists repo nil path)
             json (fs/read-file nil path)

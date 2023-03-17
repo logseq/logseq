@@ -338,8 +338,7 @@
     (let [dir (path/path-normalize dir)]
       (get-file-paths dir)))
   (unlink! [this repo fpath _opts]
-    (p/let [_ (prn ::unlink fpath)
-            repo-dir (config/get-local-dir repo)
+    (p/let [repo-dir (config/get-local-dir repo)
             recycle-dir (path/path-join repo-dir config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
             file-name (-> (path/trim-dir-prefix repo-dir fpath)
@@ -351,14 +350,12 @@
     ;; Too dangerous!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (prn ::read-file dir path)
     (let [fpath (path/path-join dir path)]
       (->
        (<read-file-with-utf8 fpath)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
   (write-file! [_this repo dir path content opts]
-    (prn ::write-file dir path)
     (let [fpath (path/path-join dir path)]
       (p/let [stat (p/catch
                     (.stat Filesystem (clj->js {:path fpath}))

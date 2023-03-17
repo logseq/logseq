@@ -173,8 +173,6 @@
             (string/replace #"/" url-encode)
             (string/replace "*" "%2A"))))
 
-
-
 ;; Register sanitization / parsing fns in:
 ;; logseq.graph-parser.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
@@ -188,7 +186,6 @@
        :triple-lowbar (tri-lb-file-name-sanity title)
        ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this or show up in config, as it's not handled.
        :legacy-dot    (legacy-dot-file-name-sanity title)
-      ;;  :v3            ()
        (legacy-url-file-name-sanity title)))))
 
 (defn create-title-property?
