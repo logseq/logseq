@@ -34,7 +34,7 @@
  ;; Enable showing the body of blocks when referencing them.
  :ui/show-full-blocks? false
 
- ;; Enable automatically expanding the block references when focusing into block.
+ ;; Expand block references automatically when zoom-in
  :ui/auto-expand-block-refs? true
 
  ;; Enable Block timestamp
