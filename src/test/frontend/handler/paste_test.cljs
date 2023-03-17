@@ -85,20 +85,22 @@
         reset
         [utils/getClipText (fn [cb] (cb clipboard))
          state/get-input (constantly #js {:value "block"})
+         commands/delete-selection! (constantly nil)
          editor-handler/insert (fn [text _] (p/resolved text))]
-        (p/let [result ((paste-handler/editor-on-paste! nil true))]
+        (p/let [result (paste-handler/editor-on-paste-raw!)]
                (is (= expected-paste result))
                (reset))))))
 
-(deftest-async ^:focus editor-on-paste-raw-with-multi-line
+(deftest-async editor-on-paste-raw-with-multi-line
   (let [clipboard "a\n\na"
         expected-paste "a\n\na"]
     (test-helper/with-reset
       reset
       [utils/getClipText (fn [cb] (cb clipboard))
        state/get-input (constantly #js {:value "block"})
+       commands/delete-selection! (constantly nil)
        editor-handler/insert (fn [text _] (p/resolved text))]
-      (p/let [result ((paste-handler/editor-on-paste! nil true))]
+      (p/let [result (paste-handler/editor-on-paste-raw!)]
              (is (= expected-paste result))
              (reset)))))
 
