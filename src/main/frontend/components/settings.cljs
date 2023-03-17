@@ -654,7 +654,7 @@
      (outdenting-row t logical-outdenting?)
      (showing-full-blocks t show-full-blocks?)
      (preferred-pasting-file t preferred-pasting-file?)
-     (auto-expand-block-refs t auto-expand-block-refs?)
+     (auto-expand-row t auto-expand-block-refs?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
