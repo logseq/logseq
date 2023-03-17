@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.util.page :as page-util]
             [frontend.db.model :as db-model]
+            [frontend.handler.notification :as notification]
             [clojure.set :as set]))
 
 ;;;; APIs
@@ -36,15 +37,33 @@
   ([page]
    (-> (get-state page) :redo-stack)))
 
-(defn- get-updated-pages
+(defn reset-history
+  [page]
+  (when page
+    (let [repo (state/get-current-repo)]
+      (assert (string? repo) "Repo should satisfy string?")
+      (swap! undo-redo-states assoc-in [repo page] {:undo-stack (atom [])
+                                                    :redo-stack (atom [])}))))
+
+(defn- get-updated-page
   [txs]
-  (let [pages (reduce (fn [col unit] (conj col (:db/id (:block/page unit)))) #{} (:blocks txs))]
-    (remove nil? (conj pages (:from-page (:tx-meta txs))))))
+  (let [pages (reduce (fn [col unit]
+                        (if-let [page-id (:db/id (:block/page unit))]
+                          (conj col page-id)
+                          col)) #{} (:blocks txs))]
+    (if (empty? (rest pages)) ; Multi-page actions are not history safe
+      (first pages)
+      (do (mapv reset-history pages)
+          (notification/show! "Multi-page actions cannot be undone" :warning false)
+          (state/pub-event! [:capture-error {:error "Multi-page action triggered"
+                                             :payload {:type :outliner/invalid-action
+                                                       :data (mapv #(dissoc % :block/content) (:blocks txs))}}])
+          nil))))
 
 (defn push-undo
   [txs]
-  (mapv #(when-let [undo-stack (get-undo-stack %)]
-           (swap! undo-stack conj txs)) (get-updated-pages txs)))
+  (when-let [undo-stack (get-undo-stack (get-updated-page txs))]
+    (swap! undo-stack conj txs)))
 
 (comment
   (defn get-content-from-txs
@@ -70,8 +89,8 @@
         container (or container (page-util/get-current-page-name))]
     (or (not (and prev-container container)) ; not enough info to block
         (db-model/page? container) ; always allow on pages
-        (= prev-container container) ; allow same context
-        (try (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']"))
+        (= prev-container container) ; allow on same context
+        (try (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']")) ; allow on nested context
              (catch :default _
                false)))))
 
@@ -86,8 +105,8 @@
   []
   (when-let [redo-stack (get-redo-stack)]
     (when-let [stack @redo-stack]
-        (when (seq stack)
-          (valid-context? (peek stack))))))
+      (when (seq stack)
+        (valid-context? (peek stack))))))
 
 (defn pop-undo
   []
@@ -116,14 +135,6 @@
   [page]
   (when-let [redo-stack (get-redo-stack page)]
     (reset! redo-stack [])))
-
-(defn reset-history
-  [page]
-  (when page
-    (let [repo (state/get-current-repo)]
-      (assert (string? repo) "Repo should satisfy string?")
-      (swap! undo-redo-states assoc-in [repo page] {:undo-stack (atom [])
-                                                    :redo-stack (atom [])}))))
 
 (defn get-txs
   [redo? txs]
@@ -167,7 +178,7 @@
 
 (defn redo
   []
-  (when (should-redo?) 
+  (when (should-redo?)
     (when-let [{:keys [txs tx-meta] :as e} (pop-redo)]
       (let [new-txs (get-txs true txs)]
         (push-undo e)
@@ -198,15 +209,13 @@
     (if (:replace? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
-        (doall
-         (map reset-redo (get-updated-pages entity))
-         (push-undo entity)))
+        (doall (reset-redo (get-updated-page entity))
+               (push-undo entity)))
       (let [updated-blocks (db-report/get-blocks tx-report)
             entity {:blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
-        (doall
-         (map reset-redo (get-updated-pages entity))
-         (push-undo entity))))))
+        (doall (reset-redo (get-updated-page entity))
+               (push-undo entity))))))
