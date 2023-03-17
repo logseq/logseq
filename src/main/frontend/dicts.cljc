@@ -175,7 +175,7 @@
         :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
         :settings-page/preferred-outdenting "Logical outdenting"
         :settings-page/show-full-blocks "Show all lines of a block reference"
-        :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in."
+        :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in"
         :settings-page/custom-date-format "Preferred date format"
         :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
         :settings-page/preferred-file-format "Preferred file format"
