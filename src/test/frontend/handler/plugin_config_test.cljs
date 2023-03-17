@@ -73,7 +73,9 @@
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Malformed plugins.edn")
             "User sees correct notification"))
-       (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(do
+                     (reset)
+                     (delete-global-config-dir dir)))))))
 
 (deftest-async open-replace-plugins-modal-invalid-edn
   (let [dir (create-global-config-dir)
@@ -89,7 +91,9 @@
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Invalid plugins.edn")
             "User sees correct notification"))
-       (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(do
+                     (reset)
+                     (delete-global-config-dir dir)))))))
 
 (defn- installed-plugins->edn-plugins
   "Converts installed plugins state to edn.plugins format"
