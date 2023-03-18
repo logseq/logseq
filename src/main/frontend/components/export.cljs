@@ -120,9 +120,8 @@
               [:label.mr-4
                {:style {:visibility (if (= :text tp) "visible" "hidden")}}
                "Indentation style:"]
-              [:select.block.my-2.text-lg.rounded.border
-               {:style     {:padding "0 0 0 12px"
-                            :visibility (if (= :text tp) "visible" "hidden")}
+              [:select.block.my-2.text-lg.rounded.border.py-0.px-1
+               {:style     {:visibility (if (= :text tp) "visible" "hidden")}
                 :on-change (fn [e]
                              (let [value (util/evalue e)]
                                (state/set-export-block-text-indent-style! value)
@@ -136,8 +135,8 @@
                             (assoc :selected selected))
                   label])]]
         [:div.flex.items-center
-         (ui/checkbox {:style {:margin-right 6
-                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+         (ui/checkbox {:class "mr-2"
+                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
                        :checked (contains? @*text-remove-options :page-ref)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :page-ref)
@@ -146,9 +145,8 @@
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "[[text]] -> text"]
 
-         (ui/checkbox {:style {:margin-right 6
-                               :margin-left "1em"
-                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+         (ui/checkbox {:class "mr-2 ml-4"
+                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
                        :checked (contains? @*text-remove-options :emphasis)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :emphasis)
@@ -158,9 +156,8 @@
          [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "remove emphasis"]
 
-         (ui/checkbox {:style {:margin-right 6
-                               :margin-left "1em"
-                               :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+         (ui/checkbox {:class "mr-2 ml-4"
+                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
                        :checked (contains? @*text-remove-options :tag)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :tag)
@@ -171,8 +168,8 @@
           "remove #tags"]]
 
         [:div.flex.items-center
-         (ui/checkbox {:style {:margin-right 6
-                               :visibility (if (#{:text} tp) "visible" "hidden")}
+         (ui/checkbox {:class "mr-2"
+                       :style {:visibility (if (#{:text} tp) "visible" "hidden")}
                        :checked (boolean (:newline-after-block @*text-other-options))
                        :on-change (fn [e]
                                     (state/update-export-block-text-other-options!
@@ -182,9 +179,8 @@
          [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
           "newline after block"]
 
-         (ui/checkbox {:style {:margin-right 6
-                               :margin-left "1em"
-                               :visibility (if (#{:text} tp) "visible" "hidden")}
+         (ui/checkbox {:class "mr-2 ml-4"
+                       :style {:visibility (if (#{:text} tp) "visible" "hidden")}
                        :checked (contains? @*text-remove-options :property)
                        :on-change (fn [e]
                                     (state/update-export-block-text-remove-options! e :property)
@@ -196,9 +192,8 @@
         [:div.flex.items-center
          [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
           "level <="]
-         [:select.block.my-2.text-lg.rounded.border
-          {:style {:padding "0 0 0 12px"
-                   :visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+         [:select.block.my-2.text-lg.rounded.border.px-2.py-0
+          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
            :value (or (:keep-only-level<=N @*text-other-options) :all)
            :on-change (fn [e]
                         (let [value (util/evalue e)
