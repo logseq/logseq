@@ -1,17 +1,17 @@
 (ns frontend.handler.export.html
   "export blocks/pages as html"
-  (:require
-   [clojure.edn :as edn]
-   [clojure.string :as string]
-   [clojure.zip :as z]
-   [frontend.db :as db]
-   [frontend.handler.export.common :as common :refer [*state*]]
-   [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [concatv mapcatv removev]]
-   [hiccups.runtime :as h]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [malli.core :as m]))
+  (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [clojure.zip :as z]
+            [frontend.db :as db]
+            [frontend.handler.export.common :as common :refer [*state*]]
+            [frontend.handler.export.zip-helper :refer [get-level goto-last
+                                                        goto-level]]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [hiccups.runtime :as h]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [malli.core :as m]))
 
 (def ^:private hiccup-malli-schema
   [:cat :keyword [:* :any]])
@@ -371,15 +371,21 @@
 ;;; export fns
 (defn- export-helper
   [content format options]
-  (let [remove-options (set (:remove-options options))]
+  (let [remove-options (set (:remove-options options))
+        other-options (:other-options options)]
     (binding [*state* (merge *state*
                              {:export-options
                               {:remove-emphasis? (contains? remove-options :emphasis)
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
-                               :remove-tags? (contains? remove-options :tag)}})]
+                               :remove-tags? (contains? remove-options :tag)
+                               :keep-only-level<=N (:keep-only-level<=N other-options)}})]
       (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
             ast (removev common/Properties-block-ast? ast)
+            keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
+            ast (if (pos? keep-level<=n)
+                  (common/keep-only-level<=n ast keep-level<=n)
+                  ast)
             ast* (util/profile :replace-block&page-reference&embed (common/replace-block&page-reference&embed ast))
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (util/profile :replace-Heading-with-Paragraph (mapv common/replace-Heading-with-Paragraph ast*))
@@ -400,8 +406,7 @@
         (h/render-html hiccup)))))
 
 (defn export-blocks-as-html
-  "options:
-  :remove-options [:emphasis :page-ref :tag]"
+  "options: see also `export-blocks-as-markdown`"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
