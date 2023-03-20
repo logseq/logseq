@@ -69,17 +69,34 @@
      [:div.ml-2
       (block-cp repo idx block)]]))
 
+(rum/defc history-action-info
+  [[k v]]
+  (when v [:.ml-4 (ui/foldable
+                   [:div (str k)]
+                   [:.ml-4 (case k
+                             :blocks
+                             (mapv (fn [block]
+                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
+
+                             :txs
+                             (mapv (fn [[_ key val]]
+                                    (when val
+                                      [:pre.code.pre-wrap-white-space.bg-base-4
+                                       [:span.font-bold (str key) " "] (str val)])) v)
+
+                             (mapv (fn [[key val]]
+                                    (when val
+                                      [:pre.code.pre-wrap-white-space.bg-base-4
+                                       [:span.font-bold (str key) " "] (str val)])) v))]
+                   {:default-collapsed? true})]))
+
 (rum/defc history-stack
   [label stack]
   [:.ml-4 (ui/foldable
    [:div label " (" (count stack) ")"]
    (map-indexed (fn [index item] 
                   [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
-                                       (map (fn [[k v]]
-                                              (when v [:.ml-4 (ui/foldable
-                                                               [:div (str k)]
-                                                               [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]
-                                                               {:default-collapsed? true})])) item)
+                                       (map history-action-info item)
                                        {:default-collapsed? true})]) stack)
    {:default-collapsed? true})])
 
