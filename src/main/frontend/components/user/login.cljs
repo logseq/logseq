@@ -29,7 +29,7 @@
 
 (rum/defc user-pane
   [_sign-out! user]
-  (let [session (:signInUserSession user)
+  (let [session  (:signInUserSession user)
         username (:username user)]
 
     (rum/use-effect!
@@ -58,13 +58,14 @@
      {:ref *ref-el}
      (when ready?
        (LSAuthenticator
+         {:termsLink "https://blog.logseq.com/terms/"}
          (fn [^js op]
-           (let [sign-out! (.-signOut op)
+           (let [sign-out!      (.-signOut op)
                  ^js user-proxy (.-user op)
-                 ^js user (try (js/JSON.parse (js/JSON.stringify user-proxy))
-                               (catch js/Error e
-                                 (js/console.error "Error: Amplify user payload:" e)))
-                 user' (bean/->clj user)]
+                 ^js user       (try (js/JSON.parse (js/JSON.stringify user-proxy))
+                                     (catch js/Error e
+                                       (js/console.error "Error: Amplify user payload:" e)))
+                 user'          (bean/->clj user)]
              (user-pane sign-out! user')))))]))
 
 (defn open-login-modal!

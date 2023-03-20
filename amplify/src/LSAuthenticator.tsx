@@ -1,6 +1,6 @@
 import { Authenticator, CheckboxField, useAuthenticator } from '@aws-amplify/ui-react'
 
-export function LSAuthenticator({ children }: any) {
+export function LSAuthenticator({ termsLink, children }: any) {
   return (<div>
     <Authenticator
       formFields={{
@@ -29,7 +29,7 @@ export function LSAuthenticator({ children }: any) {
                   hasError={!!validationErrors.acknowledgement}
                   name="acknowledgement"
                   value="yes"
-                  label="I agree with the Terms & Conditions"
+                  label={(<a href={termsLink}>I agree with the Terms & Conditions</a>)}
                 />
               </>
             )
