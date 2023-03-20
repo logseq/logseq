@@ -17,7 +17,7 @@
     --amplify-components-button-hover-background-color: var(--ls-primary-background-color);
     --amplify-components-button-border-width: 0;
     --amplify-internal-button-loading-background-color: var(--ls-header-button-background);
-    --amplify-components-authenticator-router-border-width: 2px;
+    --amplify-components-authenticator-router-border-width: 1px;
     --amplify-components-button-color: var(--ls-primary-text-color);
     --amplify-components-divider-label-background-color: var(--ls-primary-background-color);
     --amplify-components-divider-label-color: var(--ls-primary-text-color);
@@ -26,9 +26,10 @@
     --amplify-components-button-link-active-background-color: transparent;
     --amplify-components-textfield-color: var(--ls-primary-text-color);
     --amplify-components-checkbox-icon-background-color: var(--color-indigo-600);
+  }
 
-    border-radius: 4px;
-    box-shadow: none;
+  [data-amplify-authenticator] [data-amplify-router] {
+    @apply overflow-hidden rounded-[6px] shadow-2xl;
   }
 }
 
@@ -86,6 +87,10 @@
   }
 
   .panel-content {
-    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw];
+    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] w-auto;
   }
+}
+
+.federated-sign-in-container {
+  display: none;
 }
