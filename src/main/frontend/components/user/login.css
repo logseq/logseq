@@ -31,6 +31,31 @@
   [data-amplify-authenticator] [data-amplify-router] {
     @apply overflow-hidden rounded-[6px] shadow-2xl;
   }
+
+  [data-amplify-authenticator] [data-amplify-container] {
+    place-self: unset;
+  }
+
+  [data-amplify-authenticator] [data-amplify-form] {
+    @apply px-4 py-2;
+
+    @screen sm {
+      @apply px-6 py-4;
+    }
+  }
+}
+
+.ui__modal[label=user-login] {
+  @apply flex items-center top-0;
+
+  .ui__modal-panel {
+    transition: transform .3s;
+    transform: translateY(-50px);
+  }
+
+  .panel-content {
+    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] w-auto;
+  }
 }
 
 .cp__user {
@@ -75,19 +100,20 @@
     .amplify-input {
       border-radius: 4px !important;
     }
+
+    .amplify-checkboxfield {
+      @apply text-sm;
+    }
   }
 }
 
-.ui__modal[label=user-login] {
-  display: flex;
-  align-items: center;
-
-  .ui__modal-panel {
-    top: -60px;
+html {
+  &.is-mobile .ui__modal[label=user-login] .panel-content {
+    @apply pt-0;
   }
 
-  .panel-content {
-    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] w-auto;
+  &.has-mobile-keyboard .ui__modal[label=user-login] {
+    transform: translateY(calc(-50px - 6%));
   }
 }
 
