@@ -395,11 +395,9 @@
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (when-let [^js/HTMLElement editor
-                          (js/document.querySelector ".editor-wrapper")]
-                 (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
-                   {:right 0}
-                   {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
+               (if (<= vw-max-width (+ left (if set-default-width? max-width 500)))
+                 {:right 0}
+                 {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)}))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :data-modal-name modal-name

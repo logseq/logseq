@@ -1,21 +1,19 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
-  (:require
-   [clojure.string :as string]
-   [frontend.db :as db]
-   [frontend.extensions.zip :as zip]
-   [frontend.handler.export.common :as common :refer
-    [*state*
-     simple-ast-malli-schema
-     raw-text space newline* indent simple-asts->string]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [mapcatv concatv removev]]
-   [goog.dom :as gdom]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [malli.core :as m]
-   [promesa.core :as p]))
-
+  (:require [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.extensions.zip :as zip]
+            [frontend.handler.export.common :as common :refer
+             [*state* indent newline* raw-text simple-ast-malli-schema
+              simple-asts->string space]]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [goog.dom :as gdom]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [malli.core :as m]
+            [promesa.core :as p]))
 
 ;;; block-ast, inline-ast -> simple-ast
 
@@ -41,10 +39,17 @@
         size* (and size [space (raw-text (reduce str (repeat size "#")))])
         marker* (and marker (raw-text marker))]
     (set! *state* (assoc *state* :current-level level))
-    (removev nil? (concatv heading* size*
-                           [space marker* space priority* space]
-                           (mapcatv inline-ast->simple-ast title)
-                           [(newline* 1)]))))
+    (let [simple-asts
+          (removev nil? (concatv
+                         (when (and (get-in *state* [:export-options :newline-after-block])
+                                    (not (get-in *state* [:newline-after-block :current-block-is-first-heading-block?])))
+                           [(newline* 2)])
+                         heading* size*
+                         [space marker* space priority* space]
+                         (mapcatv inline-ast->simple-ast title)
+                         [(newline* 1)]))]
+      (set! *state* (assoc-in *state* [:newline-after-block :current-block-is-first-heading-block?] false))
+      simple-asts)))
 
 (declare block-list)
 (defn- block-list-item
@@ -77,6 +82,16 @@
                         (not in-list?))
                [(newline* 2)]))))
 
+(defn- block-property-drawer
+  [properties]
+  (when-not (get-in *state* [:export-options :remove-properties?])
+    (let [level (dec (get *state* :current-level 1))
+          indent (indent-with-2-spaces level)]
+      (reduce
+       (fn [r [k v]]
+         (conj r indent (raw-text k "::") space (raw-text v) (newline* 1)))
+       [] properties))))
+
 (defn- block-example
   [l]
   (let [level (dec (get *state* :current-level 1))]
@@ -93,7 +108,7 @@
   (let [level (dec (get *state* :current-level 1))]
     (concatv
      [(indent-with-2-spaces level) (raw-text "```")]
-     (when language [space (raw-text language)])
+     (when language [(raw-text language)])
      [(newline* 1)]
      (mapv raw-text lines)
      [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
@@ -306,55 +321,62 @@
          (indent-with-2-spaces (dec current-level)))))])
 
 ;; {:malli/schema ...} only works on public vars, so use m/=> here
-(m/=> block-ast->simple-ast [:=> [:cat [:sequential :any]] [:sequential simple-ast-malli-schema]])
+(m/=> block-ast->simple-ast [:=> [:cat mldoc-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
 (defn- block-ast->simple-ast
   [block]
-  (removev
-   nil?
-   (let [[ast-type ast-content] block]
-     (case ast-type
-       "Paragraph"
-       (concatv (mapcatv inline-ast->simple-ast ast-content) [(newline* 1)])
-       "Paragraph_line"
-       (assert false "Paragraph_line is mldoc internal ast")
-       "Paragraph_Sep"
-       [(newline* ast-content)]
-       "Heading"
-       (block-heading ast-content)
-       "List"
-       (block-list ast-content)
-       ("Directive" "Results" "Property_Drawer" "Export" "CommentBlock" "Custom")
-       nil
-       "Example"
-       (block-example ast-content)
-       "Src"
-       (block-src ast-content)
-       "Quote"
-       (block-quote ast-content)
-       "Latex_Fragment"
-       (block-latex-fragment ast-content)
-       "Latex_Environment"
-       (block-latex-env (rest block))
-       "Displayed_Math"
-       (block-displayed-math ast-content)
-       "Drawer"
-       (block-drawer (rest block))
-       ;; TODO: option: toggle Property_Drawer
-       ;; "Property_Drawer"
-       ;; (block-property-drawer ast-content)
-       "Footnote_Definition"
-       (block-footnote-definition (rest block))
-       "Horizontal_Rule"
-       block-horizontal-rule
-       "Table"
-       (block-table ast-content)
-       "Comment"
-       (block-comment ast-content)
-       "Raw_Html"
-       (block-raw-html ast-content)
-       "Hiccup"
-       (block-hiccup ast-content)
-       (assert false (print-str :block-ast->simple-ast ast-type "not implemented yet"))))))
+  (let [newline-after-block? (get-in *state* [:export-options :newline-after-block])]
+    (removev
+     nil?
+     (let [[ast-type ast-content] block]
+       (case ast-type
+         "Paragraph"
+         (let [{:keys [origin-ast]} (meta block)
+               current-block-is-first-heading-block? (get-in *state* [:newline-after-block :current-block-is-first-heading-block?])]
+           (set! *state* (assoc-in *state* [:newline-after-block :current-block-is-first-heading-block?] false))
+           (concatv
+            (when (and origin-ast newline-after-block? (not current-block-is-first-heading-block?))
+              [(newline* 2)])
+            (mapcatv inline-ast->simple-ast ast-content)
+            [(newline* 1)]))
+         "Paragraph_line"
+         (assert false "Paragraph_line is mldoc internal ast")
+         "Paragraph_Sep"
+         [(newline* ast-content)]
+         "Heading"
+         (block-heading ast-content)
+         "List"
+         (block-list ast-content)
+         ("Directive" "Results" "Export" "CommentBlock" "Custom")
+         nil
+         "Example"
+         (block-example ast-content)
+         "Src"
+         (block-src ast-content)
+         "Quote"
+         (block-quote ast-content)
+         "Latex_Fragment"
+         (block-latex-fragment ast-content)
+         "Latex_Environment"
+         (block-latex-env (rest block))
+         "Displayed_Math"
+         (block-displayed-math ast-content)
+         "Drawer"
+         (block-drawer (rest block))
+         "Property_Drawer"
+         (block-property-drawer ast-content)
+         "Footnote_Definition"
+         (block-footnote-definition (rest block))
+         "Horizontal_Rule"
+         block-horizontal-rule
+         "Table"
+         (block-table ast-content)
+         "Comment"
+         (block-comment ast-content)
+         "Raw_Html"
+         (block-raw-html ast-content)
+         "Hiccup"
+         (block-hiccup ast-content)
+         (assert false (print-str :block-ast->simple-ast ast-type "not implemented yet")))))))
 
 (defn- inline-ast->simple-ast
   [inline]
@@ -410,22 +432,29 @@
 
 ;;; block-ast, inline-ast -> simple-ast (ends)
 
-
 ;;; export fns
 
 (defn- export-helper
   [content format options]
-  (let [remove-options (set (:remove-options options))]
+  (let [remove-options (set (:remove-options options))
+        other-options (:other-options options)]
     (binding [*state* (merge *state*
                              {:export-options
                               {:indent-style (or (:indent-style options) "dashes")
                                :remove-emphasis? (contains? remove-options :emphasis)
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
-                               :remove-tags? (contains? remove-options :tag)}})]
+                               :remove-tags? (contains? remove-options :tag)
+                               :remove-properties? (contains? remove-options :property)
+                               :keep-only-level<=N (:keep-only-level<=N other-options)
+                               :newline-after-block (:newline-after-block other-options)}})]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)
+            keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
+            ast* (if (pos? keep-level<=n)
+                   (common/keep-only-level<=n ast* keep-level<=n)
+                   ast*)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (mapv common/replace-Heading-with-Paragraph ast*)
                     ast*)
@@ -447,7 +476,8 @@
 (defn export-blocks-as-markdown
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
-  :remove-options [:emphasis :page-ref :tag]"
+  :remove-options [:emphasis :page-ref :tag :property]
+  :other-options {:keep-only-level<=N int :newline-after-block bool}"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
