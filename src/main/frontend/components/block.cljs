@@ -1613,7 +1613,7 @@
 
          ["Cookie" ["Percent" n]]
          [:span {:class "cookie-percent"}
-          (util/format "[d%%]" n)]
+          (util/format "[%d%%]" n)]
          ["Cookie" ["Absolute" current total]]
          [:span {:class "cookie-absolute"}
           (util/format "[%d/%d]" current total)]
@@ -2386,7 +2386,7 @@
                  current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
                  embed-self? (and (:embed? config)
                                   (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (if (and current-block-page? (not embed-self?)) false true)]
+                 default-hide? (if (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)) false true)]
              (assoc state ::hide-block-refs? (atom default-hide?))))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)

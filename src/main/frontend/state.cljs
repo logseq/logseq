@@ -226,6 +226,8 @@
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                 #{})
+     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                {})
      :date-picker/date                      nil
 
      :youtube/players                       {}
@@ -312,6 +314,7 @@
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
+   :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
    ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
@@ -672,6 +675,10 @@ Similar to re-frame subscriptions"
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
+
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -1733,6 +1740,13 @@ Similar to re-frame subscriptions"
                    #(f % k))
     (storage/set :copy/export-block-text-remove-options
                  (get-export-block-text-remove-options))))
+
+(defn get-export-block-text-other-options []
+  (:copy/export-block-text-other-options @state))
+
+(defn update-export-block-text-other-options!
+  [k v]
+  (update-state! :copy/export-block-text-other-options #(assoc % k v)))
 
 (defn set-editor-args!
   [args]
