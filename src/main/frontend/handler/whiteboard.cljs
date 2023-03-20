@@ -11,6 +11,8 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
+            [frontend.config :as config]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
@@ -417,3 +419,12 @@
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
+
+(defn onboarding-show
+  []
+  (when (not (or (state/sub :whiteboard/onboarding-tour?)
+                 (config/demo-graph?)
+                 (util/mobile?)))
+    (state/pub-event! [:whiteboard/onboarding])
+    (state/set-state! [:whiteboard/onboarding-tour?] true)
+    (storage/set :whiteboard-onboarding-tour? true)))
