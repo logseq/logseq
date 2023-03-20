@@ -243,17 +243,15 @@ html[data-theme='light'] {
 }
 
 .tl-statusbar {
-  @apply fixed flex items-center w-full bottom-0;
+  @apply absolute flex items-center w-full bottom-0;
 
+  background: var(--ls-secondary-background-color);
   font-family: monospace;
   font-size: 10px;
   grid-row: 3;
   padding: 8px;
-  color: black;
   z-index: 100000;
   user-select: none;
-  background: white;
-  border-top: 1px solid var(--ls-secondary-border-color);
   flex-shrink: 0;
   height: 32px;
 }
