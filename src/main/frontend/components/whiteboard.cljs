@@ -294,17 +294,15 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (when (user-handler/feature-available? :whiteboard)
-    (let [name (get-in route-match [:parameters :path :name])
-          {:keys [block-id]} (get-in route-match [:parameters :query])]
-      (whiteboard-page name block-id))))
+  (let [name (get-in route-match [:parameters :path :name])
+        {:keys [block-id]} (get-in route-match [:parameters :query])]
+    (whiteboard-page name block-id)))
 
 (defn onboarding-show
   []
-  (when (and (user-handler/feature-available? :whiteboard)
-             (not (or (state/sub :whiteboard/onboarding-tour?)
-                      (config/demo-graph?)
-                      (util/mobile?))))
+  (when (not (or (state/sub :whiteboard/onboarding-tour?)
+                 (config/demo-graph?)
+                 (util/mobile?)))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding-tour?] true)
     (storage/set :whiteboard-onboarding-tour? true)))

@@ -601,9 +601,7 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (and
-    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
-    (:feature/enable-whiteboards? (sub-config repo)))))
+   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
 (defn enable-git-auto-push?
   [repo]
