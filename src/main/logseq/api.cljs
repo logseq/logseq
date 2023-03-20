@@ -9,7 +9,7 @@
             [frontend.commands :as commands]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
-            [frontend.handler.config :as handler-config]
+            [frontend.handler.config :as config-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -149,7 +149,7 @@
     (when-let [configs (bean/->clj configs)]
       (when (map? configs)
         (doseq [[k v] configs]
-          (handler-config/set-config! k v))))))
+          (config-handler/set-config! k v))))))
 
 (def ^:export get_current_graph_favorites
   (fn []
