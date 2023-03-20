@@ -11,8 +11,7 @@ export function LSAuthenticator({ children }: any) {
           confirm_password: { order: 4 },
         }
       }}
-      loginMechanisms={['email']}
-      signUpAttributes={['email']}
+      loginMechanisms={['username']}
       socialProviders={['google']}
       components={{
         SignUp: {
