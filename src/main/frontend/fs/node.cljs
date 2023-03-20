@@ -115,7 +115,8 @@
     (open-dir dir))
   (get-files [_this dir]
     (-> (ipc/ipc "getFiles" dir)
-        (p/then bean/->clj)))
+        (p/then (fn [result]
+                  (:files (bean/->clj result))))))
   (watch-dir! [_this dir options]
     (ipc/ipc "addDirWatcher" dir options))
   (unwatch-dir! [_this dir]
