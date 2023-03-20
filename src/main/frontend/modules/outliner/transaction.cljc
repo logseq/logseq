@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.transaction
   #?(:cljs (:require-macros [frontend.modules.outliner.transaction]))
-  (:require [malli.core :as m]))
+  #?(:cljs (:require [malli.core :as m])))
 
 (def transact-opts [:or :symbol :map])
 
