@@ -15,7 +15,10 @@
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
         current-format (:block/format first-block)
-        target-format (:block/format target-block)]
+        target-format (:block/format target-block)
+        first-block-page (:db/id (:block/page first-block))
+        target-page (or (:db/id (:block/page target-block))
+                        (:db/id target-block))]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
@@ -38,20 +41,25 @@
 
 
       (every? map? (conj blocks target-block))
-      (let [target-node (outliner-core/block target-block)]
-        (outliner-tx/transact!
-          {:outliner-op :move-blocks}
-          (editor-handler/save-current-block!)
-          (if top?
-            (let [first-child?
-                  (= (tree/-get-parent-id target-node)
-                     (tree/-get-left-id target-node))]
-              (if first-child?
-                (let [parent (tree/-get-parent target-node)]
-                  (outliner-core/move-blocks! blocks (:data parent) false))
-                (let [before-node (tree/-get-left target-node)]
-                  (outliner-core/move-blocks! blocks (:data before-node) true))))
-            (outliner-core/move-blocks! blocks target-block (not nested?)))))
+      (if (= first-block-page target-page)
+        (let [target-node (outliner-core/block target-block)]
+          (outliner-tx/transact!
+           {:outliner-op :move-blocks}
+           (editor-handler/save-current-block!)
+           (if top?
+             (let [first-child?
+                   (= (tree/-get-parent-id target-node)
+                      (tree/-get-left-id target-node))]
+               (if first-child?
+                 (let [parent (tree/-get-parent target-node)]
+                   (outliner-core/move-blocks! blocks (:data parent) false))
+                 (let [before-node (tree/-get-left target-node)]
+                   (outliner-core/move-blocks! blocks (:data before-node) true))))
+             (outliner-core/move-blocks! blocks target-block (not nested?)))))
+        (editor-handler/paste-blocks
+         blocks
+         {:target-block target-block
+          :sibling? (not nested?)}))
 
       :else
       nil)))

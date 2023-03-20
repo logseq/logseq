@@ -699,29 +699,17 @@
             move-parents-to-child? (some parents (map :db/id blocks))]
         (when-not move-parents-to-child?
           (let [blocks (get-top-level-blocks blocks)
-                first-block (first blocks)
                 {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
                                                                       :outliner-op (or outliner-op :move-blocks)})]
             (when (seq tx-data)
-              (let [first-block-page (:db/id (:block/page first-block))
-                    target-page (or (:db/id (:block/page target-block))
-                                    (:db/id target-block))
-                    not-same-page? (not= first-block-page target-page)
-                    move-blocks-next-tx [(build-move-blocks-next-tx blocks non-consecutive-blocks?)]
-                    children-page-tx (when not-same-page?
-                                       (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
-                                         (map (fn [id] {:block/uuid id
-                                                        :block/page target-page}) children-ids)))
+              (let [move-blocks-next-tx [(build-move-blocks-next-tx blocks non-consecutive-blocks?)]
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)
                                                 (remove (fn [b]
                                                           (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
-                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
-                    tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
-                                     :move-op outliner-op
-                                     :target (:db/id target-block)}
-                              not-same-page?
-                              (assoc :from-page first-block-page
-                                     :target-page target-page))]
+                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx fix-non-consecutive-tx)
+                    tx-meta {:move-blocks (mapv :db/id blocks)
+                             :move-op outliner-op
+                             :target (:db/id target-block)}]
                 {:tx-data full-tx
                  :tx-meta tx-meta}))))))))
 
