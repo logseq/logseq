@@ -109,7 +109,7 @@
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
         original-name (db/get-file-page (or path rel-path))
-        in-db? (boolean (and rel-path (db/get-file (or path rel-path))))
+        in-db? (boolean (db/get-file (or path rel-path)))
         file-fpath (if in-db?
                      (path/path-join repo-dir path)
                      path)
