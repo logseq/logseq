@@ -2604,10 +2604,9 @@
 
       :else
       (let [edit-block (state/get-edit-block)
-            transact-opts (cond->
-                            {:outliner-op :delete-block
-                             :concat-data {:last-edit-block (:block/uuid edit-block)
-                                           :end? true}})
+            transact-opts {:outliner-op :delete-block
+                           :concat-data {:last-edit-block (:block/uuid edit-block)
+                                         :end? true}}
             new-content (str value "" (:block/content next-block))
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
