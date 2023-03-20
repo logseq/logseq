@@ -511,7 +511,7 @@
          (:db/id page-entity)
          :page))
 
-      (and (gobj/get e "altKey") (whiteboard-handler/inside-portal? (.-target e)))
+      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
       (whiteboard-handler/add-new-block-portal-shape!
        page-name
        (whiteboard-handler/closest-shape (.-target e)))
@@ -889,7 +889,7 @@
                      (:db/id block)
                      :block-ref)
 
-                    (and (gobj/get e "altKey") (whiteboard-handler/inside-portal? (.-target e)))
+                    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
                      (whiteboard-handler/closest-shape (.-target e)))
@@ -2156,7 +2156,10 @@
           button (gobj/get e "buttons")
           shift? (gobj/get e "shiftKey")
           meta? (util/meta-key? e)]
-      (if (and meta? (not (state/get-edit-input-id)))
+      (if (and meta?
+               (not (state/get-edit-input-id))
+               (not (dom/has-class? target "page-ref"))
+               (not= "A" (gobj/get target "tagName")))
         (do
           (util/stop e)
           (state/conj-selection-block! (gdom/getElement block-id) :down)
