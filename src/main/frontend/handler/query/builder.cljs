@@ -2,7 +2,8 @@
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.db.query-dsl :as query-dsl]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
@@ -161,15 +162,17 @@
 
 (defn ->dsl
   [col]
-  (walk/prewalk
-   (fn [f]
-     (let [f' (->dsl* f)]
-       (cond
-         (and (vector? f') (keyword (first f')))
-         (cons (symbol (first f')) (rest f'))
+  (->
+   (walk/prewalk
+    (fn [f]
+      (let [f' (->dsl* f)]
+        (cond
+          (and (vector? f') (keyword (first f')))
+          (cons (symbol (first f')) (rest f'))
 
-         :else f')))
-   col))
+          :else f')))
+    col)
+   (query-dsl/simplify-query)))
 
 (defn from-dsl
   [dsl-form]

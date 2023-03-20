@@ -448,13 +448,13 @@ Some bindings in this fn:
 ;; parse fns
 ;; =========
 
-(defonce tag-placeholder-in-page-ref "~~~tag-placeholder~~~")
+(defonce tag-placeholder "~~~tag-placeholder~~~")
 (defn pre-transform
   [s]
   (if (gp-util/wrapped-by-quotes? s)
     s
     (let [quoted-page-ref (fn [matches]
-                            (let [match' (string/replace (second matches) "#" tag-placeholder-in-page-ref)]
+                            (let [match' (string/replace (second matches) "#" tag-placeholder)]
                               (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
       (some-> s
               (string/replace page-ref/page-ref-re quoted-page-ref)
@@ -470,9 +470,10 @@ Some bindings in this fn:
                                               x)))
                                      (string/join " ")
                                      (util/format "(between %s)"))))
+              (string/replace #"\"[^\"]+\"" (fn [s] (string/replace s "#" tag-placeholder)))
               (string/replace " #" " #tag ")
               (string/replace #"^#" "#tag ")
-              (string/replace tag-placeholder-in-page-ref "#")))))
+              (string/replace tag-placeholder "#")))))
 
 (defn- add-bindings!
   [form q]

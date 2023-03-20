@@ -427,7 +427,10 @@
                                          (when-let [block (:block config)]
                                            (let [q (if (= [:and] @*tree)
                                                      ""
-                                                     (str (query-builder/->dsl @*tree)))
+                                                     (let [result (query-builder/->dsl @*tree)]
+                                                       (if (string? result)
+                                                         (util/format "\"%s\"" result)
+                                                         (str result))))
                                                  repo (state/get-current-repo)
                                                  block (db/pull [:block/uuid (:block/uuid block)])]
                                              (when block

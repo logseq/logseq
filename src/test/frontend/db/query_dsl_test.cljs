@@ -58,7 +58,16 @@
      "\"[[test #foo]]\""
 
      "(and [[test #foo]] (or #foo))"
-     "(and \"[[test #foo]]\" (or #tag foo))")))
+     "(and \"[[test #foo]]\" (or #tag foo))"
+
+     "\"for #clojure\""
+     "\"for #clojure\""
+
+     "(and \"for #clojure\")"
+     "(and \"for #clojure\")"
+
+     "(and \"for #clojure\" #foo)"
+     "(and \"for #clojure\" #tag foo)")))
 
 (defn- block-property-queries-test
   []
