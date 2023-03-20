@@ -45,25 +45,17 @@
       (swap! undo-redo-states assoc-in [repo page] {:undo-stack (atom [])
                                                     :redo-stack (atom [])}))))
 
-(defn- get-updated-page
+(defn- get-updated-pages
   [txs]
-  (let [pages (reduce (fn [col unit]
-                        (if-let [page-id (:db/id (:block/page unit))]
-                          (conj col page-id)
-                          col)) #{} (:blocks txs))]
-    (if (empty? (rest pages)) ; Multi-page actions are not history safe
-      (first pages)
-      (do (mapv reset-history pages)
-          (notification/show! "Multi-page actions cannot be undone" :warning false)
-          (state/pub-event! [:capture-error {:error "Multi-page action triggered"
-                                             :payload {:type :outliner/invalid-action
-                                                       :data (mapv #(dissoc % :block/content) (:blocks txs))}}])
-          nil))))
+  (reduce (fn [col unit]
+            (if-let [page-id (:db/id (:block/page unit))]
+              (conj col page-id)
+              col)) #{} (:blocks txs)))
 
 (defn push-undo
   [txs]
-  (when-let [undo-stack (get-undo-stack (get-updated-page txs))]
-    (swap! undo-stack conj txs)))
+  (mapv #(when-let [undo-stack (get-undo-stack %)]
+           (swap! undo-stack conj txs)) (get-updated-pages txs)))
 
 (comment
   (defn get-content-from-txs
@@ -209,13 +201,19 @@
     (if (:replace? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
-        (doall (reset-redo (get-updated-page entity))
-               (push-undo entity)))
+            (push-undo entity))
       (let [updated-blocks (db-report/get-blocks tx-report)
             entity {:blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
                     :editor-cursor (:editor-cursor tx-meta)
-                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
-        (doall (reset-redo (get-updated-page entity))
-               (push-undo entity))))))
+                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}
+            pages (get-updated-pages entity)]
+        (if (empty? (rest pages)) ; Multi-page actions are not history safe
+          (do (reset-redo (first pages))
+              (push-undo entity))
+          (do (mapv reset-history pages)
+              (notification/show! (str "Multi-page actions cannot be undone") :warning false)
+              (state/pub-event! [:capture-error {:error "Multi-page action triggered"
+                                                 :payload {:type :outliner/invalid-action
+                                                           :data (mapv #(dissoc % :block/content) (:blocks entity))}}])))))))
