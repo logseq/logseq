@@ -31,7 +31,7 @@ With ```yarn watch``` running, it should prints ``shadow-cljs - nREPL server sta
 
 You may connect to the nREPL server with:
 
-``cmd + shift + p`` -> ``Calva: Connect to a running nREPL server`` -> ``logseq`` -> ``shadow-cljs``->``:app`` ->``localhost:8701``
+``cmd + shift + p`` -> ``Calva: Connect to a Running REPL Server in the Project`` -> ``logseq`` -> ``shadow-cljs``->``:app`` ->``localhost:8701``
 
 (change ``:app`` to ``:electron`` if you want to connect to the main thread of the Electron app)
 

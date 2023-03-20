@@ -42,8 +42,10 @@
   }
 
   &[data-modal-name="commands"] {
-    width: 380px !important;
-    max-width: 90vw !important;
+    @screen sm {
+      width: 380px !important;
+      max-width: 90vw !important;
+    }
   }
 }
 

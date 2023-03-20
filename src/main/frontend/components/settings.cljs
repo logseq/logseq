@@ -133,6 +133,17 @@
            :width  500
            :height 500}]]])
 
+(rum/defc auto-expand-hint
+  []
+  [:div.ui__modal-panel
+   {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
+   [:div {:style {:margin "12px" :max-width "500px"}}
+    [:p.text-sm
+     "This option controls whether to expand the block references automatically when zoom-in."]
+    [:img {:src    "https://user-images.githubusercontent.com/28241963/225818326-118deda9-9d1e-477d-b0ce-771ca0bcd976.gif"
+           :width  500
+           :height 500}]]])
+
 (defn row-with-button-action
   [{:keys [left-label action button-label href on-click desc -for]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -378,6 +389,17 @@
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
+(defn auto-expand-row [t auto-expand-block-refs?]
+  (toggle "auto_expand_block_refs"
+          [(t :settings-page/auto-expand-block-refs)
+           (ui/tippy {:html        (auto-expand-hint)
+                      :class       "tippy-hover ml-2"
+                      :interactive true
+                      :disabled    false}
+                     (svg/info))]
+          auto-expand-block-refs?
+          config-handler/toggle-auto-expand-block-refs!))
+
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
           (t :settings-page/enable-tooltip)
@@ -615,6 +637,7 @@
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
+        auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -631,6 +654,7 @@
      (outdenting-row t logical-outdenting?)
      (showing-full-blocks t show-full-blocks?)
      (preferred-pasting-file t preferred-pasting-file?)
+     (auto-expand-row t auto-expand-block-refs?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
