@@ -216,17 +216,19 @@
   [state content status uid]
   (when (and content status)
     (let [svg
-          (case status
-            :success
-            (icon "circle-check" {:class "text-success" :size "32"})
+          (if (keyword? status)
+            (case status
+              :success
+              (icon "circle-check" {:class "text-success" :size "32"})
 
-            :warning
-            (icon "alert-circle" {:class "text-warning" :size "32"})
+              :warning
+              (icon "alert-circle" {:class "text-warning" :size "32"})
 
-            :error
-            (icon "circle-x" {:class "text-error" :size "32"})
+              :error
+              (icon "circle-x" {:class "text-error" :size "32"})
 
-            (icon "info-circle" {:class "text-indigo-500" :size "32"}))]
+              (icon "info-circle" {:class "text-indigo-500" :size "32"}))
+            status)]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -246,7 +248,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-6.font-medium.whitespace-pre-line {:style {:margin 0}}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button

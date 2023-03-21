@@ -191,7 +191,7 @@
 (defn setup-install-listener!
   []
   (let [channel  (name :lsp-installed)
-        listener (fn [^js _ ^js e]
+        listener (fn [_ ^js e]
                    (js/console.debug :lsp-installed e)
 
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
@@ -201,16 +201,16 @@
                        (let [{:keys [id dst name title theme]} payload
                              name (or title name "Untitled")]
                          (if only-check
-                           (state/consume-updates-coming-plugin payload false)
+                           (state/consume-updates-from-coming-plugin! payload false)
                            (if (plugin-common-handler/installed? id)
                              (when-let [^js pl (get-plugin-inst id)] ;; update
                                (p/then
-                                (.reload pl)
-                                #(do
-                                   ;;(if theme (select-a-plugin-theme id))
-                                   (notification/show!
+                                 (.reload pl)
+                                 #(do
+                                    ;;(if theme (select-a-plugin-theme id))
+                                    (notification/show!
                                     (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
-                                   (state/consume-updates-coming-plugin payload true))))
+                                    (state/consume-updates-from-coming-plugin! payload true))))
 
                              (do                            ;; register new
                                (p/then
@@ -230,12 +230,12 @@
                              pending?   (seq (:plugin/updates-pending @state/state))]
 
                          (if (and only-check pending?)
-                           (state/consume-updates-coming-plugin payload false)
+                           (state/consume-updates-from-coming-plugin! payload false)
 
                            (do
                              ;; consume failed download updates
                              (when (and (not only-check) (not pending?))
-                               (state/consume-updates-coming-plugin payload true))
+                               (state/consume-updates-from-coming-plugin! payload true))
 
                              ;; notify human tips
                              (notification/show!

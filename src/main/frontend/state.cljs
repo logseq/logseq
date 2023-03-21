@@ -1893,7 +1893,7 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
-(defn consume-updates-coming-plugin
+(defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
     (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
