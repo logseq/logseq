@@ -1,6 +1,7 @@
 import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as pathlib from 'path'
+import { modKey } from './util/basic'
 
 // TODO: The file should be a facade of utils in the /util folder
 // No more additional functions should be added to this file
@@ -34,6 +35,9 @@ export async function lastBlock(page: Page): Promise<Locator> {
  * @param page The Playwright Page object.
  */
 export async function enterNextBlock(page: Page): Promise<Locator> {
+  // Move cursor to the end of the editor
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForTimeout(10)
@@ -50,15 +54,6 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
 
-  return page.locator('textarea >> nth=0')
-}
-
-// Deprecated by block.enterNext
-export async function newBlock(page: Page): Promise<Locator> {
-  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  await lastBlock(page)
-  await page.press('textarea >> nth=0', 'Enter')
-  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
 
@@ -173,8 +168,8 @@ export async function editFirstBlock(page: Page) {
 /**
  * Wait for a console message with a given prefix to appear, and return the full text of the message
  * Or reject after a timeout
- * 
- * @param page 
+ *
+ * @param page
  * @param prefix - the prefix to look for
  * @param timeout - the timeout in ms
  * @returns the full text of the console message

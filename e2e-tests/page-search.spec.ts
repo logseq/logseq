@@ -1,7 +1,7 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
 import { Block } from './types'
-import { modKey, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
+import { modKey, createRandomPage, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 import { searchPage, closeSearchBox } from './util/search-modal'
 
 /***
