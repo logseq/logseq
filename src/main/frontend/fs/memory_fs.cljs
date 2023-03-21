@@ -1,6 +1,6 @@
-(ns ^:no-doc frontend.fs.memory-fs
+(ns frontend.fs.memory-fs
   "Memory FS backed by lightning-fs
-   
+
    Paths are denoted by `memory://`. No open-dir/get-files support."
   (:require [cljs-bean.core :as bean]
             [frontend.db :as db]
@@ -10,7 +10,7 @@
 
 (defn- <readdir
   "Read dir recursively, return all paths
-   
+
    accept dir as path, without memory:// prefix for simplicity"
   [dir]
   (p/let [result (p/loop [result []
@@ -44,7 +44,7 @@
           (p/resolved nil)))
       (p/catch (fn [_error]
                  (js/window.pfs.mkdir dir)))))
-  
+
 
 (defrecord Bfs []
   protocol/Fs

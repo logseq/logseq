@@ -108,31 +108,31 @@
 
 (defn- transact-file-tx-if-not-exists!
   [page-block ok-handler]
-  (when-let [_repo (state/get-current-repo)]
-    (when (:block/name page-block)
-      (let [format (name (get page-block :block/format
-                              (state/get-preferred-format)))
-            title (string/capitalize (:block/name page-block))
-            whiteboard-page? (model/whiteboard-page? page-block)
-            format (if whiteboard-page? "edn" format)
-            journal-page? (date/valid-journal-title? title)
-            journal-title (date/normalize-journal-title title)
-            filename (if (and journal-page? (not (string/blank? journal-title)))
-                       (date/date->file-name journal-title)
-                       (-> (or (:block/original-name page-block) (:block/name page-block))
-                           (fs-util/file-name-sanity)))
-            sub-dir (cond
-                      journal-page?    (config/get-journals-directory)
-                      whiteboard-page? (config/get-whiteboards-directory)
-                      :else            (config/get-pages-directory))
-            ext (if (= format "markdown") "md" format)
-            file-rpath (path/path-join sub-dir (str filename "." ext))
-            file {:file/path file-rpath}
-            tx [{:file/path file-rpath}
-                {:block/name (:block/name page-block)
-                 :block/file file}]]
-        (db/transact! tx)
-        (when ok-handler (ok-handler))))))
+  (when (and (state/get-current-repo)
+             (:block/name page-block))
+    (let [format (name (get page-block :block/format
+                            (state/get-preferred-format)))
+          title (string/capitalize (:block/name page-block))
+          whiteboard-page? (model/whiteboard-page? page-block)
+          format (if whiteboard-page? "edn" format)
+          journal-page? (date/valid-journal-title? title)
+          journal-title (date/normalize-journal-title title)
+          filename (if (and journal-page? (not (string/blank? journal-title)))
+                     (date/date->file-name journal-title)
+                     (-> (or (:block/original-name page-block) (:block/name page-block))
+                         (fs-util/file-name-sanity)))
+          sub-dir (cond
+                    journal-page?    (config/get-journals-directory)
+                    whiteboard-page? (config/get-whiteboards-directory)
+                    :else            (config/get-pages-directory))
+          ext (if (= format "markdown") "md" format)
+          file-rpath (path/path-join sub-dir (str filename "." ext))
+          file {:file/path file-rpath}
+          tx [{:file/path file-rpath}
+              {:block/name (:block/name page-block)
+               :block/file file}]]
+      (db/transact! tx)
+      (when ok-handler (ok-handler)))))
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
