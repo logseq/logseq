@@ -28,3 +28,10 @@
        "/root/Documents/audio" nil
        "/root/Documents/audio." nil
        "special/characters/aäääöüß.7z" "7z"))
+
+(deftest url?
+  (are [x y]
+       (= (gp-util/url? x) y)
+       "http://logseq.com" true
+       "prop:: value" false
+       "a:" false))

@@ -368,6 +368,23 @@ export class TLApp<
       }
     })
 
+    const deleteBinding = (shapeA: string, shapeB: string) => {
+      if ([...ids].includes(shapeA) && this.getShapeById(shapeB)?.type === "line")
+        ids.add(shapeB)
+    }
+
+     this.currentPage.shapes
+      .flatMap(s => Object.values(s.props.handles ?? {}))
+      .flatMap(h => h.bindingId)
+      .filter(isNonNullable)
+      .map(binding => {
+        const toId = this.currentPage.bindings[binding]?.toId
+        const fromId = this.currentPage.bindings[binding]?.fromId
+        if (toId && fromId) {
+          deleteBinding(toId, fromId)
+          deleteBinding(fromId, toId)
+        }})
+
     const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
 
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))

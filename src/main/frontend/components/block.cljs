@@ -511,6 +511,11 @@
          (:db/id page-entity)
          :page))
 
+      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+      (whiteboard-handler/add-new-block-portal-shape!
+       page-name
+       (whiteboard-handler/closest-shape (.-target e)))
+
       whiteboard-page?
       (route-handler/redirect-to-whiteboard! page-name)
 
@@ -890,7 +895,7 @@
                      (:db/id block)
                      :block-ref)
 
-                    (whiteboard-handler/inside-portal? (.-target e))
+                    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
                      (whiteboard-handler/closest-shape (.-target e)))
@@ -2154,7 +2159,10 @@
           meta? (util/meta-key? e)
           forbidden-edit? (target-forbidden-edit? target)]
       (when-not forbidden-edit? (.stopPropagation e))
-      (if (and meta? (not (state/get-edit-input-id)))
+      (if (and meta?
+               (not (state/get-edit-input-id))
+               (not (dom/has-class? target "page-ref"))
+               (not= "A" (gobj/get target "tagName")))
         (do
           (util/stop e)
           (state/conj-selection-block! (gdom/getElement block-id) :down)
