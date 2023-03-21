@@ -103,7 +103,7 @@
           resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
           inputs (cond-> resolved-inputs
                          rules
-                         (conj rules))
+                   (conj rules))
           k [:custom (or (:query-string query') query') inputs]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)

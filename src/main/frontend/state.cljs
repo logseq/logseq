@@ -93,7 +93,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/custom-query-components            {}
      :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
@@ -228,6 +227,8 @@
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                 #{})
+     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                {})
      :date-picker/date                      nil
 
      :youtube/players                       {}
@@ -314,6 +315,7 @@
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
+   :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
    ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
@@ -674,6 +676,10 @@ Similar to re-frame subscriptions"
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
+
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -1248,22 +1254,6 @@ Similar to re-frame subscriptions"
   (when value
     (set-state! :journals-length value)))
 
-(defn add-custom-query-component!
-  [query-string component]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (assoc m query-string component))))
-
-(defn remove-custom-query-component!
-  [query-string]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (dissoc m query-string))))
-
-(defn get-custom-query-components
-  []
-  (vals (get @state :ui/custom-query-components)))
-
 (defn save-scroll-position!
   ([value]
    (save-scroll-position! value js/window.location.hash))
@@ -1751,6 +1741,13 @@ Similar to re-frame subscriptions"
                    #(f % k))
     (storage/set :copy/export-block-text-remove-options
                  (get-export-block-text-remove-options))))
+
+(defn get-export-block-text-other-options []
+  (:copy/export-block-text-other-options @state))
+
+(defn update-export-block-text-other-options!
+  [k v]
+  (update-state! :copy/export-block-text-other-options #(assoc % k v)))
 
 (defn set-editor-args!
   [args]
