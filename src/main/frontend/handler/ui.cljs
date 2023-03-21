@@ -96,9 +96,7 @@
      (if clear-all-query-state?
        (db/clear-query-state!)
        (db/clear-query-state-without-refs-and-embeds!))
-     (rum/request-render component)
-     (doseq [component (state/get-custom-query-components)]
-       (rum/request-render component)))))
+     (rum/request-render component))))
 
 (defn highlight-element!
   [fragment]
