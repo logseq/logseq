@@ -16,7 +16,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [promesa.core :as p]))
