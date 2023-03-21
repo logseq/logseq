@@ -1866,7 +1866,7 @@ Similar to re-frame subscriptions"
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (= (boolean theme?) (:theme %))))
+           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
