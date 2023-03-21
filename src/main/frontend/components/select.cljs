@@ -16,36 +16,45 @@
             [frontend.handler.repo :as repo-handler]
             [reitit.frontend.easy :as rfe]))
 
-(rum/defc render-item
-  [result chosen?]
-  (if (map? result)
-    (let [{:keys [id value]} result]
-      [:div.inline-grid.grid-cols-4.gap-x-4.w-full
-       {:class (when chosen? "chosen")}
-       [:span.col-span-3 value]
-       [:div.col-span-1.justify-end.tip.flex
-        (when id
-          [:code.opacity-20.bg-transparent id])]])
-    [:div.inline-grid.grid-cols-4.gap-x-4.w-full
-     {:class (when chosen? "chosen")}
-     [:span.col-span-3 result]]))
+(rum/defc render-item < rum/reactive
+  [result chosen? multiple-choices? *selected-choices]
+  (let [value (if (map? result) (:value result) result)
+        selected-choices (rum/react *selected-choices)]
+    [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
+     [:span
+      (when multiple-choices? (ui/checkbox {:checked (selected-choices value)
+                                            :style {:margin-right 4}
+                                            :on-click (fn [e]
+                                                        (.preventDefault e))}))
+      value]
+     (when (and (map? result) (:id result))
+       [:div.tip.flex
+        [:code.opacity-20.bg-transparent (:id result)]])]))
 
-(rum/defcs select <
+(rum/defcs select < rum/reactive
   (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
-  {:will-unmount (fn [state]
+  {:init (fn [state]
+           (assoc state ::selected-choices
+                  (atom (set (:selected-choices (first (:rum/args state)))))))
+   :will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
+                   (let [{:keys [multiple-choices? on-chosen]} (first (:rum/args state))]
+                     (when (and multiple-choices? on-chosen)
+                       (on-chosen @(::selected-choices state))))
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
                  extract-fn host-opts on-input input-opts
-                 item-cp transform-fn tap-*input-val]
+                 item-cp transform-fn tap-*input-val
+                 multiple-choices? _selected-choices]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
                close-modal? true
                extract-fn :value}}]
-  (let [input (::input state)]
+  (let [input (::input state)
+        *selected-choices (::selected-choices state)]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
@@ -68,11 +77,19 @@
          (fn? transform-fn)
          (transform-fn @input))
 
-       {:item-render       (or item-cp render-item)
+       {:item-render       (or item-cp (fn [result chosen?]
+                                         (render-item result chosen? multiple-choices? *selected-choices)))
         :class             "cp__select-results"
         :on-chosen         (fn [x]
-                             (when close-modal? (state/close-modal!))
-                             (on-chosen x))
+                             (reset! input "")
+                             (if multiple-choices?
+                               (if (@*selected-choices x)
+                                 (swap! *selected-choices disj x)
+                                 (swap! *selected-choices conj x))
+                               (do
+                                 (when close-modal? (state/close-modal!))
+                                 (when on-chosen
+                                   (on-chosen (if multiple-choices? @*selected-choices x))))))
         :empty-placeholder (empty-placeholder t)})]]))
 
 (defn select-config

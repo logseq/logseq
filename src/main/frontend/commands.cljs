@@ -268,7 +268,8 @@
 
     ;; advanced
 
-    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
+    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
+               [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
@@ -666,6 +667,9 @@
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
+
+(defmethod handle-step :editor/exit [[_]]
+  (state/clear-edit!))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))
