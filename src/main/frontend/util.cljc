@@ -1116,18 +1116,6 @@
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
 #?(:cljs
-   (defn select-highlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/add-class! block "selected noselect"))))
-
-#?(:cljs
-   (defn select-unhighlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/remove-class! block "selected" "noselect"))))
-
-#?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
      [ch]

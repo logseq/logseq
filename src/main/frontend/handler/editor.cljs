@@ -205,8 +205,7 @@
 
 (defn clear-selection!
   []
-  (state/clear-selection!)
-  (util/select-unhighlight! (dom/by-class "selected")))
+  (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
