@@ -47,9 +47,9 @@
     (->> blocks
          (map (fn [block]
                 (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
-         (sort-by :index)
          (filter gp-whiteboard/shape-block?)
-         (map gp-whiteboard/block->shape))))
+         (map gp-whiteboard/block->shape)
+         (sort-by :index))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
