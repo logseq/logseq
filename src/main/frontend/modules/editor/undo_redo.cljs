@@ -1,5 +1,6 @@
 (ns frontend.modules.editor.undo-redo
   (:require [datascript.core :as d]
+            [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
@@ -103,14 +104,33 @@
     (when e
       (let [{:keys [txs tx-meta]} e
             new-txs (get-txs false txs)
-            editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
-                                 (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
+            undo-delete-concat-block? (and (= :delete-block (:outliner-op tx-meta))
+                                           (seq (:concat-data tx-meta)))
+            editor-cursor (cond
+                            undo-delete-concat-block?
+                            (let [data (:concat-data tx-meta)]
+                              (assoc (:editor-cursor e)
+                                     :last-edit-block {:block/uuid (:last-edit-block data)}
+                                     :pos (if (:end? data) :max 0)))
+
+                            ;; same block
+                            (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
+                               (get-in prev-e [:editor-cursor :last-edit-block :block/uuid]))
                             (:editor-cursor prev-e)
+
+                            :else
                             (:editor-cursor e))]
+
         (push-redo e)
         (transact! new-txs (merge {:undo? true}
                                   tx-meta
                                   (select-keys e [:pagination-blocks-range])))
+
+        (when undo-delete-concat-block?
+          (when-let [block (state/get-edit-block)]
+            (state/set-edit-content! (state/get-edit-input-id)
+                                     (:block/content (db/entity (:db/id block))))))
+
         (when (:whiteboard/transact? tx-meta)
           (state/pub-event! [:whiteboard/undo e]))
         (assoc e
