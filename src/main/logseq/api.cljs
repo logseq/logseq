@@ -1029,7 +1029,8 @@
 ;; search
 (defn ^:export search
   [q]
-  (search-handler/search q))
+  (-> (search-handler/search q)
+      (p/then #(bean/->js %))))
 
 ;; helpers
 (defn ^:export query_element_by_id
