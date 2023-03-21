@@ -180,7 +180,10 @@
 
               (cond
                 (= path "logseq/custom.css")
-                (ui-handler/add-style-if-exists!)
+                (do
+                  ;; ui-handler will load css from db and config
+                  (db/set-file-content! repo path content)
+                  (ui-handler/add-style-if-exists!))
 
                 (= path "logseq/config.edn")
                 (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
