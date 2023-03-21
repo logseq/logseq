@@ -996,6 +996,14 @@
      (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
+(rum/defc point
+  ([] (point "bg-red-600" 5 nil))
+  ([klass size {:keys [class style] :as opts}]
+   [:span.ui__point.overflow-hidden.rounded-full.inline-block
+    (merge {:class (str (util/hiccup->class klass) " " class)
+            :style (merge {:width size :height size} style)}
+           (dissoc opts :style :class))]))
+
 (rum/defc type-icon
   [{:keys [name class title extension?]}]
   [:.type-icon {:class class

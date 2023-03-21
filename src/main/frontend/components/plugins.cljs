@@ -1022,7 +1022,13 @@
        {:title   (t :settings)
         :options {:on-click #(plugin-handler/goto-plugins-settings!)
                   :class    "extra-item"}
-        :icon    (ui/icon "adjustments")}])
+        :icon    (ui/icon "adjustments")}
+
+       {:title   [:div.flex.items-center.space-x-5.leading-none
+                  [:span "New updates"] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
+        :options {:on-click #()
+                  :class    "extra-item"}
+        :icon    (ui/icon "download")}])
     {:trigger-class "toolbar-plugins-manager-trigger"}))
 
 (rum/defcs hook-ui-items < rum/reactive
