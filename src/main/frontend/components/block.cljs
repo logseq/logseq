@@ -3263,7 +3263,10 @@
                 [:div.flex.flex-row.items-center.fade-in
                  (when (> (count result) 0)
                    [:span.results-count
-                    (str (count result) (if (> (count result) 1) " results" " result"))])
+                    (let [result-count (if (and (not table?) (map? result))
+                                         (apply + (map (comp count val) result))
+                                         (count result))]
+                      (str result-count (if (> result-count 1) " results" " result")))])
 
                  (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
                    (if table?
