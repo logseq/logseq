@@ -103,6 +103,11 @@
 
     .amplify-checkboxfield {
       @apply text-sm;
+
+      .amplify-field__error-message {
+        color: var(--ls-primary-text-color);
+        opacity: .4;
+      }
     }
   }
 }

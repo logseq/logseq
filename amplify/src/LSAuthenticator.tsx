@@ -38,9 +38,9 @@ export function LSAuthenticator({ termsLink, children }: any) {
       }}
       services={{
         async validateCustomSignUp(formData) {
-          if (formData.hasOwnProperty('acknowledgement') && !formData.acknowledgement) {
+          if (!formData.acknowledgement) {
             return {
-              acknowledgement: 'You must agree to the Terms & Conditions',
+              acknowledgement: '',
             }
           }
         }
