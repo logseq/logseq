@@ -737,10 +737,11 @@
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
-      (doseq [id ids]
-        (let [block (db/pull [:block/uuid id])]
-          (when (not-empty (:block/content block))
-            (set-marker block)))))))
+      (outliner-tx/transact! {:outliner-op :cycle-todos}
+        (doseq [id ids]
+          (let [block (db/pull [:block/uuid id])]
+            (when (not-empty (:block/content block))
+              (set-marker block))))))))
 
 (defn cycle-todo!
   []
