@@ -184,13 +184,13 @@
 
 
 (defn init-remote-graph
-  [local graph]
-  (when (and local graph)
+  [local-graph-dir graph]
+  (when (and local-graph-dir graph)
     (notification/show!
      (str "Start syncing the remote graph "
           (:GraphName graph)
           " to "
-          (config/get-string-repo-dir (config/get-local-dir local)))
+          (config/get-string-repo-dir local-graph-dir))
      :success)
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
