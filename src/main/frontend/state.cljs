@@ -973,6 +973,7 @@ Similar to re-frame subscriptions"
 
 (defn clear-selection!
   []
+  (util/clear-selection!)
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
