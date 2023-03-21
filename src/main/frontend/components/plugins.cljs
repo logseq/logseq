@@ -19,6 +19,7 @@
             [frontend.rum :as rum-utils]
             [clojure.string :as string]))
 
+(declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
 
 (rum/defcs installed-themes
@@ -989,47 +990,51 @@
       [:<>])))
 
 (rum/defc toolbar-plugins-manager-list
-  [items]
+  [updates-coming items]
+  (let [has-updates? (seq (state/all-available-coming-updates updates-coming))]
+    (ui/dropdown-with-links
+      (fn [{:keys [toggle-fn]}]
+        [:div.toolbar-plugins-manager
+         {:on-click toggle-fn}
+         [:a.button.relative
+          (ui/icon "puzzle" {:size 20})
+          (when has-updates?
+            (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
 
-  (ui/dropdown-with-links
-    (fn [{:keys [toggle-fn]}]
-      [:div.toolbar-plugins-manager
-       {:on-click toggle-fn}
-       [:a.button (ui/icon "puzzle" {:size 20})]])
+      ;; items
+      (concat
+        (for [[_ {:keys [key pinned?] :as opts} pid] items
+              :let [pkey (str (name pid) ":" key)]]
+          {:title   key
+           :item    [:div.flex.items-center.item-wrap
+                     (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                     [:span.opacity-80 {:style {:padding-left "2px"}} key]
+                     [:span.pin.flex.items-center.opacity-60
+                      {:class (util/classnames [{:pinned pinned?}])}
+                      (ui/icon (if pinned? "pinned" "pin"))]]
+           :options {:on-click (fn [^js e]
+                                 (let [^js target (.-target e)
+                                       user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
+                                   (when-not user-btn?
+                                     (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
+                                 false)}})
+        [{:hr true}
+         {:title   (t :plugins)
+          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
+                    :class    "extra-item mt-2"}
+          :icon    (ui/icon "apps")}
+         {:title   (t :settings)
+          :options {:on-click #(plugin-handler/goto-plugins-settings!)
+                    :class    "extra-item"}
+          :icon    (ui/icon "adjustments")}
 
-    ;; items
-    (concat
-      (for [[_ {:keys [key pinned?] :as opts} pid] items
-            :let [pkey (str (name pid) ":" key)]]
-        {:title   key
-         :item    [:div.flex.items-center.item-wrap
-                   (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                   [:span.opacity-80 {:style {:padding-left "2px"}} key]
-                   [:span.pin.flex.items-center.opacity-60
-                    {:class (util/classnames [{:pinned pinned?}])}
-                    (ui/icon (if pinned? "pinned" "pin"))]]
-         :options {:on-click (fn [^js e]
-                               (let [^js target (.-target e)
-                                     user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
-                                 (when-not user-btn?
-                                   (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
-                               false)}})
-      [{:hr true}
-       {:title   (t :plugins)
-        :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
-                  :class    "extra-item mt-2"}
-        :icon    (ui/icon "apps")}
-       {:title   (t :settings)
-        :options {:on-click #(plugin-handler/goto-plugins-settings!)
-                  :class    "extra-item"}
-        :icon    (ui/icon "adjustments")}
-
-       {:title   [:div.flex.items-center.space-x-5.leading-none
-                  [:span "New updates"] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
-        :options {:on-click #()
-                  :class    "extra-item"}
-        :icon    (ui/icon "download")}])
-    {:trigger-class "toolbar-plugins-manager-trigger"}))
+         (when has-updates?
+           {:title   [:div.flex.items-center.space-x-5.leading-none
+                      [:span "New updates"] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
+            :options {:on-click #(open-waiting-updates-modal!)
+                      :class    "extra-item"}
+            :icon    (ui/icon "download")})])
+      {:trigger-class "toolbar-plugins-manager-trigger"})))
 
 (rum/defcs hook-ui-items < rum/reactive
                            < {:key-fn #(identity "plugin-hook-items")}
@@ -1060,7 +1065,8 @@
 
          ;; manage plugin buttons
          (when toolbar?
-           (toolbar-plugins-manager-list items))]))))
+           (let [updates-coming (state/sub :plugin/updates-coming)]
+             (toolbar-plugins-manager-list updates-coming items)))]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]

@@ -1898,9 +1898,9 @@ Similar to re-frame subscriptions"
     (coming-update-new-version? pkg)))
 
 (defn all-available-coming-updates
-  []
-  (when-let [updates (vals (:plugin/updates-coming @state))]
-    (filterv #(coming-update-new-version? %) updates)))
+  ([] (all-available-coming-updates (:plugin/updates-coming @state)))
+  ([updates] (when-let [updates (vals updates)]
+               (filterv #(coming-update-new-version? %) updates))))
 
 (defn get-next-selected-coming-update
   []
