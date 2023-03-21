@@ -199,6 +199,10 @@
   (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
 
+(defn upgrade [] 
+  (js/window.open 
+    "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"))
+
 (defn <ensure-id&access-token
   []
   (go
