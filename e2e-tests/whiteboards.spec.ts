@@ -15,8 +15,16 @@ test('enable whiteboards', async ({ page }) => {
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
 
-test('create new whiteboard', async ({ page }) => {
+test('should display onboarding tour', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
+  await page.waitForTimeout(1000)
+
+  await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
+  await page.click('.cp__whiteboard-welcome button.bg-gray-600')
+  await expect(page.locator('.cp__whiteboard-welcome')).toBeHidden()
+})
+
+test('create new whiteboard', async ({ page }) => {
   await page.click('#tl-create-whiteboard')
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
