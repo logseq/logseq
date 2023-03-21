@@ -59,13 +59,13 @@
                (ui/button
                 "Check for updates"
                 :class "text-sm p-1 mr-1"
-                :href "https://github.com/logseq/logseq/releases" )
+                :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
                 "Check for updates"
                 :class "text-sm p-1 mr-1"
-                :href "https://apps.apple.com/app/logseq/id1601013908" )
+                :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
@@ -750,6 +750,41 @@
    {:left-label (t :settings-page/enable-whiteboards)
     :action (whiteboards-enabled-switcher enabled?)}))
 
+(rum/defc settings-account < rum/reactive
+  []
+  (let [current-repo (state/get-current-repo)
+        enable-journals? (state/enable-journals? current-repo)
+        enable-flashcards? (state/enable-flashcards? current-repo)
+        enable-sync? (state/enable-sync?)
+        enable-whiteboards? (state/enable-whiteboards? current-repo)
+        logged-in? (user-handler/logged-in?)
+        pro-account? false]
+    [:div.panel-wrap.is-features.mb-8
+     (when-not web-platform?
+       [:div.mt-1.sm:mt-0.sm:col-span-2
+        (cond
+          (and logged-in? pro-account?)
+          [:div 
+           (user-handler/email)]
+
+          logged-in?
+          [:div
+           (user-handler/email)
+           [:p (ui/button (t :logout) {:class "p-1"
+                                       :icon "logout"
+                                       :on-click user-handler/logout})]
+           [:p (ui/button "Upgrade" {:class "p-1"
+                                     :icon "businessplan"
+                                     :on-click user-handler/upgrade})]]
+          (not logged-in?)
+          [:div
+           (ui/button (t :login) {:class "p-1"
+                                  :icon "login"
+                                  :on-click (fn []
+                                              (state/close-settings!)
+                                              (js/window.open config/LOGIN-URL))})
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])]))
+
 (rum/defc settings-features < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
@@ -820,7 +855,7 @@
      ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
      ;;     ;; features
      ;;     ]])
-     ]))
+     
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)
@@ -849,7 +884,8 @@
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+              [[:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
+               [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
                (when (util/electron?)
@@ -871,7 +907,7 @@
               :on-click #(reset! *active [label (first @*active)])}
 
              [:a.flex.items-center.settings-menu-link
-             {:data-id id}
+              {:data-id id}
               icon
               [:strong text]]]))]]
 
@@ -884,6 +920,9 @@
            (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
            (reset! *active [label label])
            nil)
+
+         :account 
+         (settings-account)
 
          :general
          (settings-general current-repo)
