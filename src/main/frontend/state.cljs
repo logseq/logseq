@@ -1119,7 +1119,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (cursor/pos (gdom/getElement edit-input-id))})))
+       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+                            (count (:block/content edit-block)))})))
 
 (defn clear-edit!
   []
