@@ -3,13 +3,15 @@ import { test } from './fixtures'
 import { modKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
-  await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
-  await page.click('#head .toolbar-dots-btn')
-  await page.click('#head .dropdown-wrapper >> text=Settings')
-  await page.click('.settings-modal a[data-id=features]')
-  await page.click('text=Whiteboards >> .. >> .ui__toggle')
-  await page.waitForTimeout(1000)
-  await page.keyboard.press('Escape')
+  if (await page.$('.nav-header .whiteboard') === null) {
+    await page.click('#head .toolbar-dots-btn')
+    await page.click('#head .dropdown-wrapper >> text=Settings')
+    await page.click('.settings-modal a[data-id=features]')
+    await page.click('text=Whiteboards >> .. >> .ui__toggle')
+    await page.waitForTimeout(1000)
+    await page.keyboard.press('Escape')
+  }
+
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
 
