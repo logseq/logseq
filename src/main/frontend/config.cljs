@@ -391,7 +391,7 @@
               last
               gp-util/safe-decode-uri-component
               (str "/" (string/capitalize app-name) "/")))
-    (get-repo-dir repo-dir)))
+    (get-repo-dir (get-local-repo repo-dir))))
 
 (defn get-repo-fpath
   [repo-url path]
