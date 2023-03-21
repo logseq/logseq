@@ -1,8 +1,20 @@
 (ns frontend.components.query-table-test
-  (:require [clojure.test :refer [deftest testing are]]
+  (:require [clojure.test :refer [deftest testing are use-fixtures is]]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.state :as state]
             [frontend.components.query-table :as query-table]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db :as db]
             [frontend.util :as util]))
+
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
+
+(defn- dsl-query
+  [s]
+  (db/clear-query-state!)
+  (when-let [result (query-dsl/query test-helper/test-db s)]
+    (map first (deref result))))
 
 (deftest sort-result
   ;; Define since it's not defined
@@ -105,8 +117,27 @@
       {:sort-desc? true :sort-by-column :rating}
       [{:rating 8} {:rating 7}] [{:rating 8} {:rating 7}]
          2.0 ;; actual: ~0.05
- 
+
       {:sort-desc? false :sort-by-column :rating}
       [{:rating 8} {:rating 7}] [{:rating 7} {:rating 8}]
       2.0 ;; actual: ~0.05
       )))
+
+(deftest build-column-value
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "prop:: a
+- b1
+- b2
+prop:: b"}])
+  (testing "for :page"
+    (is (= ["page1" "page1"]
+           (->> (dsl-query "(property prop)")
+                (map #(#'query-table/build-column-value % :page {:page? false}))
+                (map second)))
+        "Page columns have valid value for blocks")
+
+    (is (= ["page1"]
+           (->> (dsl-query "(page-property prop)")
+                (map #(#'query-table/build-column-value % :page {:page? true}))
+                (map second)))
+        "Page columns have valid value for pages")))
