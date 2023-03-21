@@ -757,7 +757,7 @@
         (if (not @collapsed?) (content) nil)
         content)]]))
 
-(rum/defc admonition
+(defn admonition
   [type content]
   (let [type (name type)]
     (when-let [icon (case (string/lower-case type)
@@ -926,14 +926,14 @@
                           [:div {:key "tippy"} ""])))
            (rum/fragment {:key "tippy-children"} child))))
 
-(rum/defc slider
+(defn slider
   [default-value {:keys [min max on-change]}]
   [:input.cursor-pointer
-   {:type      "range"
-    :value     (int default-value)
-    :min       min
-    :max       max
-    :style     {:width "100%"}
+   {:type  "range"
+    :value (int default-value)
+    :min   min
+    :max   max
+    :style {:width "100%"}
     :on-change #(let [value (util/evalue %)]
                   (on-change value))}])
 
@@ -950,7 +950,7 @@
 (def get-adapt-icon-class
   (memoize (fn [klass] (r/adapt-class klass))))
 
-(rum/defc icon
+(defn icon
   ([name] (icon name nil))
   ([name {:keys [extension? font? class] :as opts}]
    (when-not (string/blank? name)
@@ -958,10 +958,10 @@
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
                                  (util/format
-                                   (str "%s-" name
-                                        (when (:class opts)
-                                          (str " " (string/trim (:class opts)))))
-                                   (if extension? "tie tie" "ti ti"))}
+                                  (str "%s-" name
+                                       (when (:class opts)
+                                         (str " " (string/trim (:class opts)))))
+                                  (if extension? "tie tie" "ti ti"))}
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
@@ -971,7 +971,7 @@
               {:class (str "ls-icon-" name " " class)}
               (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
-(rum/defc button
+(defn button
   [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
            :or   {small? false large? false}
            :as   option}]
@@ -982,15 +982,15 @@
         klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
-       {:type     "button"
-        :title    title
-        :disabled disabled?
-        :class    (str (util/hiccup->class klass) " " class)}
-       (dissoc option :background :class :small? :large?)
-       (when href
-         {:on-click (fn []
-                      (util/open-url href)
-                      (when (fn? on-click) (on-click)))}))
+      {:type  "button"
+       :title title
+       :disabled disabled?
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small? :large?)
+      (when href
+        {:on-click (fn []
+                     (util/open-url href)
+                     (when (fn? on-click) (on-click)))}))
      (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
