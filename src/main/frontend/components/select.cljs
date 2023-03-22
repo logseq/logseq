@@ -31,7 +31,7 @@
      [:span.col-span-3 result]]))
 
 (rum/defcs select <
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (rum/local "" ::input)
   {:will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)

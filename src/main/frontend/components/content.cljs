@@ -134,7 +134,7 @@
        nil))))
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [format (:block/format block)
