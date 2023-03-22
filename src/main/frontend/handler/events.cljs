@@ -117,8 +117,7 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
-            (file-sync/maybe-onboarding-show status)
-            (whiteboard/onboarding-show)))))))
+            (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
