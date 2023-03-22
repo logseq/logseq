@@ -121,16 +121,8 @@ export class TLApp<
         fn: () => this.api.zoomIn(),
       },
       {
-        keys: 'mod+z',
-        fn: () => this.undo(),
-      },
-      {
         keys: 'mod+x',
         fn: () => this.cut(),
-      },
-      {
-        keys: 'mod+shift+z',
-        fn: () => this.redo(),
       },
       {
         keys: '[',
@@ -193,6 +185,12 @@ export class TLApp<
         keys: 'mod+shift+g',
         fn: () => {
           this.api.unGroup()
+        },
+      },
+      {
+        keys: 'shift+g',
+        fn: () => {
+          this.api.toggleGrid()
         },
       },
     ]
@@ -279,9 +277,9 @@ export class TLApp<
   @computed get serialized(): TLDocumentModel<S> {
     return {
       // currentPageId: this.currentPageId,
-      selectedIds: Array.from(this.selectedIds.values()),
-      pages: Array.from(this.pages.values()).map(page => page.serialized),
-      assets: this.getCleanUpAssets(),
+      // selectedIds: Array.from(this.selectedIds.values()),
+      // pages: Array.from(this.pages.values()).map(page => page.serialized),
+      // assets: this.getCleanUpAssets(),
     }
   }
 
@@ -369,6 +367,23 @@ export class TLApp<
         }
       }
     })
+
+    const deleteBinding = (shapeA: string, shapeB: string) => {
+      if ([...ids].includes(shapeA) && this.getShapeById(shapeB)?.type === "line")
+        ids.add(shapeB)
+    }
+
+     this.currentPage.shapes
+      .flatMap(s => Object.values(s.props.handles ?? {}))
+      .flatMap(h => h.bindingId)
+      .filter(isNonNullable)
+      .map(binding => {
+        const toId = this.currentPage.bindings[binding]?.toId
+        const fromId = this.currentPage.bindings[binding]?.fromId
+        if (toId && fromId) {
+          deleteBinding(toId, fromId)
+          deleteBinding(fromId, toId)
+        }})
 
     const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
 
@@ -562,15 +577,10 @@ export class TLApp<
 
       const shapeBlockRefs = this.selectedShapesArray.map(s => `((${s.props.id}))`).join(' ')
 
-      // FIXME: use `writeClipboard` in frontend.utils
-      navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          'text/plain': new Blob([shapeBlockRefs], {
-            type: 'text/plain',
-          }),
-        }),
-      ])
+      this.notify('copy', {
+        text: shapeBlockRefs,
+        html: tldrawString,
+      })
     }
   }
 
@@ -889,7 +899,7 @@ export class TLApp<
       !this.isInAny('select.translating', 'select.pinching') &&
       this.selectedShapes.size > 0 &&
       !this.selectedShapesArray.every(shape => shape.hideSelectionDetail) &&
-      false // FIXME: should we shoult the selection detail?
+      false // FIXME: should we show the selection detail?
     )
   }
 

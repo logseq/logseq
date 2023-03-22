@@ -236,10 +236,7 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})])))
-
-       (when (state/feature-http-server-enabled?)
-        (server/server-indicator (state/sub :electron/server)))]]
+              (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
       (when (and current-repo
@@ -259,6 +256,9 @@
 
       (when config/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
+
+      (when (state/feature-http-server-enabled?)
+        (server/server-indicator (state/sub :electron/server)))
 
       (when (util/electron?)
         (back-and-forward))

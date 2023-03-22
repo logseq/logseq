@@ -322,7 +322,7 @@
     (if (and (< 2 (count parts))
              (= 36 (count (parts 0)))
              (= 36 (count (parts 1))))
-      (string/join "/" (drop 2 parts))
+      (util/string-join-path (drop 2 parts))
       path)))
 
 (defprotocol IRelativePath
@@ -342,7 +342,7 @@
       (remove-user-graph-uuid-prefix o)
 
       :else
-      (throw (js/Error. (str "unsupport type " (str o)))))))
+      (throw (js/Error. (str "unsupported type " (str o)))))))
 
 (defprotocol IChecksum
   (-checksum [this]))
@@ -531,7 +531,7 @@
   {:post [(s/valid? ::diff %)]}
   {:TXId (inc index)
    :TXType "update_files"
-   :TXContent [[(string/join "/" [user-uuid graph-uuid relative-path]) nil checksum]]})
+   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
 
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.
@@ -3258,7 +3258,7 @@
 
 ;;; ### some add-watches
 
-;; TOOD: replace this logic by pause/resume state
+;; TODO: replace this logic by pause/resume state
 (defonce network-online-cursor (rum/cursor state/state :network/online?))
 (add-watch network-online-cursor "sync-manage"
            (fn [_k _r o n]

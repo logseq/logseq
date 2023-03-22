@@ -23,9 +23,9 @@ jobs:
           java-version: 1.8
 
       - name: Set up Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
-            node-version: 16
+            node-version: 18
 
       - name: Install clojure
         run: |

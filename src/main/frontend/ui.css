@@ -32,6 +32,11 @@
           visibility: visible;
         }
       }
+
+      &:not(.chosen):hover {
+        background-color: unset !important;
+        color: var(--ls-primary-text-color);
+      }
     }
   }
 }
@@ -398,4 +403,8 @@ html.is-mobile {
     background: var(--ls-primary-background-color);
     content: " ";
   }
+}
+
+.ui__radio-list {
+  @apply grid grid-flow-col gap-2;
 }

@@ -58,6 +58,13 @@
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
 
+(defn string-join-path
+  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
+  https://github.com/logseq/logseq/pull/8679"
+  [parts]
+  (string/join "/" parts))
+
+
 #?(:cljs
    (defn safe-re-find
      {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
@@ -777,7 +784,13 @@
      ([s]
       (utils/writeClipboard (clj->js {:text s})))
      ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+      (utils/writeClipboard (clj->js {:text s :html html})))
+     ([s html owner-window]
+      (-> (cond-> {:text s}
+            (not (string/blank? html))
+            (assoc :html html))
+          (bean/->js)
+          (utils/writeClipboard owner-window)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -1028,7 +1041,7 @@
   (let [parts (string/split path "/")
         basename (last parts)
         dir (->> (butlast parts)
-                 (string/join "/"))]
+                 string-join-path)]
     [dir basename]))
 
 (defn get-relative-path
@@ -1044,7 +1057,7 @@
             ["."])
           parts-2
           [another-file-name])
-         (string/join "/"))))
+         string-join-path)))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -1254,14 +1267,15 @@
 #?(:cljs
    (defn- get-dom-top
      [node]
-     (gobj/get (.getBoundingClientRect node) "top")))
+     (when node
+       (gobj/get (.getBoundingClientRect node) "top"))))
 
 #?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
-           elements)))
+           (remove nil? elements))))
 
 #?(:cljs
    (defn calc-delta-rect-offset
@@ -1491,3 +1505,26 @@ Arg *stop: atom, reset to true to stop the loop"
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
+
+
+(defmacro concatv
+  "Vector version of concat. non-lazy"
+  [& args]
+  `(vec (concat ~@args)))
+
+(defmacro mapcatv
+  "Vector version of mapcat. non-lazy"
+  [f coll & colls]
+  `(vec (mapcat ~f ~coll ~@colls)))
+
+(defmacro removev
+  "Vector version of remove. non-lazy"
+  [pred coll]
+  `(vec (remove ~pred ~coll)))
+
+#?(:cljs
+   (defn safe-with-meta
+     [o meta]
+     (if (satisfies? IMeta o)
+       (with-meta o meta)
+       o)))

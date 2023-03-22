@@ -10,8 +10,10 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [logseq.graph-parser.text :as text]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.context.i18n :refer [t]]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -102,13 +104,13 @@
     :repo-add
     "Add another repo"
     :graph
-    "Graph"
+    (t :graph)
     :all-files
-    "All files"
+    (t :all-files)
     :all-pages
-    "All pages"
+    (t :all-pages)
     :all-journals
-    "All journals"
+    (t :all-journals)
     :file
     (str "File " (:path path-params))
     :new-page
@@ -142,8 +144,9 @@
 (defn update-page-title!
   [route]
   (let [{:keys [data path-params]} route
-        title (get-title (:name data) path-params)]
-    (util/set-title! title)))
+        title (get-title (:name data) path-params)
+        hls? (pdf-utils/hls-file? title)]
+    (util/set-title! (if hls? (pdf-utils/fix-local-asset-pagename title) title))))
 
 (defn update-page-label!
   [route]

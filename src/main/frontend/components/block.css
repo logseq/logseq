@@ -538,6 +538,12 @@ a:hover > .bullet-container {
   }
 }
 
+.ls-block .custom-query {
+  > .th {
+    @apply flex flex-row flex-1 items-center justify-between my-1 text-xs opacity-90;
+  }
+}
+
 /* copied from https://github.com/drdogbot7/tailwindcss-responsive-embed */
 .embed-responsive {
   position: relative;

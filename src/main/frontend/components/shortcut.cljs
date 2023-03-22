@@ -104,7 +104,7 @@
      [:td.text-left (t :help/block-reference)]
      [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
-     [:td.text-left (t :command.editor/open-link-in-sidebar)]
+     [:td.text-left (t :help/open-link-in-sidebar)]
      [:td.text-right (ui/render-keyboard-shortcut ["shift" "click"])]]
     [:tr
      [:td.text-left (t :help/context-menu)]

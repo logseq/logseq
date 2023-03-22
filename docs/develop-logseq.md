@@ -24,6 +24,21 @@ yarn watch
 
 Then open the browser <http://localhost:3001>.
 
+### REPL setup
+
+#### VSCode + Calva
+With ```yarn watch``` running, it should prints ``shadow-cljs - nREPL server started on port 8701``
+
+You may connect to the nREPL server with:
+
+``cmd + shift + p`` -> ``Calva: Connect to a Running REPL Server in the Project`` -> ``logseq`` -> ``shadow-cljs``->``:app`` ->``localhost:8701``
+
+(change ``:app`` to ``:electron`` if you want to connect to the main thread of the Electron app)
+
+Open a dev environment (Browser dev app on ``localhost:3000`` or Desktop dev app), then you can play REPL on the current editing file:
+
+``cmd + shift + p`` -> ``Calva: Load/Evaluate Current File and its Requires/Dependencies``
+
 ### Production Build
 
 ```bash

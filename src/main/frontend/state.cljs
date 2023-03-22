@@ -92,7 +92,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/custom-query-components            {}
      :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
@@ -207,6 +206,7 @@
      :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
+     :pdf/system-win?                       false
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
@@ -226,6 +226,8 @@
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                 #{})
+     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                {})
      :date-picker/date                      nil
 
      :youtube/players                       {}
@@ -277,7 +279,9 @@
      :graph/importing-state                 {}
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)})))
+     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
+     :whiteboard/last-persisted-at          {}
+     :whiteboard/pending-tx-data            {}})))
 
 ;; Block ast state
 ;; ===============
@@ -310,6 +314,7 @@
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
+   :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
    ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
@@ -324,12 +329,13 @@
   "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
-  (apply merge-with
+  (->> configs
+       (filter map?)
+       (apply merge-with
          (fn merge-config [current new]
            (if (and (map? current) (map? new))
              (merge current new)
-             new))
-         configs))
+             new)))))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -596,12 +602,8 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    ((resolve 'frontend.handler.user/alpha-or-beta-user?)) ;; using resolve to avoid circular dependency
+    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
-
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list? (sub-config)))))
 
 (defn enable-git-auto-push?
   [repo]
@@ -674,6 +676,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/preferred-pasting-file? (sub-config)))
 
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
+
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
@@ -731,9 +737,13 @@ Similar to re-frame subscriptions"
     (get-in (get-route-match)
             [:path-params :name])))
 
+(defn whiteboard-route?
+  []
+  (= :whiteboard (get-current-route)))
+
 (defn get-current-whiteboard
   []
-  (when (= :whiteboard (get-current-route))
+  (when (whiteboard-route?)
     (get-in (get-route-match)
             [:path-params :name])))
 
@@ -1243,22 +1253,6 @@ Similar to re-frame subscriptions"
   (when value
     (set-state! :journals-length value)))
 
-(defn add-custom-query-component!
-  [query-string component]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (assoc m query-string component))))
-
-(defn remove-custom-query-component!
-  [query-string]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (dissoc m query-string))))
-
-(defn get-custom-query-components
-  []
-  (vals (get @state :ui/custom-query-components)))
-
 (defn save-scroll-position!
   ([value]
    (save-scroll-position! value js/window.location.hash))
@@ -1632,25 +1626,13 @@ Similar to re-frame subscriptions"
      ;; Is this a good idea to put whiteboard check here?
      (not (get-edit-input-id)))))
 
-(defn whiteboard-page-idle?
-  "Check if whiteboard page is idle.
-   - when current tool is select and idle
-     - and whiteboard page is updated longer than 1000 seconds
-   - when current tool is other tool and idle
-     - and whiteboard page is updated longer than 3000 seconds"
-  [repo whiteboard-page & {:keys [select-idle-ms tool-idle-ms]
-                           :or {select-idle-ms 1000
-                                tool-idle-ms 3000}}]
+(defn whiteboard-idle?
+  "Check if whiteboard is idle."
+  [repo]
   (when repo
-    (if-let [tldraw-app (active-tldraw-app)]
-      (let [last-time (:block/updated-at whiteboard-page)
-            now (util/time-ms)
-            elapsed (- now last-time)
-            select-idle (.. tldraw-app (isIn "select.idle"))
-            tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
-        (or (and select-idle (>= elapsed select-idle-ms))
-            (and (not select-idle) tool-idle (>= elapsed tool-idle-ms))))
-      true)))
+    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
+                              (- (util/time-ms) 10000)))
+        3000)))
 
 (defn set-nfs-refreshing!
   [value]
@@ -1758,6 +1740,13 @@ Similar to re-frame subscriptions"
                    #(f % k))
     (storage/set :copy/export-block-text-remove-options
                  (get-export-block-text-remove-options))))
+
+(defn get-export-block-text-other-options []
+  (:copy/export-block-text-other-options @state))
+
+(defn update-export-block-text-other-options!
+  [k v]
+  (update-state! :copy/export-block-text-other-options #(assoc % k v)))
 
 (defn set-editor-args!
   [args]
@@ -2113,3 +2102,7 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn clear-user-info!
+  []
+  (storage/remove :user-groups))

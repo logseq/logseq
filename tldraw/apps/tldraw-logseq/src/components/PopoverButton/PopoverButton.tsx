@@ -60,7 +60,7 @@ export const PopoverButton = observer(
         </Popover.Trigger>
 
         <Popover.Content
-          // it seems like the Popover.Content component doesn't update collission when camera changes
+          // it seems like the Popover.Content component doesn't update collision when camera changes
           key={'popover-content-' + tick}
           ref={contentRef}
           className="tl-popover-content"

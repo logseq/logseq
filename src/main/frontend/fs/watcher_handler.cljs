@@ -37,8 +37,7 @@
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
-  (p/let [
-          ;; save the previous content in a versioned bak file to avoid data overwritten.
+  (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
           _ (when backup?
               (-> (when-let [repo-dir (config/get-local-dir repo)]
                     (file-handler/backup-file! repo-dir path db-content content))
@@ -96,10 +95,10 @@
           (and (= "unlink" type)
                (db/file-exists? repo path))
           (p/let [dir-exists? (fs/file-exists? dir "")]
-                 (when dir-exists?
-                   (when-let [page-name (db/get-file-page path)]
-                     (println "Delete page: " page-name ", file path: " path ".")
-                     (page-handler/delete! page-name #() :delete-file? false))))
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :delete-file? false))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
@@ -114,7 +113,7 @@
           (log/error :fs/watcher-no-handler {:type type
                                              :payload payload})))
 
-      ;; return nil, otherwise the entire db will be transfered by ipc
+      ;; return nil, otherwise the entire db will be transferred by ipc
       nil)))
 
 (defn load-graph-files!

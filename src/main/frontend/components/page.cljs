@@ -15,7 +15,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
-            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
@@ -296,7 +295,7 @@
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
-          hls-page? (pdf-assets/hls-file? title)
+          hls-page? (pdf-utils/hls-file? title)
           whiteboard-page? (model/whiteboard-page? page-name)
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
@@ -474,15 +473,15 @@
             (reference/references route-page-name)
             (str route-page-name "-refs"))])
 
-       (when-not (or block? whiteboard?)
-         [:div
-          (when (not journal?)
-            (hierarchy/structures route-page-name))
+       (let [block-or-whiteboard? (or block? whiteboard?)]
+         (when-not block-or-whiteboard?
+           (when (not journal?)
+             (hierarchy/structures route-page-name)))
 
-          ;; TODO: or we can lazy load them
-          (when-not sidebar?
-            [:div {:key "page-unlinked-references"}
-             (reference/unlinked-references route-page-name)])])])))
+         (when-not block-or-whiteboard?
+           (when-not sidebar?
+             [:div {:key "page-unlinked-references"}
+              (reference/unlinked-references route-page-name)])))])))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
@@ -561,7 +560,7 @@
               ;;         item))
               ;;     [{:label "gForce"}
               ;;      {:label "dagre"}])
-              ;;    (fn [value]
+              ;;    (fn [_e value]
               ;;      (set-setting! :layout value))
               ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2

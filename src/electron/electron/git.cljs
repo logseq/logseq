@@ -98,7 +98,9 @@
 
 (defn commit!
   [message]
-  (run-git! #js ["commit" "-m" message]))
+  (p/do!
+   (run-git! #js ["config" "core.quotepath" "false"])
+   (run-git! #js ["commit" "-m" message])))
 
 (defn add-all-and-commit!
   ([]
@@ -119,6 +121,10 @@
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
                                                              :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")})))))))))
+
+(defn short-status!
+  []
+  (run-git! #js ["status" "--porcelain"]))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?

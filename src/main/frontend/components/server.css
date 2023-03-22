@@ -1,15 +1,8 @@
 .cp__server-indicator {
-  @apply flex items-center px-1 rounded-md
-  dark:border-gray-500;
+  @apply flex items-center rounded-md;
 
   .button.icon {
     width: auto;
     height: auto;
-  }
-}
-
-.ls-left-sidebar-open {
-  .cp__server-indicator {
-    @apply ml-[115px];
   }
 }

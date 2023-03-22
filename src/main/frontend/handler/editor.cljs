@@ -9,13 +9,15 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.diff :as diff]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -126,18 +128,21 @@
 (defn html-link-format!
   ([]
    (html-link-format! nil))
-  ([link]
+  ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
-           selection-link? (and selection (gp-util/url? selection))
+           selection-link? (and selection (gp-mldoc/mldoc-link? format selection))
            [content forward-pos] (cond
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
 
-                                   link
-                                   (config/with-label-link format selection link)
+                                   (and text selection-link?)
+                                   (config/with-label-link format text selection)
+
+                                   text
+                                   (config/with-label-link format selection text)
 
                                    selection-link?
                                    (config/with-default-link format selection)
@@ -311,7 +316,7 @@
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
-        properties (if (and (= format :markdown) 
+        properties (if (and (= format :markdown)
                             (number? (:heading properties)))
                      (dissoc properties :heading)
                      properties)
@@ -948,10 +953,10 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
                                    (map :block/uuid))
-        content (export/export-blocks-as-markdown
+        content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
-                 (state/get-export-block-text-indent-style)
-                 (into [] (state/get-export-block-text-remove-options)))]
+                 {:indent-style (state/get-export-block-text-indent-style)
+                  :remove-options (set (state/get-export-block-text-remove-options))})]
     [top-level-block-uuids content]))
 
 (defn- get-all-blocks-by-ids
@@ -973,7 +978,7 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
+        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
@@ -1189,7 +1194,7 @@
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
-          html (export/export-blocks-as-html repo [block-id])
+          html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
       (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
@@ -1772,7 +1777,9 @@
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
              (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
              (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
-             (not (wrapped-by? input "#" "")))
+             ;; wrapped-by? doesn't detect multiple beginnings when ending with "" so
+             ;; use subs to correctly detect current hashtag
+             (not (text-util/wrapped-by? (subs (.-value input) 0 (cursor/pos input)) (cursor/pos input) commands/hashtag "")))
     (state/clear-editor-action!)))
 
 (defn resize-image!
@@ -1810,6 +1817,10 @@
                  (state/set-editor-op! nil)))
              500))))
 
+(defn- start-of-new-word?
+  [input pos]
+  (contains? #{" " "\t"} (get (.-value input) (- pos 2))))
+
 (defn handle-last-input []
   (let [input           (state/get-input)
         pos             (cursor/pos input)
@@ -1820,9 +1831,8 @@
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
-      ;; By default, "/" is also used as namespace separator in Logseq.
       (and (= last-input-char (state/get-editor-command-trigger))
-           (not (contains? #{:page-search-hashtag} (state/sub :editor/action))))
+           (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
@@ -1855,8 +1865,8 @@
 
       ;; Open "Search page or New page" auto-complete
       (and (= last-input-char commands/hashtag)
-           ;; Only trigger at beginning of line or before whitespace
-           (or (= 1 pos) (contains? #{" " "\t"} (get (.-value input) (- pos 2)))))
+           ;; Only trigger at beginning of a line or before whitespace
+           (or (re-find #"(?m)^#" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -2001,7 +2011,7 @@
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
-  [tree-vec format keep-uuid?]
+  [tree-vec format keep-uuid? page-name]
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
@@ -2009,7 +2019,7 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* format {})
+                    blocks (block/extract-blocks ast content* format {:page-name page-name})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -2021,8 +2031,9 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
-        page-id (:db/id (:block/page target-block))
+  (let [page-id (:db/id (:block/page target-block))
+        page-name (some-> page-id (db/entity) :block/name)
+        blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-left page-id blocks)
         block-refs (->> (mapcat :block/refs blocks)
                         (set)
@@ -2807,7 +2818,68 @@
         :else
         nil))))
 
-(defn ^:large-vars/cleanup-todo keyup-handler
+(defn- default-case-for-keyup-handler
+  [input current-pos k code is-processed? c]
+  (let [last-key-code (state/get-last-key-code)
+        blank-selected? (string/blank? (util/get-selected-text))
+        non-enter-processed? (and is-processed? ;; #3251
+                                  (not= code keycode/enter-code))  ;; #3459
+        editor-action (state/get-editor-action)]
+    (when (and (not editor-action) (not non-enter-processed?))
+      (cond
+        ;; When you type text inside square brackets
+        (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
+             (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
+        (let [orig-pos (cursor/get-caret-pos input)
+              value (gobj/get input "value")
+              square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
+              pos (+ square-pos 2)
+              _ (state/set-editor-last-pos! pos)
+              pos (assoc orig-pos :pos pos)
+              command-step (if (= \# (util/nth-safe value (dec square-pos)))
+                             :editor/search-page-hashtag
+                             :editor/search-page)]
+          (commands/handle-step [command-step])
+          (state/set-editor-action-data! {:pos pos}))
+
+        ;; Handle non-ascii square brackets
+        (and blank-selected?
+             (contains? keycode/left-square-brackets-keys k)
+             (= (:key last-key-code) k)
+             (> current-pos 0)
+             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+        (do
+          (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
+                                                                                 :backward-pos 2}])
+          (commands/handle-step [:editor/search-page])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
+
+        ;; Handle non-ascii parentheses
+        (and blank-selected?
+             (contains? keycode/left-paren-keys k)
+             (= (:key last-key-code) k)
+             (> current-pos 0)
+             (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
+        (do
+          (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
+                                                                                :backward-pos 2}])
+          (commands/handle-step [:editor/search-block :reference])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
+
+        ;; Handle non-ascii angle brackets
+        (and (= "〈" c)
+             (= "《" (util/nth-safe (gobj/get input "value") (dec (dec current-pos))))
+             (> current-pos 0))
+        (do
+          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                       :backward-pos 0}])
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+          (state/set-editor-show-block-commands!))
+
+        :else
+        nil))))
+
+(defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
@@ -2836,24 +2908,22 @@
                (if (mobile-util/native-android?)
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
-               (util/event-is-composing? e true)]) ;; #3440
-            format (:format (get-state))
-            last-key-code (state/get-last-key-code)
-            blank-selected? (string/blank? (util/get-selected-text))
-            non-enter-processed? (and is-processed? ;; #3251
-                                      (not= code keycode/enter-code))  ;; #3459
-            editor-action (state/get-editor-action)]
+                ;; #3440
+               (util/event-is-composing? e true)])]
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
-          (let [matched-commands (get-matched-commands input)]
-            (if (seq matched-commands)
-              (reset! commands/*matched-commands matched-commands)
-              (state/clear-editor-action!)))
+          (if (= (state/get-editor-command-trigger) (second (re-find #"(\S+)\s+$" value)))
+            (state/clear-editor-action!)
+            (let [matched-commands (get-matched-commands input)]
+              (if (seq matched-commands)
+                (reset! commands/*matched-commands matched-commands)
+                (state/clear-editor-action!))))
 
           ;; When you type search text after < (and when you release shift after typing <)
-          (and (= :block-commands editor-action) (not= key-code 188)) ; not <
-          (let [matched-block-commands (get-matched-block-commands input)]
+          (and (= :block-commands (state/get-editor-action)) (not= key-code 188)) ; not <
+          (let [matched-block-commands (get-matched-block-commands input)
+                format (:format (get-state))]
             (if (seq matched-block-commands)
               (cond
                 (= key-code 9)          ;tab
@@ -2870,7 +2940,7 @@
               (state/clear-editor-action!)))
 
           ;; When you type two spaces after a command character (may always just be handled by the above instead?)
-          (and (contains? #{:commands :block-commands} (state/get-editor-action))
+          (and (contains? #{:block-commands} (state/get-editor-action))
                (= c (util/nth-safe value (dec (dec current-pos))) " "))
           (state/clear-editor-action!)
 
@@ -2880,59 +2950,7 @@
           (state/clear-editor-action!)
 
           :else
-          (when (and (not editor-action) (not non-enter-processed?))
-            (cond
-              ;; When you type text inside square brackets
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
-                   (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
-              (let [orig-pos (cursor/get-caret-pos input)
-                    value (gobj/get input "value")
-                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
-                    pos (+ square-pos 2)
-                    _ (state/set-editor-last-pos! pos)
-                    pos (assoc orig-pos :pos pos)
-                    command-step (if (= \# (util/nth-safe value (dec square-pos)))
-                                   :editor/search-page-hashtag
-                                   :editor/search-page)]
-                (commands/handle-step [command-step])
-                (state/set-editor-action-data! {:pos pos}))
-
-              ;; Handle non-ascii square brackets
-              (and blank-selected?
-                   (contains? keycode/left-square-brackets-keys k)
-                   (= (:key last-key-code) k)
-                   (> current-pos 0)
-                   (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-              (do
-                (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-page])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-              ;; Handle non-ascii parentheses
-              (and blank-selected?
-                   (contains? keycode/left-paren-keys k)
-                   (= (:key last-key-code) k)
-                   (> current-pos 0)
-                   (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
-              (do
-                (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-block :reference])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-              ;; Handle non-ascii angle brackets
-              (and (= "〈" c)
-                   (= "《" (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-              (do
-                (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                             :backward-pos 0}])
-                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-                (state/set-editor-show-block-commands!))
-
-              :else
-              nil)))
+          (default-case-for-keyup-handler input current-pos k code is-processed? c))
 
         (close-autocomplete-if-outside input)
 
@@ -3020,12 +3038,8 @@
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
         (save-current-block!)
-        (if (= selected-start selected-end)
-          (copy-current-block-ref "ref")
-          (js/document.execCommand "copy")))
-
-      :else
-      (js/document.execCommand "copy"))))
+        (when (= selected-start selected-end)
+          (copy-current-block-ref "ref"))))))
 
 (defn shortcut-copy-text
   "shortcut copy action:
@@ -3202,6 +3216,20 @@
            (mldoc/block-with-title? first-elem-type))
          true)))
 
+(defn- valid-dsl-query-block?
+  "Whether block has a valid dsl query."
+  [block]
+  (->> (:block/macros (db/entity (:db/id block)))
+       (some (fn [macro]
+               (when-let [query-body (and
+                                      (= "query" (get-in macro [:block/properties :logseq.macro-name]))
+                                      (first (:logseq.macro-arguments (:block/properties macro))))]
+                 (seq (:query
+                       (try
+                         (query-dsl/parse-query query-body)
+                         (catch :default _e
+                           nil)))))))))
+
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
@@ -3210,6 +3238,7 @@
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (or (db-model/has-children? block-id)
+           (valid-dsl-query-block? block)
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)

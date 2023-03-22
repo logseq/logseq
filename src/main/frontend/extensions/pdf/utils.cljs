@@ -11,6 +11,10 @@
 (defonce MIN-SCALE 0.25)
 (defonce DELTA_SCALE 1.05)
 
+(defn hls-file?
+  [filename]
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
+
 (defn clean-asset-path-prefix
   [path]
   (when (string? path)
@@ -177,7 +181,7 @@
   [filename]
   (when-not (string/blank? filename)
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls?         (re-find #"^hls__" filename)
+          hls?         (hls-file? filename)
           len          (count filename)]
       (if (or local-asset? hls?)
         (-> filename
@@ -192,13 +196,13 @@
 (defn next-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "nextPage")
+    (js-invoke js/window.lsActivePdfViewer "nextPage")
     (catch :default _e nil)))
 
 (defn prev-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "previousPage")
+    (js-invoke js/window.lsActivePdfViewer "previousPage")
     (catch :default _e nil)))
 
 (defn open-finder

@@ -95,9 +95,9 @@ html[data-theme='dark'] {
   --ls-highlight-color-blue: var(--color-blue-900);
   --ls-highlight-color-purple: var(--color-purple-900);
   --ls-highlight-color-pink: var(--color-pink-900);
-  --ls-error-text-color: var(--color-red-100);
+  --ls-error-text-color: var(--color-red-400);
   --ls-error-background-color: var(--color-red-900);
-  --ls-warning-text-color: var(--color-yellow-100);
+  --ls-warning-text-color: var(--color-yellow-400);
   --ls-warning-background-color: var(--color-yellow-900);
   --ls-success-text-color: var(--color-green-100);
   --ls-success-background-color: var(--color-green-900);
@@ -173,9 +173,9 @@ html[data-theme='light'] {
   --ls-highlight-color-blue: var(--color-blue-100);
   --ls-highlight-color-purple: var(--color-purple-100);
   --ls-highlight-color-pink: var(--color-pink-100);
-  --ls-error-text-color: var(--color-red-800);
+  --ls-error-text-color: var(--color-red-600);
   --ls-error-background-color: var(--color-red-100);
-  --ls-warning-text-color: var(--color-yellow-800);
+  --ls-warning-text-color: var(--color-yellow-700);
   --ls-warning-background-color: var(--color-yellow-100);
   --ls-success-text-color: var(--color-green-800);
   --ls-success-background-color: var(--color-green-100);
@@ -203,7 +203,7 @@ html {
 }
 
 body {
-  color: #24292e;
+  color: var(--ls-primary-text-color);
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;
@@ -914,4 +914,11 @@ html.is-mobile {
   #journals .journal-item:first-child {
     margin-top: 5px;
   }
+}
+
+@layer base {
+    .ls-grid-cols {
+        @apply grid grid-flow-col auto-cols-max;
+        place-items: center;
+    }
 }

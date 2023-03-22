@@ -5,6 +5,7 @@ import { TextAreaUtils } from './TextAreaUtils'
 
 const stopPropagation = (e: KeyboardEvent | React.SyntheticEvent<any, Event>) => e.stopPropagation()
 
+const placeholder = "Enter text"
 export interface TextLabelProps {
   font: string
   text: string
@@ -57,11 +58,7 @@ export const TextLabel = React.memo(function TextLabel({
       if (!(e.key === 'Meta' || e.metaKey)) {
         e.stopPropagation()
       } else if (e.key === 'z' && e.metaKey) {
-        if (e.shiftKey) {
-          document.execCommand('redo', false)
-        } else {
-          document.execCommand('undo', false)
-        }
+        document.execCommand(e.shiftKey ? 'redo' : 'undo', false)
         e.stopPropagation()
         e.preventDefault()
         return
@@ -92,8 +89,7 @@ export const TextLabel = React.memo(function TextLabel({
 
   const handleFocus = React.useCallback(
     (e: React.FocusEvent<HTMLTextAreaElement>) => {
-      if (!isEditing) return
-      if (!rIsMounted.current) return
+      if (!isEditing || !rIsMounted.current) return
 
       if (document.activeElement === e.currentTarget) {
         e.currentTarget.select()
@@ -130,7 +126,7 @@ export const TextLabel = React.memo(function TextLabel({
     const elm = rInnerWrapper.current
     if (!elm) return
     const size = getTextLabelSize(
-      text,
+      text || placeholder,
       { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
       4
     )
@@ -172,7 +168,7 @@ export const TextLabel = React.memo(function TextLabel({
             autoCorrect="false"
             autoSave="false"
             autoFocus
-            placeholder=""
+            placeholder={placeholder}
             spellCheck="true"
             wrap="off"
             dir="auto"

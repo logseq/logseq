@@ -40,6 +40,13 @@
   &.is-overflow-vh-y {
     transform: translateY(calc(-100% - 2rem));
   }
+
+  &[data-modal-name="commands"] {
+    @screen sm {
+      width: 380px !important;
+      max-width: 90vw !important;
+    }
+  }
 }
 
 .is-mobile {

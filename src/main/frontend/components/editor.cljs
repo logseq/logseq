@@ -340,20 +340,30 @@
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
-  (let [vw-width js/window.innerWidth
+  (let [MAX-HEIGHT 700
+        MAX-HEIGHT' 600
+        MAX-WIDTH 600
+        SM-MAX-WIDTH 300
+        Y-BOUNDARY-HEIGHT 150
+        vw-width js/window.innerWidth
         vw-height js/window.innerHeight
         vw-max-width (- vw-width (:left rect))
         vw-max-height (- vw-height (:top rect))
+        vw-max-height' (:top rect)
         sm? (< vw-width 415)
-        max-height (min (- vw-max-height 20) 800)
-        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        max-height (min (- vw-max-height 20) MAX-HEIGHT)
+        max-height' (min (- vw-max-height' 70) MAX-HEIGHT')
+        max-width (if sm? SM-MAX-WIDTH (min (max 400 (/ vw-max-width 2)) MAX-WIDTH))
         offset-top 24
-        to-max-height (if (and (seq rect) (> vw-height max-height))
-                        (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
-                          (if (< delta-height max-height)
-                            (- (max (* 2 offset-top) delta-height) 16)
-                            max-height))
-                        max-height)
+        to-max-height (cond-> (if (and (seq rect) (> vw-height max-height))
+                                (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
+                                  (if (< delta-height max-height)
+                                    (- (max (* 2 offset-top) delta-height) 16)
+                                    max-height))
+                                max-height)
+
+                              (= modal-name "commands")
+                              (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
         editing-key    (first (keys (:editor/editing? @state/state)))
         *el (rum/use-ref nil)
@@ -367,8 +377,9 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        y-overflow-vh? (< to-max-height 130)
-        to-max-height (if y-overflow-vh? max-height to-max-height)
+        y-overflow-vh? (or (< to-max-height Y-BOUNDARY-HEIGHT)
+                           (> (- max-height' to-max-height) Y-BOUNDARY-HEIGHT))
+        to-max-height (if y-overflow-vh? max-height' to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))
@@ -381,11 +392,9 @@
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (when-let [^js/HTMLElement editor
-                          (js/document.querySelector ".editor-wrapper")]
-                 (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
-                   {:right 0}
-                   {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
+               (if (<= vw-max-width (+ left (if set-default-width? max-width 500)))
+                 {:right 0}
+                 {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)}))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :data-modal-name modal-name

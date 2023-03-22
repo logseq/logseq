@@ -34,6 +34,9 @@
  ;; Enable showing the body of blocks when referencing them.
  :ui/show-full-blocks? false
 
+ ;; Expand block references automatically when zoom-in
+ :ui/auto-expand-block-refs? true
+
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 
@@ -127,7 +130,7 @@
  ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `t` followed by `s`
  ;; 3. `mod` means `Ctrl` for Windows/Linux  and `Command` for Mac
  ;; 4. use `false` to disable particular shortcut
- ;; 4. you can define multiple bindings for one action, eg `["ctrl+j" "down"]`
+ ;; 5. you can define multiple bindings for one action, eg `["ctrl+j" "down"]`
  ;; full list of configurable shortcuts are available below:
  ;; https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/config.cljs
  ;; Example:
@@ -135,7 +138,7 @@
  ;; {:editor/new-block       "enter"
  ;;  :editor/new-line        "shift+enter"
  ;;  :editor/insert-link     "mod+shift+k"
- ;;  :editor/hightlight       false
+ ;;  :editor/highlight       false
  ;;  :ui/toggle-settings     "t s"
  ;;  :editor/up              ["ctrl+k" "up"]
  ;;  :editor/down            ["ctrl+j" "down"]
@@ -300,6 +303,7 @@
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
+ ;; - {date}: capture date using current date format, use `[[{date}]]` to get a page reference
  ;; - {text}: text that users selected before sharing.
  ;; - {url}: url or assets path for media files stored in Logseq.
  ;; You can also reorder them, or even only use one or two of them in the template.
@@ -309,7 +313,7 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options
- ;; :quick-capture-options {:insert-today? false :redirect-page? false}
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.

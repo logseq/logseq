@@ -9,14 +9,15 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 
-let repoName = randomString(10)
+// For testing special characters in graph name / path
+let repoName = "@" + randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
   fs.rmSync(testTmpDir, { recursive: true })
 }
 
-export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
+export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 
 // NOTE: This following is a console log watcher for error logs.
 // Save and print all logs when error happens.
@@ -26,21 +27,12 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   const text = msg.text()
   logs += text + '\n'
 
-  // expect() will remember all arguments in memory,
-  // and the memory usage will grow *exponentially* in the number of output line.
-  // So we call expect() iff interesting pattern has already be found to avoid OOM.
-  const expectNotMatchWithCheck = (pattern: RegExp) => {
-    if (text.match(pattern)) {
-      expect(text, logs).not.toMatch(pattern)
-    }
-  }
-
-  expectNotMatchWithCheck(/^(Failed to|Uncaught)/)
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
   // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
   if (!text.match(/^Error with Permissions-Policy header:/)) {
-    expectNotMatchWithCheck(/^Error/)
+    expect(text, logs).not.toMatch(/^Error/)
   }
 
   // NOTE: React warnings will be logged as error.
@@ -219,7 +211,7 @@ export const test = base.extend<LogseqFixtures>({
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
-        // scroll, for isVisble test
+        // scroll, for isVisible test
         await page.$eval(`.ls-block >> nth=${nth}`, (element) => {
           element.scrollIntoView();
         });

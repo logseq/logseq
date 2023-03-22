@@ -17,7 +17,7 @@
 (defonce publishing? PUBLISHING)
 
 (goog-define REVISION "unknown")
-(defonce revison REVISION)
+(defonce revision REVISION)
 
 (reset! state/publishing? publishing?)
 
