@@ -15,6 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -132,7 +133,8 @@
        "Make a Template"
        nil))))
 
-(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
+(rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
+  (shortcut/disable-all-shortcuts)
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [format (:block/format block)
@@ -389,7 +391,8 @@
                           (and block-id (parse-uuid block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
-                              (util/select-highlight! [block]))
+                              (state/clear-selection!)
+                              (state/conj-selection-block! block :down))
                             (common-handler/show-custom-context-menu!
                              e
                              (block-context-menu-content target (uuid block-id))))
