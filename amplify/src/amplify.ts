@@ -1,6 +1,6 @@
 import '@aws-amplify/ui-react/styles.css'
 import { Amplify, Auth, Hub, I18n } from 'aws-amplify'
-import { LSAuthenticator } from './LSAuthenticator'
+import { LSAuthenticator, LSAuthenticatorChangePassword } from './LSAuthenticator'
 import { dict } from 'aws-amplify-react/lib-esm/AmplifyI18n'
 
 // fix i18n
@@ -94,6 +94,6 @@ function setupAuthConfigure(config) {
 //@ts-ignore
 window.LSAmplify = {
   setupAuthConfigure,
-  LSAuthenticator,
+  LSAuthenticator, LSAuthenticatorChangePassword,
   Auth, Amplify, Hub, I18n
 }

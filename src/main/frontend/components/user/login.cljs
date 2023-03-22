@@ -2,6 +2,7 @@
   (:require ["/frontend/amplify"]
             [rum.core :as rum]
             [frontend.rum :refer [adapt-class]]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
@@ -42,7 +43,7 @@
 
     nil))
 
-(rum/defc page
+(rum/defc page-impl
   []
   (let [[ready?, set-ready?] (rum/use-state false)
         *ref-el (rum/use-ref nil)]
@@ -67,6 +68,11 @@
                                        (js/console.error "Error: Amplify user payload:" e)))
                  user'          (bean/->clj user)]
              (user-pane sign-out! user')))))]))
+
+(rum/defcs page <
+  (shortcut/disable-all-shortcuts)
+  [_state]
+  (page-impl))
 
 (defn open-login-modal!
   []

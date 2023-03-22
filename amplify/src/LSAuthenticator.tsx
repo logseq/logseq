@@ -1,4 +1,4 @@
-import { Authenticator, CheckboxField, useAuthenticator } from '@aws-amplify/ui-react'
+import { Authenticator, CheckboxField, useAuthenticator, AccountSettings } from '@aws-amplify/ui-react'
 
 export function LSAuthenticator({ termsLink, children }: any) {
   return (<div>
@@ -49,4 +49,12 @@ export function LSAuthenticator({ termsLink, children }: any) {
       {children}
     </Authenticator>
   </div>)
+}
+
+export function LSAuthenticatorChangePassword(
+  {onSuccess, onError}
+) {
+  return (
+    <AccountSettings.ChangePassword onSuccess={onSuccess} onError={onError}/>
+  )
 }
