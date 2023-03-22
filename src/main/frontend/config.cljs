@@ -432,44 +432,6 @@
     (path/path-join (get-repo-dir repo-url) path)
     (util/node-path.join (get-repo-dir repo-url) path)))
 
-(defn get-file-path
-  "Normalization happens here"
-  [repo-url rpath]
-  (js/console.error "BUG SHOULD-NOT-USE-BUGGY-FN" repo-url rpath)
-  (when (and repo-url rpath)
-    (let [path (cond
-                 (demo-graph?)
-                 (let [dir (get-repo-dir repo-url)
-                       r (path/path-join dir rpath)]
-                   (js/console.error "get-file-path" r)
-                   r)
-
-                 (and (util/electron?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)]
-                   (if (string/starts-with? rpath dir)
-                     rpath
-                     (str dir "/"
-                          (string/replace rpath #"^/" ""))))
-
-                 (and (mobile-util/native-ios?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)]
-                   (path/path-join dir rpath))
-
-                 (and (mobile-util/native-android?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)
-                       dir (if (or (string/starts-with? dir "file:")
-                                   (string/starts-with? dir "content:"))
-                             dir
-                             (str "file:///" (string/replace dir #"^/+" "")))]
-                   (util/safe-path-join dir rpath))
-
-                 (= "/" (first rpath))
-                 (subs rpath 1)
-
-                 :else
-                 rpath)]
-      (and (not-empty path) (gp-util/path-normalize path)))))
-
 (defn get-repo-config-path
   ([]
    (get-repo-config-path (state/get-current-repo)))

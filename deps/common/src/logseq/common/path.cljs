@@ -12,7 +12,7 @@
       (js/console.error "decode-uri-component-failed" uri)
       uri)))
 
-(defn is-file-url
+(defn is-file-url?
   [s]
   (and (string? s)
        (or (string/starts-with? s "file://") ;; mobile platform
@@ -29,7 +29,7 @@
   (let [fname (if (string/ends-with? path "/")
                 nil
                 (last (string/split path #"/")))]
-    (if (and (seq fname) (is-file-url path))
+    (if (and (seq fname) (is-file-url? path))
       (safe-decode-uri-component fname)
       fname)))
 
@@ -167,7 +167,7 @@
     :else
     nil)
 
-  (if (is-file-url base)
+  (if (is-file-url? base)
     (apply url-join base segments)
     (apply path-join-internal base segments)))
 
@@ -190,16 +190,16 @@
 (defn path-normalize
   "Normalize path or URL"
   [path]
-  (if (is-file-url path)
+  (if (is-file-url? path)
     (url-normalize path)
     (path-normalize-internal path)))
 
 (defn url-to-path
   "Extract path part of a URL, decoded.
-   
+
    The reverse operation is (path-join protocol:// path)"
   [original-url]
-  (if (is-file-url original-url)
+  (if (is-file-url? original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
     (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
@@ -218,7 +218,7 @@
   [base-path sub-path]
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
-        is-url? (is-file-url base-path)]
+        is-url? (is-file-url? base-path)]
     (if (string/starts-with? sub-path base-path)
       (if is-url?
         (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
@@ -233,12 +233,12 @@
   [base-path sub-path]
   (let [base-path (path-normalize base-path)
         sub-path (path-normalize sub-path)
-        is-url? (is-file-url base-path)]
+        is-url? (is-file-url? base-path)]
     (if (string/starts-with? sub-path base-path)
       (if is-url?
         (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
         (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-       ;; append as many .. 
+       ;; append as many ..
       ;; NOTE: buggy impl
       (let [base-segs (string/split base-path #"/" -1)
             path-segs (string/split sub-path #"/" -1)
@@ -277,7 +277,7 @@
   [current-path target-path]
   (let [base-path (parent current-path)
         sub-path (path-normalize target-path)
-        is-url? (is-file-url base-path)
+        is-url? (is-file-url? base-path)
         base-segs (if base-path
                     (string/split base-path #"/" -1)
                     [])
