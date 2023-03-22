@@ -3428,6 +3428,28 @@
          block-ids (map :block/uuid blocks)]
      (set-blocks-collapsed! block-ids false))))
 
+(defn collapse-all-selection!
+  []
+  (let [block-ids (->> (get-selected-toplevel-block-uuids)
+                    (map #(all-blocks-with-level {:incremental? false
+                                                  :expanded? true
+                                                  :root-block %}))
+                    flatten
+                    (map :block/uuid)
+                    distinct)]
+    (set-blocks-collapsed! block-ids true)))
+
+(defn expand-all-selection!
+  []
+  (let [block-ids (->> (get-selected-toplevel-block-uuids)
+                       (map #(all-blocks-with-level {:incremental? false
+                                                     :collapse? true
+                                                     :root-block %}))
+                       flatten
+                       (map :block/uuid)
+                       distinct)]
+    (set-blocks-collapsed! block-ids false)))
+
 (defn toggle-open! []
   (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
                                                       :collapse? true}))]

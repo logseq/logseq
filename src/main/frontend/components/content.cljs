@@ -77,6 +77,20 @@
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
     "Cycle todos"
+    nil)
+
+   [:hr.menu-separator]
+
+   (ui/menu-link
+    {:key "Expand all"
+     :on-click editor-handler/expand-all-selection!}
+    "Expand all"
+    nil)
+
+   (ui/menu-link
+    {:key "Collapse all"
+     :on-click editor-handler/collapse-all-selection!}
+    "Collapse all"
     nil)])
 
 (defonce *template-including-parent? (atom nil))
