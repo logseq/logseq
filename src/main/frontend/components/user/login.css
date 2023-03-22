@@ -56,6 +56,10 @@
   .panel-content {
     @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] w-auto;
   }
+
+  .ui__modal-close-wrap {
+    @apply z-10 top-[4px];
+  }
 }
 
 .cp__user {

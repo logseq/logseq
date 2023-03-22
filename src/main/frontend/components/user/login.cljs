@@ -72,6 +72,7 @@
   []
   (state/set-modal!
     (fn [_close] (page))
-    {:close-btn? false
-     :label      "user-login"
-     :center?    true}))
+    {:close-btn?      true
+     :label           "user-login"
+     :close-backdrop? false
+     :center?         true}))
