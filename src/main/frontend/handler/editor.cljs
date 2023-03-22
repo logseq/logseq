@@ -734,7 +734,7 @@
 (defn cycle-todos!
   []
   (when-let [blocks (seq (get-selected-blocks))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "data-block-id")]
                                      (uuid id)) blocks))
                    (remove nil?))]
       (doseq [id ids]
@@ -778,7 +778,7 @@
 (defn- move-to-prev-block
   [repo sibling-block format id value]
   (when (and repo sibling-block)
-    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+    (when-let [sibling-block-id (dom/attr sibling-block "data-block-id")]
       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
         (let [original-content (util/trim-safe (:block/content block))
               value' (-> (property/remove-built-in-properties format original-content)
@@ -992,7 +992,7 @@
   [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
-          ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
+          ids (distinct (keep #(when-let [id (dom/attr % "data-block-id")]
                                  (uuid id)) blocks))
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
@@ -1005,7 +1005,7 @@
 (defn copy-block-refs
   []
   (when-let [selected-blocks (seq (get-selected-blocks))]
-    (let [blocks (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [blocks (->> (distinct (map #(when-let [id (dom/attr % "data-block-id")]
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
                                            :level (int level)}))
@@ -1042,7 +1042,7 @@
 (defn copy-block-embeds
   []
   (when-let [blocks (seq (get-selected-blocks))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "data-block-id")]
                                      (uuid id)) blocks))
                    (remove nil?))
           ids-str (some->> ids
@@ -1055,7 +1055,7 @@
   []
   (when-let [blocks (seq (get-selected-blocks))]
     (let [repo (state/get-current-repo)
-          block-ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+          block-ids (->> (distinct (map #(when-let [id (dom/attr % "data-block-id")]
                                            (uuid id)) blocks))
                          (remove nil?))
           blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
@@ -1078,7 +1078,7 @@
                                    (= "true" (dom/attr block "data-transclude"))) blocks))]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
-              block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
+              block-uuids (distinct (map #(uuid (dom/attr % "data-block-id")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
               blocks (db/pull-many repo '[*] lookup-refs)
               top-level-blocks (outliner-core/get-top-level-blocks blocks)
@@ -2481,7 +2481,7 @@
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected)]
-    (when (and sibling-block (dom/attr sibling-block "blockid"))
+    (when (and sibling-block (dom/attr sibling-block "data-block-id"))
       (scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
@@ -2496,7 +2496,7 @@
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
-      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (when-let [sibling-block-id (dom/attr sibling-block "data-block-id")]
         (let [value (state/get-edit-content)]
           (when (not= (clean-content! format content)
                       (string/trim value))
@@ -2546,7 +2546,7 @@
                                (map (fn [^js b] (.closest b ".blocks-container")))
                                (apply =)))]
     (when (and sibling-block same-container?)
-      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (when-let [sibling-block-id (dom/attr sibling-block "data-block-id")]
         (let [content (:block/content block)
               value (state/get-edit-content)]
           (when (not= (clean-content! format content)
@@ -3165,7 +3165,7 @@
             :right last)]
     (when-let [block-id (some-> selected-blocks
                                 f
-                                (dom/attr "blockid")
+                                (dom/attr "data-block-id")
                                 uuid)]
       (util/stop e)
       (let [block    {:block/uuid block-id}
@@ -3384,7 +3384,7 @@
      (do
        (->> (get-selected-blocks)
             (map (fn [dom]
-                   (-> (dom/attr dom "blockid")
+                   (-> (dom/attr dom "data-block-id")
                        uuid
                        expand-block!)))
             doall)
@@ -3417,7 +3417,7 @@
      (do
        (->> (get-selected-blocks)
             (map (fn [dom]
-                   (-> (dom/attr dom "blockid")
+                   (-> (dom/attr dom "data-block-id")
                        uuid
                        collapse-block!)))
             doall)
@@ -3516,7 +3516,7 @@
         (util/stop e)
         (when-not (:selection/selected-all? @state/state)
           (if-let [block-id (some-> (first (state/get-selection-blocks))
-                                    (dom/attr "blockid")
+                                    (dom/attr "data-block-id")
                                     uuid)]
             (when-let [block (db/entity [:block/uuid block-id])]
               (let [parent (:block/parent block)]

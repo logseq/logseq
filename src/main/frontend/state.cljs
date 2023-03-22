@@ -632,7 +632,7 @@ Similar to re-frame subscriptions"
   [blocks]
   (->> blocks
        (remove nil?)
-       (keep #(when-let [id (dom/attr % "blockid")]
+       (keep #(when-let [id (dom/attr % "data-block-id")]
                 (uuid id)))
        (distinct)))
 
@@ -962,12 +962,12 @@ Similar to re-frame subscriptions"
   ([blocks direction]
    (when (seq blocks)
      (let [container (util/get-block-container (first blocks))
-           first-selected-block-id (.getAttribute (first blocks) "blockid")
+           first-selected-block-id (.getAttribute (first blocks) "data-block-id")
            first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
            page-id (get-in first-selected-block [:block/page :db/id])
            blocks (filter
                    #(and (= container (util/get-block-container %)) ;; Filter out blocks from different containers
-                         (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (.getAttribute % "blockid"))
+                         (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (.getAttribute % "data-block-id"))
                                             [:block/page :db/id]))) ;; Filter out blocks from different pages 
                    blocks)
            blocks (util/sort-by-height (remove nil? blocks))]

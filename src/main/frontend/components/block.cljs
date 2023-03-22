@@ -1746,13 +1746,13 @@
                      :draggable true
                      :on-drag-start (fn [event]
                                       (bullet-drag-start event block uuid block-id))
-                     :blockid (str uuid)
+                     :data-block-id (str uuid)
                      :class (str (when collapsed? "bullet-closed")
                                  " "
                                  (when (and (:document/mode? config)
                                             (not collapsed?))
                                    "hide-inner-bullet"))}
-                    [:span.bullet {:blockid (str uuid)}]]]]
+                    [:span.bullet {:data-block-id (str uuid)}]]]]
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
@@ -2268,7 +2268,7 @@
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
         attrs (cond->
-               {:blockid       (str uuid)
+               {:data-block-id (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
@@ -2776,7 +2776,7 @@
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect"))
-        :blockid (str uuid)
+        :data-block-id (str uuid)
         :haschild (str (boolean has-child?))}
 
        level
