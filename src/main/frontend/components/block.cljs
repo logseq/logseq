@@ -1676,7 +1676,7 @@
         (util/stop e))
 
     :else
-    (route-handler/redirect-to-page! uuid)))
+    (when uuid (route-handler/redirect-to-page! uuid))))
 
 (rum/defc block-children < rum/reactive
   [config block children collapsed?]
