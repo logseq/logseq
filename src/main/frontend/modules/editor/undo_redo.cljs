@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.util.page :as page-util]
             [frontend.db.model :as db-model]
-            [frontend.handler.notification :as notification]
             [clojure.set :as set]))
 
 ;;;; APIs
@@ -83,7 +82,7 @@
     (or (not (and prev-container container)) ; not enough info to block
         (db-model/page? container) ; always allow on pages
         (= prev-container container) ; allow on same context
-        (try (.querySelectorAll js/document (str "#" container " [blockid='" prev-container "']")) ; allow on nested context
+        (try (.querySelectorAll js/document (str "#" container " [data-block-id='" prev-container "']")) ; allow on nested context
              (catch :default _
                false)))))
 
@@ -221,7 +220,7 @@
     (if (:replace? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
-            (push-undo entity))
+        (push-undo entity))
       (let [updated-blocks (db-report/get-blocks tx-report)
             entity {:blocks updated-blocks
                     :txs tx-data
@@ -233,7 +232,7 @@
           (do (reset-redo (first pages))
               (push-undo entity))
           (do (mapv reset-history pages)
-              (notification/show! (str "Multi-page actions cannot be undone") :warning false)
+              #_(notification/show! (str "Multi-page actions cannot be undone") :warning false)
               (state/pub-event! [:capture-error {:error "Multi-page action triggered"
                                                  :payload {:type :outliner/invalid-action
                                                            :data (mapv #(dissoc % :block/content) (:blocks entity))}}])))))))
