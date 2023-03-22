@@ -8,6 +8,8 @@
 #app-container {
   background-color: var(--ls-primary-background-color, #fff);
   position: relative;
+  display: flex;
+  flex: 0 0 100%;
 }
 
 #root {
@@ -15,11 +17,6 @@
     color: var(--ls-primary-text-color, #24292e);
     font-size: var(--ls-page-text-size);
   }
-}
-
-#app-container {
-  display: flex;
-  flex: 0 0 100%;
 }
 
 #skip-to-main {
@@ -39,6 +36,7 @@
 
 #left-container {
   @apply flex flex-1 flex-col relative h-screen;
+  user-select: none;
 }
 
 #main-container {
@@ -48,6 +46,7 @@
   position: relative;
   height: 100%;
   transition: padding-left .3s;
+  user-select: none;
 
   &.is-left-sidebar-open {
     padding-left: 0;
@@ -226,7 +225,7 @@
         li {
           margin: 0;
         }
-        
+
         a {
           width: 100%;
           padding: 4px 24px;
