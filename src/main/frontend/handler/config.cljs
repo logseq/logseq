@@ -23,11 +23,9 @@
         (file-handler/set-file-content! repo path new-content) nil))))
 
 (defn set-config!
-  ([k v]
-   (set-config! (state/get-current-repo) k v))
-  ([_repo k v]
-   (let [path "logseq/config.edn"]
-     (repo-config-set-key-value path k v))))
+  [k v]
+  (let [path "logseq/config.edn"]
+    (repo-config-set-key-value path k v)))
 
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]

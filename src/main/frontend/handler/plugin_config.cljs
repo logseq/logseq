@@ -37,7 +37,9 @@ when a plugin is installed, updated or removed"
                               rewrite/parse-string
                               (rewrite/assoc (keyword id) (select-keys plugin common-plugin-keys))
                               str)]
-    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+         ;; fs protocols require repo and dir when they aren't necessary. For this component,
+         ;; neither is needed so these are blank and nil respectively
+         (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn remove-plugin
   "Removes a plugin from plugin.edn"
