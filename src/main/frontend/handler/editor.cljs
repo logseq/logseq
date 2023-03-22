@@ -866,6 +866,14 @@
                        input-pos
                        (state/get-edit-input-id)))))))
 
+(defn batch-add-block-property!
+  [block-ids property-key property-value]
+  (batch-set-block-property! (map #(vector % property-key property-value) block-ids)))
+
+(defn batch-remove-block-property!
+  [block-ids property-key]
+  (batch-set-block-property! (map #(vector % property-key nil) block-ids)))
+
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]

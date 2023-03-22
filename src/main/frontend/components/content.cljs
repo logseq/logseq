@@ -31,13 +31,18 @@
 (rum/defc custom-context-menu-content
   []
   [:.menu-links-wrapper
+   (ui/menu-background-color #(editor-handler/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
+                             #(editor-handler/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
+
+   [:hr.menu-separator]
+
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
     (t :content/cut)
     nil)
    (ui/menu-link
-    {:key      "delete"
+    {:key "delete"
      :on-click #(do (editor-handler/delete-selection %)
                     (state/hide-custom-context-menu!))}
     "Delete"
@@ -140,19 +145,8 @@
       (let [format (:block/format block)
             heading (-> block :block/properties :heading)]
         [:.menu-links-wrapper
-         [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-           (for [color ui/block-background-colors]
-             [:a.shadow-sm
-              {:title (t (keyword "color" color))
-               :on-click (fn [_e]
-                           (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-           [:a.shadow-sm
-            {:title    (t :remove-background)
-             :on-click (fn [_e]
-                         (editor-handler/remove-block-property! block-id "background-color"))}
-            [:div.heading-bg.remove "-"]]]]
+         (ui/menu-background-color #(editor-handler/set-block-property! block-id :background-color %)
+                                   #(editor-handler/remove-block-property! block-id :background-color))
 
          [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1.px-1
