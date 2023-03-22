@@ -19,7 +19,7 @@
 
 (defn- setup-configure!
   []
-  (.setLanguage js/LSAmplify.I18n (:preferred-language @state/state))
+  (.setLanguage js/LSAmplify.I18n (or (:preferred-language @state/state) "en"))
   (setupAuthConfigure!
     #js {:region              config/REGION,
          :userPoolId          config/USER-POOL-ID,
