@@ -28,13 +28,13 @@
 
 (rum/defc block-cp
   [props]
-  ((state/get-component :block/single-block) (uuid (gobj/get props "data-block-id"))))
+  ((state/get-component :block/single-block) (uuid (gobj/get props "blockId"))))
 
 (rum/defc breadcrumb
   [props]
   (block/breadcrumb {:preview? true}
                     (state/get-current-repo)
-                    (uuid (gobj/get props "data-block-id"))
+                    (uuid (gobj/get props "blockId"))
                     {:end-separator? (gobj/get props "endSeparator")
                      :level-limit (gobj/get props "levelLimit" 3)}))
 
@@ -44,7 +44,7 @@
 
 (rum/defc block-reference
   [props]
-  (block/block-reference {} (gobj/get props "data-block-id") nil))
+  (block/block-reference {} (gobj/get props "blockId") nil))
 
 (rum/defc page-name-link
   [props]
