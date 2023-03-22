@@ -1233,6 +1233,13 @@
                    blocks)]
       (state/exit-editing-and-set-selected-blocks! blocks direction))))
 
+(defn- scroll-to-block
+  [block]
+  (when block
+    (when-not (util/element-visible? block)
+      (.scrollIntoView block #js {:behavior "smooth"
+                                  :block "center"}))))
+
 (defn- select-block-up-down
   [direction]
   (cond
@@ -1245,7 +1252,8 @@
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           element (f (first (state/get-selection-blocks)))]
       (when element
-        (state/conj-selection-block! element direction)))
+        (state/conj-selection-block! element direction)
+        (scroll-to-block element)))
 
     ;; if same direction, keep conj on same direction
     (and (state/selection?) (= direction (state/get-selection-direction)))
@@ -1253,7 +1261,8 @@
           first-last (if (= :up direction) first last)
           element (f (first-last (state/get-selection-blocks)))]
       (when element
-        (state/conj-selection-block! element direction)))
+        (state/conj-selection-block! element direction)
+        (scroll-to-block element)))
 
     ;; if different direction, keep clear until one left
     (state/selection?)
@@ -2454,13 +2463,6 @@
     (do
       (.preventDefault e)
       (keydown-new-line))))
-
-(defn- scroll-to-block
-  [block]
-  (when block
-    (when-not (util/element-visible? block)
-      (.scrollIntoView block #js {:behavior "smooth"
-                                  :block "center"}))))
 
 (defn- select-first-last
   "Select first or last block in viewpoint"
