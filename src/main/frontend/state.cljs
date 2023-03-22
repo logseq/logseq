@@ -960,9 +960,14 @@ Similar to re-frame subscriptions"
   (when-not (get-selection-start-block)
     (swap! state assoc :selection/start-block start-block)))
 
+(defn get-selection-blocks
+  []
+  (->> (:selection/blocks @state)
+       (remove nil?)))
+
 (defn should-select-block?
   ([block]
-   (should-select-block? (get-selection-start-block) block))
+   (should-select-block? (first (get-selection-blocks)) block))
   ([first-selected-block block]
    (let [container (util/get-block-container first-selected-block)
          first-selected-block-id (get-block-id first-selected-block)
@@ -997,11 +1002,6 @@ Similar to re-frame subscriptions"
          :selection/start-block nil
          :selection/selected-all? false))
 
-(defn get-selection-blocks
-  []
-  (->> (:selection/blocks @state)
-       (remove nil?)))
-
 (defn get-selection-block-ids
   []
   (get-selected-block-ids (get-selection-blocks)))
@@ -1023,13 +1023,12 @@ Similar to re-frame subscriptions"
 
 (defn conj-selection-block!
   [block direction]
-  (js/console.log block)
   (when (should-select-block? block)
-   (swap! state assoc
-         :selection/mode true
-         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
-                               (util/sort-by-height))
-         :selection/direction direction)))
+    (swap! state assoc
+           :selection/mode true
+           :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+                                 (util/sort-by-height))
+           :selection/direction direction)))
 
 (defn drop-last-selection-block!
   []
