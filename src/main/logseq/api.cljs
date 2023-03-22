@@ -527,7 +527,7 @@
     (when-let [blocks (and (state/in-selection-mode?)
                            (seq (state/get-selection-blocks)))]
       (let [blocks (->> blocks
-                        (map (fn [^js el] (some-> (.getAttribute el "data-block-id")
+                        (map (fn [^js el] (some-> (state/get-block-id el)
                                                   (db-model/query-block-by-uuid)))))]
         (bean/->js (normalize-keyword-for-json blocks))))))
 
@@ -716,7 +716,7 @@
           block (or block
                     (some-> (or (first (state/get-selection-blocks))
                                 (gdom/getElement (state/get-editing-block-dom-id)))
-                            (.getAttribute "data-block-id")
+                            (state/get-block-id)
                             (db-model/get-block-by-uuid)))]
       (get_block (:db/id block) opts))))
 

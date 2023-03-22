@@ -628,11 +628,15 @@ Similar to re-frame subscriptions"
   [id]
   (sub [:editor/content id]))
 
+(defn get-block-id
+  [el]
+  (dom/attr el "data-block-id"))
+
 (defn- get-selected-block-ids
   [blocks]
   (->> blocks
        (remove nil?)
-       (keep #(when-let [id (dom/attr % "data-block-id")]
+       (keep #(when-let [id (get-block-id %)]
                 (uuid id)))
        (distinct)))
 
@@ -956,20 +960,24 @@ Similar to re-frame subscriptions"
   (when-not (get-selection-start-block)
     (swap! state assoc :selection/start-block start-block)))
 
+(defn should-select-block?
+  ([block]
+   (should-select-block? (get-selection-start-block) block))
+  ([first-selected-block block]
+   (let [container (util/get-block-container first-selected-block)
+         first-selected-block-id (get-block-id first-selected-block)
+         first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
+         page-id (get-in first-selected-block [:block/page :db/id])]
+     (and (= container (util/get-block-container block))
+          (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (get-block-id block))
+                             [:block/page :db/id]))))))
+
 (defn set-selection-blocks!
   ([blocks]
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [container (util/get-block-container (first blocks))
-           first-selected-block-id (.getAttribute (first blocks) "data-block-id")
-           first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
-           page-id (get-in first-selected-block [:block/page :db/id])
-           blocks (filter
-                   #(and (= container (util/get-block-container %)) ;; Filter out blocks from different containers
-                         (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (.getAttribute % "data-block-id"))
-                                            [:block/page :db/id]))) ;; Filter out blocks from different pages 
-                   blocks)
+     (let [blocks (filter #(should-select-block? (first blocks) %) blocks)
            blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
               :selection/mode true
@@ -1015,11 +1023,13 @@ Similar to re-frame subscriptions"
 
 (defn conj-selection-block!
   [block direction]
-  (swap! state assoc
+  (js/console.log block)
+  (when (should-select-block? block)
+   (swap! state assoc
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
                                (util/sort-by-height))
-         :selection/direction direction))
+         :selection/direction direction)))
 
 (defn drop-last-selection-block!
   []
