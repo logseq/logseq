@@ -143,6 +143,8 @@ test('connect rectangles with an arrow', async ({ page }) => {
 })
 
 test('delete the first rectangle', async ({ page }) => {
+  await page.click('.logseq-tldraw .tl-canvas')
+  await page.waitForTimeout(1000)
   await page.click('.logseq-tldraw .tl-box-container:first-of-type')
   await page.keyboard.press('Delete')
 
@@ -158,6 +160,8 @@ test('undo the delete action', async ({ page }) => {
 })
 
 test('move arrow to back', async ({ page }) => {
+  await page.click('.logseq-tldraw .tl-canvas')
+  await page.waitForTimeout(1000)
   await page.click('.logseq-tldraw .tl-line-container')
   await page.keyboard.press('Shift+[')
 
