@@ -117,7 +117,8 @@
                              tx-data (db/string->db (:data tx-data))]
                          (when-let [conn (db/get-db graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
-                         (ui-handler/re-render-root!))))
+                         (ui-handler/re-render-root!)
+                         nil)))
 
   (js/window.apis.on "persistGraph"
                      ;; electron is requesting window for persisting a graph in it's db
