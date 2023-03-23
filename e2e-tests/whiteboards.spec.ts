@@ -16,8 +16,9 @@ test('enable whiteboards', async ({ page }) => {
 })
 
 test('should display onboarding tour', async ({ page }) => {
+  // ensure onboarding tour is going to be triggered locally
+  await page.evaluate(`window.localStorage.removeItem('whiteboard-onboarding-tour?')`)
   await page.click('.nav-header .whiteboard')
-  await page.waitForTimeout(1000)
 
   await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
   await page.click('.cp__whiteboard-welcome button.bg-gray-600')
@@ -138,8 +139,44 @@ test('connect rectangles with an arrow', async ({ page }) => {
   await page.mouse.up()
   await page.keyboard.press('Escape')
 
-
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('delete the first rectangle', async ({ page }) => {
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.keyboard.press('Delete')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
+})
+
+test('undo the delete action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('move arrow to back', async ({ page }) => {
+  await page.click('.logseq-tldraw .tl-line-container')
+  await page.keyboard.press('Shift+[')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).toHaveClass('tl-line-container')
+})
+
+test('move arrow to front', async ({ page }) => {
+  await page.click('.logseq-tldraw .tl-canvas')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-line-container')
+  await page.keyboard.press('Shift+]')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).not.toHaveClass('tl-line-container')
+})
+
+test('undo the move action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).toHaveClass('tl-line-container')
 })
 
 test('cleanup the shapes', async ({ page }) => {
