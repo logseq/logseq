@@ -92,12 +92,13 @@
    (re-render-root! {}))
   ([{:keys [clear-all-query-state?]
      :or {clear-all-query-state? false}}]
+   {:post [(nil? %)]}
    (when-let [component (state/get-root-component)]
      (if clear-all-query-state?
        (db/clear-query-state!)
        (db/clear-query-state-without-refs-and-embeds!))
-     (rum/request-render component)
-     nil)))
+     (rum/request-render component))
+   nil))
 
 (defn highlight-element!
   [fragment]
