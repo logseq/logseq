@@ -17,7 +17,9 @@
 
 (defn- setup-configure!
   []
+  #_:clj-kondo/ignore
   (def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
+  #_:clj-kondo/ignore
   (def LSAuthenticator
     (adapt-class (.-LSAuthenticator js/LSAmplify)))
 
