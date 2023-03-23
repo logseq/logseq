@@ -134,13 +134,13 @@
 (defn transact-tldr-delta! [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
-        page (db/entity [:block/name page-name])
-        db-page-nonoce (get-in page [:block/properties :logseq.tldraw.page :nonce])
+        shapes-index (map #(gobj/get % "id") shapes)
         new-id-nonces (set (map (fn [shape]
-                                  {:id (.-id shape)
-                                   :nonce (if (= (gobj/get tl-page "nonce") db-page-nonoce) 
-                                            (.-nonce shape)
-                                            (.getTime (js/Date.)))}) shapes))
+                                  (let [id (.-id shape)]
+                                   {:id id
+                                    :nonce (if (= shape.id (.indexOf shapes-index id))
+                                             (.-nonce shape)
+                                             (.getTime (js/Date.)))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])
@@ -161,7 +161,7 @@
 
                     ;; arrow
                     (some #(and (= "line" (:type %))
-                                (= "arrow "(:end (:decorations %)))) new-shapes)
+                                (= "arrow " (:end (:decorations %)))) new-shapes)
 
                     (assoc metadata :whiteboard/op :new-arrow)
                     :else
