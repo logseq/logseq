@@ -92,7 +92,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @observable nonce = 0
 
   @action bump = () => {
-    // this.nonce++
+    this.nonce++
   }
 
   @action update(props: Partial<TLPageProps<S>>) {
@@ -102,6 +102,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @action updateBindings(bindings: Record<string, TLBinding>) {
     Object.assign(this.bindings, bindings)
+    return this
+  }
+
+  @action updateShapesIndex(shapesIndex: string[]) {
+    this.shapes.sort((a,b) => shapesIndex.indexOf(b.id) - shapesIndex.indexOf(a.id))
     return this
   }
 
@@ -115,7 +120,6 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
             return new ShapeClass(shape)
           })
     this.shapes.push(...shapeInstances)
-    this.bump()
     return shapeInstances
   }
 
@@ -145,6 +149,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         this.shapes[index] = this.shapes[index + 1]
         this.shapes[index + 1] = t
       })
+    this.bump()
     this.app.persist()
     return this
   }
@@ -162,6 +167,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         this.shapes[index] = this.shapes[index - 1]
         this.shapes[index - 1] = t
       })
+    this.bump()
     this.app.persist()
     return this
   }
@@ -169,6 +175,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @action bringToFront = (shapes: S[] | string[]): this => {
     const shapesToMove = this.parseShapesArg(shapes)
     this.shapes = this.shapes.filter(shape => !shapesToMove.includes(shape)).concat(shapesToMove)
+    this.bump()
     this.app.persist()
     return this
   }
@@ -176,6 +183,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @action sendToBack = (shapes: S[] | string[]): this => {
     const shapesToMove = this.parseShapesArg(shapes)
     this.shapes = shapesToMove.concat(this.shapes.filter(shape => !shapesToMove.includes(shape)))
+    this.bump()
     this.app.persist()
     return this
   }

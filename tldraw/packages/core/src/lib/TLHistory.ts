@@ -32,7 +32,6 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
-    this.app.pages.forEach(page => page.bump()) // Is it ok here?
     this.app.notify('persist', {replace})
   }
 
