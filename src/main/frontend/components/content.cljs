@@ -73,6 +73,13 @@
 
    [:hr.menu-separator]
 
+   (when (state/enable-flashcards?)
+     (ui/menu-link
+      {:key "Make a Card"
+       :on-click (fn [_e] (srs/batch-make-cards!))}
+      "Make a Flashcard"
+      nil))
+
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}

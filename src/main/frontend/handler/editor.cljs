@@ -1274,6 +1274,13 @@
      (when (db/entity repo [:block/uuid (:block/uuid block)])
        (save-block-aux! block value {})))))
 
+(defn save-blocks!
+  [blocks]
+  (outliner-tx/transact!
+   {:outliner-op :save-block}
+    (doseq [[block value] blocks]
+      (save-block-if-changed! block value))))
+
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
