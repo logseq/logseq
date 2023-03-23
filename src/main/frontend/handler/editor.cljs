@@ -1267,9 +1267,8 @@
   ([repo block-or-uuid content]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
-                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
-         format (:block/format block)]
-     (save-block! {:block block :repo repo :format format} content)))
+                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)]
+     (save-block! {:block block :repo repo} content)))
   ([{:keys [block repo] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
      (when (db/entity repo [:block/uuid (:block/uuid block)])
