@@ -106,7 +106,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   }
 
   @action updateShapesIndex(shapesIndex: string[]) {
-    this.shapes.sort((a,b) => shapesIndex.indexOf(b.id) - shapesIndex.indexOf(a.id))
+    this.shapes.sort((a,b) => shapesIndex.indexOf(a.id) - shapesIndex.indexOf(b.id))
     return this
   }
 

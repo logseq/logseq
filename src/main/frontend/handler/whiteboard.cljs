@@ -366,7 +366,7 @@
 (defn update-shapes-index!
   [^js tl-page page-name]
   (when-let [page (db/entity [:block/name page-name])]
-    (let [shapes-index (get-in page [:block/properties :logseq.tldraw.page :shapes-index!])]
+    (let [shapes-index (get-in page [:block/properties :logseq.tldraw.page :shapes-index])]
       (when (seq shapes-index)
         (.updateShapesIndex tl-page (bean/->js shapes-index))))))
 
