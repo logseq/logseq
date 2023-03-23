@@ -104,7 +104,8 @@
           (and (= "change" type)
                (= dir (global-config-handler/global-config-dir)))
           (when (= path "config.edn")
-            (file-handler/alter-global-file path content))
+            (file-handler/alter-global-file
+             (global-config-handler/global-config-path) content {:from-disk? true}))
 
           (and (= "change" type)
                (not exists-in-db?))

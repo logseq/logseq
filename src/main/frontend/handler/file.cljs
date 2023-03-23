@@ -91,22 +91,18 @@
 (defn- detect-deprecations
   [path content]
   (when (or (= path "logseq/config.edn")
-            (and
-             (config/global-config-enabled?)
-             (= (path/dirname path) (global-config-handler/global-config-dir))))
+            (= (path/dirname path) (global-config-handler/safe-global-config-dir)))
     (config-edn-common-handler/detect-deprecations path content)))
 
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
   that are not validated just return true"
-  [repo path content]
+  [path content]
   (cond
-    (= path (config/get-repo-config-path repo))
+    (= path "logseq/config.edn")
     (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn)
 
-    (and
-     (config/global-config-enabled?)
-     (= (path/dirname path) (global-config-handler/global-config-dir)))
+    (= (path/dirname path) (global-config-handler/safe-global-config-dir))
     (config-edn-common-handler/validate-config-edn path content global-config-schema/Config-edn)
 
     :else
@@ -121,28 +117,27 @@
     (fs/write-file! repo path-dir path content write-file-options')))
 
 (defn alter-global-file
-  "Write global file, e.g. global config"
-  [path content]
-  (-> (p/let [repo (state/get-current-repo)
-              _ (fs/write-file! "" nil path content {:skip-compare? true})]
-        (cond
-          (and (config/global-config-enabled?)
-               (= path (global-config-handler/global-config-path)))
-          (p/do! (detect-deprecations path content)
-                 (global-config-handler/restore-global-config!)
-                 (validate-file repo path content)
-                 (state/pub-event! [:shortcut/refresh]))
-          ;; Add future global file handler here
-          ))
-      (p/catch (fn [error]
-                 (state/pub-event! [:notification/show
-                                    {:content (str "Failed to write to file " path ", error: " error)
-                                     :status :error}])
-                 (println "Write file failed, path: " path ", content: " content)
-                 (log/error :write/failed error)
-                 (state/pub-event! [:capture-error
-                                    {:error error
-                                     :payload {:type :write-file/failed-for-alter-file}}])))))
+  "Does pre-checks on a global file, writes if it's not already written
+  (:from-disk? is not set) and then does post-checks. Currently only handles
+  global config.edn but can be extended as needed"
+  [path content {:keys [from-disk?]}]
+  (if (and path (= path (global-config-handler/safe-global-config-path)))
+    (do
+      (detect-deprecations path content)
+      (when (validate-file path content)
+       (-> (p/let [_ (when-not from-disk?
+                       (fs/write-file! "" nil path content {:skip-compare? true}))]
+                  (p/do! (global-config-handler/restore-global-config!)
+                         (state/pub-event! [:shortcut/refresh])))
+           (p/catch (fn [error]
+                      (state/pub-event! [:notification/show
+                                         {:content (str "Failed to write to file " path ", error: " error)
+                                          :status :error}])
+                      (log/error :write/failed error)
+                      (state/pub-event! [:capture-error
+                                         {:error error
+                                          :payload {:type :write-file/failed-for-alter-file}}]))))))
+    (log/error :msg "alter-global-file does not support this file" :file path)))
 
 (defn alter-file
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
@@ -156,7 +151,7 @@
         config-file? (= path "logseq/config.edn")
         _ (when config-file?
             (detect-deprecations path content))
-        config-valid? (and config-file? (validate-file repo path content))]
+        config-valid? (and config-file? (validate-file path content))]
     (when (or config-valid? (not config-file?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
@@ -190,16 +185,6 @@
                   (state/pub-event! [:shortcut/refresh]))))
             (p/catch
              (fn [error]
-               (when (and (config/global-config-enabled?)
-                             ;; Global-config not started correctly but don't
-                             ;; know root cause yet
-                             ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
-                          (global-config-handler/global-config-dir-exists?)
-                          (= path (global-config-handler/global-config-path)))
-                 (state/pub-event! [:notification/show
-                                    {:content (str "Failed to write to file " path)
-                                     :status :error}]))
-
                (println "Write file failed, path: " path ", content: " content)
                (log/error :write/failed error)
                (state/pub-event! [:capture-error
