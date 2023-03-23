@@ -1359,10 +1359,11 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        video? (and url (util/ext-of-video? url))]
+  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
+        media? (and url (or (util/ext-of-audio? url)
+                            (util/ext-of-video? url)))]
     (case (keyword format)
-      :markdown (util/format (str (when (or image? video? pdf?) "!") "[%s](%s)") file-name url)
+      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
              (util/format "[[%s]]" url)
              (util/format "[[%s][%s]]" url file-name))
