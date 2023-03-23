@@ -15,21 +15,25 @@
 (defonce root-dir
   (atom nil))
 
-(defn global-config-dir-exists?
-  "This is used in contexts where we are unusure whether global-config has been
-  started correctly e.g. an error handler"
-  []
-  (some? @root-dir))
-
 (defn global-config-dir
+  "Fetch config dir in a global config context"
   []
-  (when @root-dir
-    (path/path-join @root-dir "config")))
+  (path/path-join @root-dir "config"))
+
+(defn safe-global-config-dir
+  "Fetch config dir in a general context, not just for global config"
+  []
+  (when @root-dir (global-config-dir)))
 
 (defn global-config-path
+  "Fetch config path in a global config context"
   []
-  (when @root-dir
-    (path/path-join @root-dir "config" "config.edn")))
+  (path/path-join @root-dir "config" "config.edn"))
+
+(defn safe-global-config-path
+  "Fetch config path in a general context, not just for global config"
+  []
+  (when @root-dir (global-config-path)))
 
 (defn set-global-config-state!
   [content]

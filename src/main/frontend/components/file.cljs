@@ -81,7 +81,7 @@
                        [path format] (:rum/args state)
                        repo-dir (config/get-repo-dir (state/get-current-repo))
                        [dir path] (cond
-                                    (string/starts-with? path (global-config-handler/global-config-dir))
+                                    (string/starts-with? path (str (global-config-handler/safe-global-config-dir)))
                                     [nil path]
 
                                     ;; in-repo file, absolute path

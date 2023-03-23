@@ -57,7 +57,7 @@
                                              (str (string/trim value) "\n")
                                              {:re-render-root? true})))
                 ;; global file
-                (file-handler/alter-global-file path (str (string/trim value) "\n"))))
+                (file-handler/alter-global-file path (str (string/trim value) "\n") {})))
 
             :else
             nil))))))
