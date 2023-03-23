@@ -1,6 +1,5 @@
 (ns frontend.components.user.login
-  (:require ["/frontend/amplify"]
-            [rum.core :as rum]
+  (:require [rum.core :as rum]
             [frontend.rum :refer [adapt-class]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
@@ -9,9 +8,7 @@
             [frontend.state :as state]
             [frontend.config :as config]))
 
-(def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
-(def LSAuthenticator
-  (adapt-class (.-LSAuthenticator js/LSAmplify)))
+(declare setupAuthConfigure! LSAuthenticator)
 
 (defn sign-out!
   []
@@ -20,6 +17,10 @@
 
 (defn- setup-configure!
   []
+  (def setupAuthConfigure! (.-setupAuthConfigure js/LSAmplify))
+  (def LSAuthenticator
+    (adapt-class (.-LSAuthenticator js/LSAmplify)))
+
   (.setLanguage js/LSAmplify.I18n (or (:preferred-language @state/state) "en"))
   (setupAuthConfigure!
     #js {:region              config/REGION,
