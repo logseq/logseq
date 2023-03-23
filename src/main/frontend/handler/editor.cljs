@@ -205,8 +205,7 @@
 
 (defn clear-selection!
   []
-  (state/clear-selection!)
-  (util/select-unhighlight! (dom/by-class "selected")))
+  (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -224,35 +223,41 @@
 (defn edit-block!
   ([block pos id]
    (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len move-cursor?]
+  ([block pos id {:keys [custom-content tail-len move-cursor? retry-times]
                   :or {tail-len 0
-                       move-cursor? true}}]
-   (when-not config/publishing?
-     (when-let [block-id (:block/uuid block)]
-       (let [block (or (db/pull [:block/uuid block-id]) block)
-             edit-input-id (if (uuid? id)
-                             (get-edit-input-id-with-block-id id)
-                             (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                 (string/replace "ls-block" "edit-block")))
-             content (or custom-content (:block/content block) "")
-             content-length (count content)
-             text-range (cond
-                          (vector? pos)
-                          (text-range-by-lst-fst-line content pos)
+                       move-cursor? true
+                       retry-times 0}
+                  :as opts}]
+   (when-not (> retry-times 2)
+     (when-not config/publishing?
+       (when-let [block-id (:block/uuid block)]
+         (let [block (or (db/pull [:block/uuid block-id]) block)
+               edit-input-id (if (uuid? id)
+                               (get-edit-input-id-with-block-id id)
+                               (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                   (string/replace "ls-block" "edit-block")))
+               content (or custom-content (:block/content block) "")
+               content-length (count content)
+               text-range (cond
+                            (vector? pos)
+                            (text-range-by-lst-fst-line content pos)
 
-                          (and (> tail-len 0) (>= (count content) tail-len))
-                          (subs content 0 (- (count content) tail-len))
+                            (and (> tail-len 0) (>= (count content) tail-len))
+                            (subs content 0 (- (count content) tail-len))
 
-                          (or (= :max pos) (<= content-length pos))
-                          content
+                            (or (= :max pos) (<= content-length pos))
+                            content
 
-                          :else
-                          (subs content 0 pos))
-             content (-> (property/remove-built-in-properties (:block/format block)
-                                                              content)
-                         (drawer/remove-logbook))]
-         (clear-selection!)
-         (state/set-editing! edit-input-id content block text-range move-cursor?))))))
+                            :else
+                            (subs content 0 pos))
+               content (-> (property/remove-built-in-properties (:block/format block)
+                                                                content)
+                           (drawer/remove-logbook))]
+           (clear-selection!)
+           (if edit-input-id
+             (state/set-editing! edit-input-id content block text-range move-cursor?)
+             ;; Block may not be rendered yet
+             (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -731,10 +736,11 @@
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
-      (doseq [id ids]
-        (let [block (db/pull [:block/uuid id])]
-          (when (not-empty (:block/content block))
-            (set-marker block)))))))
+      (outliner-tx/transact! {:outliner-op :cycle-todos}
+        (doseq [id ids]
+          (let [block (db/pull [:block/uuid id])]
+            (when (not-empty (:block/content block))
+              (set-marker block))))))))
 
 (defn cycle-todo!
   []
@@ -787,7 +793,11 @@
           (edit-block! block pos id
                        {:custom-content new-value
                         :tail-len tail-len
-                        :move-cursor? false}))))))
+                        :move-cursor? false})
+          {:prev-block block
+           :new-content new-value})))))
+
+(declare save-block!)
 
 (defn delete-block!
   ([repo]
@@ -810,9 +820,18 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
-                   (delete-block-aux! block delete-children?)
-                   (move-to-prev-block repo sibling-block format id value)))))))))
+                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                       concat-prev-block? (boolean (and prev-block new-content))
+                       transact-opts (cond->
+                                       {:outliner-op :delete-block}
+                                       concat-prev-block?
+                                       (assoc :concat-data
+                                              {:last-edit-block (:block/uuid block)}))]
+                   (outliner-tx/transact! transact-opts
+                     (when concat-prev-block?
+                       (save-block! repo prev-block new-content))
+                     (delete-block-aux! block delete-children?))))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -2584,9 +2603,17 @@
       nil
 
       :else
-      (do
-        (delete-block-aux! next-block false)
-        (state/set-edit-content! input-id (str value "" (:block/content next-block)))
+      (let [edit-block (state/get-edit-block)
+            transact-opts {:outliner-op :delete-block
+                           :concat-data {:last-edit-block (:block/uuid edit-block)
+                                         :end? true}}
+            new-content (str value "" (:block/content next-block))
+            repo (state/get-current-repo)]
+        (outliner-tx/transact! transact-opts
+          (save-block! repo edit-block new-content)
+          (delete-block-aux! next-block false))
+
+        (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))
 
 (defn keydown-delete-handler

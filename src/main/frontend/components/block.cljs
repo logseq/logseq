@@ -1676,7 +1676,7 @@
         (util/stop e))
 
     :else
-    (route-handler/redirect-to-page! uuid)))
+    (when uuid (route-handler/redirect-to-page! uuid))))
 
 (rum/defc block-children < rum/reactive
   [config block children collapsed?]
@@ -3259,7 +3259,7 @@
               [:div.flex.flex-1.flex-row
                (ui/icon "search" {:size 14})
                [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]]
-              (when-not collapsed?'
+              (when (or (not dsl-query?) (not collapsed?'))
                 [:div.flex.flex-row.items-center.fade-in
                  (when (> (count result) 0)
                    [:span.results-count
@@ -3292,12 +3292,14 @@
                                                       :on-mouse-down (fn [e]
                                                                        (util/stop e)
                                                                        (trigger-custom-query! state *query-error))}))]])])
-           (if built-in?
-             (ui/foldable
-              (query-title config title)
-              (fn []
-                (custom-query-inner config q opts))
-              {})
+           (if (or built-in? (not dsl-query?))
+             [:div {:style {:margin-left 2}}
+              (ui/foldable
+               (query-title config title)
+               (fn []
+                 (custom-query-inner config q opts))
+               {:default-collapsed? collapsed?
+                :title-trigger? true})]
              [:div.bd
               (query-title config title)
               (when-not collapsed?'
