@@ -96,7 +96,8 @@
      (if clear-all-query-state?
        (db/clear-query-state!)
        (db/clear-query-state-without-refs-and-embeds!))
-     (rum/request-render component))))
+     (rum/request-render component)
+     nil)))
 
 (defn highlight-element!
   [fragment]
