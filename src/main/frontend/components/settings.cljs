@@ -871,12 +871,13 @@
         *active (::active state)]
 
     [:div#settings.cp__settings-main
-     [:header
-      [:h1.title (t :settings)]]
 
      [:div.cp__settings-inner
 
       [:aside.md:w-64 {:style {:min-width "10rem"}}
+       [:header.cp__settings-header
+        (ui/icon "settings")
+        [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
               [[:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
@@ -907,6 +908,8 @@
               [:strong text]]]))]]
 
       [:article
+       [:header.cp__settings-header
+        [:h1.cp__settings-category-title (name (first @*active))]]
 
        (case (first @*active)
 
