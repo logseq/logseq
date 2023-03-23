@@ -241,6 +241,11 @@
              (string/ends-with? %))
         [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
 
+(defn ext-of-audio? [s]
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
+        [".mp3" ".wav" "ogg"]))
+
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]
