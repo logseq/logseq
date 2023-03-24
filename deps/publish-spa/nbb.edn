@@ -1,0 +1,4 @@
+{:deps
+ {logseq/graph-parser
+  ;; Nbb bug. Should just be "../graph-parser"
+  {:local/root "../../../../graph-parser"}}}
