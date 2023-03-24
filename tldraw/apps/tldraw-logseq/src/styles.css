@@ -174,9 +174,6 @@ html[data-theme='light'] {
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
-  max-width: 90vw;
-  max-height: 90vh;
-  overflow: auto;
 }
 
 .tl-context-bar {
@@ -296,6 +293,8 @@ html[data-theme='light'] {
 }
 
 .tl-tools-floating-panel {
+  max-height: 90vh;
+  overflow-y: auto;
   flex-flow: column;
 }
 
