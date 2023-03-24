@@ -166,7 +166,7 @@
     (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
 (def disable-all-shortcuts
-  {:did-mount
+  {:will-mount
    (fn [state]
      (unlisten-all)
      state)

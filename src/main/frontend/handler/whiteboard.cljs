@@ -11,6 +11,8 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
+            [frontend.config :as config]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
@@ -47,9 +49,9 @@
     (->> blocks
          (map (fn [block]
                 (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
-         (sort-by :index)
          (filter gp-whiteboard/shape-block?)
-         (map gp-whiteboard/block->shape))))
+         (map gp-whiteboard/block->shape)
+         (sort-by :index))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
@@ -417,3 +419,12 @@
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
+
+(defn onboarding-show
+  []
+  (when (not (or (state/sub :whiteboard/onboarding-tour?)
+                 (config/demo-graph?)
+                 (util/mobile?)))
+    (state/pub-event! [:whiteboard/onboarding])
+    (state/set-state! [:whiteboard/onboarding-tour?] true)
+    (storage/set :whiteboard-onboarding-tour? true)))
