@@ -1,16 +1,19 @@
-(ns logseq.tasks.dev.publish
+(ns logseq.publish-spa
   (:require [promesa.core :as p]
             ["path" :as path]
-            ["fs-extra$default" :as fs]))
+            ["fs-extra$default" :as fs]
+            [datascript.transit :as dt]
+            [logseq.graph-parser.cli :as gp-cli]
+            [logseq.publish-spa.html :as html]))
 
 (defn- handle-export-publish-assets
   [html custom-css-path export-css-path repo-path asset-filenames output-path]
-  (let [app-path "static"
+  (let [app-path "../../static"
         root-dir output-path
         static-dir (path/join root-dir "static")
-            assets-from-dir (path/join repo-path "assets")
-            assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")]
+        assets-from-dir (path/join repo-path "assets")
+        assets-to-dir (path/join root-dir "assets")
+        index-html-path (path/join root-dir "index.html")]
     (p/let [_ (. fs ensureDir static-dir)
             _ (. fs ensureDir assets-to-dir)
             _ (p/all (concat
@@ -61,17 +64,25 @@
             {:type "success"
              :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))
 
+(defn- get-app-state
+  []
+  {:ui/theme "dark", :ui/sidebar-collapsed-blocks {}, :ui/show-recent? false
+   :config {"local" {:feature/enable-whiteboards? true, :shortcuts {:editor/right ["mod+l" "right"], :ui/toggle-theme "t z"}, :ignored-page-references-keywords #{:description :desc}, :repo/dir-version 3, :default-templates {:journals ""}, :macros {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}, :shortcut/doc-mode-enter-for-new-block? false, :favorites ["foob"], :ui/show-empty-bullets? false, :preferred-file-format :edn, :preferred-workflow :now, :publishing/all-pages-public? true, :ref/default-open-blocks-level 2, :feature/enable-block-timestamps? false, :ref/linked-references-collapsed-threshold 50, :commands [], :meta/version 1, :hidden [], :default-queries {:journals '[{:title "🔨 NOW", :query [:find (pull ?h [*]) :in $ ?start ?today :where [?h :block/marker ?marker] [(contains? #{"NOW" "DOING"} ?marker)] [?h :block/page ?p] [?p :block/journal? true] [?p :block/journal-day ?d] [(>= ?d ?start)] [(<= ?d ?today)]], :inputs [:14d :today], :result-transform (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result)), :collapsed? false} {:title "📅 NEXT", :query [:find (pull ?h [*]) :in $ ?start ?next :where [?h :block/marker ?marker] [(contains? #{"NOW" "LATER" "TODO"} ?marker)] [?h :block/ref-pages ?p] [?p :block/journal? true] [?p :block/journal-day ?d] [(> ?d ?start)] [(< ?d ?next)]], :inputs [:today :7d-after], :collapsed? false}]}, :ui/enable-tooltip? true, :rich-property-values? false, :property/separated-by-commas #{:comma-prop}, :property-pages/excludelist #{:author}, :graph/settings {:journal? true, :excluded-pages? true, :orphan-pages? false, :builtin-pages? false}, :property-pages/enabled? true, :ui/show-command-doc? true, :preferred-format :markdown}}})
+
+(defn- get-db [graph-dir]
+  (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
+
 (defn -main
-  [args]
+  [& args]
   (let [repo-path  (or (first args)
                        (throw (ex-info "GRAPH DIR required" {})))
         output-path (or (second args)
                         (throw (ex-info "OUT DIR required" {})))
-        html "WOOHOO"
+        ; html "WOOHOO"
+        db-str (dt/write-transit-str (get-db repo-path))
+        html (html/publishing-html db-str (pr-str (get-app-state)))
         custom-css-path (path/join repo-path "logseq" "custom.css")
         export-css-path (path/join repo-path "logseq" "export.css")
         ;; TODO: Read from repo-path
         asset-filenames []]
     (handle-export-publish-assets html custom-css-path export-css-path repo-path asset-filenames output-path)))
-
-(-main *command-line-args*)

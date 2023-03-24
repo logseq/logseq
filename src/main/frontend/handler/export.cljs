@@ -89,6 +89,7 @@
                                      :config])
           state        (update state :config (fn [config]
                                                {"local" (get config repo)}))
+          _ (prn :STATE state)
           raw-html-str (html/publishing-html db-str (pr-str state))
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]

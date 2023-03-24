@@ -6,6 +6,7 @@
 
 (defn publishing-html
   [transit-db app-state]
+  (prn :PROJECT (:project (state/get-config)))
   (let [{:keys [icon name alias title description url]} (:project (state/get-config))
         icon (or icon "static/img/logo.png")
         project (or alias name)]
@@ -84,7 +85,7 @@
           }
         }
       }(window.location))"]
-            ;; TODO: should make this configurable
+           ;; TODO: should make this configurable
            [:script {:src "static/js/main.js"}]
            [:script {:src "static/js/highlight.min.js"}]
            [:script {:src "static/js/interact.min.js"}]
