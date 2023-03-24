@@ -117,29 +117,24 @@
             (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
-(defn check-or-update-marketplace-plugin
+(defn check-or-update-marketplace-plugin!
   [{:keys [id] :as pkg} error-handler]
   (when-not (and (:plugin/installing @state/state)
                  (not (plugin-common-handler/installed? id)))
-    (p/catch
-      (p/then
-        (do (state/set-state! :plugin/installing pkg)
-            (p/catch
-              (load-marketplace-plugins false)
-              (fn [^js e]
-                (state/reset-all-updates-state)
-                (throw e))))
-        (fn [mfts]
+    (state/set-state! :plugin/installing pkg)
 
-          (let [mft (some #(when (= (:id %) id) %) mfts)]
-            ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
-            (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
-          true))
-
-      (fn [^js e]
-        (error-handler e)
-        (state/set-state! :plugin/installing nil)
-        (js/console.error e)))))
+    (-> (load-marketplace-plugins false)
+        (p/then (fn [mfts]
+                  (let [mft (some #(when (= (:id %) id) %) mfts)]
+                    ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+                    (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
+                  true))
+        (p/catch (fn [^js e]
+                   (state/reset-all-updates-state)
+                   (error-handler e)
+                   (js/console.error e)))
+        (p/finally
+          #(state/set-state! :plugin/installing nil)))))
 
 (defn get-plugin-inst
   [pid]
@@ -608,8 +603,10 @@
     (when (or auto-checking? (not user-checking?))
       ;; TODO: too many requests may be limited by Github api
       (when-let [plugins (seq (take 32 (state/get-enabled?-installed-plugins theme?)))]
-        (state/set-state! :plugin/updates-pending
-                          (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
+        (->> plugins
+             (map (fn [v] [(keyword (:id v)) v]))
+             (into {})
+             (state/set-state! :plugin/updates-pending))
         (state/pub-event! [:plugin/consume-updates])))))
 
 (defn auto-check-enabled-for-updates!
@@ -773,3 +770,10 @@
   (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))
+
+
+(comment
+  {:pending        (count (:plugin/updates-pending @state/state))
+   :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
+   :coming         (count (:plugin/updates-coming @state/state))
+   :downloading?   (boolean (:plugin/updates-downloading? @state/state))})

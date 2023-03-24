@@ -1881,6 +1881,7 @@ Similar to re-frame subscriptions"
   [payload updated?]
   (when-let [id (keyword (:id payload))]
     (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
+      (println "Updates: consumed pending - " id)
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
@@ -1921,6 +1922,7 @@ Similar to re-frame subscriptions"
 (defn reset-all-updates-state
   []
   (swap! state assoc
+         :plugin/updates-auto-checking?         false
          :plugin/updates-pending                {}
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))

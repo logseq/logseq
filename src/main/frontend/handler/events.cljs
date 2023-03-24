@@ -579,18 +579,21 @@
     (if (and updated? downloading?)
       ;; try to start consume downloading item
       (if-let [next-coming (state/get-next-selected-coming-update)]
-        (plugin-handler/check-or-update-marketplace-plugin
+        (plugin-handler/check-or-update-marketplace-plugin!
           (assoc next-coming :only-check false :error-code nil)
           (fn [^js e] (js/console.error "[Download Err]" next-coming e)))
         (plugin-handler/close-updates-downloading))
 
       ;; try to start consume pending item
       (if-let [next-pending (second (first (:plugin/updates-pending @state/state)))]
-        (plugin-handler/check-or-update-marketplace-plugin
-          (assoc next-pending :only-check true :auto-check auto-checking? :error-code nil)
-          (fn [^js e]
-            (notification/show! (.toString e) :error)
-            (js/console.error "[Check Err]" next-pending e)))
+        (do
+          (println "Updates: take next pending - " (:id next-pending))
+          (js/setTimeout
+            #(plugin-handler/check-or-update-marketplace-plugin!
+               (assoc next-pending :only-check true :auto-check auto-checking? :error-code nil)
+               (fn [^js e]
+                 (notification/show! (.toString e) :error)
+                 (js/console.error "[Check Err]" next-pending e))) 500))
 
         ;; try to open waiting updates list
         (do (when (and prev-pending? (not auto-checking?)

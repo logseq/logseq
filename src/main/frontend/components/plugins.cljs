@@ -259,7 +259,7 @@
        [:a.btn
         {:class    (util/classnames [{:disabled installing-or-updating?}])
          :on-click #(when-not has-other-pending?
-                      (plugin-handler/check-or-update-marketplace-plugin
+                      (plugin-handler/check-or-update-marketplace-plugin!
                         (assoc item :only-check (not new-version))
                         (fn [^js e] (notification/show! (.toString e) :error))))}
 
@@ -896,7 +896,7 @@
           #(when-not downloading?
              (plugin-handler/open-updates-downloading)
              (if-let [n (state/get-next-selected-coming-update)]
-               (plugin-handler/check-or-update-marketplace-plugin
+               (plugin-handler/check-or-update-marketplace-plugin!
                  (assoc n :only-check false)
                  (fn [^js e] (notification/show! (.toString e) :error)))
                (plugin-handler/close-updates-downloading)))

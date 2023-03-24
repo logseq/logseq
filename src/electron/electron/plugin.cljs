@@ -166,12 +166,13 @@
   includes the following keys:
 * :only-check - When set to true, this only fetches the latest version without installing
 * :plugin-action - When set to 'install', installs the specific :version given
-* :repo - A github repo, not a logseq repo, e.g. user/repo"
+* :repo - A Github repo, not a logseq repo, e.g. user/repo"
   [{:keys [version repo only-check plugin-action] :as item}]
   (if repo
-    (let [coerced-version (and version (. semver coerce version))
+    (let [action          (keyword plugin-action)
+          coerced-version (and version (. semver coerce version))
           updating?       (and version (. semver valid coerced-version)
-                               (not= plugin-action "install"))]
+                               (not= action :install))]
 
       (debug (if updating? "Updating:" "Installing:") repo)
 
@@ -180,7 +181,7 @@
               ;;(reset! *installing-or-updating item)
               ;; get releases
               (-> (p/let [[asset latest-version notes]
-                          (if (= plugin-action "install")
+                          (if (= action :install)
                             (fetch-specific-release-asset item)
                             (fetch-latest-release-asset item))
 
