@@ -29,7 +29,8 @@
 (defn shape->block [shape page-name]
   (let [properties {:ls-type :whiteboard-shape
                     :logseq.tldraw.shape shape}
-        block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
+        block {:block/page {:block/name (util/page-name-sanity-lc page-name)
+                            :block/original-name page-name}
                :block/parent {:block/name page-name}
                :block/properties properties}
         additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
@@ -285,7 +286,8 @@
             :block/uuid uuid
             :block/content (or content "")
             :block/format :markdown ;; fixme to support org?
-            :block/page {:block/name (util/page-name-sanity-lc page-name)}
+            :block/page {:block/name (util/page-name-sanity-lc page-name)
+                         :block/original-name page-name}
             :block/parent {:block/name page-name}}]
     (db-utils/transact! [tx])
     uuid))
