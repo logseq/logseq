@@ -1,6 +1,7 @@
 (ns frontend.util-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.util :as util]
+            [frontend.config :as config]
             [frontend.modules.shortcut.data-helper :as shortcut-data-helper]))
 
 (deftest test-find-first
@@ -107,3 +108,16 @@
                                          :date-picker/prev-week        ["up" "ctrl+p"]
                                          :date-picker/next-week        "down"}))
       (is (= @actual-ops 3)))))
+
+(deftest test-media-format-from-input
+  (testing "predicate file type from ext (html5 supported)"
+    (is (= (config/ext-of-audio? "file.mp3") true))
+    (is (= (config/ext-of-audio? "fIle.mP3") true))
+    (is (= (config/ext-of-audio? "https://x.com/file.mp3") true))
+    (is (= (config/ext-of-audio? "file.wma") false))
+    (is (= (config/ext-of-audio? "file.wma" false) true))
+    (is (= (config/ext-of-video? "file.mp4") true))
+    (is (= (config/ext-of-video? "file.mp3") false))
+    (is (= (config/ext-of-image? "file.svg") true))
+    (is (= (config/ext-of-image? "a.file.png") true))
+    (is (= (config/ext-of-image? "file.tiff") false))))

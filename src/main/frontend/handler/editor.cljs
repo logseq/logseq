@@ -1361,8 +1361,8 @@
 (defn get-asset-file-link
   [format url file-name image?]
   (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        media? (and url (or (util/ext-of-audio? url)
-                            (util/ext-of-video? url)))]
+        media? (and url (or (config/ext-of-audio? url)
+                            (config/ext-of-video? url)))]
     (case (keyword format)
       :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
@@ -1507,7 +1507,7 @@
           (p/then
            (fn [res]
              (when-let [[asset-file-name file full-file-path matched-alias] (and (seq res) (first res))]
-               (let [image? (util/ext-of-image? asset-file-name)]
+               (let [image? (config/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
                   (get-asset-file-link format
