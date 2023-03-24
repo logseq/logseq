@@ -3626,6 +3626,29 @@
           content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))))
 
+(defn batch-remove-heading!
+  [block-ids]
+  (doseq [block-id block-ids]
+    (remove-block-property! block-id "heading")
+    (let [block (db/entity [:block/uuid block-id])]
+      (when (= (:block/format block) :markdown)
+        (let [repo (state/get-current-repo)
+              content' (commands/clear-markdown-heading (:block/content block))]
+          (save-block! repo block-id content'))))))
+
+(defn batch-set-heading!
+  [block-ids heading]
+  (batch-remove-heading! block-ids)
+  (doseq [block-id block-ids]
+    (let [block (db/entity [:block/uuid block-id])]
+      (if (or (true? heading) (not= (:block/format block) :markdown))
+        (do
+          (save-current-block!)
+          (set-block-property! block-id "heading" heading))
+        (let [repo (state/get-current-repo)
+              content' (commands/set-markdown-heading (:block/content block) heading)]
+          (save-block! repo block-id content'))))))
+
 (defn block->data-transfer!
   "Set block or page name to the given event's dataTransfer. Used in dnd."
   [block-or-page-name event]

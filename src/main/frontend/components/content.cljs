@@ -34,6 +34,10 @@
    (ui/menu-background-color #(editor-handler/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
                              #(editor-handler/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
 
+   (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
+                    #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
+                    #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
+
    [:hr.menu-separator]
 
    (ui/menu-link
@@ -76,7 +80,7 @@
    (when (state/enable-flashcards?)
      (ui/menu-link
       {:key "Make a Card"
-       :on-click (fn [_e] (srs/batch-make-cards!))}
+       :on-click #(srs/batch-make-cards!)}
       "Make a Flashcard"
       nil))
 
@@ -164,46 +168,15 @@
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [format (:block/format block)
-            heading (-> block :block/properties :heading)]
+            heading (-> block :block/properties :heading (or false))]
         [:.menu-links-wrapper
          (ui/menu-background-color #(editor-handler/set-block-property! block-id :background-color %)
                                    #(editor-handler/remove-block-property! block-id :background-color))
 
-         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1.px-1
-           (for [i (range 1 7)]
-             (ui/button
-              ""
-              :disabled (= heading i)
-              :icon (str "h-" i)
-              :title (t :heading i)
-              :class "to-heading-button"
-              :on-click (fn [_e]
-                          (editor-handler/set-heading! block-id format i))
-              :intent "link"
-              :small? true))
-           (ui/button
-            ""
-            :icon "h-auto"
-            :disabled (= heading true)
-            :icon-props {:extension? true}
-            :class "to-heading-button"
-            :title (t :auto-heading)
-            :on-click (fn [_e]
-                        (editor-handler/set-heading! block-id format true))
-            :intent "link"
-            :small? true)
-           (ui/button
-            ""
-            :icon "heading-off"
-            :disabled (not heading)
-            :icon-props {:extension? true}
-            :class "to-heading-button"
-            :title (t :remove-heading)
-            :on-click (fn [_e]
-                        (editor-handler/remove-heading! block-id format))
-            :intent "link"
-            :small? true)]]
+         (ui/menu-heading heading
+                          #(editor-handler/set-heading! block-id format %)
+                          #(editor-handler/set-heading! block-id format true)
+                          #(editor-handler/remove-heading! block-id format))
 
          [:hr.menu-separator]
 
