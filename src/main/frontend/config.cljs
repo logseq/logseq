@@ -102,7 +102,7 @@
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def video-formats
-  #{:mp4 :webm :mov})
+  #{:mp4 :webm :mov :flv :avi :mkv})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
@@ -120,10 +120,32 @@
                        (string/replace-first "." ""))
                      (util/safe-lower-case)
                      (keyword))]
-     (some
-      (fn [s]
-        (contains? s input))
-      formats))))
+     (boolean
+       (some
+         (fn [s]
+           (contains? s input))
+         formats)))))
+
+(defn ext-of-video?
+  ([s] (ext-of-video? s true))
+  ([s html5?]
+   (when-let [s (and (string? s) (util/get-file-ext s))]
+     (let [video-formats (cond-> video-formats
+                                 html5? (disj :mkv))]
+       (extname-of-supported? s [video-formats])))))
+
+(defn ext-of-audio?
+  ([s] (ext-of-audio? s true))
+  ([s html5?]
+   (when-let [s (and (string? s) (util/get-file-ext s))]
+     (let [audio-formats (cond-> audio-formats
+                                 html5? (disj :wma :ogg))]
+       (extname-of-supported? s [audio-formats])))))
+
+(defn ext-of-image?
+  [s]
+  (when-let [s (and (string? s) (util/get-file-ext s))]
+    (extname-of-supported? s [image-formats])))
 
 (def mobile?
   "Triggering condition: Mobile phones
