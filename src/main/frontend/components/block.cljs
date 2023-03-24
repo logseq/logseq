@@ -2543,11 +2543,9 @@
                               level-limit 3}
                          :as opts}]
   (when block-id
-    (js/console.log block-id)
     (let [parents (db/get-block-parents repo block-id (inc level-limit))
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
                    (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
-          _ (js/console.log (str page))
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           show? (or (seq parents) show-page? page-name)
