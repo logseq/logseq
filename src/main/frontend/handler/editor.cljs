@@ -372,14 +372,15 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [block value {}]
+  [block value opts]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block' (wrap-parse-block block)]
+     (let [block' (wrap-parse-block block)
+           opts' (merge opts {:outliner-op :save-block})]
        (outliner-tx/transact!
-         {:outliner-op :save-block}
+         opts'
          (outliner-core/save-block! block'))
 
        ;; sanitized page name changed
