@@ -566,7 +566,7 @@
                   [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
                     :options {:on-click #(reload-market-fn)}}]
                   [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
-                    :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
+                    :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
                 [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
                   :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
@@ -1124,14 +1124,16 @@
          (reset! *updates-sub-content-timer))))
 
 (rum/defc updates-notifications-impl
-  [check-pending?]
+  [check-pending? auto-checking?]
   (let [[uid, set-uid] (rum/use-state nil)
         [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
         notify! (fn [content status]
-                  (try
-                    (set-uid (notification/show! content status false uid))
-                    (catch js/Error _
-                      (set-uid (notification/show! content status false)))))]
+                  (if auto-checking?
+                    (println "Plugin Updates: " content)
+                    (try
+                      (set-uid (notification/show! content status false uid))
+                      (catch js/Error _
+                        (set-uid (notification/show! content status false))))))]
 
     (rum/use-effect!
       (fn []
@@ -1141,7 +1143,7 @@
              [:div (str "Checking for plugin updates ...")]
              (when sub-content [:p.opacity-60 sub-content])]
             (ui/loading ""))
-          (notification/clear! uid)))
+          (when uid (notification/clear! uid))))
       [check-pending? sub-content])
 
     [:<>]))
@@ -1149,8 +1151,9 @@
 (rum/defcs updates-notifications < rum/reactive
   [_]
   (let [updates-pending (state/sub :plugin/updates-pending)
+        auto-checking?  (state/sub :plugin/updates-auto-checking?)
         check-pending?  (boolean (seq updates-pending))]
-    (updates-notifications-impl check-pending?)))
+    (updates-notifications-impl check-pending? auto-checking?)))
 
 (rum/defcs focused-settings-content
   < rum/reactive

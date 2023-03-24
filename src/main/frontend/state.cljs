@@ -198,6 +198,7 @@
      :plugin/marketplace-stats              nil
      :plugin/installing                     nil
      :plugin/active-readme                  nil
+     :plugin/updates-auto-checking?         false
      :plugin/updates-pending                {}
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
@@ -1879,14 +1880,14 @@ Similar to re-frame subscriptions"
 (defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
-    (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
+    (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
           (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
           (swap! state update :plugin/updates-coming dissoc id))
         (swap! state update :plugin/updates-coming assoc id payload))
-      (pub-event! [:plugin/consume-updates id pending? updated?]))))
+      (pub-event! [:plugin/consume-updates id prev-pending? updated?]))))
 
 (defn coming-update-new-version?
   [pkg]

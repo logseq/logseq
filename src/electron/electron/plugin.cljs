@@ -158,7 +158,7 @@
                                  (fs/removeSync frm-zip))]
       true)
     (fn [^js e]
-      (emit :lsp-installed {:status :error :payload e})
+      (emit :lsp-updates {:status :error :payload e})
       (throw e))))
 
 (defn install-or-update!
@@ -208,7 +208,7 @@
                           _      (when-not only-check (download-asset-zip item dl-url latest-version dest))
                           _      (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
 
-                    (emit :lsp-installed
+                    (emit :lsp-updates
                           {:status     :completed
                            :only-check only-check
                            :payload    (if only-check
@@ -219,7 +219,7 @@
 
                   (p/catch
                     (fn [^js e]
-                      (emit :lsp-installed
+                      (emit :lsp-updates
                             {:status     :error
                              :only-check only-check
                              :payload    (assoc item :error-code (.-message e))})
