@@ -171,10 +171,12 @@ html[data-theme='light'] {
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
-
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
 }
 
 .tl-context-bar {
@@ -289,6 +291,7 @@ html[data-theme='light'] {
 
   .tl-button {
     font-size: 16px;
+    flex: 0 0 auto;
   }
 }
 
