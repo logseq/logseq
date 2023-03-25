@@ -53,6 +53,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
 interface LogseqTldrawProps {
   renderers: LogseqContextValue['renderers']
   handlers: LogseqContextValue['handlers']
+  isPublishing: LogseqContextValue['isPublishing']
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
@@ -123,7 +124,7 @@ const AppInner = ({
   )
 }
 
-export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawProps): JSX.Element {
+export const App = function App({ renderers, handlers, isPublishing, ...rest }: LogseqTldrawProps): JSX.Element {
   const memoRenders: any = React.useMemo(() => {
     return Object.fromEntries(
       Object.entries(renderers).map(([key, comp]) => {
@@ -135,6 +136,7 @@ export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawPr
   const contextValue = {
     renderers: memoRenders,
     handlers: handlers,
+    isPublishing: isPublishing,
   }
 
   return (
