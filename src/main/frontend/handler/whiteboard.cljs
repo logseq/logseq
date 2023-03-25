@@ -285,7 +285,8 @@
             :block/uuid uuid
             :block/content (or content "")
             :block/format :markdown ;; fixme to support org?
-            :block/page {:block/name (util/page-name-sanity-lc page-name)}
+            :block/page {:block/name (util/page-name-sanity-lc page-name)
+                         :block/original-name page-name}
             :block/parent {:block/name page-name}}]
     (db-utils/transact! [tx])
     uuid))
