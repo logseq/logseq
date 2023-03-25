@@ -315,7 +315,7 @@
                          repo
                          (:db/id page)
                          :page))
-                      (when (and (not hls-page?) (not fmt-journal?))
+                      (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
                         (reset! *input-value (if untitled? "" old-name))
                         (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
