@@ -99,7 +99,7 @@
      ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
       (p/let [result (if (fn? dir-result-fn)
-                       (dir-result-fn {:nfs? nfs?})
+                       (dir-result-fn)
                        (fs/open-dir dir))
               _ (when (fn? on-open-dir)
                   (on-open-dir result))
@@ -158,8 +158,8 @@
   ([path] (ls-dir-files-with-path! path nil))
   ([path opts]
    (when-let [dir-result-fn
-              (and path (fn [{:keys [_nfs?]}]
-                          (p/let [files-result (fs/get-files path)]
+              (and path (fn []
+                          (p/let [files-result (fs/open-dir path)]
                             files-result)))]
      (ls-dir-files-with-handler!
       (:ok-handler opts)
