@@ -57,6 +57,7 @@ export interface LogseqContextValue {
     redirectToPage: (uuidOrPageName: string) => void
     copyToClipboard: (text: string, html: string) => void
   }
+  isPublishing: boolean
 }
 
 export const LogseqContext = React.createContext<LogseqContextValue>({} as LogseqContextValue)

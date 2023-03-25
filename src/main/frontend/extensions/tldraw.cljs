@@ -3,6 +3,7 @@
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
+            [frontend.config :as config]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -152,6 +153,7 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
+                :isPublishing config/publishing?
                 :onPersist (fn [app info]
                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
                              (util/profile "tldraw persist"

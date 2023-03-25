@@ -8,9 +8,12 @@ import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import { ZoomMenu } from '../ZoomMenu'
 import * as Separator from '@radix-ui/react-separator'
+import { LogseqContext } from './../../lib/logseq-context'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
+  const { isPublishing } = React.useContext(LogseqContext)
+
   const undo = React.useCallback(() => {
     app.api.undo()
   }, [app])
@@ -29,16 +32,18 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
 
   return (
     <div className="tl-action-bar">
-      <div className="tl-toolbar tl-history-bar">
-        <Button tooltip="Undo" onClick={undo}>
-          <TablerIcon name="arrow-back-up" />
-        </Button>
-        <Button tooltip="Redo" onClick={redo}>
-          <TablerIcon name="arrow-forward-up" />
-        </Button>
-      </div>
+      {!isPublishing && (
+        <div className="tl-toolbar tl-history-bar">
+          <Button tooltip="Undo" onClick={undo}>
+            <TablerIcon name="arrow-back-up" />
+          </Button>
+          <Button tooltip="Redo" onClick={redo}>
+            <TablerIcon name="arrow-forward-up" />
+          </Button>
+        </div>
+      )}
 
-      <div className="tl-toolbar tl-zoom-bar">
+      <div className={`tl-toolbar tl-zoom-bar ${isPublishing ? "" : "ml-4"}`}>
         <Button tooltip="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
