@@ -1,9 +1,7 @@
 (ns ^:no-doc logseq.publish-spa.html
-  ; (:require-macros [hiccups.core])
   (:require [clojure.string :as string]
             [goog.string :as gstring]
-            [goog.string.format]
-            #_[hiccups.runtime]))
+            [goog.string.format]))
 
 (defn- escape-html
   "Change special characters into HTML character entities."
@@ -15,7 +13,7 @@
       (string/replace "\"" "logseq____&quot;")
       (string/replace "'" "logseq____&apos;")))
 
-;; from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
+;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
 (defn html [v]
   (cond (vector? v)
     (let [tag (first v)
