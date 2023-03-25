@@ -183,7 +183,7 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              (if (or (nfs-handler/supported?) (mobile-util/native-platform?)) 
+              (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
                 {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
                 {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
@@ -206,13 +206,11 @@
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [valid-remotes-but-locals? (and (seq repos) (not (some :url repos)))
-                                   remote? (when-not valid-remotes-but-locals?
-                                             (:remote? (first (filter #(= current-repo (:url %)) repos))))
-                                   repo-name (if-not valid-remotes-but-locals?
-                                               (db/get-repo-name current-repo) "")
-                                   short-repo-name (if-not valid-remotes-but-locals?
-                                                     (db/get-short-repo-name repo-name) "Select a Graph")]
+                             (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
+                                   repo-name (db/get-repo-name current-repo)
+                                   short-repo-name (if repo-name
+                                                    (db/get-short-repo-name repo-name)
+                                                    "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
                                 {:on-click (fn []
