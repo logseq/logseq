@@ -176,15 +176,12 @@
    Wrap as {:path string :files []}, using relative path"
   [dir]
   (let [fs-record (get-native-backend)]
-    (p/let [result (protocol/get-files fs-record dir)]
-      (println ::get-files (count result) "files")
-      (if (seq result) ;; electron, mobile, nfs
-        (let [files result
-              files (mapv (fn [entry]
-                            (assoc entry :path (path/relative-path dir (:path entry))))
-                          files)]
-          {:path dir :files files})
-        result))))
+    (p/let [files (protocol/get-files fs-record dir)]
+      (println ::get-files (count files) "files")
+      (let [files (mapv (fn [entry]
+                          (assoc entry :path (path/relative-path dir (:path entry))))
+                        files)]
+        {:path dir :files files}))))
 
 (defn watch-dir!
   ([dir] (watch-dir! dir {}))
