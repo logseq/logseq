@@ -1,0 +1,14 @@
+{
+  "name": "@logseq/publish-spa",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "^1.2.168"
+  },
+  "dependencies": {
+    "mldoc": "^1.5.1"
+  },
+  "scripts": {
+    "test": "nbb-logseq -cp src:test -m logseq.publish-spa.nbb-test-runner/run-tests"
+  }
+}

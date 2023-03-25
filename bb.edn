@@ -35,7 +35,7 @@
   logseq.tasks.dev/build-publishing
 
   dev:publish
-  (apply shell {:dir "deps/publish-spa"} "nbb-logseq -cp src -m logseq.publish-spa"
+  (apply shell {:dir "deps/publish-spa"} "yarn -s nbb-logseq -cp src -m logseq.publish-spa.cli"
                 *command-line-args*)
 
   dev:npx-cap-run-ios
