@@ -93,7 +93,7 @@
   (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
                   (remove (property/built-in-properties))
                   (remove #{:template}))
-        keys (if page? (cons :page keys) (cons :block keys))
+        keys (if page? (cons :page keys) (concat '(:block :page) keys))
         keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
     keys))
 
@@ -112,7 +112,41 @@
                included-columns)
        columns))))
 
-;; Table rows are called items
+(defn- build-column-value
+  "Builds a column's tuple value for a query table given a row, column and
+  options"
+  [row column {:keys [page? ->elem map-inline config]}]
+  (case column
+    :page
+    [:string (if page?
+               (or (:block/original-name row)
+                   (:block/name row))
+               (or (get-in row [:block/page :block/original-name])
+                   (get-in row [:block/page :block/name])))]
+
+    :block       ; block title
+    (let [content (:block/content row)
+          {:block/keys [title]} (block/parse-title-and-body
+                                 (:block/uuid row)
+                                 (:block/format row)
+                                 (:block/pre-block? row)
+                                 content)]
+      (if (seq title)
+        [:element (->elem :div (map-inline config title))]
+        [:string content]))
+
+    :created-at
+    [:string (when-let [created-at (:block/created-at row)]
+               (date/int->local-time-2 created-at))]
+
+    :updated-at
+    [:string (when-let [updated-at (:block/updated-at row)]
+               (date/int->local-time-2 updated-at))]
+
+    [:string (or (get-in row [:block/properties-text-values column])
+                 ;; Fallback to property relationships for page blocks
+                 (get-in row [:block/properties column]))]))
+
 (rum/defcs result-table < rum/reactive
   (rum/local false ::select?)
   (rum/local false ::mouse-down?)
@@ -145,37 +179,16 @@
                              (name column))]
               (sortable-title title column sort-state (:block/uuid current-block))))]]
         [:tbody
-         (for [item result']
-           (let [format (:block/format item)]
+         (for [row result']
+           (let [format (:block/format row)]
              [:tr.cursor
               (for [column columns]
-                (let [value (case column
-                              :page
-                              [:string (or (:block/original-name item)
-                                           (:block/name item))]
-
-                              :block       ; block title
-                              (let [content (:block/content item)
-                                    {:block/keys [title]} (block/parse-title-and-body
-                                                           (:block/uuid item)
-                                                           (:block/format item)
-                                                           (:block/pre-block? item)
-                                                           content)]
-                                (if (seq title)
-                                  [:element (->elem :div (map-inline config title))]
-                                  [:string content]))
-
-                              :created-at
-                              [:string (when-let [created-at (:block/created-at item)]
-                                         (date/int->local-time-2 created-at))]
-
-                              :updated-at
-                              [:string (when-let [updated-at (:block/updated-at item)]
-                                         (date/int->local-time-2 updated-at))]
-
-                              [:string (or (get-in item [:block/properties-text-values column])
-                                           ;; Fallback to property relationships for page blocks
-                                           (get-in item [:block/properties column]))])]
+                (let [value (build-column-value row
+                                                column
+                                                {:page? page?
+                                                 :->elem ->elem
+                                                 :map-inline map-inline
+                                                 :config config})]
                   [:td.whitespace-nowrap {:on-mouse-down (fn []
                                                            (reset! *mouse-down? true)
                                                            (reset! select? false))
@@ -184,7 +197,7 @@
                                                          (when (and @*mouse-down? (not @select?))
                                                            (state/sidebar-add-block!
                                                             (state/get-current-repo)
-                                                            (:db/id item)
+                                                            (:db/id row)
                                                             :block-ref)
                                                            (reset! *mouse-down? false)))}
                    (when value
@@ -192,8 +205,8 @@
                        (second value)
                        (let [value (second value)]
                          (if (coll? value)
-                           (let [vals (for [item value]
-                                        (page-cp {} {:block/name item}))]
+                           (let [vals (for [row value]
+                                        (page-cp {} {:block/name row}))]
                              (interpose [:span ", "] vals))
                            (cond
                              (boolean? value) (str value)
