@@ -372,14 +372,15 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [block value {}]
+  [block value opts]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block' (wrap-parse-block block)]
+     (let [block' (wrap-parse-block block)
+           opts' (merge opts {:outliner-op :save-block})]
        (outliner-tx/transact!
-         {:outliner-op :save-block}
+         opts'
          (outliner-core/save-block! block'))
 
        ;; sanitized page name changed
@@ -1359,10 +1360,11 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        video? (and url (util/ext-of-video? url))]
+  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
+        media? (and url (or (config/ext-of-audio? url)
+                            (config/ext-of-video? url)))]
     (case (keyword format)
-      :markdown (util/format (str (when (or image? video? pdf?) "!") "[%s](%s)") file-name url)
+      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
              (util/format "[[%s]]" url)
              (util/format "[[%s][%s]]" url file-name))
@@ -1505,7 +1507,7 @@
           (p/then
            (fn [res]
              (when-let [[asset-file-name file full-file-path matched-alias] (and (seq res) (first res))]
-               (let [image? (util/ext-of-image? asset-file-name)]
+               (let [image? (config/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
                   (get-asset-file-link format

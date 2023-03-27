@@ -2505,7 +2505,7 @@
 
 (rum/defc breadcrumb-fragment
   [config block label opts]
-  [:a {:on-mouse-down
+  [:a {:on-mouse-up
        (fn [e]
          (cond
            (gobj/get e "shiftKey")
@@ -2570,13 +2570,14 @@
                                                                    content)
                                        config (assoc config :block/uuid uuid)]
                                    [block
-                                    (if (seq title)
-                                      (->elem :span (map-inline config title))
-                                      (->elem :div (markup-elements-cp config body)))]))))
+                                    (when title
+                                      (if (seq title)
+                                        (->elem :span (map-inline config title))
+                                        (->elem :div (markup-elements-cp config body))))]))))
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
                               (filterv identity)
-                              (map (fn [x] (if (vector? x)
+                              (map (fn [x] (if (and (vector? x) (second x))
                                              (let [[block label] x]
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
@@ -3263,7 +3264,10 @@
                 [:div.flex.flex-row.items-center.fade-in
                  (when (> (count result) 0)
                    [:span.results-count
-                    (str (count result) (if (> (count result) 1) " results" " result"))])
+                    (let [result-count (if (and (not table?) (map? result))
+                                         (apply + (map (comp count val) result))
+                                         (count result))]
+                      (str result-count (if (> result-count 1) " results" " result")))])
 
                  (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
                    (if table?
