@@ -42,19 +42,23 @@
 (defn migrate-absolute-file-path-to-relative [db]
   (when db
     (let [all-files (d/q
-                     '[:find (pull ?b [:db/id :file/path])
+                     '[:find [(pull ?b [:db/id :file/path]) ...]
                        :where
                        [?b :file/path]]
                      db)
           repo-dir (config/get-repo-dir (state/get-current-repo))]
       (if (seq all-files)
         (let [tx-data (->> all-files
-                           (mapv first)
                            (filter (fn [db-file]
                                      (and (path/absolute? (:file/path db-file))
                                                       (string/starts-with? (:file/path db-file) repo-dir))))
                            (mapv (fn [db-file] {:db/id (:db/id db-file)
                                                 :file/path (path/trim-dir-prefix repo-dir (:file/path db-file))})))]
+          (when tx-data
+            (state/pub-event! [:notification/show
+                               {:content [:div "Migrated from an old version of DB, please re-index the graph"]
+                                :status :warning
+                                :clear? false}]))
           (prn :migrate-absolute-file-path-to-relative {:count (count tx-data)})
           (d/db-with db tx-data))
         db))))
