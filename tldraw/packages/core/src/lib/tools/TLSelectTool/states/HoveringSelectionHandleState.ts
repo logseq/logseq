@@ -69,12 +69,12 @@ export class HoveringSelectionHandleState<
   }
 
   onDoubleClick: TLEvents<S>['pointer'] = info => {
-    if (info.order || this.app.readOnly) return
+    if (info.order) return
     const isSingle = this.app.selectedShapes.size === 1
     if (!isSingle) return
     const selectedShape = getFirstFromSet(this.app.selectedShapes)
 
-    if (selectedShape.canEdit) {
+    if (selectedShape.canEdit && !this.app.readOnly) {
       switch (info.type) {
         case TLTargetType.Shape: {
           this.tool.transition('editingShape', info)
