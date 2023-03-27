@@ -580,7 +580,9 @@
 
 (defn set-auto-checking!
   [v]
-  (state/set-state! :plugin/updates-auto-checking? (boolean v)))
+  (let [v (boolean v)]
+    (println "Updates: " (if v "start" "finish") " auto-checking...")
+    (state/set-state! :plugin/updates-auto-checking? v)))
 
 (defn get-auto-checking?
   []
@@ -596,7 +598,8 @@
 
 (defn cancel-user-checking!
   []
-  (when (get-user-checking?)
+  (when (and (get-user-checking?)
+             (not (get-auto-checking?)))
     (state/set-state! :plugin/updates-pending {})))
 
 (defn user-check-enabled-for-updates!

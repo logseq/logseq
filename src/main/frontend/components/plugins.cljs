@@ -16,6 +16,7 @@
             [frontend.components.plugins-settings :as plugins-settings]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.storage :as storage]
             [frontend.rum :as rum-utils]
             [clojure.string :as string]))
 
@@ -991,14 +992,15 @@
 
 (rum/defc toolbar-plugins-manager-list
   [updates-coming items]
-  (let [has-updates? (seq (state/all-available-coming-updates updates-coming))]
+  (let [badge-updates? (and (not (plugin-handler/get-auto-checking?))
+                            (seq (state/all-available-coming-updates updates-coming)))]
     (ui/dropdown-with-links
       (fn [{:keys [toggle-fn]}]
         [:div.toolbar-plugins-manager
          {:on-click toggle-fn}
          [:a.button.relative
           (ui/icon "puzzle" {:size 20})
-          (when has-updates?
+          (when badge-updates?
             (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
 
       ;; items
@@ -1028,7 +1030,7 @@
                     :class    "extra-item"}
           :icon    (ui/icon "adjustments")}
 
-         (when has-updates?
+         (when badge-updates?
            {:title   [:div.flex.items-center.space-x-5.leading-none
                       [:span "New updates"] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
@@ -1146,6 +1148,19 @@
             (ui/loading ""))
           (when uid (notification/clear! uid))))
       [check-pending? sub-content])
+
+    (rum/use-effect!
+      ;; scheduler for auto updates
+      (fn []
+        (let [last-updates (storage/get :lsp-last-auto-updates)]
+          (when (or (not (number? last-updates))
+                    ;; interval 12 hours
+                    (> (- (js/Date.now) last-updates) (* 60 60 12 1000)))
+            (js/setTimeout
+              (fn []
+                (plugin-handler/auto-check-enabled-for-updates!)
+                (storage/set :lsp-last-auto-updates (js/Date.now)))))))
+      [])
 
     [:<>]))
 
