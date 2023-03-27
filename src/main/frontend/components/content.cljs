@@ -13,6 +13,8 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.publish :as publish-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
@@ -246,6 +248,15 @@
           nil)
 
          [:hr.menu-separator]
+
+         (when (user-handler/logged-in?)
+           (ui/menu-link
+            {:key "Publish"
+             :on-click (fn [e]
+                         (util/stop e)
+                         (publish-handler/publish :page-name (str (:block/uuid block))))}
+            "Publish"
+            nil))
 
          (block-template block-id)
 

@@ -18,10 +18,11 @@
             [frontend.handler.editor :as editor-handler]))
 
 (defn publish
-  []
+  [& {:keys [page-name]}]
   (state/set-state! [:ui/loading? :publish] true)
   (let [repo         (state/get-current-repo)
-        page-name    (or (state/get-current-page)
+        page-name    (or page-name
+                         (state/get-current-page)
                          (date/today))
         block-page?  (util/uuid-string? page-name)
         block-uuid   (when block-page? (uuid page-name))
@@ -77,20 +78,22 @@
           (do
             ;; persist page/block id
             (if block-page?
-              (editor-handler/set-blocks-id! [block-uuid])
+              (do
+                (editor-handler/set-blocks-id! [block-uuid])
+                (editor-handler/set-block-property! block-uuid :published true))
               (do
                 (page-property/add-property! page-name :id page-id)
                 (page-property/add-property! page-name :published true)))
             (when-let [permalink (get-in result [:body :permalink])]
-             (let [url' (str "http://localhost:3000" "/" permalink)]
-               (state/pub-event! [:notification/show
-                                  {:content [:span
-                                             "Congrats! The page has been published to "
-                                             [:a {:href url'
-                                                  :target "_blank"}
-                                              url']
-                                             "."]
-                                   :status :success}]))))
+              (let [url' (str "http://localhost:3000" "/" permalink)]
+                (state/pub-event! [:notification/show
+                                   {:content [:span
+                                              "Congrats! The page has been published to "
+                                              [:a {:href url'
+                                                   :target "_blank"}
+                                               url']
+                                              "."]
+                                    :status :success}]))))
           (do
             (prn "Publish failed" result)
             (notification/show!
