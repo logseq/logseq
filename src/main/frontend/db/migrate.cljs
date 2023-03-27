@@ -14,7 +14,7 @@
   "Get schema version from db, the current version is defined in db-schema/version"
   [db]
   (d/q
-   '[:find ?v .
+   '[:find (max ?v) .
      :where
      [_ :schema/version ?v]]
    db))
