@@ -230,9 +230,7 @@
     nil)
 
   (read-file [_this dir path _options]
-    (p/let [_ (when-not (string/includes? dir "/")
-                (await-get-nfs-file-handle (str "logseq_local_" dir) (str "handle/" dir)))
-            fpath (path/path-join dir path)
+    (p/let [fpath (path/path-join dir path)
             handle-path (str "handle/" fpath)]
       (p/let [handle (or (get-nfs-file-handle handle-path)
                          (idb/get-item handle-path))
