@@ -25,7 +25,7 @@ import {
   KeyUtils,
   uniqueId,
 } from '../../utils'
-import type { TLGroupShape, TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
+import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
