@@ -69,7 +69,7 @@ export class HoveringSelectionHandleState<
   }
 
   onDoubleClick: TLEvents<S>['pointer'] = info => {
-    if (info.order) return
+    if (info.order || this.app.readOnly) return
     const isSingle = this.app.selectedShapes.size === 1
     if (!isSingle) return
     const selectedShape = getFirstFromSet(this.app.selectedShapes)

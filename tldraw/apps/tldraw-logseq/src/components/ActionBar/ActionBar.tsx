@@ -8,11 +8,9 @@ import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import { ZoomMenu } from '../ZoomMenu'
 import * as Separator from '@radix-ui/react-separator'
-import { LogseqContext } from './../../lib/logseq-context'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
-  const { isPublishing } = React.useContext(LogseqContext)
 
   const undo = React.useCallback(() => {
     app.api.undo()
@@ -32,7 +30,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
 
   return (
     <div className="tl-action-bar">
-      {!isPublishing && (
+      {!app.readOnly && (
         <div className="tl-toolbar tl-history-bar">
           <Button tooltip="Undo" onClick={undo}>
             <TablerIcon name="arrow-back-up" />
@@ -43,7 +41,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </div>
       )}
 
-      <div className={`tl-toolbar tl-zoom-bar ${isPublishing ? "" : "ml-4"}`}>
+      <div className={`tl-toolbar tl-zoom-bar ${app.readOnly ? "" : "ml-4"}`}>
         <Button tooltip="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>

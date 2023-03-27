@@ -4,7 +4,6 @@ import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import * as React from 'react'
-import { LogseqContext } from './../../lib/logseq-context'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
 import * as Separator from '@radix-ui/react-separator'
@@ -21,7 +20,6 @@ export const ContextMenu = observer(function ContextMenu({
 }: ContextMenuProps) {
   const app = useApp()
   const rContent = React.useRef<HTMLDivElement>(null)
-  const { isPublishing } = React.useContext(LogseqContext)
 
   const runAndTransition = (f: Function) => {
     f()
@@ -56,7 +54,7 @@ export const ContextMenu = observer(function ContextMenu({
         tabIndex={-1}
       >
         <div>
-          {app.selectedShapes?.size > 1 && !isPublishing && (
+          {app.selectedShapes?.size > 1 && !app.readOnly && (
             <>
               <ReactContextMenu.Item>
                 <div className="tl-menu-button-row pb-0">
@@ -145,7 +143,7 @@ export const ContextMenu = observer(function ContextMenu({
           )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) &&
-            !isPublishing && (
+            !app.readOnly && (
             <>
               {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
                 <ReactContextMenu.Item
@@ -180,7 +178,7 @@ export const ContextMenu = observer(function ContextMenu({
           )}
           {app.selectedShapes?.size > 0 && (
             <>
-              {!isPublishing && (
+              {!app.readOnly && (
                 <ReactContextMenu.Item
                   className="tl-menu-item"
                   onClick={() => runAndTransition(app.cut)}
@@ -208,7 +206,7 @@ export const ContextMenu = observer(function ContextMenu({
               </ReactContextMenu.Item>
             </>
           )}
-          {!isPublishing && (
+          {!app.readOnly && (
             <ReactContextMenu.Item
               className="tl-menu-item"
               onClick={() => runAndTransition(app.paste)}
@@ -222,7 +220,7 @@ export const ContextMenu = observer(function ContextMenu({
               </div>
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size === 1 && !isPublishing && (
+          {app.selectedShapes?.size === 1 && !app.readOnly && (
             <ReactContextMenu.Item
               className="tl-menu-item"
               onClick={() => runAndTransition(() => app.paste(undefined, true))}
@@ -255,7 +253,7 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size > 0 && !isPublishing && (
+          {app.selectedShapes?.size > 0 && !app.readOnly && (
             <>
               <ReactContextMenu.Item
                 className="tl-menu-item"
@@ -269,7 +267,7 @@ export const ContextMenu = observer(function ContextMenu({
                   </span>
                 </div>
               </ReactContextMenu.Item>
-              {app.selectedShapes?.size > 1 && !isPublishing && (
+              {app.selectedShapes?.size > 1 && !app.readOnly && (
                 <>
                   <ReactContextMenu.Separator className="menu-separator" />
                   <ReactContextMenu.Item
@@ -288,7 +286,7 @@ export const ContextMenu = observer(function ContextMenu({
                   </ReactContextMenu.Item>
                 </>
               )}
-              {!isPublishing && (
+              {!app.readOnly && (
                 <>
               <ReactContextMenu.Separator className="menu-separator" />
               <ReactContextMenu.Item
