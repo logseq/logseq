@@ -144,38 +144,38 @@ export const ContextMenu = observer(function ContextMenu({
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) &&
             !app.readOnly && (
-            <>
-              {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
-                <ReactContextMenu.Item
-                  className="tl-menu-item"
-                  onClick={() => runAndTransition(app.api.unGroup)}
-                >
-                  <TablerIcon className="tl-menu-icon" name="ungroup" />
-                  Ungroup
-                  <div className="tl-menu-right-slot">
-                    <span className="keyboard-shortcut">
-                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
-                    </span>
-                  </div>
-                </ReactContextMenu.Item>
-              )}
-              {app.selectedShapesArray.length > 1 && (
-                <ReactContextMenu.Item
-                  className="tl-menu-item"
-                  onClick={() => runAndTransition(app.api.doGroup)}
-                >
-                  <TablerIcon className="tl-menu-icon" name="group" />
-                  Group
-                  <div className="tl-menu-right-slot">
-                    <span className="keyboard-shortcut">
-                      <code>{MOD_KEY}</code> <code>G</code>
-                    </span>
-                  </div>
-                </ReactContextMenu.Item>
-              )}
-              <ReactContextMenu.Separator className="menu-separator" />
-            </>
-          )}
+              <>
+                {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
+                  <ReactContextMenu.Item
+                    className="tl-menu-item"
+                    onClick={() => runAndTransition(app.api.unGroup)}
+                  >
+                    <TablerIcon className="tl-menu-icon" name="ungroup" />
+                    Ungroup
+                    <div className="tl-menu-right-slot">
+                      <span className="keyboard-shortcut">
+                        <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
+                      </span>
+                    </div>
+                  </ReactContextMenu.Item>
+                )}
+                {app.selectedShapesArray.length > 1 && (
+                  <ReactContextMenu.Item
+                    className="tl-menu-item"
+                    onClick={() => runAndTransition(app.api.doGroup)}
+                  >
+                    <TablerIcon className="tl-menu-icon" name="group" />
+                    Group
+                    <div className="tl-menu-right-slot">
+                      <span className="keyboard-shortcut">
+                        <code>{MOD_KEY}</code> <code>G</code>
+                      </span>
+                    </div>
+                  </ReactContextMenu.Item>
+                )}
+                <ReactContextMenu.Separator className="menu-separator" />
+              </>
+            )}
           {app.selectedShapes?.size > 0 && (
             <>
               {!app.readOnly && (
@@ -288,30 +288,32 @@ export const ContextMenu = observer(function ContextMenu({
               )}
               {!app.readOnly && (
                 <>
-              <ReactContextMenu.Separator className="menu-separator" />
-              <ReactContextMenu.Item
-                className="tl-menu-item"
-                onClick={() => runAndTransition(app.bringToFront)}
-              >
-                Move to front
-                <div className="tl-menu-right-slot">
-                  <span className="keyboard-shortcut">
-                    <code>⇧</code> <code>]</code>
-                  </span>
-                </div>
-              </ReactContextMenu.Item>
-              <ReactContextMenu.Item
-                className="tl-menu-item"
-                onClick={() => runAndTransition(app.sendToBack)}
-              >
-                Move to back
-                <div className="tl-menu-right-slot">
-                  <span className="keyboard-shortcut">
-                    <code>⇧</code> <code>[</code>
-                  </span>
-                </div>
-              </ReactContextMenu.Item>)
-              </>)}
+                  <ReactContextMenu.Separator className="menu-separator" />
+                  <ReactContextMenu.Item
+                    className="tl-menu-item"
+                    onClick={() => runAndTransition(app.bringToFront)}
+                  >
+                    Move to front
+                    <div className="tl-menu-right-slot">
+                      <span className="keyboard-shortcut">
+                        <code>⇧</code> <code>]</code>
+                      </span>
+                    </div>
+                  </ReactContextMenu.Item>
+                  <ReactContextMenu.Item
+                    className="tl-menu-item"
+                    onClick={() => runAndTransition(app.sendToBack)}
+                  >
+                    Move to back
+                    <div className="tl-menu-right-slot">
+                      <span className="keyboard-shortcut">
+                        <code>⇧</code> <code>[</code>
+                      </span>
+                    </div>
+                  </ReactContextMenu.Item>
+                  )
+                </>
+              )}
 
               {developerMode && (
                 <ReactContextMenu.Item

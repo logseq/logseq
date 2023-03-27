@@ -147,7 +147,11 @@ export class IdleState<
     const { selectedShapesArray } = this.app
     switch (e.key) {
       case 'Enter': {
-        if (selectedShapesArray.length === 1 && selectedShapesArray[0].canEdit && !this.app.readOnly) {
+        if (
+          selectedShapesArray.length === 1 &&
+          selectedShapesArray[0].canEdit &&
+          !this.app.readOnly
+        ) {
           this.tool.transition('editingShape', {
             type: TLTargetType.Shape,
             shape: selectedShapesArray[0],

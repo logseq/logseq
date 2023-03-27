@@ -41,7 +41,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </div>
       )}
 
-      <div className={`tl-toolbar tl-zoom-bar ${app.readOnly ? "" : "ml-4"}`}>
+      <div className={`tl-toolbar tl-zoom-bar ${app.readOnly ? '' : 'ml-4'}`}>
         <Button tooltip="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
