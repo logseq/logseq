@@ -432,10 +432,8 @@
     (util/node-path.join (get-repo-dir repo-url) path)))
 
 (defn get-repo-config-path
-  ([]
-   (get-repo-config-path (state/get-current-repo)))
-  ([_repo]
-   (path/path-join app-name config-file)))
+  []
+  (path/path-join app-name config-file))
 
 (defn get-custom-css-path
   ([]

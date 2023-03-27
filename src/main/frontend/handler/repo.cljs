@@ -286,7 +286,7 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) file-objs))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path) (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))

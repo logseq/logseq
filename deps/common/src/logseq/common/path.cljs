@@ -23,7 +23,7 @@
 
 (defn filename
   "File name of a path or URL.
-   Returns nil when it's a directory."
+   Returns nil when it's a directory that ends with '/'."
   [path]
   (let [fname (if (string/ends-with? path "/")
                 nil
@@ -159,8 +159,9 @@
   [base & segments]
 
   (cond
-    (nil? base)
-    (js/console.log "path join with nil global directory" segments)
+    ;; For debugging
+    ; (nil? base)
+    ; (js/console.log "path join with nil global directory" segments)
     (= base "")
     (js/console.error "BUG: should not join with empty dir" segments)
     :else
