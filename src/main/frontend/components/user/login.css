@@ -113,6 +113,10 @@
         opacity: .4;
       }
     }
+
+    .amplify-text--error {
+      color: var(--ls-error-text-color);
+    }
   }
 }
 
