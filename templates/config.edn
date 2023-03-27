@@ -270,7 +270,7 @@
  ;; :property/separated-by-commas #{}
 
  ;; Properties that are ignored when parsing property values for references
- ;; :ignored-page-references-keywords #{"author" "startup"}
+ ;; :ignored-page-references-keywords #{:author :startup}
 
  ;; logbook setup
  ;; :logbook/settings

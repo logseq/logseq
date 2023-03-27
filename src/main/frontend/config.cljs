@@ -32,14 +32,24 @@
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
       (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
-      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/"))
+      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
+      (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
+      (def REGION "us-east-1")
+      (def USER-POOL-ID "us-east-1_dtagLnju8")
+      (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
+      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com"))
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
       (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")
-      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")))
+      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
+      (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
+      (def REGION "us-east-2")
+      (def USER-POOL-ID "us-east-2_kAqZcxIeM")
+      (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
+      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")))
 
 ;; Feature flags
 ;; =============
