@@ -30,7 +30,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
-    this.app.notify('persist', {replace})
+    this.app.notify('persist', { replace })
   }
 
   @action undo = () => {

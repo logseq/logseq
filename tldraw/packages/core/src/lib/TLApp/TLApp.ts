@@ -377,11 +377,10 @@ export class TLApp<
     })
 
     const deleteBinding = (shapeA: string, shapeB: string) => {
-      if ([...ids].includes(shapeA) && this.getShapeById(shapeB)?.type === "line")
-        ids.add(shapeB)
+      if ([...ids].includes(shapeA) && this.getShapeById(shapeB)?.type === 'line') ids.add(shapeB)
     }
 
-     this.currentPage.shapes
+    this.currentPage.shapes
       .flatMap(s => Object.values(s.props.handles ?? {}))
       .flatMap(h => h.bindingId)
       .filter(isNonNullable)
@@ -391,7 +390,8 @@ export class TLApp<
         if (toId && fromId) {
           deleteBinding(toId, fromId)
           deleteBinding(fromId, toId)
-        }})
+        }
+      })
 
     const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
 
@@ -446,7 +446,7 @@ export class TLApp<
   }
 
   align = (type: AlignType, shapes: S[] = this.selectedShapesArray): this => {
-    if (shapes.length < 2  || this.readOnly) return this
+    if (shapes.length < 2 || this.readOnly) return this
 
     const boundsForShapes = shapes.map(shape => {
       const bounds = shape.getBounds()
@@ -625,8 +625,7 @@ export class TLApp<
   }
 
   selectTool = (id: string, data: AnyObject = {}) => {
-    if (!this.readOnly || ['select', 'move'].includes(id) )
-      this.transition(id, data)
+    if (!this.readOnly || ['select', 'move'].includes(id)) this.transition(id, data)
   }
 
   registerTools(tools: TLToolConstructor<S, K>[]) {
