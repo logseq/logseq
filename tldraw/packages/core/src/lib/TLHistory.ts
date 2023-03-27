@@ -1,8 +1,6 @@
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, makeObservable, observable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
-import { deepCopy, deepEqual, omit } from '../utils'
 import type { TLShape, TLShapeModel } from './shapes'
-import type { TLGroupShape } from './shapes/TLGroupShape'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
 
