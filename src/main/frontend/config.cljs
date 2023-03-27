@@ -404,8 +404,7 @@
   ([]
    (get-repo-config-path (state/get-current-repo)))
   ([repo]
-   (when-let [repo-dir (get-repo-dir repo)]
-     (path/path-join repo-dir app-name config-file))))
+   (path/path-join app-name config-file)))
 
 (defn get-custom-css-path
   ([]
