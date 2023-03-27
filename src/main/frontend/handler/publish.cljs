@@ -13,7 +13,9 @@
             [frontend.handler.notification :as notification]
             [clojure.string :as string]
             [logseq.publish :as publish]
-            [frontend.util.fs :as fs-util]))
+            [frontend.util.fs :as fs-util]
+            [frontend.util.page-property :as page-property]
+            [frontend.handler.editor :as editor-handler]))
 
 (defn publish
   []
@@ -72,16 +74,23 @@
                                    :with-credentials? false}))]
         (state/set-state! [:ui/loading? :publish] false)
         (if (:success result)
-          (when-let [permalink (get-in result [:body :permalink])]
-            (let [url' (str "http://localhost:3000" "/" permalink)]
-              (state/pub-event! [:notification/show
-                                 {:content [:span
-                                            "Congrats! The page has been published to "
-                                            [:a {:href url'
-                                                 :target "_blank"}
-                                             url']
-                                            "."]
-                                  :status :success}])))
+          (do
+            ;; persist page/block id
+            (if block-page?
+              (editor-handler/set-blocks-id! [block-uuid])
+              (do
+                (page-property/add-property! page-name :id page-id)
+                (page-property/add-property! page-name :published true)))
+            (when-let [permalink (get-in result [:body :permalink])]
+             (let [url' (str "http://localhost:3000" "/" permalink)]
+               (state/pub-event! [:notification/show
+                                  {:content [:span
+                                             "Congrats! The page has been published to "
+                                             [:a {:href url'
+                                                  :target "_blank"}
+                                              url']
+                                             "."]
+                                   :status :success}]))))
           (do
             (prn "Publish failed" result)
             (notification/show!
