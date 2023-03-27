@@ -270,8 +270,12 @@
       (page-ref/->page-ref (second clause))
 
       (= (keyword f) :page-tags)
-      (if (string? (second clause))
+      (cond
+        (string? (second clause))
         (str "#" (second clause))
+        (symbol? (second clause))
+        (str "#" (str (second clause)))
+        :else
         (str "#" (second (second clause))))
 
       (contains? #{:property :page-property} (keyword f))
@@ -287,7 +291,15 @@
              (last clause)))
 
       (= (keyword f) :between)
-      (str "between: " (second (second clause)) " - " (second (last clause)))
+      (let [start (if (or (keyword? (second clause))
+                          (symbol? (second clause)))
+                    (name (second clause))
+                    (second (second clause)))
+            end (if (or (keyword? (last clause))
+                        (symbol? (last clause)))
+                  (name (last  clause))
+                  (second (last clause)))]
+        (str "between: " start " ~ " end))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "
@@ -312,7 +324,7 @@
        [:a.flex.text-sm.query-clause {:on-click toggle-fn}
         clause]
 
-       [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border
+       [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border.query-clause-btn
         [:a.flex.query-clause {:on-click toggle-fn}
          (dsl-human-output clause)]]))
    (fn [{:keys [toggle-fn]}]
@@ -368,9 +380,9 @@
      (let [kind (keyword (first clause))]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
-          [:div.text-4xl.mr-1.font-thin "("]
+          [:div.clause-bracket "("]
           (clauses-group *tree *find (conj loc 0) kind (rest clause))
-          [:div.text-4xl.ml-1.font-thin ")"]]
+          [:div.clause-bracket ")"]]
          (clause-inner *tree loc clause)))]))
 
 (rum/defc clauses-group
@@ -378,7 +390,7 @@
   (let [parens? (and (= loc [0])
                      (> (count clauses) 1))]
     [:div.clauses-group
-     (when parens? [:div.text-4xl.mr-1.font-thin "("])
+     (when parens? [:div.clause-bracket "("])
      (when-not (and (= loc [0])
                     (= kind :and)
                     (<= (count clauses) 1))
@@ -390,7 +402,7 @@
                     (clause *tree *find (update loc (dec (count loc)) #(+ % i 1)) item))
                   clauses)
 
-     (when parens? [:div.text-4xl.ml-1.font-thin ")"])
+     (when parens? [:div.clause-bracket ")"])
 
      (when (not= loc [0])
        (add-filter *find *tree loc []))]))
