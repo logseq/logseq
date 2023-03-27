@@ -29,7 +29,7 @@
     }
 
     .clauses-group {
-        @apply flex flex-row gap-1 flex-wrap items-center text-sm;
+        @apply flex flex-row gap-2 flex-wrap items-center text-sm;
     }
 
     a.query-clause, a.add-filter {
@@ -42,5 +42,14 @@
 
     .filter-item select {
         border: none;
+    }
+
+    .clause-bracket {
+        @apply text-4xl ml-1 font-thin opacity-30;
+        font-family: "Inter";
+    }
+
+    .query-clause-btn {
+        border-color: var(--ls-border-color);
     }
 }
