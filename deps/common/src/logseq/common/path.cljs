@@ -1,9 +1,7 @@
 (ns logseq.common.path
   "Path manipulation functions, use '/' sep on all platforms.
    Also handles URL paths."
-  (:require [clojure.string :as string]
-            ["path" :as path]
-            ["/frontend/utils" :as utils]))
+  (:require [clojure.string :as string]))
 
 (defn- safe-decode-uri-component
   [uri]
@@ -239,8 +237,8 @@
       (if is-url?
         (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
         (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-       ;; append as many ..
-      ;; NOTE: buggy impl
+      ;; append as many ..
+      ;; NOTE: This is a buggy impl, relative-path is different when base-path is a file or a dir
       (let [base-segs (string/split base-path #"/" -1)
             path-segs (string/split sub-path #"/" -1)
             common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
@@ -305,5 +303,8 @@
 (defn absolute?
   "Whether path `p` is absolute."
   [p]
-  (or (.isAbsolute path p)
-      (utils/win32 p)))
+  (let [p (path-normalize p)]
+    (boolean (or (is-file-url? p)
+                 (string/starts-with? p "/")
+                 ;; is windows dir
+                 (re-matches #"^[a-zA-Z]:[/\\]" p)))))
