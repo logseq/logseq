@@ -19,7 +19,8 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.config :as config]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -234,7 +235,7 @@
         [:div.gap-8.grid.grid-rows-auto
          {:style {:visibility (when (nil? container-width) "hidden")
                   :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
-         (dashboard-create-card)
+         (when-not config/publishing? (dashboard-create-card))
          (for [whiteboard-name whiteboard-names]
            [:<> {:key whiteboard-name}
             (dashboard-preview-card whiteboard-name
