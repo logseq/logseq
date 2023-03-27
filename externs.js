@@ -148,6 +148,5 @@ dummy.TEXT = function() {};
 var openDirectoryOptions;
 /**
  * @param {(undefined | openDirectoryOptions)} options
- * @param {function} cb
  */
-var openDirectory = function(options, cb) {};
+var openDirectory = function(options) {};

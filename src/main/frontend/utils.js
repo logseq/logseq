@@ -4,6 +4,7 @@ import path from 'path/path.js'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
+import { directoryOpen, supported } from 'browser-fs-access'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -85,38 +86,6 @@ export const getSelectionText = () => {
   return ''
 }
 
-// Modified from https://github.com/GoogleChromeLabs/browser-nativefs
-// because shadow-cljs doesn't handle this babel transform
-export const getFiles = async (dirHandle, recursive, cb, path = dirHandle.name) => {
-  const dirs = []
-  const files = []
-  for await (const entry of dirHandle.values()) {
-    const nestedPath = `${path}/${entry.name}`
-    if (entry.kind === 'file') {
-      cb(nestedPath, entry)
-      files.push(
-        entry.getFile().then((file) => {
-          Object.defineProperty(file, 'webkitRelativePath', {
-            configurable: true,
-            enumerable: true,
-            get: () => nestedPath,
-          })
-          Object.defineProperty(file, 'handle', {
-            configurable: true,
-            enumerable: true,
-            get: () => entry,
-          })
-          return file
-        })
-      )
-    } else if (entry.kind === 'directory' && recursive) {
-      cb(nestedPath, entry)
-      dirs.push(getFiles(entry, recursive, cb, nestedPath))
-    }
-  }
-  return [(await Promise.all(dirs)), (await Promise.all(files))]
-}
-
 export const verifyPermission = async (handle, readWrite) => {
   const options = {}
   if (readWrite) {
@@ -136,14 +105,27 @@ export const verifyPermission = async (handle, readWrite) => {
 
 // NOTE: Need externs to prevent `options.recursive` been munged
 //       When building with release.
-export const openDirectory = async (options = {}, cb) => {
+export const openDirectory = async (options = {}) => {
   options.recursive = options.recursive || false;
-  const handle = await window.showDirectoryPicker({
-    mode: 'readwrite'
-  });
-  const _ask = await verifyPermission(handle, true);
-  return [handle, getFiles(handle, options.recursive, cb)];
+  options.startIn = options.startIn || 'documents';
+  options.mode = options.mode || 'readwrite';
+  options.id = options.id || 'open-directory';
+  try {
+    const files = await directoryOpen(options);
+    let handle;
+    if (files.length && !(files[0] instanceof File)) {
+      handle = files[0];
+    } else {
+     handle = files[0].directoryHandle;
+    }
+    await verifyPermission(handle, true);
+    return [handle, files];
+  } catch (err) {
+    throw err;
+  }
 };
+
+export const nfsSupported = () => supported;
 
 export const writeFile = async (fileHandle, contents) => {
   // Create a FileSystemWritableFileStream to write to.
@@ -157,15 +139,6 @@ export const writeFile = async (fileHandle, contents) => {
     // Close the file and write the contents to disk.
     await writable.close()
   }
-}
-
-export const nfsSupported = () => {
-  if ('chooseFileSystemEntries' in self) {
-    return 'chooseFileSystemEntries'
-  } else if ('showOpenFilePicker' in self) {
-    return 'showOpenFilePicker'
-  }
-  return false
 }
 
 const inputTypes = [
