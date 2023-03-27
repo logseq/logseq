@@ -922,14 +922,6 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
-#?(:cljs
-   (defn absolute-path?
-     [path]
-     (try
-       (js/window.apis.isAbsolutePath path)
-       (catch :default _
-         (utils/win32 path)))))
-
 (defn default-content-with-title
   [text-format]
   (case (name text-format)

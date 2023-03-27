@@ -1,8 +1,9 @@
 (ns logseq.common.path
   "Path manipulation functions, use '/' sep on all platforms.
    Also handles URL paths."
-  (:require [clojure.string :as string]))
-
+  (:require [clojure.string :as string]
+            ["path" :as path]
+            ["/frontend/utils" :as utils]))
 
 (defn- safe-decode-uri-component
   [uri]
@@ -300,3 +301,9 @@
 (defn dirname
   [path]
   (parent path))
+
+(defn absolute?
+  "Whether path `p` is absolute."
+  [p]
+  (or (.isAbsolute path p)
+      (utils/win32 p)))

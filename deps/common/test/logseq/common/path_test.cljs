@@ -25,3 +25,11 @@
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "baz")))
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))))
 
+(deftest path-absolute
+  (testing "absolute"
+    (is (true? (path/absolute? "D:\\sources\\sources.md")))
+    (is (true? (path/absolute? "/home/xxx/logseq/test.md")))
+    (is (false? (path/absolute? "logseq/test.md")))
+    (is (false? (path/absolute? "test.md")))
+    (is (false? (path/absolute? "test")))
+    (is (false? (path/absolute? "D:test.md")))))

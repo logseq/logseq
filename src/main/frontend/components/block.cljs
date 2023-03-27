@@ -711,7 +711,7 @@
                         (gp-util/url? path)
                         path
 
-                        (util/absolute-path? path)
+                        (path/absolute? path)
                         path
 
                         :else
@@ -1009,7 +1009,7 @@
 
 (defn- relative-assets-path->absolute-path
   [path]
-  (if (util/absolute-path? path)
+  (if (path/absolute? path)
     path
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
