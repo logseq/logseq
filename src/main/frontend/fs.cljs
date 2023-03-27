@@ -6,7 +6,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.fs.memory-fs :as bfs]
+            [frontend.fs.memory-fs :as memory-fs]
             [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
@@ -19,7 +19,7 @@
             [electron.ipc :as ipc]))
 
 (defonce nfs-backend (nfs/->Nfs))
-(defonce memory-backend (bfs/->Bfs))
+(defonce memory-backend (memory-fs/->MemoryFs))
 (defonce node-backend (node/->Node))
 (defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
