@@ -218,8 +218,9 @@
   ([]
    (create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
-   (create-new-whiteboard-page! name)
-   (route-handler/redirect-to-whiteboard! name)))
+   (when-not config/publishing?
+     (create-new-whiteboard-page! name)
+     (route-handler/redirect-to-whiteboard! name))))
 
 (defn ->logseq-portal-shape
   [block-id point]
