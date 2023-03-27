@@ -1,25 +1,43 @@
-# Build Logseq Desktop on Windows
+# Setup Logseq development dependencies on Windows
 
-This is a guide on setting up a Logseq development environment on Windows.
+This is a guide on setting up Logseq development dependencies on Windows.  Once these dependencies are installed, you can follow the  [develop-logseq](develop-logseq.md) docs for build instructions.
 
-## Pre-requisites
+## Winget
 
-  * NVM, Node, and Yarn
+Winget is a package manager installed by default on windows.
+
   ```
   winget install --id CoreyButler.NVMforWindows
   nvm install 18
   nvm use 18
   npm install -g yarn
-  ```
-  * Java
-  ```
   winget install --id Microsoft.OpenJDK.17
-  ```
-  * Visual Studio
-  ```
   winget install --id Microsoft.VisualStudio.2022.Community
   ```
-  * An installer for clojure is available from [casselc/clj-msi](https://github.com/casselc/clj-msi/releases/)
+
+An installer for clojure is available from [casselc/clj-msi](https://github.com/casselc/clj-msi/releases/)
+
+## [chocolatey](https://chocolatey.org/)
+
+```
+choco install nvm
+nvm install 18
+nvm use 18
+npm install -g yarn
+choco install visualstudio2022community
+choco install javaruntime
+choco install clojure
+```
+
+
+## [scoop](https://scoop.sh/)
+
+```
+scoop bucket add scoop-clojure https://github.com/littleli/scoop-clojure
+scoop bucket add extras
+scoop bucket add java
+scoop install java/openjdk clojure clj-deps babashka leiningen nodejs-lts
+```
 
 ## Troubleshooting
 
