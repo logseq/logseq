@@ -160,7 +160,7 @@
 
   (cond
     (nil? base)
-    (js/console.log "path join global directory" segments)
+    (js/console.log "path join with nil global directory" segments)
     (= base "")
     (js/console.error "BUG: should not join with empty dir" segments)
     :else

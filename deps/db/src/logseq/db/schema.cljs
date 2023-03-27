@@ -1,7 +1,7 @@
 (ns logseq.db.schema
   "Main db schema for the Logseq app")
 
-(defonce version 1)
+(defonce version 2)
 (defonce ast-version 1)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
