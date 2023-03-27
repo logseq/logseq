@@ -383,8 +383,7 @@
     (let [dir (get-local-dir repo-url)]
       (if (string/starts-with? dir "file://")
         dir
-        ;; FIXME(andelf): should not use str to concat file:// url
-        (str "file:///" (string/replace dir #"^/+" ""))))
+        (path/path-join "file://" dir)))
 
     ;; Special handling for demo graph
     (= repo-url "local")
