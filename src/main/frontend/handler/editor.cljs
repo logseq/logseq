@@ -856,26 +856,37 @@
   [col]
   #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
-    (outliner-tx/transact!
-     {:outliner-op :save-block}
-     (doseq [[block-id key value] col]
-       (let [block-id (if (string? block-id) (uuid block-id) block-id)]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [format (:block/format block)
-                 content (:block/content block)
-                 properties (:block/properties block)
-                 properties (if (nil? value)
-                              (dissoc properties key)
-                              (assoc properties key value))
-                 content (if (nil? value)
-                           (property/remove-property format key content)
-                           (property/insert-property format content key value))
-                 content (property/remove-empty-properties content)
-                 block {:block/uuid block-id
-                        :block/properties properties
-                        :block/properties-order (keys properties)
-                        :block/content content}]
-             (outliner-core/save-block! block))))))
+    (let [col' (group-by first col)]
+      (outliner-tx/transact!
+       {:outliner-op :save-block}
+        (doseq [[block-id items] col']
+          (let [block-id (if (string? block-id) (uuid block-id) block-id)
+                new-properties (zipmap (map second items)
+                                (map last items))]
+            (when-let [block (db/entity [:block/uuid block-id])]
+              (let [format (:block/format block)
+                    content (:block/content block)
+                    properties (:block/properties block)
+                    properties-text-values (:block/properties-text-values block)
+                    properties (-> (merge properties new-properties)
+                                   gp-util/remove-nils-non-nested)
+                    properties-text-values (-> (merge properties-text-values new-properties)
+                                               gp-util/remove-nils-non-nested)
+                    property-ks (->> (concat (:block/properties-order block)
+                                             (map second items))
+                                     (filter (set (keys properties)))
+                                     distinct
+                                     vec)
+                    content (property/remove-properties format content)
+                    kvs (for [key property-ks] [key (get properties key)])
+                    content (property/insert-properties format content kvs)
+                    content (property/remove-empty-properties content)
+                    block {:block/uuid block-id
+                           :block/properties properties
+                           :block/properties-order property-ks
+                           :block/properties-text-values properties-text-values
+                           :block/content content}]
+                (outliner-core/save-block! block)))))))
 
     (let [block-id (ffirst col)
           block-id (if (string? block-id) (uuid block-id) block-id)
@@ -2798,6 +2809,9 @@
             (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+        nil
+
+        (some? (:editor/action @state/state))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
