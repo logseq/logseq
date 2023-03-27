@@ -224,8 +224,8 @@
   (first (filter pred coll)))
 
 (defn find-index
-  [pred-or-val coll]
   "Find first index of an element in list"
+  [pred-or-val coll]
   (let [pred (if (fn? pred-or-val) pred-or-val #(= pred-or-val %))]
     (reduce-kv #(if (pred %3) (reduced %2) %1) -1
                (cond-> coll (list? coll) (vec)))))
