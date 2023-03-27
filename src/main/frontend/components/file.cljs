@@ -21,8 +21,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [logseq.common.path :as path]
-            [frontend.handler.global-config :as global-config-handler]))
+            [logseq.common.path :as path]))
 
 (defn- get-path
   [state]
@@ -136,8 +135,7 @@
      (cond
        ;; image type
        (and format (contains? (gp-config/img-formats) format))
-       ;; FIXME(andelf): bad path op
-       [:img {:src (util/node-path.join "file://" path)}]
+       [:img {:src (path/path-join "file://" path)}]
 
        (and format
             (contains? (gp-config/text-formats) format)
