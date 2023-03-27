@@ -250,8 +250,6 @@
   ([path]
    (get-file (state/get-current-repo) path))
   ([repo path]
-   (when (string/starts-with? path "/")
-     (js/console.error "BUG: Using absolute path while querying DB" path))
    (when (and repo path)
      (when-let [db (conn/get-db repo)]
        (:file/content (db-utils/entity db [:file/path path]))))))
