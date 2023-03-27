@@ -53,7 +53,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
 interface LogseqTldrawProps {
   renderers: LogseqContextValue['renderers']
   handlers: LogseqContextValue['handlers']
-  isPublishing: LogseqContextValue['isPublishing']
+  readOnly: boolean
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
@@ -92,13 +92,14 @@ const AppImpl = () => {
 
 const AppInner = ({
   onPersist,
+  readOnly,
   model,
   ...rest
 }: Omit<LogseqTldrawProps, 'renderers' | 'handlers'>) => {
   const onDrop = useDrop()
   const onPaste = usePaste()
   const onCopy = useCopy()
-  const onQuickAdd = useQuickAdd()
+  const onQuickAdd = readOnly ? null : useQuickAdd()
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -114,6 +115,7 @@ const AppInner = ({
       onDrop={onDrop}
       onPaste={onPaste}
       onCopy={onCopy}
+      readOnly={readOnly}
       onCanvasDBClick={onQuickAdd}
       onPersist={onPersistOnDiff}
       model={model}
@@ -124,7 +126,7 @@ const AppInner = ({
   )
 }
 
-export const App = function App({ renderers, handlers, isPublishing, ...rest }: LogseqTldrawProps): JSX.Element {
+export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawProps): JSX.Element {
   const memoRenders: any = React.useMemo(() => {
     return Object.fromEntries(
       Object.entries(renderers).map(([key, comp]) => {
@@ -136,7 +138,6 @@ export const App = function App({ renderers, handlers, isPublishing, ...rest }: 
   const contextValue = {
     renderers: memoRenders,
     handlers: handlers,
-    isPublishing: isPublishing,
   }
 
   return (

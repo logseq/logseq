@@ -153,7 +153,7 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :isPublishing config/publishing?
+                :readOnly config/publishing?
                 :onPersist (fn [app info]
                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
                              (util/profile "tldraw persist"
