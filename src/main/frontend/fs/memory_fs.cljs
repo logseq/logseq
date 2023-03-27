@@ -46,7 +46,7 @@
                  (js/window.pfs.mkdir dir)))))
 
 
-(defrecord Bfs []
+(defrecord MemoryFs []
   protocol/Fs
   (mkdir! [_this dir]
     (when js/window.pfs

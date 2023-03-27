@@ -434,7 +434,7 @@
 (defn get-repo-config-path
   ([]
    (get-repo-config-path (state/get-current-repo)))
-  ([repo]
+  ([_repo]
    (path/path-join app-name config-file)))
 
 (defn get-custom-css-path

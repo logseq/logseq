@@ -307,4 +307,4 @@
     (boolean (or (is-file-url? p)
                  (string/starts-with? p "/")
                  ;; is windows dir
-                 (re-matches #"^[a-zA-Z]:[/\\]" p)))))
+                 (re-find #"^[a-zA-Z]:[/\\]" p)))))
