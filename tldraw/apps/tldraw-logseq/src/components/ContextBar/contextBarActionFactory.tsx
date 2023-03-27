@@ -566,6 +566,9 @@ const getContextBarActionTypes = (type: ShapeType) => {
 }
 
 export const getContextBarActionsForShapes = (shapes: Shape[]) => {
+  const {isPublishing} = React.useContext(LogseqContext)
+  if (isPublishing) return []
+
   const types = shapes.map(s => s.props.type)
   const actionTypes = new Set(shapes.length > 0 ? getContextBarActionTypes(types[0]) : [])
   for (let i = 1; i < types.length && actionTypes.size > 0; i++) {
