@@ -1,6 +1,6 @@
 (ns frontend.fs.nfs
   "Browser File System API based fs implementation.
-   
+
    Rationale:
    - nfs-file-handles-cache stores all file & directory handle
    - idb stores top-level directory handle
@@ -103,9 +103,9 @@
    (await-permission-granted repo)
    (get-nfs-file-handle handle-path)))
 
-(defn- readdir-and-reload-all-handles 
+(defn- readdir-and-reload-all-handles
   "Return list of filenames"
-  [root-dir root-handle] 
+  [root-dir root-handle]
   (p/let [files (utils/getFiles root-handle
                                 true
                                 (fn [path entry]
@@ -308,7 +308,7 @@
            :path fpath
            :type (get-attr "type")}))
       (p/rejected "File not exists")))
-  
+
   (open-dir [_this _dir]
     (p/let [files (utils/openDirectory #js {:recursive true
                                             :mode "readwrite"}
@@ -318,11 +318,11 @@
                                            ;; FileSystemDirectoryHandle or FileSystemFileHandle
                                            (when-not (string/includes? path "/.")
                                              (add-nfs-file-handle! handle-path entry)))))
-            dir-handle (first files) ;; FileSystemDirectoryHandle 
+            dir-handle (first files) ;; FileSystemDirectoryHandle
             dir-name (.-name dir-handle)
             files (->> (next files)
                        (remove  (fn [file]
-                                  (let [rpath (.-webkitRelativePath file) ; 
+                                  (let [rpath (.-webkitRelativePath file) ;
                                         ; (string/replace-first (.-webkitRelativePath file) (str dir-name "/") "")
                                         ext (util/get-file-ext rpath)]
                                     (or  (string/blank? rpath)
@@ -357,7 +357,6 @@
     (p/let [handle-path (str "handle/" dir)
             handle (get-nfs-file-handle handle-path)
             files (get-files-and-reload-all-handles dir handle)]
-      (prn ::get-files files)
       files))
 
   (watch-dir! [_this _dir _options]
