@@ -2072,6 +2072,7 @@
                                       (remove (property/hidden-properties))
                                       pre-block?
                                       (remove hidden-editable-page-properties))
+            properties-order (distinct properties-order)
             ordered-properties (if (seq properties-order)
                                  (map (fn [k] [k (get properties k)]) properties-order)
                                  properties)]
