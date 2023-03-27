@@ -1130,10 +1130,11 @@
         notify! (fn [content status]
                   (if auto-checking?
                     (println "Plugin Updates: " content)
-                    (try
-                      (set-uid (notification/show! content status false uid))
-                      (catch js/Error _
-                        (set-uid (notification/show! content status false))))))]
+                    (let [cb #(plugin-handler/cancel-user-checking!)]
+                      (try
+                        (set-uid (notification/show! content status false uid nil cb))
+                        (catch js/Error _
+                          (set-uid (notification/show! content status false nil nil cb)))))))]
 
     (rum/use-effect!
       (fn []
@@ -1230,7 +1231,7 @@
                                   [:span "The plugin "
                                    [:strong.text-error "#" name]
                                    " is disabled."] :success
-                                  true nil 3000)))
+                                  true nil 3000 nil)))
                      (p/catch #(js/console.error %)))))]])
 
 (defn open-plugins-modal!

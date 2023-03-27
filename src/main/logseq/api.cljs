@@ -963,7 +963,7 @@
          content (if hiccup? (parse-hiccup-ui content) content)
          uid     (when (string? key) (keyword key))
          clear?  (not= timeout 0)
-         key'    (notification/show! content (keyword status) clear? uid timeout)]
+         key'    (notification/show! content (keyword status) clear? uid timeout nil)]
      (name key'))))
 
 (defn ^:export ui_show_msg

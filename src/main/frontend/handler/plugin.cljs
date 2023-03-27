@@ -594,6 +594,11 @@
   []
   (boolean (:plugin/updates-downloading? @state/state)))
 
+(defn cancel-user-checking!
+  []
+  (when (get-user-checking?)
+    (state/set-state! :plugin/updates-pending {})))
+
 (defn user-check-enabled-for-updates!
   [theme?]
   (let [user-checking? (get-user-checking?)
