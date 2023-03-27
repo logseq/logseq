@@ -223,14 +223,15 @@
   []
   (or (alpha-user?) (beta-user?)))
 
-(defonce feature-matrix {:file-sync :beta
-                         :whiteboard :beta})
+(comment
+  ;; We probably need this for some new features later
+  (defonce feature-matrix {:file-sync :beta})
 
-(defn feature-available?
-  [feature]
-  (or config/dev?
-      (when (logged-in?)
-        (case (feature feature-matrix)
-          :beta (alpha-or-beta-user?)
-          :alpha (alpha-user?)
-          false))))
+  (defn feature-available?
+    [feature]
+    (or config/dev?
+        (when (logged-in?)
+          (case (feature feature-matrix)
+            :beta (alpha-or-beta-user?)
+            :alpha (alpha-user?)
+            false)))))

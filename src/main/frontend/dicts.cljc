@@ -8,7 +8,6 @@
                           :default "tutorial-en.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                  :default "dummy-notes-en.md")
-        :on-boarding/closed-feature "Closed {1}"
         :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
         :on-boarding/add-graph "Add a graph"
         :on-boarding/open-local-dir "Open a local directory"
@@ -539,7 +538,6 @@
         :notification/clear-all "Alles löschen"
 
         :on-boarding/add-graph "Graph hinzufügen"
-        :on-boarding/closed-feature "{1} geschlossen"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
         :on-boarding/new-graph-desc-1 "Logseq unterstützt sowohl Markdown als auch Org-mode. Sie können ein bestehendes Verzeichnis öffnen oder auf Ihrem Rechner ein neues Verzeichnis anlegen. Ein Verzeichnis wird auch als Ordner bezeichnet. Ihre Daten werden nur auf diesem Gerät gespeichert."
         :on-boarding/new-graph-desc-2 "Nachdem Sie ein Verzeichnis geöffnet haben, werden darin drei Ordner angelegt:"
@@ -1298,7 +1296,6 @@
 
         :file/validate-existing-file-error "La page existe déjà avec un autre fichier: {1}, fichier actuel: {2}. Veuillez n'en garder qu'un et réindexer votre graphique."
         :notification/clear-all "Tout effacer"
-        :on-boarding/closed-feature "Fermé {1}"
         :on-boarding/tour-whiteboard-home "{1} Commencez pour vos tableaux blancs"
         :on-boarding/tour-whiteboard-home-description "Les tableaux blancs ont leur propre section dans l'application où vous pouvez les voir en un coup d'œil, en créer de nouveaux ou les supprimer facilement."
         :on-boarding/tour-whiteboard-new "{1} Créer un nouveau tableau blanc"
@@ -1638,7 +1635,6 @@
 
    :zh-Hant {
           :accessibility/skip-to-main-content "跳轉到主頁面"
-          :on-boarding/closed-feature "已關閉 {1}"
           :on-boarding/demo-graph "目前在 demo 用圖表，您需要打開本機目錄以保存。"
           :on-boarding/add-graph "增加圖表"
           :on-boarding/open-local-dir "打開本機目錄"
@@ -2884,7 +2880,6 @@
            :left-side-bar/create "Criar"
            :left-side-bar/new-whiteboard "Novo quadro branco"
            :notification/clear-all "Limpar tudo"
-           :on-boarding/closed-feature "Fechado {1}"
            :on-boarding/tour-whiteboard-home "{1} Início para seus quadros brancos"
            :on-boarding/tour-whiteboard-home-description "Os quadros brancos têm sua própria seção no aplicativo, onde você pode vê-los rapidamente, criar novos ou excluí-los facilmente."
            :on-boarding/tour-whiteboard-new "{1} Criar novo quadro branco"
@@ -2924,7 +2919,6 @@
                              :default "tutorial-en.md")
            :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                     :default "dummy-notes-en.md")
-           :on-boarding/closed-feature "{1} fechado/a"
            :on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
            :on-boarding/open-local-dir "Abrir uma pasta local"
@@ -4006,7 +4000,6 @@
                           :default "tutorial-tr.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-tr.md")
                                  :default "dummy-notes-tr.md")
-        :on-boarding/closed-feature "Kapalı {1}"
         :on-boarding/demo-graph "Bu bir demo graftır, yerel bir klasör açana kadar değişiklikler kaydedilmeyecektir."
         :on-boarding/add-graph "Bir graf ekle"
         :on-boarding/open-local-dir "Yerel bir dizin açın"
@@ -4603,7 +4596,6 @@
         :color/purple "보라색"
         :color/red "빨간색"
         :color/yellow "노란색"
-        :on-boarding/closed-feature "{1} 종료됨"
         :on-boarding/tour-whiteboard-home "{1} 홈 화이트보드"
         :on-boarding/tour-whiteboard-home-description "화이트보드는 각각 섹션이 존재합니다. 섹션에서 화이트보드를 한눈에 보고, 생성하거나 삭제할 수 있습니다."
         :on-boarding/tour-whiteboard-new "{1} 새 화이트보드 생성"
@@ -4927,7 +4919,6 @@
                                                              :default "tutorial-sk.md")
         :tutorial/dummy-notes                             #?(:cljs    (rc/inline "dummy-notes-sk.md")
                                                              :default "dummy-notes-sk.md")
-        :on-boarding/closed-feature                       "Zatvorený {1}"
         :on-boarding/demo-graph                           "Toto je ukážkový graf, zmeny nebudú uložené, kým neotvoríte lokálny adresár."
         :on-boarding/add-graph                            "Pridať graf"
         :on-boarding/open-local-dir                       "Otvoriť lokálny adresár"
