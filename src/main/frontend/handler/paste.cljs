@@ -88,11 +88,11 @@
   (util/stop e)
   (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
                             (js/navigator.clipboard.read))
-          blocks-blob ^js (try
-                            (.getType ^js (first clipboard-items)
-                                      "web application/logseq")
-                            (catch :default _e
-                                nil))
+          blocks-blob ^js (when clipboard-items
+                            (let [types (.-types ^js (first clipboard-items))]
+                              (when (contains? (set types) "web application/logseq")
+                                (.getType ^js (first clipboard-items)
+                                         "web application/logseq"))))
           blocks-str (when blocks-blob (.text blocks-blob))
           copied-blocks (when blocks-str
                           (gp-util/safe-read-string blocks-str))]
