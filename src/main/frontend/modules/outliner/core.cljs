@@ -13,7 +13,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [frontend.config :as config]))
 
 (s/def ::block-map (s/keys :req [:db/id]
                            :opt [:block/page :block/left :block/parent]))
@@ -557,7 +558,7 @@
                         [{:block/uuid (tree/-get-id next)
                           :block/left (:db/id left)}]))
             full-tx (util/concat-without-nil uuids-tx tx next-tx)]
-        (when (and replace-empty-target? (state/editing?))
+        (when (and replace-empty-target? (not config/test?) (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
         {:tx-data full-tx
          :blocks tx}))))
