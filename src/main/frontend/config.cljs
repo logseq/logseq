@@ -462,7 +462,7 @@
                                                  (get-repo-dir (state/get-current-repo)) "assets"))
                         "/")]
     (when (not-empty source)
-      (string/replace source #"\\.\\./assets/"
+      (string/replace source #"\.\./assets/"
                       assets-link-fn))))
 
 (defn get-current-repo-assets-root
