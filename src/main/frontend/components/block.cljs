@@ -2543,11 +2543,14 @@
            (route-handler/redirect-to-page! (:block/uuid block))))}
    label])
 
-(rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
+(rum/defc breadcrumb-separator
+  []
+  (ui/icon "chevron-right" {:style {:font-size 20}
+                            :class "opacity-50 mx-1"}))
 
 (defn breadcrumb
   "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
-  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? level-limit navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
@@ -2591,13 +2594,17 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex-row.flex-1
+          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.items-center
            {:class (when (seq breadcrumb)
                      (str (when-not (:search? config)
                             " my-2")
                           (when indent?
                             " ml-4")))}
-           breadcrumb (when end-separator? (breadcrumb-separator))])))))
+           (when (and (false? (:top-level? config))
+                      (seq parents))
+             (breadcrumb-separator))
+           breadcrumb
+           (when end-separator? (breadcrumb-separator))])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -3704,12 +3711,10 @@
                                                              parent-blocks)
                        sorted-parent-blocks (concat top-level-blocks others)]
                    (for [[parent blocks] sorted-parent-blocks]
-                     [:div {:class (if (= (:db/id parent) (:db/id page))
-                                     "top-level-matched-blocks"
-                                     "nested-matched-blocks")}
-                      (rum/with-key
-                        (breadcrumb-with-container blocks config)
-                        (:db/id parent))]))
+                     (let [top-level? (= (:db/id parent) (:db/id page))]
+                       (rum/with-key
+                         (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
+                         (:db/id parent)))))
                  {:debug-id page
                   :trigger-once? false})])))))]
 
