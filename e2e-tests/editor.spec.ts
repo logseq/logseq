@@ -173,8 +173,9 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   await page.press('textarea >> nth=0', 'Enter')
   await block.waitForBlocks(2)
-
+  await page.waitForTimeout(100)
   await page.keyboard.press(modKey + '+v')
+  await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
 
   // Check if the newly created block-ref has the same referenced content
