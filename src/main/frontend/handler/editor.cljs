@@ -1013,7 +1013,6 @@
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
               copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
-        ;; (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1229,7 +1228,6 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      ;; (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
       (delete-block-aux! block true))))
 
