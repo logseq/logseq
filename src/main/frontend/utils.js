@@ -249,7 +249,9 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html}, ownerWindow) => {
+export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
+  console.log("block")
+  console.log(blocks)
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
@@ -281,6 +283,19 @@ export const writeClipboard = ({text, html}, ownerWindow) => {
                     ["text/html"]: richBlob
                 })];
             }
+          if (blocks) {
+            let blocksBlob = new Blob([blocks], {
+              type: ["web application/logseq"]
+            })
+            let richBlob = new Blob([html], {
+              type: ["text/html"]
+            })
+            data = [new ClipboardItem({
+              ["text/plain"]: blob,
+              ["text/html"]: richBlob,
+              ["web application/logseq"]: blocksBlob
+            })];
+          }
             promise_written = navigator.clipboard.write(data)
         } else {
             console.debug("Degraded copy without `ClipboardItem` support:", text)

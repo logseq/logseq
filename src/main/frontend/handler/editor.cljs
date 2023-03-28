@@ -1010,9 +1010,10 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
-          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
-        (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
+        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+              copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
+        ;; (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1228,8 +1229,8 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (state/set-copied-blocks! md-content sorted-blocks)
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
+      ;; (state/set-copied-blocks! md-content sorted-blocks)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1510,7 +1511,7 @@
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
   "Relative path to current file path.
-   
+
    Requires editing state"
   [file-path]
   (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
@@ -2052,7 +2053,7 @@
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
-                           blocks)
+                        blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?

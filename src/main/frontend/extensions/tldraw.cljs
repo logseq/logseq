@@ -94,7 +94,7 @@
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
-   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text html))
+   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
