@@ -143,6 +143,9 @@
 (defn legacy-dot-file-name-sanity
   [page-name]
   (when (string? page-name)
+    ;; Bug in original code, but doesn't affect the result
+    ;; https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L892
+    #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]}
     (let [normalize (fn [s] (.normalize s "NFC"))
           remove-boundary-slashes (fn [s] (when (string? s)
                                             (let [s (if (= \/ (first s))
@@ -165,9 +168,12 @@
 (defn legacy-url-file-name-sanity
   [page-name]
   (let [url-encode #(some-> % str (js/encodeURIComponent) (.replace "+" "%20"))]
+    ;; Bug in original code, but doesn't affect the result
+    ;; https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L892
+    #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]}
     (some-> page-name
             gp-util/page-name-sanity
-             ;; for android filesystem compatibility
+            ;; for android filesystem compatibility
             (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
             (string/replace #"[:\\*\\?\"<>|]+" url-encode)
