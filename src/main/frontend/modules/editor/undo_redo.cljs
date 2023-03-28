@@ -47,12 +47,12 @@
 
 (defn- get-updated-pages
   [txs]
-  (let [txt-page (->> (:txs txs)
+  (let [txs-page (->> (:txs txs)
                       (filter #(= (second %) :block/page))
                       (map #(nth % 2)))]
-    (set (remove nil? (if (empty? txt-page)
+    (set (remove nil? (if (empty? txs-page)
                         (map #(get-in % [:block/page :db/id]) (:blocks txs))
-                        txt-page)))))
+                        txs-page)))))
 
 (defn push-undo
   [txs]
