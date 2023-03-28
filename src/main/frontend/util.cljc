@@ -772,9 +772,10 @@
    (defn copy-to-clipboard!
      [text & {:keys [html blocks owner-window]}]
      (let [data (clj->js
-                 {:text text
-                  :html html
-                  :blocks (when blocks (pr-str blocks))})]
+                 (gp-util/remove-nils-non-nested
+                  {:text text
+                   :html html
+                   :blocks (when (seq blocks) (pr-str blocks))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))
