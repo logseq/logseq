@@ -632,6 +632,10 @@ a.cloze-revealed {
   opacity: 1;
 }
 
+.nested-matched-blocks {
+  margin-left: 27px;
+}
+
 .cp__fenced-code-block {
   .not-edit {
     cursor: default;
