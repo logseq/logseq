@@ -168,8 +168,6 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   await createRandomPage(page)
 
   await block.mustType('Some random text')
-  // FIXME: https://github.com/logseq/logseq/issues/7541
-  await page.waitForTimeout(1000)
 
   await page.keyboard.press(modKey + '+c')
 
