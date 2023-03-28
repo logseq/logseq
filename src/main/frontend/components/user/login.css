@@ -45,6 +45,12 @@
   }
 }
 
+@media (min-width: 30rem) {
+  [data-amplify-authenticator] [data-amplify-container] {
+    width: 100%;
+  }
+}
+
 .ui__modal[label=user-login] {
   @apply flex items-center top-0;
 
@@ -54,7 +60,7 @@
   }
 
   .panel-content {
-    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] w-auto;
+    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] sm:w-[500px];
   }
 
   .ui__modal-close-wrap {

@@ -112,7 +112,7 @@
     .panel-content {
       overflow-y: auto;
       overflow-x: hidden;
-      width: calc(94vw - 2rem);
+      width: calc(96vw - 2rem);
       max-height: 89vh;
       padding: 2rem 1.5rem;
 
@@ -250,12 +250,6 @@ html.is-mobile {
         padding-bottom: 0;
       }
     }
-  }
-
-  .ui__modal-panel .panel-content {
-    width: calc(98vw - 2rem);
-    max-width: var(--ls-main-content-max-width);
-    padding-top: 24px;
   }
 }
 
