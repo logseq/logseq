@@ -167,16 +167,15 @@
   shortcut/disable-all-shortcuts
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [format (:block/format block)
-            heading (-> block :block/properties :heading (or false))]
+      (let [heading (-> block :block/properties :heading (or false))]
         [:.menu-links-wrapper
          (ui/menu-background-color #(editor-handler/set-block-property! block-id :background-color %)
                                    #(editor-handler/remove-block-property! block-id :background-color))
 
          (ui/menu-heading heading
-                          #(editor-handler/set-heading! block-id format %)
-                          #(editor-handler/set-heading! block-id format true)
-                          #(editor-handler/remove-heading! block-id format))
+                          #(editor-handler/set-heading! block-id %)
+                          #(editor-handler/set-heading! block-id true)
+                          #(editor-handler/remove-heading! block-id))
 
          [:hr.menu-separator]
 

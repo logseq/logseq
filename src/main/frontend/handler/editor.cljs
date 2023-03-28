@@ -850,6 +850,26 @@
                             (dom/attr sibling-block "id")
                             "")))))
 
+(defn- set-block-property-aux!
+  [block-or-id key value]
+  (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
+                         (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
+                         :else block-or-id)]
+    (let [format (:block/format block)
+          content (:block/content block)
+          properties (:block/properties block)
+          properties (if (nil? value)
+                       (dissoc properties key)
+                       (assoc properties key value))
+          content (if (nil? value)
+                    (property/remove-property format key content)
+                    (property/insert-property format content key value))
+          content (property/remove-empty-properties content)]
+      {:block/uuid (:block/uuid block)
+       :block/properties properties
+       :block/properties-order (or (keys properties) {})
+       :block/content content})))
+
 (defn- batch-set-block-property!
   "col: a collection of [block-id property-key property-value]."
   [col]
@@ -858,23 +878,8 @@
     (outliner-tx/transact!
      {:outliner-op :save-block}
      (doseq [[block-id key value] col]
-       (let [block-id (if (string? block-id) (uuid block-id) block-id)]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [format (:block/format block)
-                 content (:block/content block)
-                 properties (:block/properties block)
-                 properties (if (nil? value)
-                              (dissoc properties key)
-                              (assoc properties key value))
-                 content (if (nil? value)
-                           (property/remove-property format key content)
-                           (property/insert-property format content key value))
-                 content (property/remove-empty-properties content)
-                 block {:block/uuid block-id
-                        :block/properties properties
-                        :block/properties-order (keys properties)
-                        :block/content content}]
-             (outliner-core/save-block! block))))))
+       (when-let [block (set-block-property-aux! block-id key value)]
+         (outliner-core/save-block! block))))
 
     (let [block-id (ffirst col)
           block-id (if (string? block-id) (uuid block-id) block-id)
@@ -3648,49 +3653,70 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
-(defn remove-heading!
-  [block-id format]
-  (remove-block-property! block-id "heading")
-  (when (= format :markdown)
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          content' (commands/clear-markdown-heading (:block/content block))]
-      (save-block! repo block-id content'))))
+(defn- set-heading-aux!
+  [block-id heading]
+  (let [block (db/pull [:block/uuid block-id])
+        format (:block/format block)
+        old-heading (get-in block [:block/properties :heading])]
+    (if (= format :markdown)
+      (cond
+        ;; nothing changed
+        (or (and (nil? old-heading) (nil? heading))
+            (and (true? old-heading) (true? heading))
+            (= old-heading heading))
+        nil
+
+        (or (and (nil? old-heading) (true? heading))
+            (and (true? old-heading) (nil? heading)))
+        (set-block-property-aux! block :heading heading)
+
+        (or (or (nil? heading) (true? heading))
+            (number? old-heading))
+        (let [block' (set-block-property-aux! block :heading heading)
+              content (commands/clear-markdown-heading (:block/content block'))]
+          (merge block' {:block/content content}))
+
+        (or (or (nil? old-heading) (true? old-heading))
+            (number? heading))
+        (let [block' (set-block-property-aux! block :heading nil)
+              properties (assoc (:block/properties block) :heading heading)
+              content (commands/set-markdown-heading (:block/content block') heading)]
+          (merge block' {:block/content content :block/properties properties}))
+
+        ;; heading-num1 -> heading-num2
+        :else
+        (let [properties (assoc (:block/properties block) :heading heading)
+              content (-> block
+                          :block/content
+                          commands/clear-markdown-heading
+                          (commands/set-markdown-heading heading))]
+          {:block/uuid (:block/uuid block)
+           :block/properties properties
+           :block/content content}))
+      (set-block-property-aux! block :heading heading))))
 
 (defn set-heading!
-  [block-id format heading]
-  (remove-heading! block-id format)
-  (if (or (true? heading) (not= format :markdown))
-    (do
-      (save-current-block!)
-      (set-block-property! block-id "heading" heading))
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          content' (commands/set-markdown-heading (:block/content block) heading)]
-      (save-block! repo block-id content'))))
+  [block-id heading]
+  (when-let [block (set-heading-aux! block-id heading)]
+    (outliner-tx/transact!
+     {:outliner-op :save-block}
+     (outliner-core/save-block! block))))
 
-(defn batch-remove-heading!
-  [block-ids]
-  (doseq [block-id block-ids]
-    (remove-block-property! block-id "heading")
-    (let [block (db/entity [:block/uuid block-id])]
-      (when (= (:block/format block) :markdown)
-        (let [repo (state/get-current-repo)
-              content' (commands/clear-markdown-heading (:block/content block))]
-          (save-block! repo block-id content'))))))
+(defn remove-heading!
+  [block-id]
+  (set-heading! block-id nil))
 
 (defn batch-set-heading!
   [block-ids heading]
-  (batch-remove-heading! block-ids)
-  (doseq [block-id block-ids]
-    (let [block (db/entity [:block/uuid block-id])]
-      (if (or (true? heading) (not= (:block/format block) :markdown))
-        (do
-          (save-current-block!)
-          (set-block-property! block-id "heading" heading))
-        (let [repo (state/get-current-repo)
-              content' (commands/set-markdown-heading (:block/content block) heading)]
-          (save-block! repo block-id content'))))))
+  (outliner-tx/transact!
+   {:outliner-op :save-block}
+   (doseq [block-id block-ids]
+     (when-let [block (set-heading-aux! block-id heading)]
+       (outliner-core/save-block! block)))))
+
+(defn batch-remove-heading!
+  [block-ids]
+  (batch-set-heading! block-ids nil))
 
 (defn block->data-transfer!
   "Set block or page name to the given event's dataTransfer. Used in dnd."
