@@ -75,16 +75,16 @@
                    [:div (str k)]
                    [:.ml-4 (case k
                              :blocks
-                             (mapv (fn [block]
-                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
+                             (map (fn [block]
+                                    [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
 
                              :txs
-                             (mapv (fn [[_ key val]]
+                             (map (fn [[_ key val]]
                                     (when val
                                       [:pre.code.pre-wrap-white-space.bg-base-4
                                        [:span.font-bold (str key) " "] (str val)])) v)
 
-                             (mapv (fn [[key val]]
+                             (map (fn [[key val]]
                                     (when val
                                       [:pre.code.pre-wrap-white-space.bg-base-4
                                        [:span.font-bold (str key) " "] (str val)])) v))]

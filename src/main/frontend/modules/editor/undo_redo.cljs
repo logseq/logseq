@@ -47,10 +47,12 @@
 
 (defn- get-updated-pages
   [txs]
-  (reduce (fn [col unit]
-            (if-let [page-id (:db/id (:block/page unit))]
-              (conj col page-id)
-              col)) #{} (:blocks txs)))
+  (let [txt-page (->> (:txs txs)
+                      (filter #(= (second %) :block/page))
+                      (map #(nth % 2)))]
+    (set (remove nil? (if (empty? txt-page)
+                        (map #(get-in % [:block/page :db/id]) (:blocks txs))
+                        txt-page)))))
 
 (defn push-undo
   [txs]
@@ -80,7 +82,7 @@
         container (:container (state/get-current-edit-block-and-position))
         container (or container (page-util/get-current-page-name))]
     (or (not (and prev-container container)) ; not enough info to block
-        (db-model/page? container) ; always allow on pages
+        (db-model/page? container) ; always allow on pages (top level context)
         (= prev-container container) ; allow on same context
         (try (.querySelectorAll js/document (str "#" container " [data-block-id='" prev-container "']")) ; allow on nested context
              (catch :default _
@@ -228,11 +230,10 @@
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}
             pages (get-updated-pages entity)]
-        (if (empty? (rest pages)) ; Multi-page actions are not history safe
-          (do (reset-redo (first pages))
-              (push-undo entity))
-          (do (mapv reset-history pages)
-              #_(notification/show! (str "Multi-page actions cannot be undone") :warning false)
+        (if (second pages) ; Multi-page actions are not history safe
+          (do (mapv reset-history pages) ; Clear history for those pages and don't push the action to the stack
               (state/pub-event! [:capture-error {:error "Multi-page action triggered"
                                                  :payload {:type :outliner/invalid-action
-                                                           :data (mapv #(dissoc % :block/content) (:blocks entity))}}])))))))
+                                                           :data (mapv #(dissoc % :block/content) (:blocks entity))}}]))
+          (do (reset-redo (first pages))
+              (push-undo entity)))))))
