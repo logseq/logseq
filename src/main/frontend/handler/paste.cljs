@@ -181,6 +181,16 @@
       (paste-text-in-one-block-at-point))
     (paste-copied-blocks-or-text text e html)))
 
+(defn- paste-file-if-exists [id e]
+  (when id
+    (let [clipboard-data (gobj/get e "clipboardData")
+          files (.-files clipboard-data)]
+      (when-let [file (first files)]
+        (when-let [block (state/get-edit-block)]
+          (editor-handler/upload-asset id #js[file] (:block/format block)
+                                       editor-handler/*asset-uploading? true)))
+      (util/stop e))))
+
 (defn editor-on-paste!
   "Pastes with formatting and includes the following features:
 - handles internal pastes to correctly paste at the block level
@@ -194,29 +204,19 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [input (state/get-input)
-          clipboard-data (gobj/get e "clipboardData")
+    (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
-          text (.getData clipboard-data "text")
-          files (.-files text)
-          paste-file-if-exist (fn []
-                                (when id
-                                  (let [_handled
-                                        (let [clipboard-data (gobj/get e "clipboardData")
-                                              files (.-files clipboard-data)]
-                                          (when-let [file (first files)]
-                                            (when-let [block (state/get-edit-block)]
-                                              (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                                           editor-handler/*asset-uploading? true))))]
-                                    (util/stop e))))]
+          text (.getData clipboard-data "text")]
       (cond
-        (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-        (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
+        (and (string/blank? text) (string/blank? html))
+        (paste-file-if-exists id e)
+        (and (seq (.-files clipboard-data)) (state/preferred-pasting-file?))
+        (paste-file-if-exists id e)
         :else
         (let [text' (or (when (gp-util/url? text)
                           (wrap-macro-url text))
                         text)]
-          (paste-text-or-blocks-aux input e text' html))))))
+          (paste-text-or-blocks-aux (state/get-input) e text' html))))))
 
 (defn editor-on-paste-raw!
   "Raw pastes without _any_ formatting. Can also replace selected text with a paste"
