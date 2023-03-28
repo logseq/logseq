@@ -2594,7 +2594,7 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.items-center
+          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.flex-wrap.items-center
            {:class (when (seq breadcrumb)
                      (str (when-not (:search? config)
                             " my-2")
