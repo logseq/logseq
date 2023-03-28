@@ -1,6 +1,6 @@
 (ns frontend.mobile.intent
   (:require ["@capacitor/filesystem" :refer [Filesystem]]
-            ["path" :as path]
+            ["path" :as node-path]
             ["send-intent" :refer [^js SendIntent]]
             [clojure.pprint :as pprint]
             [clojure.set :as set]
@@ -62,7 +62,7 @@
 
 
 (defn- embed-asset-file [url format]
-  (p/let [basename (path/basename url)
+  (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
           time (date/get-current-time)
           path (editor-handler/get-asset-path basename)
@@ -82,14 +82,14 @@
   "Store external content with url into Logseq repo"
   [url title]
   (p/let [time (date/get-current-time)
-          title (some-> (or title (path/basename url))
+          title (some-> (or title (node-path/basename url))
                         gp-util/safe-decode-uri-component
                         util/node-path.name
                         ;; make the title more user friendly
                         gp-util/page-name-sanity)
-          path (path/join (config/get-repo-dir (state/get-current-repo))
+          path (node-path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)
-                          (str (js/encodeURI (fs-util/file-name-sanity title)) (path/extname url)))
+                          (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
           _ (p/catch
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]

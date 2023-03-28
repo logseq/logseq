@@ -2,7 +2,7 @@
 
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
@@ -34,12 +34,12 @@
        (some #(string/ends-with? path %)
              [".DS_Store" "logseq/graphs-txid.edn"])
       ;; hidden directory or file
-       (let [relpath (path/relative dir path)]
+       (let [relpath (node-path/relative dir path)]
          (or (re-find #"/\.[^.]+" relpath)
              (re-find #"^\.[^.]+" relpath)))
        (let [path (string/lower-case path)]
          (and
-          (not (string/blank? (path/extname path)))
+          (not (string/blank? (node-path/extname path)))
           (not
            (some #(string/ends-with? path %)
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))

@@ -35,7 +35,7 @@
             [lambdaisland.glogi :as log]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -662,7 +662,7 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal-dir (path/join (config/get-journals-directory) path/sep)
+            journal-dir (node-path/join (config/get-journals-directory) node-path/sep)
             journal? (string/starts-with? path journal-dir)
             journal-day
             (when journal?
@@ -1429,8 +1429,8 @@
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
-    (or (string/starts-with? rel-path (path/join (config/get-journals-directory) path/sep))
-        (string/starts-with? rel-path (path/join (config/get-pages-directory) path/sep)))))
+    (or (string/starts-with? rel-path (node-path/join (config/get-journals-directory) node-path/sep))
+        (string/starts-with? rel-path (node-path/join (config/get-pages-directory) node-path/sep)))))
 
 (defn- need-add-version-file?
   "when we need to create a new version file:
