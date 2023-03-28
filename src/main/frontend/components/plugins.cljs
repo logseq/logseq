@@ -1126,7 +1126,7 @@
          (reset! *updates-sub-content-timer))))
 
 (rum/defc updates-notifications-impl
-  [check-pending? auto-checking?]
+  [check-pending? auto-checking? online?]
   (let [[uid, set-uid] (rum/use-state nil)
         [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
         notify! (fn [content status]
@@ -1152,24 +1152,26 @@
     (rum/use-effect!
       ;; scheduler for auto updates
       (fn []
-        (let [last-updates (storage/get :lsp-last-auto-updates)]
-          (when (or (not (number? last-updates))
-                    ;; interval 12 hours
-                    (> (- (js/Date.now) last-updates) (* 60 60 12 1000)))
-            (js/setTimeout
-              (fn []
-                (plugin-handler/auto-check-enabled-for-updates!)
-                (storage/set :lsp-last-auto-updates (js/Date.now)))))))
-      [])
+        (when online?
+          (let [last-updates (storage/get :lsp-last-auto-updates)]
+            (when (or (not (number? last-updates))
+                      ;; interval 12 hours
+                      (> (- (js/Date.now) last-updates) (* 60 60 12 1000)))
+              (js/setTimeout
+                (fn []
+                  (plugin-handler/auto-check-enabled-for-updates!)
+                  (storage/set :lsp-last-auto-updates (js/Date.now))))))))
+      [online?])
 
     [:<>]))
 
 (rum/defcs updates-notifications < rum/reactive
   [_]
   (let [updates-pending (state/sub :plugin/updates-pending)
+        online?         (state/sub :network/online?)
         auto-checking?  (state/sub :plugin/updates-auto-checking?)
         check-pending?  (boolean (seq updates-pending))]
-    (updates-notifications-impl check-pending? auto-checking?)))
+    (updates-notifications-impl check-pending? auto-checking? online?)))
 
 (rum/defcs focused-settings-content
   < rum/reactive
