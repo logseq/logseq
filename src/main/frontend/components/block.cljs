@@ -3699,10 +3699,17 @@
                  [:div
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [[parent blocks] parent-blocks]
-                   (rum/with-key
-                     (breadcrumb-with-container blocks config)
-                     (:db/id parent)))
+                 (let [{top-level-blocks true others false} (group-by
+                                                             (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                             parent-blocks)
+                       sorted-parent-blocks (concat top-level-blocks others)]
+                   (for [[parent blocks] sorted-parent-blocks]
+                     [:div {:class (if (= (:db/id parent) (:db/id page))
+                                     "top-level-matched-blocks"
+                                     "nested-matched-blocks")}
+                      (rum/with-key
+                        (breadcrumb-with-container blocks config)
+                        (:db/id parent))]))
                  {:debug-id page
                   :trigger-once? false})])))))]
 
