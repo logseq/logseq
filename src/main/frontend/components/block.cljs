@@ -2550,7 +2550,7 @@
 
 (defn breadcrumb
   "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
-  [config repo block-id {:keys [show-page? indent? end-separator? level-limit navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
