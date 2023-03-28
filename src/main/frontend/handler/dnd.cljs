@@ -58,7 +58,7 @@
                    (outliner-core/move-blocks! blocks (:data before-node) true))))
              (outliner-core/move-blocks! blocks target-block (not nested?)))))
         (editor-handler/paste-blocks
-         (db-model/get-block-and-children (state/get-current-repo) (:block/uuid first-block))
+         (mapcat #(db-model/get-block-and-children (state/get-current-repo) (:block/uuid %)) blocks)
          {:target-block target-block
           :sibling? (not nested?)}))
 
