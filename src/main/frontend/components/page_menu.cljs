@@ -16,7 +16,8 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]))
+            [frontend.handler.file-sync :as file-sync-handler]
+            [logseq.common.path :as path]))
 
 (defn- delete-page!
   [page-name]
@@ -126,10 +127,12 @@
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
           (when file-path
-            [{:title   (t :page/open-in-finder)
-              :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-             {:title   (t :page/open-with-default-app)
-              :options {:on-click #(js/window.apis.openPath file-path)}}])
+            (let [repo-dir (config/get-repo-dir repo)
+                  file-fpath (path/path-join repo-dir file-path)]
+              [{:title   (t :page/open-in-finder)
+                :options {:on-click #(js/window.apis.showItemInFolder file-fpath)}}
+               {:title   (t :page/open-with-default-app)
+                :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
           (when (state/get-current-page)
             {:title   (t :export-page)
