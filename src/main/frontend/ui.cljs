@@ -565,9 +565,9 @@
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.absolute.top-0.right-0.pt-2.pr-2
+   [:div.ui__modal-close-wrap
     (when-not (false? close-btn?)
-      [:a.ui__modal-close.opacity-60.hover:opacity-100
+      [:a.ui__modal-close
        {:aria-label "Close"
         :type       "button"
         :on-click   close-fn}

@@ -14,7 +14,7 @@ export class IdleState<
   static id = 'idle'
 
   onPointerDown: TLStateEvents<S, K>['onPointerDown'] = (info, e) => {
-    if (info.order) return
+    if (info.order || this.app.readOnly) return
     this.tool.transition('creating')
   }
 

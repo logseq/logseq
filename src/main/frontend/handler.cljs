@@ -21,14 +21,14 @@
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -88,7 +88,8 @@
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
                      (global-config-handler/start {:repo repo}))
-                   (when (config/plugin-config-enabled?) (plugin-config-handler/start)))
+                   (when (config/plugin-config-enabled?)
+                     (plugin-config-handler/start)))
             (p/finally
               (fn []
                 ;; install after config is restored
@@ -214,28 +215,29 @@
 
   (events/run!)
 
-  (-> (p/let [repos (get-repos)
-              _ (state/set-repos! repos)
-              _ (restore-and-setup! repos)]
-        (when (mobile-util/native-platform?)
-          (p/do!
-           (mobile-util/hide-splash)
-           (state/restore-mobile-theme!))))
-      (p/catch (fn [e]
-                 (js/console.error "Error while restoring repos: " e)))
-      (p/finally (fn []
-                   (state/set-db-restoring! false))))
+  (p/do!
+   (-> (p/let [repos (get-repos)
+               _ (state/set-repos! repos)
+               _ (restore-and-setup! repos)]
+         (when (mobile-util/native-platform?)
+           (p/do!
+            (mobile-util/hide-splash)
+            (state/restore-mobile-theme!))))
+       (p/catch (fn [e]
+                  (js/console.error "Error while restoring repos: " e)))
+       (p/finally (fn []
+                    (state/set-db-restoring! false))))
 
-  (db/run-batch-txs!)
-  (file/<ratelimit-file-writes!)
-  (util/<app-wake-up-from-sleep-loop (atom false))
+   (db/run-batch-txs!)
+   (file/<ratelimit-file-writes!)
+   (util/<app-wake-up-from-sleep-loop (atom false))
 
-  (when config/dev?
-    (enable-datalog-console))
-  (when (util/electron?)
-    (el/listen!))
-  (persist-var/load-vars)
-  (js/setTimeout instrument! (* 60 1000)))
+   (when config/dev?
+     (enable-datalog-console))
+   (when (util/electron?)
+     (el/listen!))
+   (persist-var/load-vars)
+   (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))

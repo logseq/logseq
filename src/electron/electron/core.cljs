@@ -68,8 +68,8 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url (decode-protected-assets-schema-path url)
-           path (js/decodeURI url)
-           path (string/replace path "assets://" "")]
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
