@@ -1460,13 +1460,13 @@
 
 (defn make-asset-url
   "Make asset URL for UI element, to fill img.src"
-  [path] ;; path start with "/assets" or compatible for "../assets"
+  [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
   (if config/publishing?
     path
     (let [repo      (state/get-current-repo)
           repo-dir  (config/get-repo-dir repo)
           ;; Hack for path calculation
-          path      (string/replace path #"^(\\.\\.)?/" "./")
+          path      (string/replace path #"^(\.\.)?/" "./")
           full-path (path/path-join repo-dir path)
           data-url? (string/starts-with? path "data:")]
       (cond
