@@ -188,11 +188,16 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
 
+  // FIXME: Sometimes the cursor is in the end of the editor
+  for (let i = 0; i < 4; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
+  }
+
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r')
-  await page.waitForTimeout(100)
 
   await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+
   await block.escapeEditing()
 
   await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
