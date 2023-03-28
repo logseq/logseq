@@ -21,13 +21,12 @@
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))
 
 (defn get-editing-page-id
-  "Fetch the editing page id"
+  "Fetch the editing page id. If there is an edit-input-id set, we are probably still 
+   on editing mode"
   []
-  (if (or (state/editing?) (state/get-edit-input-id)) ; if there is an edit-input-id set, we are probably still on editing mode 
+  (if (or (state/editing?) (state/get-edit-input-id))
     (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
-    (let [page-name (some-> (or (state/get-current-page) (state/get-current-whiteboard))
-                            util/page-name-sanity-lc)]
-      (:db/id (db/entity [:block/name page-name])))))
+    (get-current-page-id)))
 
 (defn get-page-file-path
   "Gets the file path of a page. If no page is given, detects the current page.
