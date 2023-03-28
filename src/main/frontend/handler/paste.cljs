@@ -82,28 +82,31 @@
                            (clojure.string/includes? matched-text selection))))
               some?))))
 
+;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
+;; for a similar example
+(defn get-copied-blocks []
+  (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
+                            (js/navigator.clipboard.read))
+          blocks-blob ^js (when clipboard-items
+                            (let [types (.-types ^js (first clipboard-items))]
+                              (when (contains? (set types) "web application/logseq")
+                                (.getType ^js (first clipboard-items)
+                                          "web application/logseq"))))
+          blocks-str (when blocks-blob (.text blocks-blob))]
+         (when blocks-str
+           (gp-util/safe-read-string blocks-str))))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
   (->
-   (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
-                             (js/navigator.clipboard.read))
-           blocks-blob ^js (when clipboard-items
-                             (let [types (.-types ^js (first clipboard-items))]
-                               (when (contains? (set types) "web application/logseq")
-                                 (.getType ^js (first clipboard-items)
-                                           "web application/logseq"))))
-           blocks-str (when blocks-blob (.text blocks-blob))
-           copied-blocks (when blocks-str
-                           (gp-util/safe-read-string blocks-str))]
+   (p/let [copied-blocks (get-copied-blocks)]
      (let [input (state/get-input)
            input-id (state/get-edit-input-id)
            text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
            replace-text-f (fn [text]
                             (let [input-id (state/get-edit-input-id)]
-                              (prn {:text text
-                                    :input-id input-id})
                               (commands/delete-selection! input-id)
                               (commands/simple-insert! input-id text nil)))
            internal-paste? (seq copied-blocks)]
