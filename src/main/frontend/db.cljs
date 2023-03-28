@@ -69,19 +69,22 @@
 
  [logseq.db.default built-in-pages-names built-in-pages])
 
-(defn get-schema-version [db]
-  (d/q
-    '[:find ?v .
-      :where
-      [_ :schema/version ?v]]
-    db))
-
-(defn old-schema?
+(defn- old-schema?
+  "Requires migration if the schema version is older than db-schema/version"
   [db]
-  (let [v (get-schema-version db)]
-    (if (integer? v)
-      (> db-schema/version v)
-      ;; backward compatibility
+  (let [v (db-migrate/get-schema-version db)
+        ;; backward compatibility
+        v (if (integer? v) v 0)]
+    (cond
+      (= db-schema/version v)
+      false
+
+      (< db-schema/version v)
+      (do
+        (js/console.error "DB schema version is newer than the app, please update the app. " ":db-version" v)
+        false)
+
+      :else
       true)))
 
 ;; persisting DBs between page reloads

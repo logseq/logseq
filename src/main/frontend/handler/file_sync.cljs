@@ -1,6 +1,6 @@
 (ns frontend.handler.file-sync
   "Provides util handler fns for file sync"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
@@ -121,7 +121,7 @@
    (download-version-file graph-uuid file-uuid version-uuid false))
   ([graph-uuid file-uuid version-uuid silent-download?]
    (go
-     (let [key (path/join file-uuid version-uuid)
+     (let [key (node-path/join file-uuid version-uuid)
            r   (<! (sync/<download-version-files
                     sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
        (if (instance? ExceptionInfo r)
@@ -131,7 +131,7 @@
                                 [:div "Downloaded version file at: "]
                                 [:div key]] :success false)))
        (when-not (instance? ExceptionInfo r)
-         (path/join "logseq" "version-files" key))))))
+         (node-path/join "logseq" "version-files" key))))))
 
 (defn- <list-file-local-versions
   [page]
@@ -139,11 +139,11 @@
     (when-let [path (-> page :block/file :file/path)]
       (let [base-path           (config/get-repo-dir (state/get-current-repo))
             rel-path            (string/replace-first path base-path "")
-            version-files-dir   (->> (path/join "logseq/version-files/local" rel-path)
-                                     path/parse
+            version-files-dir   (->> (node-path/join "logseq/version-files/local" rel-path)
+                                     node-path/parse
                                      (#(js->clj % :keywordize-keys true))
                                      ((juxt :dir :name))
-                                     (apply path/join base-path))
+                                     (apply node-path/join base-path))
             version-file-paths (<! (p->c (fs/readdir version-files-dir :path-only? true)))]
         (when-not (instance? ExceptionInfo version-file-paths)
           (when (seq version-file-paths)
@@ -152,7 +152,7 @@
               (fn [path]
                 (try
                   (let [create-time
-                        (-> (path/parse path)
+                        (-> (node-path/parse path)
                             (js->clj :keywordize-keys true)
                             :name
                             (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
@@ -184,13 +184,13 @@
 
 
 (defn init-remote-graph
-  [local graph]
-  (when (and local graph)
+  [local-graph-dir graph]
+  (when (and local-graph-dir graph)
     (notification/show!
      (str "Start syncing the remote graph "
           (:GraphName graph)
           " to "
-          (config/get-string-repo-dir (config/get-local-dir local)))
+          (config/get-string-repo-dir local-graph-dir))
      :success)
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))

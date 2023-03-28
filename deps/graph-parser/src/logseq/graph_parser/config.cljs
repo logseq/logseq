@@ -32,7 +32,7 @@
   [s]
   (if (local-protocol-asset? s)
     (-> s
-        (string/replace-first asset-protocol "")
+        (string/replace-first asset-protocol "file://")
         (string/replace-first capacitor-protocol-with-prefix "file://")
         (string/replace-first capacitor-x-protocol-with-prefix "file://"))
     s))

@@ -16,7 +16,7 @@ export class PointingState<
 
   onPointerMove: TLStateEvents<S, K>['onPointerMove'] = () => {
     const { currentPoint, originPoint } = this.app.inputs
-    if (Vec.dist(currentPoint, originPoint) > 5) {
+    if (Vec.dist(currentPoint, originPoint) > 5 && !this.app.readOnly) {
       this.tool.transition('creating')
       this.app.setSelectedShapes(this.app.currentPage.shapes)
     }

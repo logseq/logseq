@@ -37,7 +37,7 @@
 
 (defn fix-win-path!
   [path]
-  (when path
+  (when (not-empty path)
     (if win32?
       (string/replace path "\\" "/")
       path)))
@@ -261,7 +261,8 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (string/replace graph-name "logseq_local_" ""))
+  (when (string/includes? graph-name "logseq_local_")
+    (string/replace-first graph-name "logseq_local_" "")))
 
 (defn get-graph-name
   "reversing `get-graph-dir`"

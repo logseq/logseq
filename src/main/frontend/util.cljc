@@ -231,16 +231,6 @@
   [nm]
   (into {} (remove (comp nil? second)) nm))
 
-(defn ext-of-image? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
-
-(defn ext-of-video? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
-
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]
@@ -268,7 +258,6 @@
   (if (< n 10)
     (str "0" n)
     (str n)))
-
 
 #?(:cljs
    (defn safe-parse-int
@@ -933,14 +922,6 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
-#?(:cljs
-   (defn absolute-path?
-     [path]
-     (try
-       (js/window.apis.isAbsolutePath path)
-       (catch :default _
-         (utils/win32 path)))))
-
 (defn default-content-with-title
   [text-format]
   (case (name text-format)
@@ -1114,18 +1095,6 @@
      "../e/f.org"))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
-
-#?(:cljs
-   (defn select-highlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/add-class! block "selected noselect"))))
-
-#?(:cljs
-   (defn select-unhighlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/remove-class! block "selected" "noselect"))))
 
 #?(:cljs
    (defn drain-chan

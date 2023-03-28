@@ -508,13 +508,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
                 {showingPortal && <PortalComponent {...componentProps} />}
               </div>
-              <CircleButton
-                active={!!this.collapsed}
-                style={{ opacity: isSelected ? 1 : 0 }}
-                icon={this.props.blockType === 'B' ? 'block' : 'page'}
-                onClick={this.toggleCollapsed}
-                otherIcon={'whiteboard-element'}
-              />
+              {!app.readOnly && (
+                <CircleButton
+                  active={!!this.collapsed}
+                  style={{ opacity: isSelected ? 1 : 0 }}
+                  icon={this.props.blockType === 'B' ? 'block' : 'page'}
+                  onClick={this.toggleCollapsed}
+                  otherIcon={'whiteboard-element'}
+                />
+              )}
             </>
           )}
         </div>

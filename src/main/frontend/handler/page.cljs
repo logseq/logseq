@@ -184,7 +184,7 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (when unlink-file?
-        (-> (fs/unlink! repo (config/get-repo-path repo file-path) nil)
+        (-> (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
@@ -841,14 +841,13 @@
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
               file-name (date/journal-title->default title)
-              path (str (config/get-journals-directory) "/" file-name "."
-                        (config/get-file-extension format))
-              file-path (str "/" path)
+              file-rpath (str (config/get-journals-directory) "/" file-name "."
+                              (config/get-file-extension format))
               repo-dir (config/get-repo-dir repo)
               template (state/get-default-journal-template)]
-          (p/let [file-exists? (fs/file-exists? repo-dir file-path)
+          (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
                   file-content (when file-exists?
-                                 (fs/read-file repo-dir file-path))]
+                                 (fs/read-file repo-dir file-rpath))]
             (when (and (db/page-empty? repo today-page)
                        (or (not file-exists?)
                            (and file-exists? (string/blank? file-content))))

@@ -9,8 +9,10 @@
             [promesa.core :as p]))
 
 
-(defn- load-path [location]
-  (config/get-file-path (state/get-current-repo) (str config/app-name "/" location ".edn")))
+(defn- load-rpath 
+  "Returns the relative path to the file that stores the persist-var"
+  [location]
+  (str config/app-name "/" location ".edn"))
 
 (defprotocol ILoad
   (-load [this])
@@ -33,7 +35,7 @@
       (p/resolved nil)
       (let [repo (state/get-current-repo)
             dir (config/get-repo-dir repo)
-            path (load-path location)]
+            path (load-rpath location)]
         (p/let [file-exists? (fs/file-exists? dir path)]
           (when file-exists?
             (-> (p/chain (fs/stat dir path)
@@ -44,7 +46,7 @@
                            (when (not-empty content)
                              (try (reader/read-string content)
                                   (catch :default e
-                                    (println (util/format "read persist-var failed: %s" (load-path location)))
+                                    (println (util/format "read persist-var failed: %s" (load-rpath location)))
                                     (js/console.dir e)))))
                          (fn [value]
                            (when (some? value)
@@ -53,7 +55,7 @@
                                                  (assoc-in [repo :loaded?] true)
                                                  (assoc-in [repo :value] value)))))))
                 (p/catch (fn [e]
-                           (println (util/format "load persist-var failed: %s: %s" (load-path location) e))))))))))
+                           (println (util/format "load persist-var failed: %s: %s" (load-rpath location) e))))))))))
   (-loaded? [_]
     (get-in @*value [(state/get-current-repo) :loaded?]))
 
@@ -61,7 +63,7 @@
   (-save [_]
     (if (config/demo-graph?)
       (p/resolved nil)
-      (let [path (load-path location)
+      (let [path (load-rpath location)
             repo (state/get-current-repo)
             content (str (get-in @*value [repo :value]))
             dir (config/get-repo-dir repo)]

@@ -1,6 +1,7 @@
 import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as pathlib from 'path'
+import { modKey } from './util/basic'
 
 // TODO: The file should be a facade of utils in the /util folder
 // No more additional functions should be added to this file
@@ -35,6 +36,9 @@ export async function lastBlock(page: Page): Promise<Locator> {
  * @param page The Playwright Page object.
  */
 export async function enterNextBlock(page: Page): Promise<Locator> {
+  // Move cursor to the end of the editor
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForTimeout(10)
@@ -51,15 +55,6 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
 
-  return page.locator('textarea >> nth=0')
-}
-
-// Deprecated by block.enterNext
-export async function newBlock(page: Page): Promise<Locator> {
-  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  await lastBlock(page)
-  await page.press('textarea >> nth=0', 'Enter')
-  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
 
@@ -149,15 +144,13 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
 
   // If there is an error notification from a previous test graph being deleted,
   // close it first so it doesn't cover up the UI
-  let locator = page.locator('.notification-close-button').first()
-  while (await locator?.isVisible()) {
-    try { // don't fail if unable to click (likely disappeared already)
-      await locator.click()
-    } catch (error) {}
-    await page.waitForTimeout(250)
-
-    expect(locator.isVisible()).resolves.toBe(false)
+  let n = await page.locator('.notification-close-button').count()
+  if (n > 1) {
+    await page.locator('button >> text="Clear all"').click()
+  } else if (n == 1) {
+    await page.locator('.notification-close-button').click()
   }
+  await expect(page.locator('.notification-close-button').first()).not.toBeVisible({ timeout: 2000 })
 
   console.log('Graph loaded for ' + path)
 }

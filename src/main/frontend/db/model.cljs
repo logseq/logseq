@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
@@ -269,7 +268,7 @@
 (defn get-custom-css
   []
   (when-let [repo (state/get-current-repo)]
-    (get-file (config/get-file-path repo "logseq/custom.css"))))
+    (get-file repo "logseq/custom.css")))
 
 (defn get-block-by-uuid
   [id]
