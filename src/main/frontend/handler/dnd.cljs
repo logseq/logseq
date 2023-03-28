@@ -1,6 +1,7 @@
 (ns frontend.handler.dnd
   "Provides fns for drag n drop"
-  (:require [frontend.handler.editor :as editor-handler]
+  (:require [frontend.db.model :as db-model]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -57,7 +58,7 @@
                    (outliner-core/move-blocks! blocks (:data before-node) true))))
              (outliner-core/move-blocks! blocks target-block (not nested?)))))
         (editor-handler/paste-blocks
-         blocks
+         (db-model/get-block-and-children (state/get-current-repo) (:block/uuid first-block))
          {:target-block target-block
           :sibling? (not nested?)}))
 
