@@ -141,8 +141,8 @@
                             "copy"
                             (do
                               (util/copy-to-clipboard!
-                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))) nil
-                               (pdf-windows/resolve-own-window viewer))
+                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
+                               :owner-window (pdf-windows/resolve-own-window viewer))
                               (pdf-utils/clear-all-selection))
 
                             "link"
