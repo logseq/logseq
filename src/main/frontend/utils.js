@@ -250,8 +250,6 @@ export const getClipText = (cb, errorHandler) => {
 }
 
 export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
-  console.log("block")
-  console.log(blocks)
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return

@@ -86,9 +86,13 @@
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
-  (p/let [clipboard-items (js/navigator.clipboard.read)
-          blocks-blob ^js (.getType ^js (first clipboard-items)
-                                    "web application/logseq")
+  (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
+                            (js/navigator.clipboard.read))
+          blocks-blob ^js (try
+                            (.getType ^js (first clipboard-items)
+                                      "web application/logseq")
+                            (catch :default _e
+                                nil))
           blocks-str (when blocks-blob (.text blocks-blob))
           copied-blocks (when blocks-str
                           (gp-util/safe-read-string blocks-str))]
