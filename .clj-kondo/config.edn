@@ -52,7 +52,7 @@
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.fs fs
-             frontend.fs.bfs bfs
+             frontend.fs.memory-fs memory-fs
              frontend.fs.capacitor-fs capacitor-fs
              frontend.fs.nfs nfs
              frontend.handler.extract extract
@@ -92,6 +92,7 @@
              frontend.util.url url-util
              frontend.util.thingatpt thingatpt
              lambdaisland.glogi log
+             logseq.common.path path
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
