@@ -630,7 +630,8 @@ Similar to re-frame subscriptions"
 
 (defn get-block-id
   [el]
-  (dom/attr el "data-block-id"))
+  (when el
+    (dom/attr el "data-block-id")))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -969,13 +970,15 @@ Similar to re-frame subscriptions"
   ([block]
    (should-select-block? (first (get-selection-blocks)) block))
   ([first-selected-block block]
-   (let [container (util/get-block-container first-selected-block)
-         first-selected-block-id (get-block-id first-selected-block)
-         first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
-         page-id (get-in first-selected-block [:block/page :db/id])]
-     (and (= container (util/get-block-container block))
-          (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (get-block-id block))
-                             [:block/page :db/id]))))))
+   (if first-selected-block
+     (let [container (util/get-block-container first-selected-block)
+           first-selected-block-id (get-block-id first-selected-block)
+           first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
+           page-id (get-in first-selected-block [:block/page :db/id])]
+       (and (= container (util/get-block-container block))
+            (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (get-block-id block))
+                               [:block/page :db/id]))))
+     true)))
 
 (defn set-selection-blocks!
   ([blocks]
