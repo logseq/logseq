@@ -190,6 +190,7 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r')
+  await page.waitForTimeout(100)
 
   await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
   await block.escapeEditing()
