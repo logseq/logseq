@@ -81,8 +81,7 @@
   (let [prev-container (:container (:editor-cursor (:tx-meta txs)))
         container (:container (state/get-current-edit-block-and-position))
         container (or container (page-util/get-current-page-name))]
-    (or (not (and prev-container container)) ; not enough info to block
-        (db-model/page? container) ; always allow on pages (top level context)
+    (or (db-model/page? container) ; always allow on pages (top level context)
         (= prev-container container) ; allow on same context
         (try (.querySelectorAll js/document (str "#" container " [data-block-id='" prev-container "']")) ; allow on nested context
              (catch :default _
