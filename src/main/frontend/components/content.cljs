@@ -15,7 +15,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
