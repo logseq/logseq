@@ -431,7 +431,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await page.keyboard.type(commandTrigger, { delay: 20 })
 
     await page.waitForTimeout(100)
-    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
+    await expect(page.locator('textarea >> nth=0')).toHaveText('test ' + expectedText)
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.type("some page search text", { delay: 10 })
