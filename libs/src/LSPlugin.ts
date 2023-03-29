@@ -446,6 +446,13 @@ export interface IAppProxy {
     query?: Record<string, any>
   ) => void
 
+  // templates
+  getTemplate: (name: string) => Promise<BlockEntity | null>
+  existTemplate: (name: string) => Promise<Boolean>
+  createTemplate: (target: BlockUUID, name: string, opts?: { overwrite: boolean }) => Promise<any>
+  removeTemplate: (name: string) => Promise<any>
+  insertTemplate: (target: BlockUUID, name: string) => Promise<any>
+
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
 
