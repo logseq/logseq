@@ -769,7 +769,7 @@
                                   :icon "login"
                                   :on-click (fn []
                                               (state/close-settings!)
-                                              (js/window.open config/LOGIN-URL))})
+                                              (state/pub-event! [:user/login]))})
            [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
 
      (when-not web-platform?

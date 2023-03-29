@@ -458,11 +458,10 @@
                       (if (util/electron?) "assets://" "file://"))
         ;; BUG: use "assets" as fake current directory
         assets-link-fn (fn [_]
-                        (str (path/path-join protocol
-                                                 (get-repo-dir (state/get-current-repo)) "assets"))
-                        "/")]
+                         (str (path/path-join protocol
+                                              (get-repo-dir (state/get-current-repo)) "assets") "/"))]
     (when (not-empty source)
-      (string/replace source #"\\.\\./assets/"
+      (string/replace source #"\.\./assets/"
                       assets-link-fn))))
 
 (defn get-current-repo-assets-root
