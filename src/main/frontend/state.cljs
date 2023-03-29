@@ -967,6 +967,7 @@ Similar to re-frame subscriptions"
        (remove nil?)))
 
 (defn should-select-block?
+  "Checks if the block belongs to the same page and container"
   ([block]
    (should-select-block? (first (get-selection-blocks)) block))
   ([first-selected-block block]
