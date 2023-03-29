@@ -1,6 +1,7 @@
 (ns frontend.handler.export.html
   "export blocks/pages as html"
-  (:require [clojure.edn :as edn]
+  (:require ["/frontend/utils" :as utils]
+            [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
@@ -403,7 +404,7 @@
                      (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                      ast**)
             hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))]
-        (h/render-html hiccup)))))
+        (-> hiccup h/render-html utils/prettifyXml)))))
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"
