@@ -2,7 +2,7 @@
   (:require ["@logseq/rsapi" :as rsapi]
             ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
@@ -44,21 +44,21 @@
 
 (defn get-ls-dotdir-root
   []
-  (let [lg-dir (path/join (.getPath app "home") ".logseq")]
+  (let [lg-dir (node-path/join (.getPath app "home") ".logseq")]
     (when-not (fs/existsSync lg-dir)
       (fs/mkdirSync lg-dir))
     (fix-win-path! lg-dir)))
 
 (defn get-ls-default-plugins
   []
-  (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
+  (let [plugins-root (node-path/join (get-ls-dotdir-root) "plugins")
         _ (when-not (fs/existsSync plugins-root)
             (fs/mkdirSync plugins-root))
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
                   (filter #(.isDirectory %))
                   (filter (fn [f] (not (some #(string/starts-with? (.-name f) %) ["_" "."]))))
-                  (map #(path/join plugins-root (.-name %))))]
+                  (map #(node-path/join plugins-root (.-name %))))]
     dirs))
 
 (defn- set-fetch-agent-proxy
@@ -211,14 +211,14 @@
      (some #(string/ends-with? path %)
            [".DS_Store" "logseq/graphs-txid.edn"])
      ;; hidden directory or file
-     (let [relpath (path/relative dir path)]
+     (let [relpath (node-path/relative dir path)]
        (or (re-find #"/\.[^.]+" relpath)
            (re-find #"^\.[^.]+" relpath))))))
 
 (defn should-read-content?
   "Skip reading content of file while using file-watcher"
   [path]
-  (let [ext (string/lower-case (path/extname path))]
+  (let [ext (string/lower-case (node-path/extname path))]
     (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
 
 (defn read-file
