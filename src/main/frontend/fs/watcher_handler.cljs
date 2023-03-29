@@ -1,25 +1,24 @@
 (ns frontend.fs.watcher-handler
   "Main ns that handles file watching events from electron's main process"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.fs :as fs]
+            [logseq.common.path :as path]
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
-            [logseq.graph-parser.util :as gp-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.fs :as fs-util]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.mobile.util :as mobile-util]
-            [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.state :as state]
-            [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.util.fs :as fs-util]
-            [frontend.util :as util]
-            [clojure.set :as set]))
+            [frontend.handler.global-config :as global-config-handler]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -37,8 +36,7 @@
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
-  (p/let [
-          ;; save the previous content in a versioned bak file to avoid data overwritten.
+  (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
           _ (when backup?
               (-> (when-let [repo-dir (config/get-local-dir repo)]
                     (file-handler/backup-file! repo-dir path db-content content))
@@ -52,15 +50,19 @@
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
   (when dir
-    (let [path (gp-util/path-normalize path)
-          path (if (mobile-util/native-platform?)
-                 (capacitor-fs/normalize-file-protocol-path nil path)
-                 path)
-          ;; Global directory events don't know their originating repo so we rely
+    (let [;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
-          repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
+          repo (cond
+                 global-dir (state/get-current-repo)
+                 ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
+                 (string/starts-with? dir "memory://") "local"
+                 :else (config/get-local-repo dir))
+          repo-dir (config/get-local-dir repo)
           {:keys [mtime]} stat
-          db-content (or (db/get-file repo path) "")]
+          db-content (db/get-file repo path)
+          exists-in-db? (not (nil? db-content))
+          db-content (or db-content "")]
+
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)
@@ -78,12 +80,9 @@
             (handle-add-and-change! repo path content db-content mtime backup?))
 
           (and (= "change" type)
-               (not (db/file-exists? repo path)))
-          (js/console.error "Can't get file in the db: " path)
-
-          (and (= "change" type)
+               (= dir repo-dir)
                (not= (string/trim content) (string/trim db-content))
-               (not (gp-config/local-asset? (string/replace-first path dir ""))))
+               (not (gp-config/local-asset? path)))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
                      (or
@@ -94,12 +93,23 @@
             (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)
-               (db/file-exists? repo path))
+               exists-in-db?)
           (p/let [dir-exists? (fs/file-exists? dir "")]
-                 (when dir-exists?
-                   (when-let [page-name (db/get-file-page path)]
-                     (println "Delete page: " page-name ", file path: " path ".")
-                     (page-handler/delete! page-name #() :delete-file? false))))
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :delete-file? false))))
+
+          ;; global config handling
+          (and (= "change" type)
+               (= dir (global-config-handler/global-config-dir)))
+          (when (= path "config.edn")
+            (file-handler/alter-global-file
+             (global-config-handler/global-config-path) content {:from-disk? true}))
+
+          (and (= "change" type)
+               (not exists-in-db?))
+          (js/console.error "Can't get file in the db: " path)
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
@@ -114,36 +124,52 @@
           (log/error :fs/watcher-no-handler {:type type
                                              :payload payload})))
 
-      ;; return nil, otherwise the entire db will be transfered by ipc
+      ;; return nil, otherwise the entire db will be transferred by ipc
       nil)))
 
 (defn load-graph-files!
   [graph]
   (when graph
-    (let [dir (config/get-repo-dir graph)
+    (let [repo-dir (config/get-repo-dir graph)
           db-files (->> (db/get-files graph)
-                        (map first)
-                        (filter #(string/starts-with? % (config/get-repo-dir graph))))]
-      (p/let [files (fs/readdir dir :path-only? true)
-              files (remove #(fs-util/ignored-path? dir %) files)]
-        (let [deleted-files (set/difference (set db-files) (set files))]
-          (when (seq deleted-files)
-            (let [delete-tx-data (->> (db/delete-files deleted-files)
-                                      (concat (db/delete-blocks graph deleted-files nil))
-                                      (remove nil?))]
-              (db/transact! graph delete-tx-data {:delete-files? true})))
-          (doseq [file files]
-            (when-let [_ext (util/get-file-ext file)]
-              (->
-               (p/let [content (fs/read-file dir file)
-                       stat (fs/stat dir file)
-                       type (if (db/file-exists? graph file)
-                              "change"
-                              "add")]
-                 (handle-changed! type
-                                  {:dir dir
-                                   :path file
-                                   :content content
-                                   :stat stat}))
-               (p/catch (fn [error]
-                          (js/console.dir error)))))))))))
+                        (map first))]
+      ;; read all files in the repo dir, notify if readdir error
+      (p/let [[files deleted-files]
+              (-> (fs/readdir repo-dir :path-only? true)
+                  (p/chain (fn [files]
+                             (->> files
+                                  (map #(path/relative-path repo-dir %))
+                                  (remove #(fs-util/ignored-path? repo-dir %))))
+                           (fn [files]
+                             (let [deleted-files (set/difference (set db-files) (set files))]
+                               [files deleted-files])))
+                  (p/catch (fn [error]
+                             (when-not (config/demo-graph? graph)
+                               (js/console.error "reading" graph)
+                               (state/pub-event! [:notification/show
+                                                  {:content (str "The graph " graph " can not be read:" error)
+                                                   :status :error
+                                                   :clear? false}]))
+                             [nil nil])))]
+        (prn ::init-watcher repo-dir {:deleted (count deleted-files)
+                                      :total (count files)})
+        (when (seq deleted-files)
+          (let [delete-tx-data (->> (db/delete-files deleted-files)
+                                    (concat (db/delete-blocks graph deleted-files nil))
+                                    (remove nil?))]
+            (db/transact! graph delete-tx-data {:delete-files? true})))
+        (doseq [file-rpath files]
+          (when-let [_ext (util/get-file-ext file-rpath)]
+            (->
+             (p/let [content (fs/read-file repo-dir file-rpath)
+                     stat (fs/stat repo-dir file-rpath)
+                     type (if (db/file-exists? graph file-rpath)
+                            "change"
+                            "add")]
+               (handle-changed! type
+                                {:dir repo-dir
+                                 :path file-rpath
+                                 :content content
+                                 :stat stat}))
+             (p/catch (fn [error]
+                        (js/console.dir error))))))))))

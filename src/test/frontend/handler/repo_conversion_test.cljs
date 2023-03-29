@@ -98,7 +98,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 42208 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42312 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
@@ -123,7 +123,7 @@
     (if rename-target
       #_:clj-kondo/ignore
       (do #_(prn "conversion triple-lowbar: " original-body " -> " rename-target)
-        (#'page-handler/compute-new-file-path path rename-target))
+       (#'page-handler/compute-new-file-path path rename-target))
       path)))
 
 (defn- convert-graph-files-path
@@ -134,7 +134,7 @@
 
 ;; Integration test that test parsing a large graph like docs
 ;; Check if file name conversion from old version of docs is working
-(deftest ^:integration convert-v067-filesnames-parse-and-load-files-to-db
+(deftest ^:integration convert-v067-filenames-parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)

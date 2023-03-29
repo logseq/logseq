@@ -16,16 +16,14 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
-
-(defn hls-file?
-  [filename]
-  (and filename (string? filename) (string/starts-with? filename "hls__")))
+            [rum.core :as rum]
+            [fipp.edn :refer [pprint]]))
 
 (defn inflate-asset
   [original-path]
@@ -56,8 +54,8 @@
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)]
-      (p/let [_ (fs/create-if-not-exists repo-cur repo-dir hls-file "{:highlights []}")
-              res (fs/read-file repo-dir hls-file)
+      (p/let [_    (fs/create-if-not-exists repo-cur repo-dir hls-file "{:highlights []}")
+              res  (fs/read-file repo-dir hls-file)
               data (if res (reader/read-string res) {})]
         data))))
 
@@ -66,7 +64,7 @@
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          data (pr-str {:highlights highlights :extra extra})]
+          data     (with-out-str (pprint {:highlights highlights :extra extra}))]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$
@@ -82,13 +80,13 @@
 (defn persist-hl-area-image$
   [^js viewer current new-hl old-hl {:keys [top left width height]}]
   (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page new-hl)))))]
-    (let [^js doc (.-ownerDocument canvas)
+    (let [^js doc     (.-ownerDocument canvas)
           ^js canvas' (.createElement doc "canvas")
-          dpr js/window.devicePixelRatio
-          repo-cur (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo-cur)
-          dw (* dpr width)
-          dh (* dpr height)]
+          dpr         js/window.devicePixelRatio
+          repo-cur    (state/get-current-repo)
+          repo-dir    (config/get-repo-dir repo-cur)
+          dw          (* dpr width)
+          dh          (* dpr height)]
 
       (set! (. canvas' -width) dw)
       (set! (. canvas' -height) dh)
@@ -96,31 +94,31 @@
       (when-let [^js ctx (.getContext canvas' "2d" #js{:alpha false})]
         (set! (. ctx -imageSmoothingEnabled) false)
         (.drawImage
-          ctx canvas
-          (* left dpr) (* top dpr) (* width dpr) (* height dpr)
-          0 0 dw dh)
+         ctx canvas
+         (* left dpr) (* top dpr) (* width dpr) (* height dpr)
+         0 0 dw dh)
 
         (let [callback (fn [^js png]
                          ;; write image file
                          (p/catch
-                           (p/let [_ (js/console.time :write-area-image)
-                                   ^js png (.arrayBuffer png)
-                                   {:keys [key]} current
-                                   ;; dir
-                                   fstamp (get-in new-hl [:content :image])
-                                   old-fstamp (and old-hl (get-in old-hl [:content :image]))
-                                   fname (str (:page new-hl) "_" (:id new-hl))
-                                   fdir (str gp-config/local-assets-dir "/" key)
-                                   _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
-                                   new-fpath (str fdir "/" fname "_" fstamp ".png")
-                                   old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
-                                   _ (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
-                                   _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-compare? true})]
+                          (p/let [_          (js/console.time :write-area-image)
+                                  ^js png    (.arrayBuffer png)
+                                  {:keys [key]} current
+                                  ;; dir
+                                  fstamp     (get-in new-hl [:content :image])
+                                  old-fstamp (and old-hl (get-in old-hl [:content :image]))
+                                  fname      (str (:page new-hl) "_" (:id new-hl))
+                                  fdir       (str gp-config/local-assets-dir "/" key)
+                                  _          (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
+                                  new-fpath  (str fdir "/" fname "_" fstamp ".png")
+                                  old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
+                                  _          (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
+                                  _          (fs/write-file! repo-cur repo-dir new-fpath png {:skip-compare? true})]
 
-                             (js/console.timeEnd :write-area-image))
+                            (js/console.timeEnd :write-area-image))
 
-                           (fn [err]
-                             (js/console.error "[write area image Error]" err))))]
+                          (fn [err]
+                            (js/console.error "[write area image Error]" err))))]
 
           (.toBlob canvas' callback))
         ))))
@@ -139,10 +137,10 @@
   (when-let [fkey (and (area-highlight? hl) (:key current))]
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          fstamp (get-in hl [:content :image])
-          fname (str (:page hl) "_" (:id hl))
-          fdir (str gp-config/local-assets-dir "/" fkey)
-          fpath (util/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
+          fstamp   (get-in hl [:content :image])
+          fname    (str (:page hl) "_" (:id hl))
+          fdir     (str gp-config/local-assets-dir "/" fkey)
+          fpath    (util/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
 
       (fs/unlink! repo-cur fpath {}))))
 
@@ -212,21 +210,25 @@
       (editor-handler/delete-block-aux! block true))))
 
 (defn copy-hl-ref!
-  [highlight]
+  [highlight ^js viewer]
   (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
-    (util/copy-to-clipboard! (block-ref/->block-ref (:block/uuid ref-block)))))
+    (util/copy-to-clipboard!
+     (block-ref/->block-ref (:block/uuid ref-block)) nil
+     (pdf-windows/resolve-own-window viewer))))
 
 (defn open-block-ref!
   [block]
-  (let [id (:block/uuid block)
-        page (db-utils/pull (:db/id (:block/page block)))
+  (let [id        (:block/uuid block)
+        page      (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
-        file-path (:file-path (:block/properties page))]
+        file-path (:file-path (:block/properties page))
+        hl-page   (:hl-page (:block/properties block))]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]
         (let [file-path (or file-path (str "../assets/" target-key ".pdf"))]
-          (if-let [matched (and hls (medley/find-first #(= id (:id %)) hls))]
+          (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
+                               (and hl-page {:page hl-page}))]
             (do
               (state/set-state! :pdf/ref-highlight matched)
               ;; open pdf viewer
@@ -252,7 +254,7 @@
         images (to-array images)
         images (if-not (= (count images) 1)
                  (let [^js image (.closest (.-target e) ".hl-area")
-                       image (. image querySelector "img")]
+                       image     (. image querySelector "img")]
                    (->> images
                         (sort-by (juxt #(.-y %) #(.-x %)))
                         (split-with (complement #{image}))
@@ -260,8 +262,8 @@
                         (apply concat)))
                  images)
         images (for [^js it images] {:src (.-src it)
-                                     :w (.-naturalWidth it)
-                                     :h (.-naturalHeight it)})]
+                                     :w   (.-naturalWidth it)
+                                     :h   (.-naturalHeight it)})]
 
     (when (seq images)
       (lightbox/preview-images! images))))
@@ -292,11 +294,3 @@
 
          (ui/icon "maximize")]]
        [:img {:src asset-path}]])))
-
-(defn human-page-name
-  [page-name]
-  (cond
-    (string/starts-with? page-name "hls__")
-    (pdf-utils/fix-local-asset-pagename page-name)
-
-    :else (util/trim-safe page-name)))

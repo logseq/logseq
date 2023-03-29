@@ -223,7 +223,8 @@
         page-content (gp-property/->block-content file-properties)
         ;; Create Block properties from given page ones
         block-property-transform (fn [m] (update-keys m #(keyword (str "block-" (name %)))))
-        block-content (gp-property/->block-content (block-property-transform file-properties))
+        block-file-properties (block-property-transform file-properties)
+        block-content (gp-property/->block-content block-file-properties)
         _ (graph-parser/parse-file conn
                                    "property-relationships.md"
                                    (str page-content "\n- " block-content)
@@ -234,7 +235,9 @@
                         @conn)
                    (map first))
         _ (assert (= 1 (count pages)))
-        blocks (->> (d/q '[:find (pull ?b [:block/pre-block? :block/properties
+        blocks (->> (d/q '[:find (pull ?b [:block/pre-block?
+                                           :block/properties
+                                           :block/properties-text-values
                                            {:block/refs [:block/original-name]}])
                            :in $
                            :where [?b :block/properties] [(missing? $ ?b :block/name)]]
@@ -243,42 +246,50 @@
                     (map (fn [m] (update m :block/refs #(map :block/original-name %)))))
         block-db-properties (block-property-transform db-properties)]
 
-    (is (= db-properties (:block/properties (first pages)))
-        "page has expected properties")
+    (testing "Page properties"
+      (is (= db-properties (:block/properties (first pages)))
+          "page has expected properties")
 
-    (is (= [true nil] (map :block/pre-block? blocks))
-        "page has 2 blocks, one of which is a pre-block")
+      (is (= file-properties (:block/properties-text-values (first pages)))
+          "page has expected full text of properties"))
 
-    (is (= [db-properties block-db-properties]
-           (map :block/properties blocks))
-        "pre-block/page and block have expected properties")
+    (testing "Pre-block and block properties"
+      (is (= [true nil] (map :block/pre-block? blocks))
+          "page has 2 blocks, one of which is a pre-block")
 
-    ;; has expected refs
-    (are [db-props refs]
-         (= (->> (vals db-props)
-                 ;; ignore string values
-                 (mapcat #(if (coll? %) % []))
-                 (concat (map name (keys db-props)))
-                 set)
-            (set refs))
-         ; pre-block/page has expected refs
-         db-properties (first (map :block/refs blocks))
-         ;; block has expected refs
-         block-db-properties (second (map :block/refs blocks)))))
+      (is (= [db-properties block-db-properties]
+             (map :block/properties blocks))
+          "pre-block/page and block have expected properties")
+
+      (is (= [file-properties block-file-properties]
+             (map :block/properties-text-values blocks))
+          "pre-block/page and block have expected full text of properties")
+
+      ;; has expected refs
+      (are [db-props refs]
+           (= (->> (vals db-props)
+                   ;; ignore string values
+                   (mapcat #(if (coll? %) % []))
+                   (concat (map name (keys db-props)))
+                   set)
+              (set refs))
+           ; pre-block/page has expected refs
+           db-properties (first (map :block/refs blocks))
+           ;; block has expected refs
+           block-db-properties (second (map :block/refs blocks))))))
 
 (deftest property-relationships
   (let [properties {:single-link "[[bar]]"
                     :multi-link "[[Logseq]] is the fastest #triples #[[text editor]]"
                     :desc "This is a multiple sentence description. It has one [[link]]"
                     :comma-prop "one, two,three"}]
-    (testing "With default config"
-      (property-relationships-test
-       properties
-       {:single-link #{"bar"}
-        :multi-link #{"Logseq" "triples" "text editor"}
-        :desc #{"link"}
-        :comma-prop "one, two,three"}
-       {}))))
+    (property-relationships-test
+     properties
+     {:single-link #{"bar"}
+      :multi-link #{"Logseq" "triples" "text editor"}
+      :desc #{"link"}
+      :comma-prop "one, two,three"}
+     {})))
 
 (deftest invalid-properties
   (let [conn (ldb/start-conn)
@@ -330,6 +341,25 @@
                   (remove built-in-pages)
                   set)))))
 
+  (testing "from cased org title"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set default-db/built-in-pages-names)]
+      (graph-parser/parse-file conn
+                               "foo.org"
+                               ":PROPERTIES:
+:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
+:END:
+#+tItLe: Well parsed!"
+                               {})
+      (is (= #{"Well parsed!"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/original-name first))
+                  (remove built-in-pages)
+                  set)))))
+
   (testing "for file and web uris"
     (let [conn (ldb/start-conn)
           built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
@@ -346,3 +376,49 @@
                   (map (comp :block/name first))
                   (remove built-in-pages)
                   set))))))
+
+(deftest duplicated-ids
+  (testing "duplicated block ids in same file"
+    (let [conn (ldb/start-conn)
+          extract-block-ids (atom #{})
+          parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
+          block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "- foo
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+- bar
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+"
+                               parse-opts)
+      (let [blocks (:block/_parent (d/entity @conn [:block/name "foo"]))]
+        (is (= 2 (count blocks)))
+        (is (= 1 (count (filter #(= (:block/uuid %) block-id) blocks)))))))
+
+  (testing "duplicated block ids in multiple files"
+    (let [conn (ldb/start-conn)
+          extract-block-ids (atom #{})
+          parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
+          block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "- foo
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+bar
+- test"
+                               parse-opts)
+      (graph-parser/parse-file conn
+                               "bar.md"
+                               "- bar
+id:: 63f199bc-c737-459f-983d-84acfcda14fe
+bar
+- test
+"
+                               parse-opts)
+      (is (= "foo"
+             (-> (d/entity @conn [:block/uuid block-id])
+                 :block/page
+                 :block/name)))
+      (let [bar-block (first (:block/_parent (d/entity @conn [:block/name "bar"])))]
+        (is (some? (:block/uuid bar-block)))
+        (is (not= (:block/uuid bar-block) block-id))))))

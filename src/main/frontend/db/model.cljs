@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
@@ -20,6 +19,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]))
 
@@ -103,7 +103,12 @@
          [?page :block/name ?page-name]
          [?page :block/namespace ?e]
          [?e :block/name ?parent]]
-       (conn/get-db repo)))
+    (conn/get-db repo)))
+
+(defn get-all-namespace-parents
+  [repo]
+  (->> (get-all-namespace-relation repo)
+       (map second)))
 
 (defn get-pages
   [repo]
@@ -121,7 +126,13 @@
    '[:find [(pull ?page [*]) ...]
      :where
      [?page :block/name]]
-   (conn/get-db repo)))
+    (conn/get-db repo)))
+
+(defn get-all-page-original-names
+  [repo]
+  (let [db (conn/get-db repo)]
+    (->> (d/datoms db :avet :block/original-name)
+         (map :v))))
 
 (defn get-pages-with-file
   "Return full file entity for calling file renaming"
@@ -257,7 +268,7 @@
 (defn get-custom-css
   []
   (when-let [repo (state/get-current-repo)]
-    (get-file (config/get-file-path repo "logseq/custom.css"))))
+    (get-file repo "logseq/custom.css")))
 
 (defn get-block-by-uuid
   [id]
@@ -1335,24 +1346,6 @@ independent of format as format specific heading characters are stripped"
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))
 
-(defn get-block-references-count
-  [block-uuid]
-  (when-let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (let [block (db-utils/entity [:block/uuid block-uuid])
-            query-result (->> (react/q repo [:frontend.db.react/refs
-                                             (:db/id block)]
-                                       {}
-                                       '[:find [(pull ?ref-block ?block-attrs) ...]
-                                         :in $ ?block-uuid ?block-attrs
-                                         :where
-                                         [?block :block/uuid ?block-uuid]
-                                         [?ref-block :block/refs ?block]]
-                                       block-uuid
-                                       block-attrs)
-                              react)]
-        (count query-result)))))
-
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
@@ -1424,19 +1417,37 @@ independent of format as format specific heading characters are stripped"
          distinct
          sort)))
 
+(defn- property-value-for-refs-and-text
+  "Given a property value's refs and full text, determines the value to
+  autocomplete"
+  [[refs text]]
+  (if (or (not (coll? refs)) (= 1 (count refs)))
+    text
+    (map #(cond
+            (string/includes? text (page-ref/->page-ref %))
+            (page-ref/->page-ref %)
+            (string/includes? text (str "#" %))
+            (str "#" %)
+            :else
+            %)
+         refs)))
+
 (defn get-property-values
   [property]
-  (let [pred (fn [_db properties]
-               (get properties property))]
+  (let [pred (fn [_db properties text-properties]
+               [(get properties property)
+                (get text-properties property)])]
     (->>
      (d/q
-      '[:find [?property-val ...]
+      '[:find ?property-val ?text-property-val
         :in $ ?pred
         :where
-        [_ :block/properties ?p]
-        [(?pred $ ?p) ?property-val]]
+        [?b :block/properties ?p]
+        [?b :block/properties-text-values ?p2]
+        [(?pred $ ?p ?p2) [?property-val ?text-property-val]]]
       (conn/get-db)
       pred)
+     (map property-value-for-refs-and-text)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
      (map str)
@@ -1742,11 +1753,19 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-whiteboards
   [repo]
-  (->> (d/q
-        '[:find [(pull ?page [:block/name
-                              :block/created-at
-                              :block/updated-at]) ...]
-          :where
-          [?page :block/name]
-          [?page :block/type "whiteboard"]]
-        (conn/get-db repo))))
+  (d/q
+    '[:find [(pull ?page [:block/name
+                          :block/created-at
+                          :block/updated-at]) ...]
+      :where
+      [?page :block/name]
+      [?page :block/type "whiteboard"]]
+    (conn/get-db repo)))
+
+(defn get-whiteboard-id-nonces
+  [repo page-name]
+  (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+       (filter #(:logseq.tldraw.shape (:block/properties %)))
+       (map (fn [{:block/keys [uuid properties]}]
+              {:id (str uuid)
+               :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))

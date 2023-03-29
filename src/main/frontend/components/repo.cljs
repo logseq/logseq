@@ -38,7 +38,7 @@
                graph-name (text-util/get-graph-name-from-path local-dir)]
            [:a.flex.items-center {:title    local-dir
                                   :on-click #(on-click graph)}
-            [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
+            [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
             (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
          [:a.flex.items-center {:title    GraphUUID
@@ -47,6 +47,7 @@
           (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (rum/defc repos-inner
+  "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
         :let [only-cloud? (and remote? (nil? url))]]
@@ -182,7 +183,9 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
+              (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
+                {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
+                {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link
@@ -203,19 +206,17 @@
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [valid-remotes-but-locals? (and (seq repos) (not (some :url repos)))
-                                   remote? (when-not valid-remotes-but-locals?
-                                             (:remote? (first (filter #(= current-repo (:url %)) repos))))
-                                   repo-path (if-not valid-remotes-but-locals?
-                                               (db/get-repo-name current-repo) "")
-                                   short-repo-name (if-not valid-remotes-but-locals?
-                                                     (db/get-short-repo-name repo-path) "Select a Graph")]
+                             (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
+                                   repo-name (db/get-repo-name current-repo)
+                                   short-repo-name (if repo-name
+                                                    (db/get-short-repo-name repo-name)
+                                                    "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
-                                 :title    repo-path}       ;; show full path on hover
+                                 :title    repo-name}       ;; show full path on hover
                                 [:span.flex.relative
                                  {:style {:top 1}}
                                  (ui/icon "database" {:size 16 :id "database-icon"})]

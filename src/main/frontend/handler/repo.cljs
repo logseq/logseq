@@ -30,7 +30,8 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [logseq.common.path :as path]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -41,31 +42,29 @@
   (spec/validate :repos/url repo-url)
   (p/let [repo-dir (config/get-repo-dir repo-url)
           pages-dir (state/get-pages-directory)
-          [org-path md-path] (map #(str "/" pages-dir "/contents." %) ["org" "md"])
+          [org-path md-path] (map #(str pages-dir "/contents." %) ["org" "md"])
           contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
     (when-not contents-file-exist?
       (let [format (state/get-preferred-format)
-            path (str pages-dir "/contents."
-                      (config/get-file-extension format))
-            file-path (str "/" path)
+            file-rpath (str "pages/" "contents." (config/get-file-extension format))
             default-content (case (name format)
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
-        (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
-                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+        (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
+                file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
-            (file-common-handler/reset-file! repo-url path default-content)))))))
+            (file-common-handler/reset-file! repo-url file-rpath default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         path (str config/app-name "/" config/custom-css-file)
-        file-path (str "/" path)
+        file-rpath path
         default-content ""]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+    (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
         (file-common-handler/reset-file! repo-url path default-content)))))
 
@@ -73,11 +72,10 @@
   [repo-url content]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
-        file-path (str "/" path)]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-pages-directory)))
-            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-      (file-common-handler/reset-file! repo-url path content))))
+        file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
+    (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
+            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
+      (file-common-handler/reset-file! repo-url file-rpath content))))
 
 (defn- create-today-journal-if-not-exists
   [repo-url {:keys [content]}]
@@ -101,18 +99,17 @@
 
                     :else
                     default-content)
-          path (util/safe-path-join (config/get-journals-directory) (str file-name "."
-                                                                         (config/get-file-extension format)))
-          file-path (str "/" path)
+          file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
+                                                                              (config/get-file-extension format)))
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
-                file-exists? (fs/file-exists? repo-dir file-path)]
+                _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
+                file-exists? (fs/file-exists? repo-dir file-rpath)]
           (when-not file-exists?
-            (p/let [_ (file-common-handler/reset-file! repo-url path content)]
-              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+            (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
+              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
                 (when-not (state/editing?)
                   (ui-handler/re-render-root!)))))
           (when-not (state/editing?)
@@ -122,18 +119,19 @@
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)]
-    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
-            _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
-            _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
-            _ (repo-config-handler/create-config-file-if-not-exists repo-url)
-            _ (create-contents-file repo-url)
-            _ (create-custom-theme repo-url)]
-      (state/pub-event! [:page/create-today-journal repo-url]))))
+    (p/do! (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
+           (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name config/recycle-dir))
+           (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
+           (repo-config-handler/create-config-file-if-not-exists repo-url)
+           (create-contents-file repo-url)
+           (create-custom-theme repo-url)
+           (state/pub-event! [:page/create-today-journal repo-url]))))
 
 (defonce *file-tx (atom nil))
 
 (defn- parse-and-load-file!
-  [repo-url file {:keys [new-graph? verbose skip-db-transact?]
+  "Accept: .md, .org, .edn, .css"
+  [repo-url file {:keys [new-graph? verbose skip-db-transact? extracted-block-ids]
                   :or {skip-db-transact? true}}]
   (try
     (reset! *file-tx
@@ -143,7 +141,8 @@
                                      (merge {:new-graph? new-graph?
                                              :re-render-root? false
                                              :from-disk? true
-                                             :skip-db-transact? skip-db-transact?}
+                                             :skip-db-transact? skip-db-transact?
+                                             :extracted-block-ids extracted-block-ids}
                                             (when (some? verbose) {:verbose verbose}))))
     (state/set-parsing-state! (fn [m]
                                 (update m :finished inc)))
@@ -182,7 +181,8 @@
         total (count supported-files)
         large-graph? (> total 1000)
         *page-names (atom #{})
-        *page-name->path (atom {})]
+        *page-name->path (atom {})
+        *extracted-block-ids (atom #{})]
     (when (seq delete-data) (db/transact! repo-url delete-data {:delete-files? true}))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -210,13 +210,14 @@
 
             (when yield-for-ui? (async/<! (async/timeout 1)))
 
-            (let [opts' (select-keys opts [:new-graph? :verbose])
+            (let [opts' (-> (select-keys opts [:new-graph? :verbose])
+                            (assoc :extracted-block-ids *extracted-block-ids))
                   ;; whiteboards might have conflicting block IDs so that db transaction could be failed
                   opts' (if whiteboard?
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x )
+                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x)
                                                      (= (:file/path file) (:file/path (:block/file x))))
                                             (:block/name x))) result)
                   page-exists? (and page-name (get @*page-names page-name))
@@ -254,22 +255,45 @@
                    :or {re-render? true}}]
   (parse-files-and-create-default-files! repo-url files delete-files delete-blocks re-render? re-render-opts opts))
 
+
+
+(defn load-new-repo-to-db!
+  "load graph files to db."
+  [repo-url {:keys [file-objs new-graph? empty-graph?]}]
+  (spec/validate :repos/url repo-url)
+  (route-handler/redirect-to-home!)
+  (prn ::load-new-repo repo-url :empty-graph? empty-graph? :new-graph? new-graph?)
+  (state/set-parsing-state! {:graph-loading? true})
+  (let [config (or (when-let [content (some-> (first (filter #(= "logseq/config.edn" (:file/path %)) file-objs))
+                                              :file/content)]
+                     (repo-config-handler/read-repo-config content))
+                   (state/get-config repo-url))
+        ;; NOTE: Use config while parsing. Make sure it's the current journal title format
+        ;; config should be loaded to state first
+        _ (state/set-config! repo-url config)
+        ;; remove :hidden files from file-objs, :hidden
+        file-objs (common-handler/remove-hidden-files file-objs config :file/path)]
+
+    ;; Load to db even it's empty, (will create default files)
+    (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
+                                                     :empty-graph? empty-graph?})
+    (state/set-parsing-state! {:graph-loading? false})))
+
+
+
 (defn load-repo-to-db!
-  [repo-url {:keys [diffs nfs-files refresh? new-graph? empty-graph?]}]
+  [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path) (:file/path %)) file-objs))
                                               :file/content)]
                      (repo-config-handler/read-repo-config content))
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
-        relate-path-fn (fn [m k]
-                         (some-> (get m k)
-                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
-        nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
-        diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
+        nfs-files (common-handler/remove-hidden-files file-objs config :file/path)
+        diffs (common-handler/remove-hidden-files diffs config :path)
         load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
@@ -324,7 +348,7 @@
                         (when graph-exists? (ipc/ipc "graphUnlinked" repo))
                         (when (= current-repo url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
-    (when (or (config/local-db? url) (= url "local"))
+    (when (or (config/local-db? url) (config/demo-graph? url))
       (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
             )
           (p/finally delete-db-f)))))
@@ -338,8 +362,9 @@
   []
   ;; loop query if js/window.pfs is ready, interval 100ms
   (if js/window.pfs
-    (let [repo config/local-repo]
-      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
+    (let [repo config/local-repo
+          repo-dir (config/get-repo-dir repo)]
+      (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
              (db/start-db-conn! repo)
              (when-not config/publishing?
@@ -358,6 +383,7 @@
             setup-local-repo-if-not-exists-impl!)))
 
 (defn setup-local-repo-if-not-exists!
+  "Setup demo repo, i.e. `local-repo`"
   []
   ;; ensure `(state/set-db-restoring! false)` at exit
   (-> (setup-local-repo-if-not-exists-impl!)

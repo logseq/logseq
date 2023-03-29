@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { deepEqual, TLDocumentModel } from '@tldraw/core'
+import type { TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -15,6 +15,7 @@ import { ContextMenu } from './components/ContextMenu'
 import { QuickLinks } from './components/QuickLinks'
 import { useDrop } from './hooks/useDrop'
 import { usePaste } from './hooks/usePaste'
+import { useCopy } from './hooks/useCopy'
 import { useQuickAdd } from './hooks/useQuickAdd'
 import {
   BoxTool,
@@ -52,6 +53,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
 interface LogseqTldrawProps {
   renderers: LogseqContextValue['renderers']
   handlers: LogseqContextValue['handlers']
+  readOnly: boolean
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
@@ -68,6 +70,7 @@ const BacklinksCount: LogseqContextValue['renderers']['BacklinksCount'] = props 
 const AppImpl = () => {
   const ref = React.useRef<HTMLDivElement>(null)
   const app = useApp()
+
   const components = React.useMemo(
     () => ({
       ContextBar,
@@ -89,18 +92,18 @@ const AppImpl = () => {
 
 const AppInner = ({
   onPersist,
+  readOnly,
   model,
   ...rest
 }: Omit<LogseqTldrawProps, 'renderers' | 'handlers'>) => {
   const onDrop = useDrop()
   const onPaste = usePaste()
-  const onQuickAdd = useQuickAdd()
+  const onCopy = useCopy()
+  const onQuickAdd = readOnly ? null : useQuickAdd()
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
-      if (!deepEqual(app.serialized, model)) {
-        onPersist?.(app, info)
-      }
+      onPersist?.(app, info)
     },
     [model]
   )
@@ -111,6 +114,8 @@ const AppInner = ({
       Tools={tools}
       onDrop={onDrop}
       onPaste={onPaste}
+      onCopy={onCopy}
+      readOnly={readOnly}
       onCanvasDBClick={onQuickAdd}
       onPersist={onPersistOnDiff}
       model={model}

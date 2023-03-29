@@ -193,10 +193,10 @@
 (rum/defc sync-now
   []
   (ui/button "Sync now"
-    :class "block cursor-pointer"
-    :small? true
-    :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)
-    :style {:color "#ffffff"}))
+             :class "block cursor-pointer"
+             :small? true
+             :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)
+             :style {:color "#ffffff"}))
 
 (def *last-calculated-time (atom nil))
 
@@ -285,8 +285,7 @@
             (not online?) "Currently having connection issues..."
             idle-&-no-active? "Everything is synced!"
             syncing? "Currently syncing your graph..."
-            :else "Waiting..."
-            )]]
+            :else "Waiting...")]]
         [:div.ar
          (when queuing? (sync-now))]]
 
@@ -395,7 +394,7 @@
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                  (state/get-repos)))
+                                                     (state/get-repos)))
                                                (create-remote-graph-fn))
 
                                            (second @graphs-txid) ; sync not started yet
@@ -448,7 +447,7 @@
             (concat
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (gp-util/safe-decode-uri-component f)]
+                                   f]
                            :key   (str "downloading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -457,8 +456,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-narrow-down"))
-                           }) downloading-files)
+                                    (ui/icon "arrow-narrow-down"))}) downloading-files)
 
              (map (fn [e] (let [icon (case (.-type e)
                                        "add" "plus"
@@ -467,17 +465,13 @@
                                 path (fs-sync/relative-path e)]
                             {:title [:div.file-item
                                      {:key (str "queue-" path)}
-                                     (try
-                                       (gp-util/safe-decode-uri-component path)
-                                       (catch :default _
-                                         (prn "Wrong path: " path)
-                                         path))]
+                                     path]
                              :key   (str "queue-" path)
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
-                                   (gp-util/safe-decode-uri-component f)]
+                                   f]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -486,8 +480,7 @@
                                                (< percent 100))
                                         (indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
-                                    (ui/icon "arrow-up"))
-                           }) uploading-files)
+                                    (ui/icon "arrow-up"))}) uploading-files)
 
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
@@ -500,7 +493,7 @@
                                                         (if page-name
                                                           (rfe/push-state :page {:name page-name})
                                                           (rfe/push-state :file {:path full-path})))}
-                                           [:span.file-sync-item (gp-util/safe-decode-uri-component (:path f))]
+                                           [:span.file-sync-item (:path f)]
                                            [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]})))
                             (take 10 history-files)))))
 
@@ -531,41 +524,41 @@
                                                          (:GraphName graph))]
 
    (ui/button
-     "Open a local directory"
-     :class "block w-full py-4 mt-4"
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                   (page-handler/ls-dir-files!
-                    (fn [{:keys [url]}]
-                      (file-sync-handler/init-remote-graph url graph)
-                      (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+    "Open a local directory"
+    :class "block w-full py-4 mt-4"
+    :on-click #(do
+                 (state/close-modal!)
+                 (fs-sync/<sync-stop)
+                 (->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url graph)
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                    {:empty-dir?-or-pred
-                     (fn [ret]
-                       (let [empty-dir? (nil? (second ret))]
-                         (if-let [root (first ret)]
+                   {:on-open-dir
+                    (fn [result]
+                      (prn ::on-open-dir result)
+                      (let [empty-dir? (not (seq (:files result)))
+                            root (:path result)]
+                        (cond
+                          (string/blank? root)
+                          (p/rejected (js/Error. nil))  ;; cancel pick a directory
 
-                           ;; verify directory
-                           (-> (if empty-dir?
-                                 (p/resolved nil)
-                                 (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root)))
+                          empty-dir?
+                          (p/resolved nil)
 
-                               (p/then (fn [^js info]
-                                         (when (and (not empty-dir?)
-                                                    (or (nil? info)
-                                                        (nil? (second info))
-                                                        (not= (second info) (:GraphUUID graph))))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (throw (js/Error. nil)))))))
-
-                           ;; cancel pick a directory
-                           (throw (js/Error. nil)))))})
-                   (p/catch (fn [])))))
+                          :else ; dir is not empty
+                          (-> (if (util/electron?)
+                                (ipc/ipc :readGraphTxIdInfo root)
+                                (fs-util/read-graphs-txid-info root))
+                              (p/then (fn [^js info]
+                                        (when (or (nil? info)
+                                                  (nil? (second info))
+                                                  (not= (second info) (:GraphUUID graph)))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (p/resolved nil)
+                                            (p/rejected (js/Error. nil))))))))))}) ;; cancel pick a non-empty directory
+                  (p/catch (fn [])))))
 
    [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
     (ui/icon "alert-circle")
@@ -754,8 +747,7 @@
                                  ;; Logseq sync available
                                  (maybe-onboarding-show :sync-initiate))
                                (close-fn)
-                               (set-loading? false))
-                             ))]]))
+                               (set-loading? false))))]]))
 
 (rum/defc onboarding-unavailable-file-sync
   [close-fn]

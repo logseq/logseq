@@ -1,14 +1,14 @@
 (ns frontend.components.server
   (:require
-   [clojure.string :as string]
-   [rum.core :as rum]
-   [electron.ipc :as ipc]
-   [medley.core :as medley]
-   [promesa.core :as p]
-   [frontend.state :as state]
-   [frontend.util :as util]
-   [frontend.handler.notification :as notification]
-   [frontend.ui :as ui]))
+    [clojure.string :as string]
+    [rum.core :as rum]
+    [electron.ipc :as ipc]
+    [medley.core :as medley]
+    [promesa.core :as p]
+    [frontend.state :as state]
+    [frontend.util :as util]
+    [frontend.handler.notification :as notification]
+    [frontend.ui :as ui]))
 
 (rum/defcs panel-of-tokens
   < rum/reactive
@@ -125,61 +125,61 @@
   [server-state]
 
   (rum/use-effect!
-   (fn []
-     (ipc/ipc :server/load-state)
-     (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
-                               (ipc/ipc :server/do :restart)) 1000)]
-       #(js/clearTimeout t)))
-   [])
+    (fn []
+      (ipc/ipc :server/load-state)
+      (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
+                                (ipc/ipc :server/do :restart)) 1000)]
+        #(js/clearTimeout t)))
+    [])
 
   (let [{:keys [status error]} server-state
         status   (keyword (util/safe-lower-case status))
-        running? (= :running status)]
+        running? (= :running status)
+        href     (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
 
     (rum/use-effect!
-     #(when error
-        (notification/show! (str "[Server] " error) :error))
-     [error])
+      #(when error
+         (notification/show! (str "[Server] " error) :error))
+      [error])
 
     [:div.cp__server-indicator
-     (ui/icon "api" {:size 24})
-     [:code.text-sm.ml-1
-      (if-not running?
-        (string/upper-case (or (:status server-state) "stopped"))
-        (let [href (str "http://" (:host server-state) ":" (:port server-state))]
-          [:a.hover:underline {:href href} href]))]
-
      ;; settings menus
      (ui/dropdown-with-links
-      (fn [{:keys [toggle-fn]}]
-        [:span.opacity-50.hover:opacity-80.active:opacity-100
-         [:button.button.icon.ml-1
+       (fn [{:keys [toggle-fn]}]
+         [:button.button.icon
           {:on-click #(toggle-fn)}
-          (ui/icon "dots-vertical" {:size 16})]])
-      ;; items
-      (->> [(cond
-              running?
-              {:title   "Stop server"
-               :options {:on-click #(ipc/ipc :server/do :stop)}
-               :icon    [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
+          (ui/icon (if running? "api" "api-off") {:size 22})])
 
-              :else
-              {:title   "Start server"
-               :options {:on-click #(ipc/ipc :server/do :restart)}
-               :icon    [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
+       ;; items
+       (->> [{:hr true}
 
-            {:title   "Authorization tokens"
-             :options {:on-click #(state/set-modal!
-                                   (fn [close]
-                                     (panel-of-tokens close))
-                                   {:center? true})}
-             :icon    (ui/icon "key")}
+             (cond
+               running?
+               {:title   "Stop server"
+                :options {:on-click #(ipc/ipc :server/do :stop)}
+                :icon    [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
 
-            {:title   "Server configurations"
-             :options {:on-click #(state/set-modal!
-                                   (fn [close]
-                                     (panel-of-configs close))
-                                   {:center? true})}
-             :icon    (ui/icon "server-cog")}])
-      {})]))
+               :else
+               {:title   "Start server"
+                :options {:on-click #(ipc/ipc :server/do :restart)}
+                :icon    [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
 
+             {:title   "Authorization tokens"
+              :options {:on-click #(state/set-modal!
+                                     (fn [close]
+                                       (panel-of-tokens close))
+                                     {:center? true})}
+              :icon    (ui/icon "key")}
+
+             {:title   "Server configurations"
+              :options {:on-click #(state/set-modal!
+                                     (fn [close]
+                                       (panel-of-configs close))
+                                     {:center? true})}
+              :icon    (ui/icon "server-cog")}])
+       {:links-header
+        [:div.links-header.flex.justify-center.py-2
+         [:span.ml-1.text-sm
+          (if-not running?
+            (string/upper-case (or (:status server-state) "stopped"))
+            [:a.hover:underline {:href href} href])]]})]))

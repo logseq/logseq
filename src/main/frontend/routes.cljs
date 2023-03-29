@@ -12,7 +12,8 @@
             [frontend.components.shortcut :as shortcut]
             [frontend.components.whiteboard :as whiteboard] 
             [frontend.extensions.zotero :as zotero]
-            [frontend.components.bug-report :as bug-report]))
+            [frontend.components.bug-report :as bug-report]
+            [frontend.components.user.login :as login]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -94,4 +95,8 @@
 
    ["/plugins"
     {:name :plugins
-     :view plugins/plugins-page}]])
+     :view plugins/plugins-page}]
+
+   ["/login"
+    {:name :user-login
+     :view login/page}]])

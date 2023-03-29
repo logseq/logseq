@@ -1,76 +1,14 @@
 import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
-import * as process from 'process'
-import { Block } from './types'
 import * as pathlib from 'path'
+import { modKey } from './util/basic'
 
-export const IsMac = process.platform === 'darwin'
-export const IsLinux = process.platform === 'linux'
-export const IsWindows = process.platform === 'win32'
-export const IsCI = process.env.CI === 'true'
-
-export function randomString(length: number) {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
-
-export function randomLowerString(length: number) {
-  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
-
-export async function createRandomPage(page: Page) {
-  const randomTitle = randomString(20)
-
-  // Click #search-button
-  await page.click('#search-button')
-  // Fill [placeholder="Search or create page"]
-  await page.fill('[placeholder="Search or create page"]', randomTitle)
-  // Click text=/.*New page: "new page".*/
-  await page.click('text=/.*New page: ".*/')
-  // Wait for h1 to be from our new page
-  await page.waitForSelector(`h1 >> text="${randomTitle}"`, { state: 'visible' })
-  // wait for textarea of first block
-  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
-
-  return randomTitle;
-}
-
-export async function createPage(page: Page, page_name: string) {// Click #search-button
-  await page.click('#search-button')
-  // Fill [placeholder="Search or create page"]
-  await page.fill('[placeholder="Search or create page"]', page_name)
-  // Click text=/.*New page: "new page".*/
-  await page.click('text=/.*New page: ".*/')
-  // wait for textarea of first block
-  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
-
-  return page_name;
-}
-
-
-export async function searchAndJumpToPage(page: Page, pageTitle: string) {
-  await page.click('#search-button')
-  await page.type('[placeholder="Search or create page"]', pageTitle)
-  await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
-  page.click(`[data-page-ref="${pageTitle}"]`)
-  await page.waitForNavigation()
-  return pageTitle;
-}
+// TODO: The file should be a facade of utils in the /util folder
+// No more additional functions should be added to this file
+// Move the functions to the corresponding files in the /util folder
+// Criteria: If the same selector is shared in multiple functions, they should be in the same file
+export * from './util/basic'
+export * from './util/search-modal'
 
 /**
 * Locate the last block in the inner editor
@@ -97,6 +35,9 @@ export async function lastBlock(page: Page): Promise<Locator> {
  * @param page The Playwright Page object.
  */
 export async function enterNextBlock(page: Page): Promise<Locator> {
+  // Move cursor to the end of the editor
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForTimeout(10)
@@ -113,15 +54,6 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
 
-  return page.locator('textarea >> nth=0')
-}
-
-// Deprecated by block.enterNext
-export async function newBlock(page: Page): Promise<Locator> {
-  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  await lastBlock(page)
-  await page.press('textarea >> nth=0', 'Enter')
-  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
 
@@ -211,15 +143,13 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
 
   // If there is an error notification from a previous test graph being deleted,
   // close it first so it doesn't cover up the UI
-  let locator = page.locator('.notification-close-button').first()
-  while (await locator?.isVisible()) {
-    try { // don't fail if unable to click (likely disappeared already)
-      await locator.click()
-    } catch (error) {}
-    await page.waitForTimeout(250)
-
-    expect(locator.isVisible()).resolves.toBe(false)
+  let n = await page.locator('.notification-close-button').count()
+  if (n > 1) {
+    await page.locator('button >> text="Clear all"').click()
+  } else if (n == 1) {
+    await page.locator('.notification-close-button').click()
   }
+  await expect(page.locator('.notification-close-button').first()).not.toBeVisible({ timeout: 2000 })
 
   console.log('Graph loaded for ' + path)
 }
@@ -233,22 +163,15 @@ export async function editFirstBlock(page: Page) {
   await page.click('.ls-block .block-content >> nth=0')
 }
 
-export function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1) + min)
-}
-
-export function randomBoolean(): boolean {
-  return Math.random() < 0.5;
-}
-
-export function systemModifier(shortcut: string): string {
-  if (IsMac) {
-    return shortcut.replace('Control', 'Meta')
-  } else {
-    return shortcut
-  }
-}
-
+/**
+ * Wait for a console message with a given prefix to appear, and return the full text of the message
+ * Or reject after a timeout
+ *
+ * @param page
+ * @param prefix - the prefix to look for
+ * @param timeout - the timeout in ms
+ * @returns the full text of the console message
+ */
 export async function captureConsoleWithPrefix(page: Page, prefix: string, timeout: number = 3000): Promise<string> {
   return new Promise((resolve, reject) => {
     let console_handler = (msg: ConsoleMessage) => {

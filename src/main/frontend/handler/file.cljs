@@ -20,8 +20,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.config :as gp-config]
-            ["path" :as path]))
+            [logseq.common.path :as path]
+            [logseq.graph-parser.config :as gp-config]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -88,103 +88,109 @@
     :else
     nil))
 
+(defn- detect-deprecations
+  [path content]
+  (when (or (= path "logseq/config.edn")
+            (= (path/dirname path) (global-config-handler/safe-global-config-dir)))
+    (config-edn-common-handler/detect-deprecations path content)))
+
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
   that are not validated just return true"
-  [repo path content]
+  [path content]
   (cond
-    (= path (config/get-repo-config-path repo))
+    (= path "logseq/config.edn")
     (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn)
 
-    (and
-     (config/global-config-enabled?)
-     (= (path/dirname path) (global-config-handler/global-config-dir)))
+    (= (path/dirname path) (global-config-handler/safe-global-config-dir))
     (config-edn-common-handler/validate-config-edn path content global-config-schema/Config-edn)
 
     :else
     true))
 
-(defn- validate-and-write-file
-  "Validates and if valid writes file. Returns boolean indicating if file content was valid"
+(defn- write-file-aux!
   [repo path content write-file-options]
   (let [original-content (db/get-file repo path)
-        path-dir (if (and
-                      (config/global-config-enabled?)
-                      ;; Hack until we better understand failure in error handler
-                      (global-config-handler/global-config-dir-exists?)
-                      (= (path/dirname path) (global-config-handler/global-config-dir)))
-                   (global-config-handler/global-config-dir)
-                   (config/get-repo-dir repo))
+        path-dir (config/get-repo-dir repo)
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
-    (p/do!
-     (if (validate-file repo path content)
-       (do
-         (fs/write-file! repo path-dir path content write-file-options')
-         true)
-       false))))
+    (fs/write-file! repo path-dir path content write-file-options')))
 
-;; TODO: Remove this function in favor of `alter-files`
+(defn alter-global-file
+  "Does pre-checks on a global file, writes if it's not already written
+  (:from-disk? is not set) and then does post-checks. Currently only handles
+  global config.edn but can be extended as needed"
+  [path content {:keys [from-disk?]}]
+  (if (and path (= path (global-config-handler/safe-global-config-path)))
+    (do
+      (detect-deprecations path content)
+      (when (validate-file path content)
+       (-> (p/let [_ (when-not from-disk?
+                       (fs/write-file! "" nil path content {:skip-compare? true}))]
+                  (p/do! (global-config-handler/restore-global-config!)
+                         (state/pub-event! [:shortcut/refresh])))
+           (p/catch (fn [error]
+                      (state/pub-event! [:notification/show
+                                         {:content (str "Failed to write to file " path ", error: " error)
+                                          :status :error}])
+                      (log/error :write/failed error)
+                      (state/pub-event! [:capture-error
+                                         {:error error
+                                          :payload {:type :write-file/failed-for-alter-file}}]))))))
+    (log/error :msg "alter-global-file does not support this file" :file path)))
+
 (defn alter-file
+  "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
-                             skip-db-transact?]
+                             skip-db-transact? extracted-block-ids]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
   (let [path (gp-util/path-normalize path)
-        write-file! (if from-disk?
-                      #(p/promise (validate-file repo path content))
-                      #(validate-and-write-file repo path content {:skip-compare? skip-compare?}))
-        opts {:new-graph? new-graph?
-              :from-disk? from-disk?
-              :skip-db-transact? skip-db-transact?}
-        result (if reset?
-                 (do
-                   (when-not skip-db-transact?
-                     (when-let [page-id (db/get-file-page-id path)]
-                       (db/transact! repo
-                                     [[:db/retract page-id :block/alias]
-                                      [:db/retract page-id :block/tags]]
-                                     opts)))
-                   (file-common-handler/reset-file! repo path content (merge opts
-                                                                             (when (some? verbose) {:verbose verbose}))))
-                 (db/set-file-content! repo path content opts))]
-    (util/p-handle (write-file!)
-                   (fn [valid-result?]
-                     (when re-render-root? (ui-handler/re-render-root!))
+        config-file? (= path "logseq/config.edn")
+        _ (when config-file?
+            (detect-deprecations path content))
+        config-valid? (and config-file? (validate-file path content))]
+    (when (or config-valid? (not config-file?)) ; non-config file or valid config
+      (let [opts {:new-graph? new-graph?
+                  :from-disk? from-disk?
+                  :skip-db-transact? skip-db-transact?
+                  :extracted-block-ids extracted-block-ids}
+            result (if reset?
+                     (do
+                       (when-not skip-db-transact?
+                         (when-let [page-id (db/get-file-page-id path)]
+                           (db/transact! repo
+                                         [[:db/retract page-id :block/alias]
+                                          [:db/retract page-id :block/tags]]
+                                         opts)))
+                       (file-common-handler/reset-file!
+                        repo path content (merge opts
+                                                 (when (some? verbose) {:verbose verbose}))))
+                     (db/set-file-content! repo path content opts))]
+        (-> (p/let [_ (when-not from-disk?
+                        (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
+              (when re-render-root? (ui-handler/re-render-root!))
 
-                     (cond
-                       (= path (config/get-custom-css-path repo))
-                       (ui-handler/add-style-if-exists!)
+              (cond
+                (= path "logseq/custom.css")
+                (do
+                  ;; ui-handler will load css from db and config
+                  (db/set-file-content! repo path content)
+                  (ui-handler/add-style-if-exists!))
 
-                       (and (= path (config/get-repo-config-path repo))
-                            valid-result?)
-                       (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-                              (state/pub-event! [:shortcut/refresh]))
-
-                       (and (config/global-config-enabled?)
-                            (= path (global-config-handler/global-config-path))
-                            valid-result?)
-                       (p/let [_ (global-config-handler/restore-global-config!)]
-                              (state/pub-event! [:shortcut/refresh]))))
-                   (fn [error]
-                     (when (and (config/global-config-enabled?)
-                                ;; Global-config not started correctly but don't
-                                ;; know root cause yet
-                                ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
-                                (global-config-handler/global-config-dir-exists?)
-                                (= path (global-config-handler/global-config-path)))
-                       (state/pub-event! [:notification/show
-                                          {:content (str "Failed to write to file " path)
-                                           :status :error}]))
-
-                     (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)
-                     (state/pub-event! [:capture-error
-                                        {:error error
-                                         :payload {:type :write-file/failed-for-alter-file}}])))
-    result))
+                (= path "logseq/config.edn")
+                (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                  (state/pub-event! [:shortcut/refresh]))))
+            (p/catch
+             (fn [error]
+               (println "Write file failed, path: " path ", content: " content)
+               (log/error :write/failed error)
+               (state/pub-event! [:capture-error
+                                  {:error error
+                                   :payload {:type :write-file/failed-for-alter-file}}]))))
+        result))))
 
 (defn set-file-content!
   [repo path new-content]

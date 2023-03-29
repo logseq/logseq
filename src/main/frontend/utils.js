@@ -93,7 +93,9 @@ export const getFiles = async (dirHandle, recursive, cb, path = dirHandle.name) 
   for await (const entry of dirHandle.values()) {
     const nestedPath = `${path}/${entry.name}`
     if (entry.kind === 'file') {
-      cb(nestedPath, entry)
+      if (cb) {
+        cb(nestedPath, entry)
+      }
       files.push(
         entry.getFile().then((file) => {
           Object.defineProperty(file, 'webkitRelativePath', {
@@ -110,11 +112,11 @@ export const getFiles = async (dirHandle, recursive, cb, path = dirHandle.name) 
         })
       )
     } else if (entry.kind === 'directory' && recursive) {
-      cb(nestedPath, entry)
-      dirs.push(getFiles(entry, recursive, cb, nestedPath))
+      if (cb) { cb(nestedPath, entry) }
+      dirs.push(...(await getFiles(entry, recursive, cb, nestedPath)))
     }
   }
-  return [(await Promise.all(dirs)), (await Promise.all(files))]
+  return [...(await Promise.all(dirs)), ...(await Promise.all(files))]
 }
 
 export const verifyPermission = async (handle, readWrite) => {
@@ -136,13 +138,15 @@ export const verifyPermission = async (handle, readWrite) => {
 
 // NOTE: Need externs to prevent `options.recursive` been munged
 //       When building with release.
+//       browser-fs-access doesn't return directory handles
+//       Ref: https://github.com/GoogleChromeLabs/browser-fs-access/blob/3876499caefe8512bfcf7ce9e16c20fd10199c8b/src/fs-access/directory-open.mjs#L55-L69
 export const openDirectory = async (options = {}, cb) => {
   options.recursive = options.recursive || false;
   const handle = await window.showDirectoryPicker({
     mode: 'readwrite'
   });
   const _ask = await verifyPermission(handle, true);
-  return [handle, getFiles(handle, options.recursive, cb)];
+  return [handle, ...(await getFiles(handle, options.recursive, cb))];
 };
 
 export const writeFile = async (fileHandle, contents) => {
@@ -245,11 +249,14 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html}) => {
+export const writeClipboard = ({text, html}, ownerWindow) => {
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
     }
+
+    const navigator = (ownerWindow || window).navigator
+
     navigator.permissions.query({
         name: "clipboard-write"
     }).then((result) => {

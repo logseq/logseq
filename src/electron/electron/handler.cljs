@@ -157,19 +157,19 @@
       keyword))
 
 (defn- get-files
+  "Returns vec of file-objs"
   [path]
-  (let [result (->>
-                (readdir path)
-                (remove (partial utils/ignored-path? path))
-                (filter #(contains? allowed-formats (get-ext %)))
-                (map (fn [path]
-                       (let [stat (fs/statSync path)]
-                         (when-not (.isDirectory stat)
-                           {:path    (utils/fix-win-path! path)
-                            :content (utils/read-file path)
-                            :stat    stat}))))
-                (remove nil?))]
-    (vec (cons {:path (utils/fix-win-path! path)} result))))
+  (->> (readdir path)
+       (remove (partial utils/ignored-path? path))
+       (filter #(contains? allowed-formats (get-ext %)))
+       (map (fn [path]
+              (let [stat (fs/statSync path)]
+                (when-not (.isDirectory stat)
+                  {:path    (utils/fix-win-path! path)
+                   :content (utils/read-file path)
+                   :stat    stat}))))
+       (remove nil?)
+       vec))
 
 (defn open-dir-dialog []
   (p/let [result (.showOpenDialog dialog (bean/->js
@@ -193,11 +193,13 @@
 
 (defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
-  (p/let [path (open-dir-dialog)]
+  (p/let [path (open-dir-dialog)
+          path (utils/fix-win-path! path)]
     (logger/debug ::open-dir {:path path})
     (if path
       (try
-        (p/resolved (bean/->js (get-files path)))
+        (p/resolved (bean/->js {:path path
+                                :files (get-files path)}))
         (catch js/Error e 
           (do
             (utils/send-to-renderer window "notification" {:type "error"
@@ -209,7 +211,9 @@
 
 (defmethod handle :getFiles [_window [_ path]]
   (logger/debug ::get-files {:path path})
-  (get-files path))
+  (p/let [files (get-files path)]
+    (bean/->js {:path path
+                :files files})))
 
 (defn- sanitize-graph-name
   [graph-name]
@@ -442,7 +446,7 @@
         (do (cfgs/set-item! k v)
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
-     config)))
+      config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -505,6 +509,9 @@
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
+
+(defmethod handle :gitStatus [_ [_]]
+  (git/short-status!))
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
@@ -602,7 +609,7 @@
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
   []
-  (let [win (win/create-main-window)]
+  (let [win (win/create-main-window!)]
     (win/on-close-actions! win close-watcher-when-orphaned!)
     (win/setup-window-listeners! win)
     win))

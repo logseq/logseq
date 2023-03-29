@@ -177,7 +177,7 @@
 
 (defn get-enabled-plugins-if-setting-schema
   []
-  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true true))]
+  (when-let [plugins (seq (state/get-enabled?-installed-plugins false true true true))]
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
@@ -529,8 +529,8 @@
               exist? (fs/file-exists? path dirname)
               _      (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
               path   (util/node-path.join path dirname (str key ".json"))
-              _      (fs/create-if-not-exists repo "" path (or default "{}"))
-              json   (fs/read-file "" path)]
+              _      (fs/create-if-not-exists repo nil path (or default "{}"))
+              json   (fs/read-file nil path)]
         [path (js/JSON.parse json)]))))
 
 (defn make-fn-to-save-dotdir-json
@@ -540,7 +540,7 @@
       (p/let [repo ""
               path (get-ls-dotdir-root)
               path (util/node-path.join path dirname (str key ".json"))]
-        (fs/write-file! repo "" path content {:skip-compare? true})))))
+        (fs/write-file! repo nil path content {:skip-compare? true})))))
 
 (defn make-fn-to-unlink-dotdir-json
   [dirname]

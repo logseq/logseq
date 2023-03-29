@@ -107,14 +107,20 @@
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)))
 
+(defn- <refresh-tokens
+  "return refreshed id-token, access-token"
+  [refresh-token]
+  (http/post (str "https://" config/OAUTH-DOMAIN "/oauth2/token")
+             {:form-params {:grant_type "refresh_token"
+                            :client_id config/COGNITO-CLIENT-ID
+                            :refresh_token refresh-token}}))
 
 (defn <refresh-id-token&access-token
   "Refresh id-token and access-token"
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
-                               {:with-credentials? false}))]
+      (let [resp (<! (<refresh-tokens refresh-token))]
         (cond
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
@@ -132,8 +138,8 @@
           (clear-tokens true)
 
           :else                         ; ok
-        (when (and (:id_token (:body resp)) (:access_token (:body resp)))
-          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
+          (when (and (:id_token (:body resp)) (:access_token (:body resp)))
+            (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
   "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
@@ -146,17 +152,13 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn ^:export login-callback [code]
-  (state/set-state! [:ui/loading? :login] true)
-  (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
-                             {:with-credentials? false}))]
-      (if (= 200 (:status resp))
-        (-> resp
-            :body
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
-            (#(state/pub-event! [:user/fetch-info-and-graphs])))
-        (debug/pprint "login-callback" resp)))))
+(defn login-callback
+  [session]
+  (set-tokens!
+   (:jwtToken (:idToken session))
+   (:jwtToken (:accessToken session))
+   (:token (:refreshToken session)))
+  (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
   [username password client-id client-secret]
@@ -186,6 +188,7 @@
 
 (defn logout []
   (clear-tokens)
+  (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
 
 (defn <ensure-id&access-token
@@ -222,14 +225,15 @@
   []
   (or (alpha-user?) (beta-user?)))
 
-(defonce feature-matrix {:file-sync :beta
-                         :whiteboard :beta})
+(comment
+  ;; We probably need this for some new features later
+  (defonce feature-matrix {:file-sync :beta})
 
-(defn feature-available?
-  [feature]
-  (or config/dev?
-      (when (logged-in?)
-        (case (feature feature-matrix)
-          :beta (alpha-or-beta-user?)
-          :alpha (alpha-user?)
-          false))))
+  (defn feature-available?
+    [feature]
+    (or config/dev?
+        (when (logged-in?)
+          (case (feature feature-matrix)
+            :beta (alpha-or-beta-user?)
+            :alpha (alpha-user?)
+            false)))))

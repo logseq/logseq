@@ -9,7 +9,6 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [frontend.log]
-            [frontend.util.persist-var :as persist-var]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
@@ -51,7 +50,7 @@
     (set-router!)
     (rum/mount (page/current-page) node)
     (display-welcome-message)
-    (persist-var/load-vars)
+    ;; NO repo state here, better not add init logic here
     (when config/dev?
       (js/setTimeout #(sync/<sync-start) 1000))))
 
@@ -68,6 +67,5 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
-    (sync/<sync-stop)
-    (md/stop!))
+    (sync/<sync-stop))
   (js/console.log "stop"))

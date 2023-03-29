@@ -1,6 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
@@ -14,10 +13,12 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.modules.shortcut.core :as shortcut]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
@@ -33,7 +34,7 @@
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
-    "Cut"
+    (t :content/cut)
     nil)
    (ui/menu-link
     {:key      "delete"
@@ -44,7 +45,7 @@
    (ui/menu-link
     {:key "copy"
      :on-click editor-handler/copy-selection-blocks}
-    "Copy"
+    (t :content/copy)
     nil)
    (ui/menu-link
     {:key "copy as"
@@ -83,6 +84,7 @@
               #(swap! *template-including-parent? not))])
 
 (rum/defcs block-template < rum/reactive
+  (shortcut/disable-all-shortcuts)
   (rum/local false ::edit?)
   (rum/local "" ::input)
   {:will-unmount (fn [state]
@@ -135,7 +137,8 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [format (:block/format block)]
+      (let [format (:block/format block)
+            heading (-> block :block/properties :heading)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
@@ -156,6 +159,7 @@
            (for [i (range 1 7)]
              (ui/button
               ""
+              :disabled (= heading i)
               :icon (str "h-" i)
               :title (t :heading i)
               :class "to-heading-button"
@@ -166,12 +170,10 @@
            (ui/button
             ""
             :icon "h-auto"
+            :disabled (= heading true)
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (if (= format :markdown) 
-                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
-                     (t :auto-heading))
-            :disabled (= format :markdown)
+            :title (t :auto-heading)
             :on-click (fn [_e]
                         (editor-handler/set-heading! block-id format true))
             :intent "link"
@@ -179,6 +181,7 @@
            (ui/button
             ""
             :icon "heading-off"
+            :disabled (not heading)
             :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
@@ -212,7 +215,7 @@
           (t :content/copy-block-emebed)
           nil)
 
-          ;; TODO Logseq protocol mobile support
+         ;; TODO Logseq protocol mobile support
          (when (util/electron?)
            (ui/menu-link
             {:key      "Copy block URL"
@@ -235,7 +238,7 @@
           {:key      "Cut"
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
-          "Cut"
+          (t :content/cut)
           nil)
 
          (ui/menu-link
@@ -294,17 +297,17 @@
            (ui/menu-link
             {:key      "(Dev) Show block data"
              :on-click (fn []
-                         (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                           (println block-data)
-                           (notification/show!
-                            [:div
-                             [:pre.code block-data]
-                             [:br]
-                             (ui/button "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard block-data))]
-                            :success
-                            false)))}
+                         (dev-common-handler/show-entity-data [:block/uuid block-id]))}
             "(Dev) Show block data"
+            nil))
+
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key      "(Dev) Show block AST"
+             :on-click (fn []
+                         (let [block (db/pull [:block/uuid block-id])]
+                           (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
+            "(Dev) Show block AST"
             nil))])))
 
 (rum/defc block-ref-custom-context-menu-content
@@ -388,7 +391,8 @@
                           (and block-id (parse-uuid block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
-                              (util/select-highlight! [block]))
+                              (state/clear-selection!)
+                              (state/conj-selection-block! block :down))
                             (common-handler/show-custom-context-menu!
                              e
                              (block-context-menu-content target (uuid block-id))))
@@ -399,7 +403,7 @@
   [:div {:id id}
    (if hiccup
      hiccup
-     [:div.cursor "Click to edit"])])
+     [:div.cursor (t :content/click-to-edit)])])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
@@ -421,7 +425,7 @@
          {:id id
           :on-click on-click}
          (if (string/blank? content)
-           [:div.cursor "Click to edit"]
+           [:div.cursor (t :content/click-to-edit)]
            content)]))))
 
 (defn- set-draw-iframe-style!

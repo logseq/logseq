@@ -41,4 +41,5 @@ export interface TLReactCallbacks<
   onDrop: TLReactCallback<S, R, 'drop'>
   onCanvasDBClick: TLReactCallback<S, R, 'canvas-dbclick'>
   onPaste: TLReactCallback<S, R, 'paste'>
+  onCopy: TLReactCallback<S, R, 'copy'>
 }

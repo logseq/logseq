@@ -201,6 +201,11 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  persist = () => {
+    this.app.persist()
+    return this
+  }
+
   createNewLineBinding = (source: S | string, target: S | string) => {
     return this.app.createNewLineBinding(source, target)
   }
@@ -362,6 +367,8 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
   }
 
   doGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    if (this.app.readOnly) return
+
     const selectedGroups: S[] = [
       ...shapes.filter(s => s.type === 'group'),
       ...shapes.map(s => this.app.getParentGroup(s)),
@@ -388,6 +395,8 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
   }
 
   unGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    if (this.app.readOnly) return
+
     const selectedGroups: S[] = [
       ...shapes.filter(s => s.type === 'group'),
       ...shapes.map(s => this.app.getParentGroup(s)),

@@ -109,11 +109,12 @@
      :will-unmount (fn [state]
                      (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
                      state)}
-  [dropdown-state _close-fn content class]
+  [dropdown-state _close-fn content class style-opts]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
-     {:class (str class " "
+     {:style style-opts
+      :class (str class " "
                   (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
@@ -129,13 +130,13 @@
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)
         close-fn (:close-fn state)]
-    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
+    [:div.relative.ui__dropdown-trigger {:class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 (defn render-keyboard-shortcut [sequence]
@@ -218,15 +219,15 @@
     (let [svg
           (case status
             :success
-            (icon "circle-check" {:class "text-green-500" :size "22"})
+            (icon "circle-check" {:class "text-success" :size "32"})
 
             :warning
-            (icon "alert-circle" {:class "text-yellow-500" :size "22"})
+            (icon "alert-circle" {:class "text-warning" :size "32"})
 
             :error
-            (icon "circle-x" {:class "text-red-500" :size "22"})
+            (icon "circle-x" {:class "text-error" :size "32"})
 
-            (icon "info-circle" {:class "text-indigo-500" :size "22"}))]
+            (icon "info-circle" {:class "text-indigo-500" :size "32"}))]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -483,7 +484,7 @@
            item-render
            class
            header]}]
-  (let [current-idx (get state ::current-idx)]
+  (let [*current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
@@ -492,17 +493,20 @@
           [:<>
            {:key idx}
            (let [item-cp
-                 [:div {:key idx}
-                  (let [chosen? (= @current-idx idx)]
+                 [:div.menu-link-wrap
+                  {:key            idx
+                   ;; mouse-move event to indicate that cursor moved by user
+                   :on-mouse-move  #(reset! *current-idx idx)}
+                  (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                     {:id            (str "ac-" idx)
-                      :class         (when chosen? "chosen")
-                      :on-mouse-down (fn [e]
-                                       (util/stop e)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item)))}
-                     (if item-render (item-render item chosen?) item) nil))]]
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -559,9 +563,9 @@
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.absolute.top-0.right-0.pt-2.pr-2
+   [:div.ui__modal-close-wrap
     (when-not (false? close-btn?)
-      [:a.ui__modal-close.opacity-60.hover:opacity-100
+      [:a.ui__modal-close
        {:aria-label "Close"
         :type       "button"
         :on-click   close-fn}
@@ -814,11 +818,11 @@
   ([options on-change]
    (select options on-change nil))
   ([options on-change class]
-   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+   [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
     {:class     (or class "form-select")
      :on-change (fn [e]
                   (let [value (util/evalue e)]
-                    (on-change value)))}
+                    (on-change e value)))}
     (for [{:keys [label value selected disabled]
            :or {selected false disabled false}} options]
       [:option (cond->

@@ -1,22 +1,23 @@
 (ns frontend.components.page-menu
-  (:require [cljs.pprint :as pprint]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.url :as url-util]
+            [frontend.util.page :as page-util]
             [frontend.handler.shell :as shell]
             [frontend.mobile.util :as mobile-util]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]))
+            [frontend.handler.file-sync :as file-sync-handler]
+            [logseq.common.path :as path]))
 
 (defn- delete-page!
   [page-name]
@@ -72,7 +73,7 @@
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
-          file-path (when (util/electron?) (page-handler/get-page-file-path))
+          file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
@@ -106,14 +107,13 @@
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click #(util/copy-to-clipboard!
-                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+             :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not contents?
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when (and (not (mobile-util/native-platform?)) 
+          (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
@@ -126,17 +126,19 @@
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when file-path
-            [{:title   (t :page/open-in-finder)
-              :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-             {:title   (t :page/open-with-default-app)
-              :options {:on-click #(js/window.apis.openPath file-path)}}])
+          (when file-rpath
+            (let [repo-dir (config/get-repo-dir repo)
+                  file-fpath (path/path-join repo-dir file-rpath)]
+              [{:title   (t :page/open-in-finder)
+                :options {:on-click #(js/window.apis.showItemInFolder file-fpath)}}
+               {:title   (t :page/open-with-default-app)
+                :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
           (when (state/get-current-page)
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []
-                                     (export/export-blocks [(:block/uuid page)])))}})
+                                     (export/export-blocks (:block/name page))))}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
@@ -147,12 +149,12 @@
                           (if public? false true))
                          (state/close-modal!))}})
 
-          (when (and (util/electron?) file-path
+          (when (and (util/electron?) file-rpath
                      (not (file-sync-handler/synced-file-graph? repo)))
             {:title   (t :page/open-backup-directory)
              :options {:on-click
                        (fn []
-                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
+                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-rpath))}})
 
           (when config/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
@@ -163,16 +165,14 @@
           (when developer-mode?
             {:title   "(Dev) Show page data"
              :options {:on-click (fn []
-                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                     (println page-data)
-                                     (notification/show!
-                                      [:div
-                                       [:pre.code page-data]
-                                       [:br]
-                                       (ui/button
-                                        "Copy to clipboard"
-                                        :on-click #(.writeText js/navigator.clipboard page-data))]
-                                      :success
-                                      false)))}})]
+                                   (dev-common-handler/show-entity-data (:db/id page)))}})
+
+          (when developer-mode?
+            {:title   "(Dev) Show page AST"
+             :options {:on-click (fn []
+                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
+                                     (dev-common-handler/show-content-ast
+                                      (get-in page [:block/file :file/content])
+                                      (:block/format page))))}})]
          (flatten)
          (remove nil?))))))

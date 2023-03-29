@@ -1,15 +1,11 @@
 (ns frontend.handler.common.file
   "Common file related fns for handlers"
-  (:require [frontend.util :as util]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.db :as db]
-            ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs :as fs]
             [frontend.context.i18n :refer [t]]
             [clojure.string :as string]
@@ -51,39 +47,19 @@
 
 (defn reset-file!
   "Main fn for updating a db with the results of a parsed file"
-  ([repo-url file content]
-   (reset-file! repo-url file content {}))
-  ([repo-url file content {:keys [verbose] :as options}]
-   (let [electron-local-repo? (and (util/electron?)
-                                   (config/local-db? repo-url))
-         repo-dir (config/get-repo-dir repo-url)
-         file (cond
-                (and electron-local-repo?
-                     util/win32?
-                     (utils/win32 file))
-                file
-
-                (and electron-local-repo? (or
-                                           util/win32?
-                                           (not= "/" (first file))))
-                (str repo-dir "/" file)
-
-                (mobile-util/native-platform?)
-                (capacitor-fs/normalize-file-protocol-path repo-dir file)
-
-                :else
-                file)
-         file (gp-util/path-normalize file)
-         new? (nil? (db/entity [:file/path file]))
+  ([repo-url file-path content]
+   (reset-file! repo-url file-path content {}))
+  ([repo-url file-path content {:keys [verbose] :as options}]
+   (let [new? (nil? (db/entity [:file/path file-path]))
          options (merge (dissoc options :verbose)
                         {:new? new?
                          :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)
-                                            :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                            :block-pattern (config/get-block-pattern (gp-util/get-format file-path))
                                             :supported-formats (gp-config/supported-formats)
-                                            :uri-encoded? (boolean (mobile-util/native-platform?))
-                                            :filename-format (state/get-filename-format repo-url)}
+                                            :filename-format (state/get-filename-format repo-url)
+                                            :extracted-block-ids (:extracted-block-ids options)}
                                            (when (some? verbose) {:verbose verbose}))})]
-     (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
+     (:tx (graph-parser/parse-file (db/get-db repo-url false) file-path content options)))))

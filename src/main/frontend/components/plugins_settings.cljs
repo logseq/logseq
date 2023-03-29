@@ -65,7 +65,7 @@
          :radio (ui/radio-list options #(update-setting! key %) nil)
          :checkbox (ui/checkbox-list options #(update-setting! key %) nil)
          ;; select
-         (ui/select options #(update-setting! key %) nil))
+         (ui/select options (fn [_ value ] (update-setting! key value)) nil))
        ]]]))
 
 (rum/defc render-item-object
@@ -80,11 +80,12 @@
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc render-item-heading
-  [{:keys [key title]}]
+  [{:keys [key title description]}]
 
   [:div.heading-item
    {:data-key key}
-   [:h2 title]])
+   [:h2 title]
+   [:small description]])
 
 (rum/defc settings-container
   [schema ^js pl]

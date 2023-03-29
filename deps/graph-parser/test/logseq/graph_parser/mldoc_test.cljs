@@ -106,7 +106,6 @@
        second))
 
 (deftest org-properties-test
-  []
   (testing "just title"
     (let [content "#+TITLE:   some title   "
           props (parse-properties content)]

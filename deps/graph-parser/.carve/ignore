@@ -42,3 +42,7 @@ logseq.graph-parser.util.db/resolve-input
 logseq.graph-parser.util/remove-nils
 ;; API
 logseq.graph-parser.text/get-file-basename
+;; API
+logseq.graph-parser.mldoc/mldoc-link?
+;; public var
+logseq.graph-parser.schema.mldoc/block-ast-coll-schema

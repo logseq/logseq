@@ -12,7 +12,7 @@
      Promise <void>"
   [repo format]
   (js/console.log (str "Writing character escaping format " format " of repo " repo))
-  (set-config! repo :file/name-format format))
+  (set-config! :file/name-format format))
 
 (defn- calc-current-name
   "If the file body is parsed as the same page name, but the page name has a
@@ -46,7 +46,7 @@
          :target        target
          :old-title     old-title
          :changed-title new-title}
-        ;; Even the same file body are producing mis-matched titles - it's unreachable!
+        ;; Even the same file body are producing mismatched titles - it's unreachable!
         {:status        :unreachable
          :target        target
          :old-title     old-title

@@ -81,6 +81,10 @@ export function isDarwin(): boolean {
   return /Mac|iPod|iPhone|iPad/.test(window.navigator.platform)
 }
 
+export function isDev():boolean {
+  return window?.logseq?.api?.get_state_from_store?.('ui/developer-mode?') || process.env.NODE_ENV === 'development'
+}
+
 /**
  * Migrated from frontend.util/safari?
  */

@@ -487,10 +487,10 @@
     "@jridgewell/resolve-uri" "^3.0.3"
     "@jridgewell/sourcemap-codec" "^1.4.10"
 
-"@logseq/capacitor-file-sync@0.0.19":
-  version "0.0.19"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.19.tgz#361b4c4e19f395eb159e9d44aa5f6ef9334becd2"
-  integrity sha512-qM9jtFKqUJ1fNDCycoKKu5xjqKoMN48R6GChwagOtWSFpi/LtOQ7RtzkGDSzpAs3O4/iXCcRNmUjffMel+n9JA==
+"@logseq/capacitor-file-sync@0.0.22":
+  version "0.0.22"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.22.tgz#3fa94d40e5c44c70a12537ce17cf3089ff72f93b"
+  integrity sha512-lb0+43YAaWy0umBCP2mPKyAPlIr2YHrLBfqGkCJUGAbrhTCAj37KZzb3snwSqeLA8dUSks9PcAN3jSgS74VMMw==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
@@ -713,13 +713,15 @@
     eventemitter3 "^3.1.0"
     url "^0.11.0"
 
-"@playwright/test@=1.25.2":
-  version "1.25.2"
-  resolved "https://registry.yarnpkg.com/@playwright/test/-/test-1.25.2.tgz#e726cf4844f096315c3954fdb3abf295cede43ba"
-  integrity sha512-6qPznIR4Fw02OMbqXUPMG6bFFg1hDVNEdihKy0t9K0dmRbus1DyP5Q5XFQhGwEHQkLG5hrSfBuu9CW/foqhQHQ==
+"@playwright/test@=1.31.0":
+  version "1.31.0"
+  resolved "https://registry.yarnpkg.com/@playwright/test/-/test-1.31.0.tgz#bde42ca06804164be54893525110adda946248d6"
+  integrity sha512-Ys5s/06Dg9g3zAIdCIb/UOBYim3U7Zjb3DvC6XBtnRmnglH5O47iwYzmtxXu9fhSyzI2Jn28apkXIOD81GgCdw==
   dependencies:
     "@types/node" "*"
-    playwright-core "1.25.2"
+    playwright-core "1.31.0"
+  optionalDependencies:
+    fsevents "2.3.2"
 
 "@popperjs/core@^2.9.0":
   version "2.11.6"
@@ -3073,6 +3075,11 @@ fs@0.0.1-security:
   resolved "https://registry.yarnpkg.com/fs/-/fs-0.0.1-security.tgz#8a7bd37186b6dddf3813f23858b57ecaaf5e41d4"
   integrity sha512-3XY9e1pP0CVEUCdj5BmfIZxRBTSDycnbqhIOGec9QYtmVH2fbLpj86CFWkrNOkt/Fvty4KZG5lTglL9j/gJ87w==
 
+fsevents@2.3.2, fsevents@~2.3.1, fsevents@~2.3.2:
+  version "2.3.2"
+  resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-2.3.2.tgz#8a526f78b8fdf4623b709e0b975c52c24c02fd1a"
+  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
+
 fsevents@^1.2.7:
   version "1.2.13"
   resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-1.2.13.tgz#f325cb0455592428bcf11b383370ef70e3bfcc38"
@@ -3080,11 +3087,6 @@ fsevents@^1.2.7:
   dependencies:
     bindings "^1.5.0"
     nan "^2.12.1"
-
-fsevents@~2.3.1, fsevents@~2.3.2:
-  version "2.3.2"
-  resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-2.3.2.tgz#8a526f78b8fdf4623b709e0b975c52c24c02fd1a"
-  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
 
 function-bind@^1.1.1:
   version "1.1.1"
@@ -3592,9 +3594,9 @@ htmlparser2@^3.10.0:
     readable-stream "^3.1.1"
 
 http-cache-semantics@^4.0.0:
-  version "4.1.0"
-  resolved "https://registry.yarnpkg.com/http-cache-semantics/-/http-cache-semantics-4.1.0.tgz#49e91c5cbf36c9b94bcfcd71c23d5249ec74e390"
-  integrity sha512-carPklcUh7ROWRK7Cv27RPtdhYhUsela/ue5/jKzjegVvXDqM2ILE9Q2BGn9JZJh1g87cp56su/FgQSzcWS8cQ==
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/http-cache-semantics/-/http-cache-semantics-4.1.1.tgz#abe02fcb2985460bf0323be664436ec3476a6d5a"
+  integrity sha512-er295DKPVsV82j5kw1Gjt+ADA/XYHsajl82cGNQG2eyoPkvgUhX+nDIyelzhIWbbsXP39EHcI6l5tYs2FYqYXQ==
 
 https-browserify@^1.0.0:
   version "1.0.0"
@@ -4150,10 +4152,10 @@ jsonfile@^6.0.1:
   optionalDependencies:
     graceful-fs "^4.1.6"
 
-jszip@3.7.0:
-  version "3.7.0"
-  resolved "https://registry.yarnpkg.com/jszip/-/jszip-3.7.0.tgz#9b8b995a4e7c9024653ce743e902076a82fdf4e6"
-  integrity sha512-Y2OlFIzrDOPWUnpU0LORIcDn2xN7rC9yKffFM/7pGhQuhO+SUhfm2trkJ/S5amjFvem0Y+1EALz/MEPkvHXVNw==
+jszip@3.8.0:
+  version "3.8.0"
+  resolved "https://registry.yarnpkg.com/jszip/-/jszip-3.8.0.tgz#a2ac3c33fe96a76489765168213655850254d51b"
+  integrity sha512-cnpQrXvFSLdsR9KR5/x7zdf6c3m8IhZfZzSblFEHSqBaVwD2nvJ4CuCKLyvKvwBgZm08CgfSoiTBQLm5WW9hGw==
   dependencies:
     lie "~3.3.0"
     pako "~1.0.2"
@@ -5378,17 +5380,17 @@ pixi.js@6.2.0:
     "@pixi/ticker" "6.2.0"
     "@pixi/utils" "6.2.0"
 
-playwright-core@1.25.2:
-  version "1.25.2"
-  resolved "https://registry.yarnpkg.com/playwright-core/-/playwright-core-1.25.2.tgz#ea4baa398a4d45fcdfe48799482b599e3d0f033f"
-  integrity sha512-0yTbUE9lIddkEpLHL3u8PoCL+pWiZtj5A/j3U7YoNjcmKKDGBnCrgHJMzwd2J5vy6l28q4ki3JIuz7McLHhl1A==
+playwright-core@1.31.0:
+  version "1.31.0"
+  resolved "https://registry.yarnpkg.com/playwright-core/-/playwright-core-1.31.0.tgz#dbd184771535e76c6743ef5c082def5564f07e85"
+  integrity sha512-/KquBjS5DcASCh8cGeNVHuC0kyb7c9plKTwaKxgOGtxT7+DZO2fjmFvPDBSXslEIK5CeOO/2kk5rOCktFXKEdA==
 
-playwright@=1.25.2, "playwright@>= 1.0.0":
-  version "1.25.2"
-  resolved "https://registry.yarnpkg.com/playwright/-/playwright-1.25.2.tgz#0fc67e4385a52a51371ff9114bf68e3ad50a7f41"
-  integrity sha512-RwMB5SFRV/8wSfK+tK8ycpqdzORvoqUNz9DUeRfSgZFrZej5uuBl9wFjWcc+OkXFEtaPmx1acAVGG7hA4IJ1kg==
+playwright@=1.31.0, "playwright@>= 1.0.0":
+  version "1.31.0"
+  resolved "https://registry.yarnpkg.com/playwright/-/playwright-1.31.0.tgz#c34de492c79b65dfa1a3e45c5bded785f0badc6c"
+  integrity sha512-cFn1ie3bdYw/9/Ty3842CfPSRSy+ZWPjEhrxWgC+jL/CUjq5RKVJZwUbXV1UKBQU1Vo0NetsokXmk9EEZiqVHQ==
   dependencies:
-    playwright-core "1.25.2"
+    playwright-core "1.31.0"
 
 plist@^3.0.2, plist@^3.0.5, plist@^3.0.6:
   version "3.0.6"

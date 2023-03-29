@@ -74,7 +74,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 
 (defn keyword-input-dispatch [input]
   (cond 
-    (#{:current-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
+    (#{:current-page :query-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
 
     (re-find #"^[+-]\d+[dwmy]?$" (name input)) :relative-date
     (re-find #"^[+-]\d+[dwmy]-(ms|start|end|\d{2}|\d{4}|\d{6}|\d{9})?$" (name input)) :relative-date-time
@@ -90,6 +90,10 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 (defmethod resolve-keyword-input :current-page [_ _ {:keys [current-page-fn]}]
   (when current-page-fn
     (some-> (current-page-fn) string/lower-case)))
+
+(defmethod resolve-keyword-input :query-page [db _ {:keys [current-block-uuid]}]
+  (when-let [current-block (and current-block-uuid (d/entity db [:block/uuid current-block-uuid]))]
+    (get-in current-block [:block/page :block/name])))
 
 (defmethod resolve-keyword-input :current-block [db _ {:keys [current-block-uuid]}]
   (when current-block-uuid

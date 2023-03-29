@@ -299,10 +299,10 @@
                                          (nil? next-sched*)
                                          (t/before? next-sched* time))))
                                  blocks),
-        sort-by-next-shedule   (sort-by (fn [b]
-                                (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
+        sort-by-next-schedule   (sort-by (fn [b]
+                                           (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
     {:total (count blocks)
-     :result sort-by-next-shedule}))
+     :result sort-by-next-schedule}))
 
 
 ;;; ================================================================
@@ -315,9 +315,15 @@
          (satisfies? ICard card)]}
   (let [block (.-block card)
         props (get-block-card-properties block)
-        last-interval (or (util/safe-parse-float (get props card-last-interval-property)) 0)
-        repeats (or (util/safe-parse-int (get props card-repeats-property)) 0)
-        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)
+        last-interval (or
+                       (when-let [v (get props card-last-interval-property)]
+                         (util/safe-parse-float v))
+                       0)
+        repeats (or (when-let [v (get props card-repeats-property)]
+                      (util/safe-parse-int v))
+                    0)
+        last-ef (or (when-let [v (get props card-last-easiness-factor-property)]
+                      (util/safe-parse-float v)) 2.5)
         [next-interval next-repeats next-ef of-matrix*]
         (next-interval last-interval repeats last-ef score @of-matrix)
         next-interval* (if (< next-interval 0) 0 next-interval)
@@ -406,14 +412,14 @@
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
-    [:span btn-text (when-not (util/sm-breakpoint?)
-                      [" " (ui/render-keyboard-shortcut shortcut)])]
-    :id id
-    :class (str id " " class)
-    :background background
-    :on-mouse-down (fn [e] (util/stop-propagation e))
-    :on-click (fn [_e]
-                (js/setTimeout #(on-click) 10))))
+   [:span btn-text (when-not (util/sm-breakpoint?)
+                     [" " (ui/render-keyboard-shortcut shortcut)])]
+   :id id
+   :class (str id " " class)
+   :background background
+   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-click (fn [_e]
+               (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view < rum/reactive db-mixins/query
   (rum/local 1 ::phase)
@@ -496,11 +502,11 @@
                          :class "tippy-hover"
                          :interactive true}
                         (ui/button [:span "Reset"]
-                          :id "card-reset"
-                          :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
-                          :on-click (fn [e]
-                                      (util/stop e)
-                                      (operation-reset! card)))))]
+                                   :id "card-reset"
+                                   :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
+                                   :on-click (fn [e]
+                                               (util/stop e)
+                                               (operation-reset! card)))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
@@ -528,6 +534,17 @@
 
 ;;; register cloze macro
 
+(def ^:private cloze-cue-separator "\\\\")
+
+(defn- cloze-parse
+  "Parse the cloze content, and return [answer cue]."
+  [content]
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
@@ -537,12 +554,15 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        toggle! #(swap! shown?* not)]
+        toggle! #(swap! shown?* not)
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
     (if (or shown? (:show-cloze? config))
       [:a.cloze-revealed {:on-click toggle!}
-       (util/format "[%s]" (string/join ", " (:arguments options)))]
+       (util/format "[%s]" answer)]
       [:a.cloze {:on-click toggle!}
-       "[...]"])))
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 

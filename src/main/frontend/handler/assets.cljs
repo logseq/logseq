@@ -5,7 +5,8 @@
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.config :as gp-config]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.common.path :as path]))
 
 (defn alias-enabled?
   []
@@ -89,7 +90,7 @@
       protocol-link?
       full-path
 
-      (util/absolute-path? full-path)
+      (path/absolute? full-path)
       (str "file://" full-path)
 
       :else

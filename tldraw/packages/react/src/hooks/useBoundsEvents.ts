@@ -98,10 +98,10 @@ function loopToHtmlElement(elm: Element): HTMLElement {
 There are a few hacks here in facilitate double clicking and pointer
 capture on elements.
 
-The events in this file are possibly set on individual SVG elements, 
-such as handles or corner handles, rather than on HTML elements or 
-SVGSVGElements. Raw SVG elemnets do not support pointerCapture in 
-most cases, meaning that in order for pointer capture to work, we 
+The events in this file are possibly set on individual SVG elements,
+such as handles or corner handles, rather than on HTML elements or
+SVGSVGElements. Raw SVG elements do not support pointerCapture in
+most cases, meaning that in order for pointer capture to work, we
 need to crawl up the DOM tree to find the nearest HTML element. Then,
 in order for that element to also call the `onPointerUp` event from
 this file, we need to manually set that event on that element and

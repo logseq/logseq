@@ -36,17 +36,19 @@
    uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
    filename-format - the format used to parse file name
    "
-  [file ast uri-encoded? filename-format]
+  [file-path ast uri-encoded? filename-format]
   ;; headline
   (let [ast  (map first ast)
-        file (if uri-encoded? (js/decodeURI file) file)]
+        file (if uri-encoded? (js/decodeURI file-path) file-path)]
     ;; check backward compatibility?
-    (if (string/includes? file "pages/contents.")
+    ;; FIXME: use pre-config dir
+    (if (string/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
             property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
                             (let [properties-ast (second (first ast))
-                                  properties (zipmap (map (comp keyword first) properties-ast) (map second properties-ast))]
+                                  properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
+                                                     (map second properties-ast))]
                               (:title properties)))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
@@ -101,7 +103,7 @@
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
-  [properties invalid-properties file page page-name {:keys [date-formatter db from-page]}]
+  [properties invalid-properties properties-text-values file page page-name {:keys [date-formatter db from-page]}]
   (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
@@ -119,21 +121,19 @@
       page-m
 
       (seq valid-properties)
-      (assoc :block/properties valid-properties)
+      (assoc :block/properties valid-properties
+             :block/properties-text-values (select-keys properties-text-values (keys valid-properties)))
 
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  "uri-encoded? - if is true, apply URL decode on the file path"
-  [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
+  [format ast properties file content {:keys [date-formatter db filename-format] :as options}]
   (try
-    (let [page (get-page-name file ast uri-encoded? filename-format)
+    (let [page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          options' (-> options
-                       (assoc :page-name page-name
-                              :original-page-name page))
+          options' (assoc options :page-name page-name)
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
@@ -153,12 +153,14 @@
                                        :block/page [:block/name page-name]
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
-                   blocks)
-          [properties invalid-properties] (if (:block/pre-block? (first blocks))
-                                            [(:block/properties (first blocks))
-                                             (:block/invalid-properties (first blocks))]
-                                            [properties []])
-          page-map (build-page-map properties invalid-properties file page page-name (assoc options' :from-page page))
+                      blocks)
+          [properties invalid-properties properties-text-values]
+          (if (:block/pre-block? (first blocks))
+            [(:block/properties (first blocks))
+             (:block/invalid-properties (first blocks))
+             (:block/properties-text-values (first blocks))]
+            [properties [] {}])
+          page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
           namespace-pages (let [page (:block/original-name page-map)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)
@@ -183,15 +185,15 @@
 
 (defn extract
   "Extracts pages, blocks and ast from given file"
-  [file content {:keys [user-config verbose] :or {verbose true} :as options}]
+  [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
   (if (string/blank? content)
     []
-    (let [format (gp-util/get-format file)
-          _ (when verbose (println "Parsing start: " file))
+    (let [format (gp-util/get-format file-path)
+          _ (when verbose (println "Parsing start: " file-path))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        ))]
-      (when verbose (println "Parsing finished: " file))
+                                                               ))]
+      (when verbose (println "Parsing finished: " file-path))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
@@ -208,7 +210,7 @@
                                      (fn [v]
                                        (string/replace (or v "") "\\" "")))
                              properties)))
-            [pages blocks] (extract-pages-and-blocks format ast properties file content options)]
+            [pages blocks] (extract-pages-and-blocks format ast properties file-path content options)]
         {:pages pages
          :blocks blocks
          :ast ast}))))

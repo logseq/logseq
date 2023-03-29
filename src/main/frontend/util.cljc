@@ -30,6 +30,7 @@
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [medley.core :as medley]
             [frontend.pubsub :as pubsub]))
+  #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -56,6 +57,13 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+
+(defn string-join-path
+  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
+  https://github.com/logseq/logseq/pull/8679"
+  [parts]
+  (string/join "/" parts))
+
 
 #?(:cljs
    (defn safe-re-find
@@ -223,16 +231,6 @@
   [nm]
   (into {} (remove (comp nil? second)) nm))
 
-(defn ext-of-image? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
-
-(defn ext-of-video? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
-
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]
@@ -260,7 +258,6 @@
   (if (< n 10)
     (str "0" n)
     (str n)))
-
 
 #?(:cljs
    (defn safe-parse-int
@@ -296,6 +293,19 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
+#?(:cljs
+   (defn cancelable-debounce
+     "Create a stateful debounce function with specified interval
+
+      Returns [fire-fn, cancel-fn]
+
+      Use `fire-fn` to call the function(debounced)
+
+      Use `cancel-fn` to cancel pending callback if there is"
+     [f interval]
+     (let [debouncer (Debouncer. f interval)]
+       [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
+        (fn [] (.stop debouncer))])))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
@@ -763,7 +773,13 @@
      ([s]
       (utils/writeClipboard (clj->js {:text s})))
      ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+      (utils/writeClipboard (clj->js {:text s :html html})))
+     ([s html owner-window]
+      (-> (cond-> {:text s}
+            (not (string/blank? html))
+            (assoc :html html))
+          (bean/->js)
+          (utils/writeClipboard owner-window)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -906,14 +922,6 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
-#?(:cljs
-   (defn absolute-path?
-     [path]
-     (try
-       (js/window.apis.isAbsolutePath path)
-       (catch :default _
-         (utils/win32 path)))))
-
 (defn default-content-with-title
   [text-format]
   (case (name text-format)
@@ -1014,7 +1022,7 @@
   (let [parts (string/split path "/")
         basename (last parts)
         dir (->> (butlast parts)
-                 (string/join "/"))]
+                 string-join-path)]
     [dir basename]))
 
 (defn get-relative-path
@@ -1030,7 +1038,7 @@
             ["."])
           parts-2
           [another-file-name])
-         (string/join "/"))))
+         string-join-path)))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -1087,18 +1095,6 @@
      "../e/f.org"))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
-
-#?(:cljs
-   (defn select-highlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/add-class! block "selected noselect"))))
-
-#?(:cljs
-   (defn select-unhighlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/remove-class! block "selected" "noselect"))))
 
 #?(:cljs
    (defn drain-chan
@@ -1240,14 +1236,15 @@
 #?(:cljs
    (defn- get-dom-top
      [node]
-     (gobj/get (.getBoundingClientRect node) "top")))
+     (when node
+       (gobj/get (.getBoundingClientRect node) "top"))))
 
 #?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
-           elements)))
+           (remove nil? elements))))
 
 #?(:cljs
    (defn calc-delta-rect-offset
@@ -1345,10 +1342,7 @@
        (< (.-offsetWidth js/document.documentElement) size))
 
      (defn sm-breakpoint?
-       [] (breakpoint? 640))
-
-     (defn md-breakpoint?
-       [] (breakpoint? 768))))
+       [] (breakpoint? 640))))
 
 #?(:cljs
    (defn event-is-composing?
@@ -1480,3 +1474,26 @@ Arg *stop: atom, reset to true to stop the loop"
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
+
+
+(defmacro concatv
+  "Vector version of concat. non-lazy"
+  [& args]
+  `(vec (concat ~@args)))
+
+(defmacro mapcatv
+  "Vector version of mapcat. non-lazy"
+  [f coll & colls]
+  `(vec (mapcat ~f ~coll ~@colls)))
+
+(defmacro removev
+  "Vector version of remove. non-lazy"
+  [pred coll]
+  `(vec (remove ~pred ~coll)))
+
+#?(:cljs
+   (defn safe-with-meta
+     [o meta]
+     (if (satisfies? IMeta o)
+       (with-meta o meta)
+       o)))

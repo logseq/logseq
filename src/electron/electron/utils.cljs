@@ -35,12 +35,19 @@
   ([url options]
    (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
+(defn fix-win-path!
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "\\" "/")
+      path)))
+
 (defn get-ls-dotdir-root
   []
   (let [lg-dir (path/join (.getPath app "home") ".logseq")]
-    (if-not (fs/existsSync lg-dir)
-      (do (fs/mkdirSync lg-dir) lg-dir)
-      lg-dir)))
+    (when-not (fs/existsSync lg-dir)
+      (fs/mkdirSync lg-dir))
+    (fix-win-path! lg-dir)))
 
 (defn get-ls-default-plugins
   []
@@ -214,13 +221,6 @@
   (let [ext (string/lower-case (path/extname path))]
     (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
 
-(defn fix-win-path!
-  [path]
-  (when path
-    (if win32?
-      (string/replace path "\\" "/")
-      path)))
-
 (defn read-file
   [path]
   (try
@@ -261,7 +261,8 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (string/replace graph-name "logseq_local_" ""))
+  (when (string/includes? graph-name "logseq_local_")
+    (string/replace-first graph-name "logseq_local_" "")))
 
 (defn get-graph-name
   "reversing `get-graph-dir`"

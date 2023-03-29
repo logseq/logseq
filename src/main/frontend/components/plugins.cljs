@@ -391,7 +391,8 @@
                        {:label "Direct" :value "direct" :selected (= type "direct")}
                        {:label "HTTP"   :value "http"   :selected (= type "http")}
                        {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
-                      #(set-opts! (assoc opts :type % :protocol %)))]]
+             (fn [_e value]
+               (set-opts! (assoc opts :type value :protocol value))))]]
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
@@ -1142,7 +1143,8 @@
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
   (rum/use-effect!
    (fn []
-     (when (and (not db-restoring?)
+     (when (and (not-empty current-repo)
+                (not db-restoring?)
                 (or (not util/nfs?) nfs-granted?))
        (ui-handler/exec-js-if-exists-&-allowed! t)))
    [current-repo db-restoring? nfs-granted?])

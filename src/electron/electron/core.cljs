@@ -68,8 +68,8 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url (decode-protected-assets-schema-path url)
-           path (js/decodeURI url)
-           path (string/replace path "assets://" "")]
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
@@ -248,7 +248,7 @@
 
 (defn- setup-deeplink! []
   ;; Works for Deeplink v1.0.9
-  ;; :mainWindow is only used for handeling window restoring on second-instance,
+  ;; :mainWindow is only used for handling window restoring on second-instance,
   ;; But we already handle window restoring without deeplink.
   ;; https://github.com/glawson/electron-deeplink/blob/73d58edcde3d0e80b1819cd68a0c6e837a9c9258/src/index.ts#L150-L155
   (-> (Deeplink. #js
@@ -290,7 +290,7 @@
                (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
-                                     (logger/debug "window-all-closed" "Quiting...")
+                                     (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
@@ -300,7 +300,7 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
-                   ^js win (win/create-main-window)
+                   ^js win (win/create-main-window!)
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
@@ -342,7 +342,7 @@
                                       (let [_ (async/<! state/persistent-dbs-chan)]
                                         (if (or @win/*quitting? (not mac?))
                                           ;; MacOS: only cmd+q quitting will trigger actual closing
-                                          ;; otherwise, it's just hiding - don't do any actuall closing in that case
+                                          ;; otherwise, it's just hiding - don't do any actual closing in that case
                                           ;; except saving transit
                                           (when-let [win @*win]
                                             (when-let [dir (state/get-window-graph-path win)]
@@ -351,7 +351,7 @@
                                             (win/destroy-window! win)
                                             ;; FIXME: what happens when closing main window on Windows?
                                             (reset! *win nil))
-                                          ;; Just hiding - don't do any actuall closing operation
+                                          ;; Just hiding - don't do any actual closing operation
                                           (do (.preventDefault ^js/Event e)
                                               (if (and mac? (.isFullScreen win))
                                                 (do (.once win "leave-full-screen" #(.hide win))
