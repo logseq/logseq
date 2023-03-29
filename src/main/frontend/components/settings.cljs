@@ -717,7 +717,8 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+                 (when (user-handler/feature-available? :whiteboard)
+                   (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 
 (defn whiteboards-switcher-row [enabled?]
@@ -748,7 +749,6 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (whiteboards-switcher-row enable-whiteboards?)
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (and (util/electron?) (state/developer-mode?))
@@ -784,7 +784,8 @@
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
            "here"]
-          "for instructions on how to set up and use Sync."]]])
+          "for instructions on how to set up and use Sync."]
+         (whiteboards-switcher-row enable-whiteboards?)]])
 
      ;; (when-not web-platform?
      ;;   [:<>

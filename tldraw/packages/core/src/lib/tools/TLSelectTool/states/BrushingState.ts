@@ -30,7 +30,6 @@ export class BrushingState<
   onExit = () => {
     this.initialSelectedIds = []
     this.tree.clear()
-    this.app.setBrush(undefined)
   }
 
   onPointerMove: TLEvents<S>['pointer'] = () => {

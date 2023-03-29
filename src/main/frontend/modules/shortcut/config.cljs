@@ -170,7 +170,7 @@
                        :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
-                                             :fn      paste-handler/editor-on-paste-raw!}
+                                             :fn      (fn [_state e] ((paste-handler/editor-on-paste! nil true) e))}
 
    :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}

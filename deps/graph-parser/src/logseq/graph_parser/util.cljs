@@ -83,7 +83,8 @@
   [s]
   (and (string? s)
        (try
-         (not (contains? #{nil "null"} (.-origin (js/URL. s))))
+         (js/URL. s)
+         true
          (catch :default _e
            false))))
 
@@ -254,14 +255,12 @@
     (legacy-title-parsing file-name-body)))
 
 (defn safe-read-string
-  ([content]
-   (safe-read-string {} content))
-  ([opts content]
-   (try
-     (reader/read-string opts content)
-     (catch :default e
-       (log/error :parse/read-string-failed e)
-       {}))))
+  [content]
+  (try
+    (reader/read-string content)
+    (catch :default e
+      (log/error :parse/read-string-failed e)
+      {})))
 
 ;; Copied from Medley
 ;; https://github.com/weavejester/medley/blob/d1e00337cf6c0843fb6547aadf9ad78d981bfae5/src/medley/core.cljc#L22

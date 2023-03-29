@@ -92,6 +92,7 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
+     :ui/custom-query-components            {}
      :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
@@ -601,7 +602,9 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
+   (and
+    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
+    (:feature/enable-whiteboards? (sub-config repo)))))
 
 (defn enable-git-auto-push?
   [repo]
@@ -973,7 +976,6 @@ Similar to re-frame subscriptions"
 
 (defn clear-selection!
   []
-  (util/clear-selection!)
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
@@ -1118,8 +1120,7 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
-                            (count (:block/content edit-block)))})))
+       :pos             (cursor/pos (gdom/getElement edit-input-id))})))
 
 (defn clear-edit!
   []
@@ -1252,6 +1253,22 @@ Similar to re-frame subscriptions"
   [value]
   (when value
     (set-state! :journals-length value)))
+
+(defn add-custom-query-component!
+  [query-string component]
+  (update-state! :ui/custom-query-components
+                 (fn [m]
+                   (assoc m query-string component))))
+
+(defn remove-custom-query-component!
+  [query-string]
+  (update-state! :ui/custom-query-components
+                 (fn [m]
+                   (dissoc m query-string))))
+
+(defn get-custom-query-components
+  []
+  (vals (get @state :ui/custom-query-components)))
 
 (defn save-scroll-position!
   ([value]

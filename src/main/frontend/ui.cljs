@@ -123,12 +123,11 @@
      :will-unmount (fn [state]
                      (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
                      state)}
-  [dropdown-state _close-fn content class style-opts]
+  [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
-     {:style style-opts
-      :class (str class " "
+     {:class (str class " "
                   (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
@@ -144,13 +143,13 @@
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)
         close-fn (:close-fn state)]
-    [:div.relative.ui__dropdown-trigger {:class trigger-class}
+    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 (defn render-keyboard-shortcut [sequence]
@@ -832,11 +831,11 @@
   ([options on-change]
    (select options on-change nil))
   ([options on-change class]
-   [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
     {:class     (or class "form-select")
      :on-change (fn [e]
                   (let [value (util/evalue e)]
-                    (on-change e value)))}
+                    (on-change value)))}
     (for [{:keys [label value selected disabled]
            :or {selected false disabled false}} options]
       [:option (cond->

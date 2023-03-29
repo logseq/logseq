@@ -1,19 +1,9 @@
 (ns logseq.db.default
   "Provides fns for seeding default data in a logseq db"
-  (:require [clojure.string :as string]
-            [clojure.set :as set]))
-
-(defonce built-in-markers
-  ["NOW" "LATER" "DOING" "DONE" "CANCELED" "CANCELLED" "IN-PROGRESS" "TODO" "WAIT" "WAITING"])
-
-(defonce built-in-priorities
-  ["A" "B" "C"])
+  (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names
-  (set/union
-   (set built-in-markers)
-   (set built-in-priorities)
-   #{"Favorites" "Contents" "card"}))
+  #{"NOW" "LATER" "DOING" "DONE" "CANCELED" "CANCELLED" "IN-PROGRESS" "TODO" "WAIT" "WAITING" "A" "B" "C" "Favorites" "Contents" "card"})
 
 (def built-in-pages
   (mapv (fn [p]

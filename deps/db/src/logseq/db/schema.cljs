@@ -118,7 +118,6 @@
     :block/properties
     :block/properties-order
     :block/properties-text-values
-    :block/macros
     :block/invalid-properties
     :block/created-at
     :block/updated-at

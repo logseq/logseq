@@ -1,5 +1,5 @@
 import { useApp } from '@tldraw/react'
-import { MOD_KEY, AlignType, DistributeType, isDev } from '@tldraw/core'
+import { MOD_KEY, AlignType, DistributeType } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
@@ -27,7 +27,10 @@ export const ContextMenu = observer(function ContextMenu({
   }
 
   const developerMode = React.useMemo(() => {
-    return isDev()
+    return (
+      window?.logseq?.api?.get_state_from_store?.('ui/developer-mode?') ||
+      process.env.NODE_ENV === 'development'
+    )
   }, [])
 
   return (

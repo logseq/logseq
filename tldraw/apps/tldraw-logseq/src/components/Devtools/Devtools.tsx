@@ -112,6 +112,7 @@ export const DevTools = observer(() => {
     <>
       {originPoint}
       {rendererStatus}
+      <HistoryStack />
     </>
   )
 })

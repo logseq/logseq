@@ -104,12 +104,7 @@
          [?page :block/name ?page-name]
          [?page :block/namespace ?e]
          [?e :block/name ?parent]]
-    (conn/get-db repo)))
-
-(defn get-all-namespace-parents
-  [repo]
-  (->> (get-all-namespace-relation repo)
-       (map second)))
+       (conn/get-db repo)))
 
 (defn get-pages
   [repo]
@@ -127,13 +122,7 @@
    '[:find [(pull ?page [*]) ...]
      :where
      [?page :block/name]]
-    (conn/get-db repo)))
-
-(defn get-all-page-original-names
-  [repo]
-  (let [db (conn/get-db repo)]
-    (->> (d/datoms db :avet :block/original-name)
-         (map :v))))
+   (conn/get-db repo)))
 
 (defn get-pages-with-file
   "Return full file entity for calling file renaming"

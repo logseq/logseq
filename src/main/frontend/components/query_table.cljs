@@ -100,7 +100,6 @@
 (defn- get-columns [current-block result {:keys [page?]}]
   (let [query-properties (some-> (get-in current-block [:block/properties :query-properties] "")
                                  (common-handler/safe-read-string "Parsing query properties failed"))
-        query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
                   (get-keys result page?))
@@ -115,12 +114,10 @@
 ;; Table rows are called items
 (rum/defcs result-table < rum/reactive
   (rum/local false ::select?)
-  (rum/local false ::mouse-down?)
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
     (let [result (tree/filter-top-level-blocks result)
           select? (get state ::select?)
-          *mouse-down? (::mouse-down? state)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
           result (if page? result (attach-clock-property result))
@@ -176,17 +173,14 @@
                               [:string (or (get-in item [:block/properties-text-values column])
                                            ;; Fallback to property relationships for page blocks
                                            (get-in item [:block/properties column]))])]
-                  [:td.whitespace-nowrap {:on-mouse-down (fn []
-                                                           (reset! *mouse-down? true)
-                                                           (reset! select? false))
+                  [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
                                           :on-mouse-move (fn [] (reset! select? true))
                                           :on-mouse-up (fn []
-                                                         (when (and @*mouse-down? (not @select?))
+                                                         (when-not @select?
                                                            (state/sidebar-add-block!
                                                             (state/get-current-repo)
                                                             (:db/id item)
-                                                            :block-ref)
-                                                           (reset! *mouse-down? false)))}
+                                                            :block-ref)))}
                    (when value
                      (if (= :element (first value))
                        (second value)

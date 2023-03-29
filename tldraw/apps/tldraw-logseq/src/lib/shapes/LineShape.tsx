@@ -99,7 +99,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       [label]
     )
     return (
-      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }} className="tl-line-container">
+      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
         <TextLabel
           font={font}
           text={label}

@@ -182,50 +182,38 @@
     (paste-copied-blocks-or-text text e html)))
 
 (defn editor-on-paste!
-  "Pastes with formatting and includes the following features:
-- handles internal pastes to correctly paste at the block level
-- formatted paste includes HTML if detected
-- special handling for newline and new blocks
-- pastes file if it exists
-- wraps certain urls with macros
-- wraps selected urls with link formatting
-- whiteboard friendly pasting
-- paste replaces selected text"
-  [id]
-  (fn [e]
-    (state/set-state! :editor/on-paste? true)
-    (let [input (state/get-input)
-          clipboard-data (gobj/get e "clipboardData")
-          html (.getData clipboard-data "text/html")
-          text (.getData clipboard-data "text")
-          files (.-files text)
-          paste-file-if-exist (fn []
-                                (when id
-                                  (let [_handled
-                                        (let [clipboard-data (gobj/get e "clipboardData")
-                                              files (.-files clipboard-data)]
-                                          (when-let [file (first files)]
-                                            (when-let [block (state/get-edit-block)]
-                                              (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                                           editor-handler/*asset-uploading? true))))]
-                                    (util/stop e))))]
-      (cond
-        (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-        (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
-        :else
-        (let [text' (or (when (gp-util/url? text)
-                          (wrap-macro-url text))
-                        text)]
-          (paste-text-or-blocks-aux input e text' html))))))
-
-(defn editor-on-paste-raw!
-  "Raw pastes without _any_ formatting. Can also replace selected text with a paste"
-  []
-  (state/set-state! :editor/on-paste? true)
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when (state/get-input)
-       (commands/delete-selection! (state/get-edit-input-id))
-       (editor-handler/insert clipboard-data true)))
-   (fn [error]
-     (js/console.error error))))
+  ([id]
+   (editor-on-paste! id false))
+  ([id raw-paste?]
+   (fn [e]
+     (state/set-state! :editor/on-paste? true)
+     (let [input (state/get-input)]
+       (if raw-paste?
+         (utils/getClipText
+          (fn [clipboard-data]
+            (when (state/get-input)
+              (paste-text-or-blocks-aux input e clipboard-data nil)))
+          (fn [error]
+            (js/console.error error)))
+         (let [clipboard-data (gobj/get e "clipboardData")
+               html (when-not raw-paste? (.getData clipboard-data "text/html"))
+               text (.getData clipboard-data "text")
+               files (.-files text)
+               paste-file-if-exist (fn []
+                                     (when id
+                                       (let [_handled
+                                             (let [clipboard-data (gobj/get e "clipboardData")
+                                                   files (.-files clipboard-data)]
+                                               (when-let [file (first files)]
+                                                 (when-let [block (state/get-edit-block)]
+                                                   (editor-handler/upload-asset id #js[file] (:block/format block)
+                                                                                editor-handler/*asset-uploading? true))))]
+                                         (util/stop e))))]
+           (cond
+             (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
+             :else
+             (let [text' (or (when (gp-util/url? text)
+                               (wrap-macro-url text))
+                             text)]
+               (paste-text-or-blocks-aux input e text' html)))))))))

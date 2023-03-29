@@ -3,13 +3,14 @@ import { ActionBar } from './ActionBar'
 import { DevTools } from './Devtools'
 import { PrimaryTools } from './PrimaryTools'
 import { StatusBar } from './StatusBar'
-import { isDev } from '@tldraw/core'
+
+const isDev = process.env.NODE_ENV === 'development'
 
 export const AppUI = observer(function AppUI() {
   return (
     <>
-      {isDev() && <StatusBar />}
-      {isDev() && <DevTools />}
+      {isDev && <StatusBar />}
+      {isDev && <DevTools />}
       <PrimaryTools />
       <ActionBar />
     </>

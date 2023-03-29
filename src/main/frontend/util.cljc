@@ -1116,6 +1116,18 @@
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
 #?(:cljs
+   (defn select-highlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/add-class! block "selected noselect"))))
+
+#?(:cljs
+   (defn select-unhighlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/remove-class! block "selected" "noselect"))))
+
+#?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
      [ch]
@@ -1509,10 +1521,3 @@ Arg *stop: atom, reset to true to stop the loop"
   "Vector version of remove. non-lazy"
   [pred coll]
   `(vec (remove ~pred ~coll)))
-
-#?(:cljs
-   (defn safe-with-meta
-     [o meta]
-     (if (satisfies? IMeta o)
-       (with-meta o meta)
-       o)))

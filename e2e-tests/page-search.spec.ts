@@ -1,7 +1,7 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
 import { Block } from './types'
-import { modKey, createRandomPage, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
+import { modKey, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 import { searchPage, closeSearchBox } from './util/search-modal'
 
 /***
@@ -61,7 +61,7 @@ test('Search CJK', async ({ page, block }) => {
 
   // check if CJK are indexed
   const results = await searchPage(page, '进度')
-  await expect(results.length).toEqual(5) // 1 page + 1 block + 1 page content + new whiteboard
+  await expect(results.length).toEqual(4) // 1 page + 1 block + 1 page content
   await closeSearchBox(page)
 })
 

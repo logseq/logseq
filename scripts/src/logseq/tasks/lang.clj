@@ -110,7 +110,7 @@
              :page/make-private :page/make-public]
    "(t (name" [] ;; shortcuts related
    "(t (dh/decorate-namespace" [] ;; shortcuts related
-   "(t prompt-key" [:select/default-prompt :select/default-select-multiple :select.graph/prompt]
+   "(t prompt-key" [:select/default-prompt :select.graph/prompt]
    ;; All args to ui/make-confirm-modal are not keywords
    "(t title" []
    "(t subtitle" [:asset/physical-delete]})

@@ -1,10 +1,5 @@
 (ns frontend.modules.outliner.transaction
-  #?(:cljs (:require-macros [frontend.modules.outliner.transaction]))
-  #?(:cljs (:require [malli.core :as m])))
-
-(def transact-opts [:or :symbol :map])
-
-#?(:cljs (m/=> transact! [:=> [:cat transact-opts :any] :any]))
+  #?(:cljs (:require-macros [frontend.modules.outliner.transaction])))
 
 (defmacro transact!
   "Batch all the transactions in `body` to a single transaction, Support nested transact! calls.
@@ -23,7 +18,7 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  (assert (or (map? opts) (symbol? opts)) (str "opts is not a map or symbol, type: " (type opts) ))
+  (assert (map? opts))
   `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
          opts# (if transact-data#
                  (assoc ~opts :nested-transaction? true)
