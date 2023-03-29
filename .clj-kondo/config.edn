@@ -105,6 +105,7 @@
              logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
              medley.core medley
+             "path" node-path
              promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}
