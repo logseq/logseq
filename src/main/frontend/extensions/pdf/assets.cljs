@@ -30,7 +30,7 @@
   (let [filename  (util/node-path.basename original-path)
         web-link? (string/starts-with? original-path "http")
         ext-name  (util/get-file-ext filename)
-        url       (assets-handler/normalize-asset-resource-url original-path)
+        url       (-> original-path assets-handler/normalize-asset-resource-url pdf-utils/encode-pdf-asset-url)
         filekey   (util/safe-sanitize-file-name (subs filename 0 (- (count filename) (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
