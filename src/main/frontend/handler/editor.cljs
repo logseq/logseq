@@ -1580,7 +1580,7 @@
           (keys autopair-map)))
 
 (def autopair-when-not-selected
-  #{"[" "{" "(" "`"})
+  #{"[" "{" "`"}) ; "(" is handled separately
 
 (def autopair-when-selected
   #{"*" "^" "_" "=" "+" "/" "`"})
@@ -1621,20 +1621,23 @@
                                             :selected selected})))))))
 
 (defn surround-by?
-  [input before end]
-  (when input
-    (let [value (gobj/get input "value")
-          pos (cursor/pos input)]
-      (text-util/surround-by? value pos before end))))
+  ([input before end]
+   (surround-by? input before end {:offset 0}))
+  ([input before end {:keys [offset]}]
+   (when input
+     (let [value (gobj/get input "value")
+           pos (cursor/pos input)]
+       (text-util/surround-by? value (+ pos offset) before end)))))
 
+;; This checks for the conditions *after* the ( is typed, to see if we should autopair a ) after the one that was typed.
 (defn- autopair-left-paren?
-  [input key]
-  (and (= key "(")
+  [input input-text]
+  (and (= input-text "(")
        (or
-         (surround-by? input :start "")
-         (surround-by? input " " "")
-         (surround-by? input "]" "")
-         (surround-by? input "(" ""))))
+         (surround-by? input :start "(" {:offset -1})
+         (surround-by? input " " "(" {:offset -1})
+         (surround-by? input "]" "(" {:offset -1})
+         (surround-by? input "(" "(" {:offset -1}))))
 
 (defn wrapped-by?
   [input before end]
@@ -2863,17 +2866,11 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (-> (keys autopair-map)
-            set
-            (disj "(")
-            (contains? key)
-            (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
-                  prev (util/nth-safe value (dec pos))]
-            (util/stop e)
-            (if (and (= key "`") (= "`" curr) (not= "`" prev))
-              (cursor/move-cursor-forward input)
-              (autopair input-id key format nil)))
+              prev (util/nth-safe value (dec pos))]
+          (and (string/blank? (util/get-selected-text))
+               (= key "`") (= "`" curr) (not= "`" prev)))
+        (do (util/stop e) (cursor/move-cursor-forward input))
 
         (let [sym "$"]
           (and (= key sym)
@@ -3041,13 +3038,14 @@
                                      :shift? (.-shiftKey e)}))))))
 
 (defn input-handler
-  [_state format _input input-id]
-  (fn [_e new-text]
+  [_state format input input-id]
+  (fn [_e new-text] 
     (cond
       ;; No-selection autopair must be handled after the input event has fired (instead of on keydown),
       ;; to prevent a bug in iOS keyboard's word autocomplete
       ;; https://github.com/logseq/logseq/issues/5987
-      (autopair-when-not-selected new-text)
+      (or (autopair-when-not-selected new-text)
+          (autopair-left-paren? input new-text))
       (autopair input-id new-text format {:preserve-prefix? true}))))
 
 (defn editor-on-click!
