@@ -257,6 +257,10 @@
         }
       }
     }
+
+    :not(pre) > code {
+      white-space: nowrap;
+    }
   }
 
   &-popup {
