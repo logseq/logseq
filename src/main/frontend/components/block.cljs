@@ -3214,14 +3214,17 @@
          [:div.text-sm.mt-2.opacity-90 "No matched result"])])))
 
 (rum/defc query-title
-  [config title]
+  [config title {:keys [result-count]}]
   [:div.custom-query-title.flex.justify-between.w-full
    [:span.title-text (cond
                        (vector? title) title
                        (string? title) (inline-text config
                                                     (get-in config [:block :block/format] :markdown)
                                                     title)
-                       :else title)]])
+                       :else title)]
+   (when result-count
+     [:span.opacity-60.text-sm.ml-2.results-count
+      (str result-count (if (> result-count 1) " results" " result"))])])
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   (rum/local nil ::query-result)
@@ -3315,13 +3318,13 @@
            (if (or built-in? (not dsl-query?))
              [:div {:style {:margin-left 2}}
               (ui/foldable
-               (query-title config title)
+               (query-title config title (when built-in? {:result-count (count result)}))
                (fn []
                  (custom-query-inner config q opts))
                {:default-collapsed? collapsed?
                 :title-trigger? true})]
              [:div.bd
-              (query-title config title)
+              (query-title config title {})
               (when-not collapsed?'
                 (custom-query-inner config q opts))])])))))
 
