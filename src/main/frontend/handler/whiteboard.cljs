@@ -11,6 +11,8 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
+            [frontend.config :as config]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
@@ -47,9 +49,9 @@
     (->> blocks
          (map (fn [block]
                 (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
-         (sort-by :index)
          (filter gp-whiteboard/shape-block?)
-         (map gp-whiteboard/block->shape))))
+         (map gp-whiteboard/block->shape)
+         (sort-by :index))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
@@ -90,7 +92,8 @@
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
                            (map (fn [{:keys [id]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
-                                      js->clj-keywordize)))
+                                      js->clj-keywordize
+                                      (assoc :index (.indexOf shapes-index id)))))
                            (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
@@ -131,9 +134,13 @@
 (defn transact-tldr-delta! [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
+        shapes-index (map #(gobj/get % "id") shapes)
         new-id-nonces (set (map (fn [shape]
-                                  {:id (.-id shape)
-                                   :nonce (.-nonce shape)}) shapes))
+                                  (let [id (.-id shape)]
+                                   {:id id
+                                    :nonce (if (= shape.id (.indexOf shapes-index id))
+                                             (.-nonce shape)
+                                             (.getTime (js/Date.)))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])
@@ -154,7 +161,7 @@
 
                     ;; arrow
                     (some #(and (= "line" (:type %))
-                                (= "arrow "(:end (:decorations %)))) new-shapes)
+                                (= "arrow " (:end (:decorations %)))) new-shapes)
 
                     (assoc metadata :whiteboard/op :new-arrow)
                     :else
@@ -211,8 +218,9 @@
   ([]
    (create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
-   (create-new-whiteboard-page! name)
-   (route-handler/redirect-to-whiteboard! name)))
+   (when-not config/publishing?
+     (create-new-whiteboard-page! name)
+     (route-handler/redirect-to-whiteboard! name))))
 
 (defn ->logseq-portal-shape
   [block-id point]
@@ -278,7 +286,8 @@
             :block/uuid uuid
             :block/content (or content "")
             :block/format :markdown ;; fixme to support org?
-            :block/page {:block/name (util/page-name-sanity-lc page-name)}
+            :block/page {:block/name (util/page-name-sanity-lc page-name)
+                         :block/original-name page-name}
             :block/parent {:block/name page-name}}]
     (db-utils/transact! [tx])
     uuid))
@@ -356,15 +365,25 @@
       (when (seq bindings)
         (.updateBindings tl-page (bean/->js bindings))))))
 
+(defn update-shapes-index!
+  [^js tl-page page-name]
+  (when-let [page (db/entity [:block/name page-name])]
+    (let [shapes-index (get-in page [:block/properties :logseq.tldraw.page :shapes-index])]
+      (when (seq shapes-index)
+        (.updateShapesIndex tl-page (bean/->js shapes-index))))))
+
 (defn undo!
   [{:keys [tx-meta]}]
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]
-      (let [{:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+      (let [{:keys [page-name deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
             whiteboard-op (:whiteboard/op tx-meta)
-            ^js api (.-api app)]
+            ^js api (.-api app)
+            tl-page ^js (second (first (.-pages app)))]
         (when api
+          (update-bindings! tl-page page-name)
+          (update-shapes-index! tl-page page-name)
           (case whiteboard-op
             :group
             (do
@@ -381,7 +400,7 @@
                 (delete-shapes! api new-shapes))
               (when (seq changed-shapes)
                 (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
-                                    prev-changed-blocks)]
+                                       prev-changed-blocks)]
                   (update-shapes! api prev-shapes))))))))
     (catch :default e
       (js/console.error e)))
@@ -398,6 +417,7 @@
             tl-page ^js (second (first (.-pages app)))]
         (when api
           (update-bindings! tl-page page-name)
+          (update-shapes-index! tl-page page-name)
           (case whiteboard-op
             :group
             (do
@@ -417,3 +437,12 @@
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
+
+(defn onboarding-show
+  []
+  (when (not (or (state/sub :whiteboard/onboarding-tour?)
+                 (config/demo-graph?)
+                 (util/mobile?)))
+    (state/pub-event! [:whiteboard/onboarding])
+    (state/set-state! [:whiteboard/onboarding-tour?] true)
+    (storage/set :whiteboard-onboarding-tour? true)))

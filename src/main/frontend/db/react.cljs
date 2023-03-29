@@ -81,11 +81,6 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
-(defn get-query-time
-  [q]
-  (let [k [(state/get-current-repo) :custom q]]
-    (get-in @query-state [k :query-time])))
-
 (defn kv
   [key value]
   {:db/id -1
@@ -113,12 +108,12 @@
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
   (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
-                               :query-time time'
-                               :inputs inputs
-                               :result result-atom
-                               :transform-fn transform-fn
-                               :query-fn query-fn
-                               :inputs-fn inputs-fn}))
+                                :query-time time'
+                                :inputs inputs
+                                :result result-atom
+                                :transform-fn transform-fn
+                                :query-fn query-fn
+                                :inputs-fn inputs-fn}))
   result-atom)
 
 (defn remove-q!
@@ -184,7 +179,7 @@
                                             transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
-            (set! (.-state result-atom) result)
+            (set! (.-state result-atom) (util/safe-with-meta result {:query-time time}))
             (if disable-reactive?
               result-atom
               (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))

@@ -13,7 +13,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.path :as path]))
 
 (when (mobile-util/native-ios?)
   (defn ios-ensure-documents!
@@ -29,6 +29,17 @@
       (when-not (= permission "granted")
         (p/do!
          (.requestPermissions Filesystem))))))
+
+(defn- <dir-exists?
+  [fpath]
+  (p/catch (p/let [fpath (path/path-normalize fpath)
+                   stat (.stat Filesystem (clj->js {:path fpath}))]
+             (-> stat
+                 bean/->clj
+                 :type
+                 (= "directory")))
+           (fn [_error]
+             false)))
 
 (defn- <write-file-with-utf8
   [path content]
@@ -55,21 +66,39 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true)
-               :files)
+              #(js->clj % :keywordize-keys true)
+              :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
                  nil))))
 
-(defn- <stat [path]
-  (-> (p/chain (.stat Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true))
-      (p/catch (fn [error]
-                 (js/console.error "stat Error: " path ": " error)
-                 nil))))
+(defn- get-file-paths
+  "get all file paths recursively"
+  [path]
+  (p/let [result (p/loop [result []
+                          dirs [path]]
+                   (if (empty? dirs)
+                     result
+                     (p/let [d (first dirs)
+                             files (<readdir d)
+                             files (->> files
+                                        (remove (fn [{:keys [name  type]}]
+                                                  (or (string/starts-with? name ".")
+                                                      (and (= type "directory")
+                                                           (or (= name "bak")
+                                                               (= name "version-files")))))))
+                             files-dir (->> files
+                                            (filterv #(= (:type %) "directory"))
+                                            (mapv :uri))
+                             paths-result (->> files
+                                               (filterv #(= (:type %) "file"))
+                                               (mapv :uri))]
+                       (p/recur (concat result paths-result)
+                                (concat (rest dirs) files-dir)))))]
+    result))
 
-(defn readdir
-  "readdir recursively"
+(defn- get-files
+  "get all files recursively"
   [path]
   (p/let [result (p/loop [result []
                           dirs [path]]
@@ -97,7 +126,9 @@
                                    (mapv
                                     (fn [{:keys [uri] :as file-info}]
                                       (p/chain (<read-file-with-utf8 uri)
-                                               #(assoc file-info :content %))))))]
+                                               #(assoc (dissoc file-info :uri)
+                                                       :content %
+                                                       :path uri))))))]
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))]
     (js->clj result :keywordize-keys true)))
@@ -123,11 +154,11 @@
   "reserve the latest 6 version files"
   [dir]
   (->
-   (p/let [files (readdir dir)
+   (p/let [files (get-files dir)
            files (js->clj files :keywordize-keys true)
            old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
      (mapv (fn [file]
-             (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+             (.deleteFile Filesystem (clj->js {:path (:path file)})))
            old-versioned-files))
    (p/catch (fn [_]))))
 
@@ -168,50 +199,53 @@
     (truncate-old-versioned-files! file-root)))
 
 (defn- write-file-impl!
-  [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (if (or (string/blank? repo) skip-compare?)
-    (p/catch
-     (p/let [result (<write-file-with-utf8 path content)]
-       (when ok-handler
-         (ok-handler repo path result)))
-     (fn [error]
-       (if error-handler
-         (error-handler error)
-         (log/error :write-file-failed error))))
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  (let [fpath (path/path-join dir rpath)]
+    (if (or (string/blank? repo) skip-compare?)
+      (p/catch
+       (p/let [result (<write-file-with-utf8 fpath content)]
+         (when ok-handler
+           (ok-handler repo fpath result)))
+       (fn [error]
+         (if error-handler
+           (error-handler error)
+           (log/error :write-file-failed error))))
 
     ;; Compare with disk content and backup if not equal
-    (p/let [disk-content (<read-file-with-utf8 path)
-            disk-content (or disk-content "")
-            repo-dir (config/get-local-dir repo)
-            ext (util/get-file-ext path)
-            db-content (or old-content (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)]
-      (cond
-        (and
-         (not= stat :not-found)   ; file on the disk was deleted
-         (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn" "css"} ext))
-         (not (string/includes? path "/.recycle/")))
-        (p/let [disk-content disk-content]
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+      (p/let [disk-content (if (not= stat :not-found)
+                             (<read-file-with-utf8 fpath)
+                             "")
+              disk-content (or disk-content "")
+              repo-dir (config/get-local-dir repo)
+              ext (util/get-file-ext rpath)
+              db-content (or old-content (db/get-file repo rpath) "")
+              contents-matched? (contents-matched? disk-content db-content)]
+        (cond
+          (and
+           (not= stat :not-found)   ; file on the disk was deleted
+           (not contents-matched?)
+           (not (contains? #{"excalidraw" "edn" "css"} ext))
+           (not (string/includes? fpath "/.recycle/")))
+          (p/let [disk-content disk-content]
+            (state/pub-event! [:file/not-matched-from-disk rpath disk-content content]))
 
-        :else
-        (->
-         (p/let [result (<write-file-with-utf8 path content)
-                 mtime (-> (js->clj stat :keywordize-keys true)
-                           :mtime)]
-           (when-not contents-matched?
-             (backup-file repo-dir :backup-dir path disk-content))
-           (db/set-file-last-modified-at! repo path mtime)
-           (p/let [content content]
-             (db/set-file-content! repo path content))
-           (when ok-handler
-             (ok-handler repo path result))
-           result)
-         (p/catch (fn [error]
-                    (if error-handler
-                      (error-handler error)
-                      (log/error :write-file-failed error)))))))))
+          :else
+          (->
+           (p/let [result (<write-file-with-utf8 fpath content)
+                   mtime (-> (js->clj stat :keywordize-keys true)
+                             :mtime)]
+             (when-not contents-matched?
+               (backup-file repo-dir :backup-dir fpath disk-content))
+             (db/set-file-last-modified-at! repo rpath mtime)
+             (p/let [content content]
+               (db/set-file-content! repo rpath content))
+             (when ok-handler
+               (ok-handler repo fpath result))
+             result)
+           (p/catch (fn [error]
+                      (if error-handler
+                        (error-handler error)
+                        (log/error :write-file-failed error))))))))))
 
 (defn ios-force-include-private
   "iOS sometimes return paths without the private part."
@@ -230,44 +264,6 @@
       :else
       path)
     path))
-
-(defn normalize-file-protocol-path [dir path]
-  (let [dir             (some-> dir (string/replace #"/+$" ""))
-        dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
-                          (do
-                            (js/console.trace "WARN: detect absolute path, use URL instead")
-                            (str "file://" (js/encodeURI dir)))
-                          dir)
-        path            (some-> path (string/replace #"^/+" ""))
-        normalize-f     gp-util/path-normalize
-        encodeURI-f     js/encodeURI
-        safe-encode-url #(let [encoded-chars?
-                               (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
-                           (cond
-                             (not encoded-chars?)
-                             (encodeURI-f (normalize-f %))
-
-                             :else
-                             (encodeURI-f (normalize-f (js/decodeURI %)))))
-        path' (cond
-                (and path (string/starts-with? path "file:/"))
-                (safe-encode-url path)
-
-                (string/blank? path)
-                (safe-encode-url dir)
-
-                (string/blank? dir)
-                (safe-encode-url path)
-
-                (string/starts-with? path dir)
-                (safe-encode-url path)
-
-                :else
-                (let [path' (safe-encode-url path)]
-                  (str dir "/" path')))]
-    (if (mobile-util/native-ios?)
-      (ios-force-include-private path')
-      path')))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
@@ -305,92 +301,95 @@
                        (not (or (local-container-path? path localDocumentsPath)
                                 (mobile-util/iCloud-container-path? path))))
               (state/pub-event! [:modal/show-instruction]))
+          path (if (mobile-util/native-ios?)
+                  (ios-force-include-private path)
+                  path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
-          files (readdir path)
-          files (js->clj files :keywordize-keys true)]
-    (into [] (concat [{:path path}] files))))
+          files (get-files path)]
+    {:path path
+     :files (into [] files)}))
 
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (let [dir' (normalize-file-protocol-path "" dir)]
-      (-> (.mkdir Filesystem
-                  (clj->js
-                   {:path dir'}))
-          (p/catch (fn [error]
-                     (log/error :mkdir! {:path  dir'
-                                         :error error}))))))
+    (-> (<dir-exists? dir)
+        (p/then (fn [exists?]
+                  (if exists?
+                    (p/resolved true)
+                    (.mkdir Filesystem
+                            (clj->js
+                             {:path dir})))))
+        (p/catch (fn [error]
+                   (log/error :mkdir! {:path dir
+                                       :error error})))))
   (mkdir-recur! [_this dir]
-    (p/let
-     [_ (-> (.mkdir Filesystem
-                    (clj->js
-                     {:path dir
-                      :recursive true}))
-            (p/catch (fn [error]
-                       (log/error :mkdir-recur! {:path dir
-                                                 :error error}))))
-      stat (<stat dir)]
-      (if (= (:type stat) "directory")
-        (p/resolved true)
-        (p/rejected (js/Error. "mkdir-recur! failed")))))
+    (-> (<dir-exists? dir)
+        (p/then (fn [exists?]
+                  (if exists?
+                    (p/resolved true)
+                    (.mkdir Filesystem
+                            (clj->js
+                             {:path dir
+                              :recursive true})))))
+        (p/catch (fn [error]
+                   (log/error :mkdir-recur! {:path dir
+                                             :error error})))))
   (readdir [_this dir]                  ; recursive
-    (let [dir (if-not (string/starts-with? dir "file://")
-                (str "file://" dir)
-                dir)]
-      (readdir dir)))
-  (unlink! [this repo path _opts]
-    (p/let [path (normalize-file-protocol-path nil path)
-            repo-url (config/get-local-dir repo)
-            recycle-dir (util/safe-path-join repo-url config/app-name ".recycle") ;; logseq/.recycle
+    (let [dir (path/path-normalize dir)]
+      (get-file-paths dir)))
+  (unlink! [this repo fpath _opts]
+    (p/let [repo-dir (config/get-local-dir repo)
+            recycle-dir (path/path-join repo-dir config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
-            file-name (-> (string/replace path repo-url "")
-                          (string/replace "/" "_")
-                          (string/replace "\\" "_"))
-            new-path (str recycle-dir "/" file-name)
+            file-name (-> (path/trim-dir-prefix repo-dir fpath)
+                          (string/replace "/" "_"))
+            new-path (path/path-join recycle-dir file-name)
             _ (protocol/mkdir-recur! this recycle-dir)]
-      (protocol/rename! this repo path new-path)))
+      (protocol/rename! this repo fpath new-path)))
   (rmdir! [_this _dir]
     ;; Too dangerous!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (let [path (normalize-file-protocol-path dir path)]
+    (let [fpath (path/path-join dir path)]
       (->
-       (<read-file-with-utf8 path)
+       (<read-file-with-utf8 fpath)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (write-file! [this repo dir path content opts]
-    (let [path (normalize-file-protocol-path dir path)]
+  (write-file! [_this repo dir path content opts]
+    (let [fpath (path/path-join dir path)]
       (p/let [stat (p/catch
-                    (.stat Filesystem (clj->js {:path path}))
+                    (.stat Filesystem (clj->js {:path fpath}))
                     (fn [_e] :not-found))]
         ;; `path` is full-path
-        (write-file-impl! this repo dir path content opts stat))))
-  (rename! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
-      (p/catch
-       (p/let [_ (.rename Filesystem
-                          (clj->js
-                           {:from old-path
-                            :to new-path}))])
-       (fn [error]
-         (log/error :rename-file-failed error)))))
+        (write-file-impl! repo dir path content opts stat))))
+  (rename! [_this _repo old-fpath new-fpath]
+    (-> (.rename Filesystem
+                 (clj->js
+                  {:from old-fpath
+                   :to new-fpath}))
+        (p/catch (fn [error]
+                   (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
-      (p/catch
-       (p/let [_ (.copy Filesystem
-                        (clj->js
-                         {:from old-path
-                          :to new-path}))])
-       (fn [error]
-         (log/error :copy-file-failed error)))))
-  (stat [_this dir path]
-    (let [path (normalize-file-protocol-path dir path)]
-      (p/chain (.stat Filesystem (clj->js {:path path}))
-               #(js->clj % :keywordize-keys true))))
-  (open-dir [_this dir _ok-handler]
+    (-> (.copy Filesystem
+               (clj->js
+                {:from old-path
+                 :to new-path}))
+        (p/catch (fn [error]
+                   (log/error :copy-file-failed error)))))
+  (stat [_this fpath]
+    (-> (p/chain (.stat Filesystem (clj->js {:path fpath}))
+                 #(js->clj % :keywordize-keys true))
+        (p/catch (fn [error]
+                   (let [errstr (if error (.toString error) "")]
+                     (when (string/includes? errstr "because you don’t have permission to view it")
+                       (state/pub-event! [:notification/show
+                                          {:content "No permission, please clear cache and re-open graph folder."
+                                           :status :error}]))
+                     (p/rejected error))))))
+  (open-dir [_this dir]
     (open-dir dir))
-  (get-files [_this path-or-handle _ok-handler]
-    (readdir path-or-handle))
+  (get-files [_this dir]
+    (get-files dir))
   (watch-dir! [_this dir _options]
     (p/do!
      (.unwatch mobile-util/fs-watcher)

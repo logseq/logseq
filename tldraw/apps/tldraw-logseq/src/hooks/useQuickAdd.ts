@@ -6,7 +6,7 @@ export function useQuickAdd() {
   return React.useCallback<TLReactCallbacks<Shape>['onCanvasDBClick']>(async app => {
     // Give a timeout so that the quick add input will not be blurred too soon
     setTimeout(() => {
-      app.selectTool('logseq-portal').selectedTool.transition('creating')
+      app.transition('logseq-portal').selectedTool.transition('creating')
     }, 100)
   }, [])
 }

@@ -62,7 +62,7 @@
           {:label "w"}
           {:label "m"}
           {:label "y"}])
-        (fn [value]
+        (fn [_e value]
           (swap! *timestamp assoc-in [:repeater :duration] value))
         nil)
 

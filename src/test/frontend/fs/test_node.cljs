@@ -6,12 +6,12 @@
 
 ;; Most protocol fns are not defined. Define them as needed for tests
 (defrecord NodeTestfs
-  []
+           []
   protocol/Fs
   (read-file [_this _dir path _options]
-             (p/let [content (fsp/readFile path)]
-                    (str content)))
+    (p/let [content (fsp/readFile path)]
+      (str content)))
   (write-file! [_this _repo _dir path content _opts]
-               (fsp/writeFile path content))
-  (stat [_this _dir path]
-        (fsp/stat path)))
+    (fsp/writeFile path content))
+  (stat [_this fpath]
+    (fsp/stat fpath)))

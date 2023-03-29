@@ -14,7 +14,8 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [electron.ipc :as ipc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.common.path :as path]))
 
 (defn- get-css-var-value
   [var-name]
@@ -92,13 +93,13 @@
    (re-render-root! {}))
   ([{:keys [clear-all-query-state?]
      :or {clear-all-query-state? false}}]
+   {:post [(nil? %)]}
    (when-let [component (state/get-root-component)]
      (if clear-all-query-state?
        (db/clear-query-state!)
        (db/clear-query-state-without-refs-and-embeds!))
-     (rum/request-render component)
-     (doseq [component (state/get-custom-query-components)]
-       (rum/request-render component)))))
+     (rum/request-render component))
+   nil))
 
 (defn highlight-element!
   [fragment]
@@ -121,9 +122,7 @@
   (when-let [style (or
                     (state/get-custom-css-link)
                     (some-> (db-model/get-custom-css)
-                            (config/expand-relative-assets-path))
-                    ;; (state/get-custom-css-link)
-)]
+                            (config/expand-relative-assets-path)))]
     (util/add-style! style)))
 (defn reset-custom-css!
   []
@@ -155,11 +154,12 @@
           (when (or (not should-ask?)
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (let [dir (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo)))]
-            (p/let [exists? (fs/file-exists? dir href)]
+          (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+                rpath (path/relative-path repo-dir href)]
+            (p/let [exists? (fs/file-exists? repo-dir rpath)]
               (when exists?
                 (util/p-handle
-                 (fs/read-file dir href)
+                 (fs/read-file repo-dir rpath)
                  #(when-let [scripts (and % (string/trim %))]
                     (when-not (string/blank? scripts)
                       (when (or (not should-ask?) (ask-allow))

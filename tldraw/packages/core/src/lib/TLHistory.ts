@@ -1,8 +1,6 @@
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, makeObservable, observable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
-import { deepCopy, deepEqual, omit } from '../utils'
 import type { TLShape, TLShapeModel } from './shapes'
-import type { TLGroupShape } from './shapes/TLGroupShape'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
 
@@ -32,8 +30,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
-    this.app.pages.forEach(page => page.bump()) // Is it ok here?
-    this.app.notify('persist', {replace})
+    this.app.notify('persist', { replace })
   }
 
   @action undo = () => {

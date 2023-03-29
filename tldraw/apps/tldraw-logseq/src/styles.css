@@ -150,10 +150,6 @@ html[data-theme='light'] {
   color: whites;
 }
 
-.tl-zoom-bar {
-  @apply ml-4;
-}
-
 .tl-action-bar {
   @apply absolute bottom-0 flex items-center border-0 left-10 bottom-10;
 
@@ -171,7 +167,6 @@ html[data-theme='light'] {
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
-
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
@@ -243,17 +238,15 @@ html[data-theme='light'] {
 }
 
 .tl-statusbar {
-  @apply fixed flex items-center w-full bottom-0;
+  @apply absolute flex items-center w-full bottom-0;
 
+  background: var(--ls-secondary-background-color);
   font-family: monospace;
   font-size: 10px;
   grid-row: 3;
   padding: 8px;
-  color: black;
   z-index: 100000;
   user-select: none;
-  background: white;
-  border-top: 1px solid var(--ls-secondary-border-color);
   flex-shrink: 0;
   height: 32px;
 }
@@ -291,10 +284,13 @@ html[data-theme='light'] {
 
   .tl-button {
     font-size: 16px;
+    flex: 0 0 auto;
   }
 }
 
 .tl-tools-floating-panel {
+  max-height: 90vh;
+  overflow-y: auto;
   flex-flow: column;
 }
 

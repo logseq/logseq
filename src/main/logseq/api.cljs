@@ -175,17 +175,18 @@
 
 (def ^:export load_plugin_config
   (fn [path]
-    (fs/read-file "" (util/node-path.join path "package.json"))))
+    (fs/read-file nil (util/node-path.join path "package.json"))))
 
 (def ^:export load_plugin_readme
   (fn [path]
-    (fs/read-file "" (util/node-path.join path "readme.md"))))
+    (fs/read-file nil (util/node-path.join path "readme.md"))))
 
 (def ^:export save_plugin_config
   (fn [path ^js data]
     (let [repo ""
+          
           path (util/node-path.join path "package.json")]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+      (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
 (def ^:export save_focused_code_editor_content
   (fn []
@@ -205,7 +206,7 @@
           user-path-root (util/node-path.dirname user-path)
           exist?         (fs/file-exists? user-path-root "")
           _              (when-not exist? (fs/mkdir-recur! user-path-root))
-          _              (fs/write-file! repo "" user-path content {:skip-compare? true})]
+          _              (fs/write-file! repo nil user-path content {:skip-compare? true})]
     user-path))
 
 (defn ^:private write_dotdir_file
@@ -326,8 +327,8 @@
     (p/let [repo ""
             path (plugin-handler/get-ls-dotdir-root)
             path (util/node-path.join path "preferences.json")
-            _    (fs/create-if-not-exists repo "" path)
-            json (fs/read-file "" path)
+            _    (fs/create-if-not-exists repo nil path)
+            json (fs/read-file nil path)
             json (if (string/blank? json) "{}" json)]
       (js/JSON.parse json))))
 
@@ -337,7 +338,7 @@
       (p/let [repo ""
               path (plugin-handler/get-ls-dotdir-root)
               path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
+        (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
   ;; results [path data]

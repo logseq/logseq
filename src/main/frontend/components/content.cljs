@@ -19,6 +19,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.modules.shortcut.core :as shortcut]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
@@ -114,6 +115,7 @@
               #(swap! *template-including-parent? not))])
 
 (rum/defcs block-template < rum/reactive
+  shortcut/disable-all-shortcuts
   (rum/local false ::edit?)
   (rum/local "" ::input)
   {:will-unmount (fn [state]
