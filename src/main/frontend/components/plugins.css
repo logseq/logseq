@@ -814,6 +814,10 @@
   &[data-type=toolbar] {
     @apply flex items-center;
 
+    > .list-wrap {
+      @apply flex items-center border border-red-600 flex-nowrap overflow-x-hidden;
+    }
+
     > .injected-ui-item-toolbar {
       @apply hover:opacity-100 transition-opacity;
     }

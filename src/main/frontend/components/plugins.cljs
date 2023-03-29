@@ -1024,6 +1024,34 @@
       :icon    (ui/icon "adjustments")}])
    {:trigger-class "toolbar-plugins-manager-trigger"}))
 
+(rum/defc header-ui-items-list-wrap
+  [children]
+  (let [*wrap-el (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (when-let [^js wrap-el (rum/deref *wrap-el)]
+          (let [^js header-el       (.closest wrap-el ".cp__header")
+                ^js header-l        (.querySelector header-el "* > .l")
+                ^js header-r        (.querySelector header-el "* > .r")
+                set-max-width!      #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
+                calc-wrap-max-width #(let [width-l (.-offsetWidth header-l)
+                                           width-t (-> (js/document.querySelector "#main-content-container") (.-offsetWidth))
+                                           children (to-array (.-children header-r))
+                                           width-c'  (reduce (fn [acc ^js e]
+                                                              (when (some-> e (.-classList) (.contains "ui-items-container") (not))
+                                                                (+ acc (or (.-offsetWidth e) 0)))) 0 children)]
+                                       (when-let [width-t (and (number? width-t)
+                                                               (if-not (state/get-left-sidebar-open?)
+                                                                 (- width-t width-l) width-t))]
+                                         (set-max-width! (- width-t width-c' 100))))]
+            (.addEventListener js/window "resize" calc-wrap-max-width)
+            #(.removeEventListener js/window "resize" calc-wrap-max-width))))
+      [])
+
+    [:div.list-wrap.bg-green-100
+     {:ref *wrap-el}
+     children]))
+
 (rum/defcs hook-ui-items < rum/reactive
                            < {:key-fn #(identity "plugin-hook-items")}
                            "type of :toolbar, :pagebar"
@@ -1044,12 +1072,13 @@
                                    items)
                               items))]
 
-        [:div {:class     (str "ui-items-container")
-               :data-type (name type)}
-         (conj (for [[_ {:keys [key pinned?] :as opts} pid] items]
-                 (when (or (not toolbar?)
-                           (not (set? pinned-items)) pinned?)
-                   (rum/with-key (ui-item-renderer pid type opts) key))))
+        [:div.ui-items-container
+         {:data-type (name type)}
+         (header-ui-items-list-wrap
+           (for [[_ {:keys [key pinned?] :as opts} pid] items]
+             (when (or (not toolbar?)
+                       (not (set? pinned-items)) pinned?)
+               (rum/with-key (ui-item-renderer pid type opts) key))))
 
          ;; manage plugin buttons
          (when toolbar?
