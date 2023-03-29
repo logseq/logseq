@@ -46,13 +46,14 @@
                                                     :redo-stack (atom [])}))))
 
 (defn- get-updated-pages
+  "Extracts updated pages from transaction data or blocks."
   [txs]
-  (let [txs-page (->> (:txs txs)
-                      (filter #(= (second %) :block/page))
-                      (map #(nth % 2)))]
-    (set (remove nil? (if (empty? txs-page)
+  (let [txs-pages (->> (:txs txs)
+                       (filter #(= (second %) :block/page))
+                       (map #(nth % 2)))]
+    (set (remove nil? (if (empty? txs-pages)
                         (map #(get-in % [:block/page :db/id]) (:blocks txs))
-                        txs-page)))))
+                        txs-pages)))))
 
 (defn push-undo
   [txs]
@@ -233,6 +234,7 @@
           (do (mapv reset-history pages) ; Clear history for those pages and don't push the action to the stack
               (state/pub-event! [:capture-error {:error "Multi-page action triggered"
                                                  :payload {:type :outliner/invalid-action
+                                                           :action (-> entity :tx-meta :outliner-op)
                                                            :data (mapv #(dissoc % :block/content) (:blocks entity))}}]))
           (do (reset-redo (first pages))
               (push-undo entity)))))))
