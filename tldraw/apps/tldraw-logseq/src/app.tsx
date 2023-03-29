@@ -53,6 +53,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
 interface LogseqTldrawProps {
   renderers: LogseqContextValue['renderers']
   handlers: LogseqContextValue['handlers']
+  readOnly: boolean
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
@@ -91,13 +92,14 @@ const AppImpl = () => {
 
 const AppInner = ({
   onPersist,
+  readOnly,
   model,
   ...rest
 }: Omit<LogseqTldrawProps, 'renderers' | 'handlers'>) => {
   const onDrop = useDrop()
   const onPaste = usePaste()
   const onCopy = useCopy()
-  const onQuickAdd = useQuickAdd()
+  const onQuickAdd = readOnly ? null : useQuickAdd()
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -113,6 +115,7 @@ const AppInner = ({
       onDrop={onDrop}
       onPaste={onPaste}
       onCopy={onCopy}
+      readOnly={readOnly}
       onCanvasDBClick={onQuickAdd}
       onPersist={onPersistOnDiff}
       model={model}

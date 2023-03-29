@@ -81,7 +81,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [datascript.impl.entity :as e]))
+            [datascript.impl.entity :as e]
+            [logseq.common.path :as path]))
 
 (defn safe-read-string
   ([s]
@@ -155,6 +156,7 @@
 
 (defn- get-file-absolute-path
   [config path]
+  (js/console.error "TODO: buggy path fn")
   (let [path (string/replace path "file:" "")
         block-id (:block/uuid config)
         current-file (and block-id
@@ -198,10 +200,14 @@
                     (if (and (gp-config/local-protocol-asset? src)
                              (file-sync/current-graph-sync-on?))
                       (let [*exist? (::exist? state)
-                            asset-path (gp-config/remove-asset-protocol src)]
+                            ;; special handling for asset:// protocol
+                            ;; Capacitor uses a special URL for assets loading
+                            asset-path (gp-config/remove-asset-protocol src)
+                            asset-path (fs/asset-path-normalize asset-path)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
-                          (p/let [exist? (fs/file-or-href-exists? "" asset-path)]
+                          ;; FIXME(andelf): possible bug here
+                          (p/let [exist? (fs/asset-href-exists? asset-path)]
                             (reset! *exist? (boolean exist?))))
                         (assoc state ::asset-path asset-path ::asset-file? true))
                       state)))
@@ -274,7 +280,7 @@
   {:will-unmount (fn [state]
                    (reset! *resizing-image? false)
                    state)}
-  [state config title src metadata full_text local?]
+  [state config title src metadata full-text local?]
   (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
@@ -291,7 +297,7 @@
                        (when (and @size @*resizing-image?)
                          (when-let [block-id (:block/uuid config)]
                            (let [size (bean/->clj @size)]
-                             (editor-handler/resize-image! block-id metadata full_text size))))
+                             (editor-handler/resize-image! block-id metadata full-text size))))
                        (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
                          (js/setTimeout #(reset! *resizing-image? false) 200)))
@@ -308,7 +314,7 @@
           :title   title}
          metadata)]
        [:.asset-overlay]
-       (let [image-src (string/replace src #"^assets://" "")]
+       (let [image-src (fs/asset-path-normalize src)]
          [:.asset-action-bar {:aria-hidden "true"}
           ;; the image path bar
           (when (util/electron?)
@@ -323,30 +329,31 @@
                             (js/window.apis.openExternal image-src)))}
              image-src])
           [:.flex
-           [:button.asset-action-btn
-            {:title (t :asset/delete)
-             :tabIndex "-1"
-             :on-mouse-down util/stop
-             :on-click
-             (fn [e]
-               (when-let [block-id (:block/uuid config)]
-                 (let [confirm-fn (ui/make-confirm-modal
-                                   {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                    :sub-title     (if local? :asset/physical-delete "")
-                                    :sub-checkbox? local?
-                                    :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                     (close-fn)
-                                                     (editor-handler/delete-asset-of-block!
-                                                      {:block-id    block-id
-                                                       :local?      local?
-                                                       :delete-local? (and sub-selected (first sub-selected))
-                                                       :repo        (state/get-current-repo)
-                                                       :href        src
-                                                       :title       title
-                                                       :full-text   full_text}))})]
-                   (util/stop e)
-                   (state/set-modal! confirm-fn))))}
-            (ui/icon "trash")]
+           (when-not config/publishing?
+             [:button.asset-action-btn
+              {:title (t :asset/delete)
+               :tabIndex "-1"
+               :on-mouse-down util/stop
+               :on-click
+               (fn [e]
+                 (when-let [block-id (:block/uuid config)]
+                   (let [confirm-fn (ui/make-confirm-modal
+                                     {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                      :sub-title     (if local? :asset/physical-delete "")
+                                      :sub-checkbox? local?
+                                      :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                       (close-fn)
+                                                       (editor-handler/delete-asset-of-block!
+                                                        {:block-id    block-id
+                                                         :local?      local?
+                                                         :delete-local? (and sub-selected (first sub-selected))
+                                                         :repo        (state/get-current-repo)
+                                                         :href        src
+                                                         :title       title
+                                                         :full-text   full-text}))})]
+                     (util/stop e)
+                     (state/set-modal! confirm-fn))))}
+              (ui/icon "trash")])
 
            [:button.asset-action-btn
             {:title         (t :asset/copy)
@@ -382,7 +389,9 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (let [ext (keyword (util/get-file-ext @src))
+      ;; NOTE(andelf): Under nfs context, src might be a bare blob:http://..../uuid URI without ext info
+      (let [ext (keyword (or (util/get-file-ext @src)
+                             (util/get-file-ext href)))
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             path (str repo-dir href)
@@ -391,8 +400,7 @@
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
-                               basename (js/encodeURIComponent basename)
-                               asset-url (str repo-dir rel-dir "/" basename)]
+                               asset-url (path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]
 
@@ -703,7 +711,7 @@
                         (gp-util/url? path)
                         path
 
-                        (util/absolute-path? path)
+                        (path/absolute? path)
                         path
 
                         :else
@@ -1001,7 +1009,7 @@
 
 (defn- relative-assets-path->absolute-path
   [path]
-  (if (util/absolute-path? path)
+  (if (path/absolute? path)
     path
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
@@ -2070,6 +2078,7 @@
                                       (remove (property/hidden-properties))
                                       pre-block?
                                       (remove hidden-editable-page-properties))
+            properties-order (distinct properties-order)
             ordered-properties (if (seq properties-order)
                                  (map (fn [k] [k (get properties k)]) properties-order)
                                  properties)]

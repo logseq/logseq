@@ -694,9 +694,8 @@
           (- (.-size item)))))))
 ;;; ### path-normalize
 (def path-normalize
-  (if (util/electron?)
-    gp-util/path-normalize
-    (partial capacitor-fs/normalize-file-protocol-path nil)))
+
+  gp-util/path-normalize)
 
 
 ;;; ### APIs
@@ -1447,10 +1446,10 @@
       (.-deleted? filetxn)
       false
       (.-updated? filetxn)
-      (let [path (relative-path filetxn)
+      (let [rpath (relative-path filetxn)
             repo (state/get-current-repo)
-            file-path (config/get-file-path repo path)
-            content (<! (p->c (fs/read-file "" file-path)))]
+            repo-dir (config/get-repo-dir repo)
+            content (<! (p->c (fs/read-file repo-dir rpath)))]
         (and (seq origin-db-content)
              (or (nil? content)
                  (some :removed (diff/diff origin-db-content content))))))))
@@ -1546,7 +1545,7 @@
             txn->db-content-vec (->> filetxns
                                      (mapv
                                       #(when (is-journals-or-pages? %)
-                                         [% (db/get-file repo (config/get-file-path repo (relative-path %)))]))
+                                         [% (db/get-file repo (relative-path %))]))
                                      (remove nil?))]
 
         (doseq [relative-p (map relative-path filetxns)]
@@ -2706,7 +2705,7 @@
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
-    (println "[SyncManager" graph-uuid "]"
+    (println (str "[SyncManager " graph-uuid "]")
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
@@ -3096,7 +3095,7 @@
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
 
@@ -3104,7 +3103,7 @@
 
       (reset! *sync-entered? false)
 
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 

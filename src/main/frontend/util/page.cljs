@@ -20,7 +20,7 @@
     (or (and page-name (:db/id (db/entity [:block/name page-name])))
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))
 
-(defn get-page-file-path
+(defn get-page-file-rpath
   "Gets the file path of a page. If no page is given, detects the current page.
 Returns nil if no file path is found or no page is detected or given"
   ([]

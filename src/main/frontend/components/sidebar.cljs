@@ -38,10 +38,10 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.path :as path]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
@@ -562,11 +562,9 @@
   (let [finished (or (:finished state) 0)
         total (:total state)
         width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-        file-basename (util/node-path.basename
-                       (:current-parsing-file state))
-        display-filename (if (mobile-util/native-platform?)
-                           (gp-util/safe-decode-uri-component file-basename)
-                           file-basename)
+        display-filename (some-> (:current-parsing-file state)
+                                 not-empty
+                                 path/filename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
                     [:div.hidden.md:flex.flex-row

@@ -17,7 +17,7 @@ export class PointingBoundsBackgroundState<
 
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const { currentPoint, originPoint } = this.app.inputs
-    if (Vec.dist(currentPoint, originPoint) > 5) {
+    if (Vec.dist(currentPoint, originPoint) > 5 && !this.app.readOnly) {
       this.tool.transition('translating')
     }
   }
