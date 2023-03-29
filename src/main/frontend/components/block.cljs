@@ -2543,7 +2543,10 @@
            (route-handler/redirect-to-page! (:block/uuid block))))}
    label])
 
-(rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
+(rum/defc breadcrumb-separator
+  []
+  (ui/icon "chevron-right" {:style {:font-size 20}
+                            :class "opacity-50 mx-1"}))
 
 (defn breadcrumb
   "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
@@ -2591,13 +2594,17 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex-row.flex-1
+          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.flex-wrap.items-center
            {:class (when (seq breadcrumb)
                      (str (when-not (:search? config)
                             " my-2")
                           (when indent?
                             " ml-4")))}
-           breadcrumb (when end-separator? (breadcrumb-separator))])))))
+           (when (and (false? (:top-level? config))
+                      (seq parents))
+             (breadcrumb-separator))
+           breadcrumb
+           (when end-separator? (breadcrumb-separator))])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -3699,10 +3706,15 @@
                  [:div
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [[parent blocks] parent-blocks]
-                   (rum/with-key
-                     (breadcrumb-with-container blocks config)
-                     (:db/id parent)))
+                 (let [{top-level-blocks true others false} (group-by
+                                                             (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                             parent-blocks)
+                       sorted-parent-blocks (concat top-level-blocks others)]
+                   (for [[parent blocks] sorted-parent-blocks]
+                     (let [top-level? (= (:db/id parent) (:db/id page))]
+                       (rum/with-key
+                         (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
+                         (:db/id parent)))))
                  {:debug-id page
                   :trigger-once? false})])))))]
 
