@@ -146,8 +146,9 @@
         [:ul
          (for [c children]
            (when (and (seq c) (not= (:key c) (:key topic)))
-             [:li [:a.flex {:tabIndex "0" :on-click #(on-select (:key c))}
-                   (or (:title c) (:key c))]]))])]]))
+             [:li {:key (:key c)}
+              [:a.flex {:tabIndex "0" :on-click #(on-select (:key c))}
+               (or (:title c) (:key c))]]))])]]))
 
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state nav!]
