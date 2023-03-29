@@ -1,5 +1,5 @@
 (ns frontend.extensions.html-parser-test
-  (:require [clojure.test :as test :refer [deftest is testing are]]
+  (:require [clojure.test :as test :refer [deftest testing are]]
             [frontend.extensions.html-parser :as parser]))
 
 (deftest convert-test
