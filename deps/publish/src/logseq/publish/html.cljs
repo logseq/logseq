@@ -17,6 +17,7 @@
             [logseq.publish.svg :as svg]
             [logseq.publish.ui :as ui]
             [logseq.publish.util :as util]
+            [logseq.publish.latex :as latex]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [clojure.set :as set]))
@@ -288,26 +289,6 @@
 
     ;; (show-link? config metadata s full_text)
     ;; (media-link config url s label metadata full_text)
-
-    ;; (util/electron?)
-    ;; (let [path (cond
-    ;;              (string/starts-with? s "file://")
-    ;;              (string/replace s "file://" "")
-
-    ;;              (string/starts-with? s "/")
-    ;;              s
-
-    ;;              :else
-    ;;              (relative-assets-path->absolute-path s))]
-    ;;   (->elem
-    ;;    :a
-    ;;    (cond->
-    ;;     {:href      (str "file://" path)
-    ;;      :data-href path
-    ;;      :target    "_blank"}
-    ;;      title
-    ;;      (assoc :title title))
-    ;;    (map-inline config label)))
 
     ;; TBD handle assets
 
@@ -613,8 +594,7 @@
             {:__html (:html e)}}]
 
     ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
-    :tbd
-    ;; (latex/latex (str (d/squuid)) s false (not= display "Inline"))
+    (latex/latex (str (random-uuid)) s false (not= display "Inline"))
 
     [(:or "Target" "Radio_Target") s]
     [:a {:id s} s]
@@ -963,6 +943,15 @@
 
 (declare block-container)
 
+(defn- latex-environment-content
+  [name option content]
+  (if (= (string/lower-case name) "equation")
+    content
+    (util/format "\\begin%s\n%s\\end{%s}"
+                 (str "{" name "}" option)
+                 content
+                 name)))
+
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
   (try
@@ -1005,8 +994,7 @@
       (table config t)
 
       ["Math" s]
-      nil
-      ;; (latex/html-export s true true)
+      (latex/html-export s true true)
 
       ["Example" l]
       [:pre.pre-wrap-white-space
@@ -1028,8 +1016,7 @@
           (security/remove-javascript-links-in-href))
 
       ["Export" "latex" _options content]
-      ;; (latex/html-export content true false)
-      nil
+      (latex/html-export content true false)
 
       ["Custom" "query" _options _result content]
       nil
@@ -1068,13 +1055,11 @@
        (inline config ["Latex_Fragment" l])]
 
       ["Latex_Environment" name option content]
-      nil
-      ;; (let [content (latex-environment-content name option content)]
-      ;;   (latex/html-export content true true))
+      (let [content (latex-environment-content name option content)]
+        (latex/html-export content true true))
 
       ["Displayed_Math" content]
-      nil
-      ;; (latex/html-export content true true)
+      (latex/html-export content true true)
 
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
