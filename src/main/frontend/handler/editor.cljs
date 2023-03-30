@@ -3719,14 +3719,14 @@
             (and (true? old-heading) (nil? heading)))
         (set-block-property-aux! block :heading heading)
 
-        (or (or (nil? heading) (true? heading))
-            (number? old-heading))
+        (and (or (nil? heading) (true? heading))
+             (number? old-heading))
         (let [block' (set-block-property-aux! block :heading heading)
               content (commands/clear-markdown-heading (:block/content block'))]
           (merge block' {:block/content content}))
 
-        (or (or (nil? old-heading) (true? old-heading))
-            (number? heading))
+        (and (or (nil? old-heading) (true? old-heading))
+             (number? heading))
         (let [block' (set-block-property-aux! block :heading nil)
               properties (assoc (:block/properties block) :heading heading)
               content (commands/set-markdown-heading (:block/content block') heading)]
