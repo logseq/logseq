@@ -4,7 +4,7 @@
             ["semver" :as semver]
             ["os" :as os]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             [clojure.string :as string]
             [electron.utils :refer [fetch extract-zip] :as utils]
             [electron.logger :as logger]
@@ -21,7 +21,7 @@
 
 (defn dotdir-file?
   [file]
-  (and file (string/starts-with? (path/normalize file) cfgs/dot-root)))
+  (and file (string/starts-with? (node-path/normalize file) cfgs/dot-root)))
 
 (defn assetsdir-file?
   [file]
@@ -94,10 +94,10 @@
                       (fn [resolve1 reject1]
                         (let [body (.-body res)
                               *downloaded (atom 0)
-                              dest-basename (path/basename dl-url)
+                              dest-basename (node-path/basename dl-url)
                               dest-basename (if-not (string/ends-with? dest-basename ".zip")
                                               (str id "_" dest-basename ".zip") dest-basename)
-                              tmp-dest-file (path/join (os/tmpdir) (str dest-basename ".pending"))
+                              tmp-dest-file (node-path/join (os/tmpdir) (str dest-basename ".pending"))
                               dest-file (.createWriteStream fs tmp-dest-file)]
                           (doto body
                             (.on "data" (fn [chunk]
@@ -121,22 +121,22 @@
                                      pkg? (fn [root]
                                             (when-let [^js stat (fs/statSync root)]
                                               (when (.isDirectory stat)
-                                                (fs/pathExistsSync (.join path root "package.json")))))]
+                                                (fs/pathExistsSync (.join node-path root "package.json")))))]
                                  (if (pkg? zip-extracted-path)
                                    "."
-                                   (last (take-while #(pkg? (.join path zip-extracted-path %)) dirs))))
+                                   (last (take-while #(pkg? (.join node-path zip-extracted-path %)) dirs))))
 
             _ (when-not tmp-extracted-root
                 (throw (js/Error. :invalid-plugin-package)))
 
-            tmp-extracted-root (.join path zip-extracted-path tmp-extracted-root)
+            tmp-extracted-root (.join node-path zip-extracted-path tmp-extracted-root)
 
             _ (and (fs/existsSync dot-extract-to)
                    (fs/removeSync dot-extract-to))
 
             _ (fs/moveSync tmp-extracted-root dot-extract-to)
 
-            _ (let [src (.join path dot-extract-to "package.json")
+            _ (let [src (.join node-path dot-extract-to "package.json")
                     ^js sponsors (bean/->js sponsors)
                     ^js pkg (fs/readJsonSync src)]
                 (set! (.-repo pkg) repo)
@@ -201,7 +201,7 @@
                              (debug "[Download URL Error]" asset)
                              (throw (js/Error. [:release-asset-not-found (js/JSON.stringify asset)])))
 
-                         dest (.join path cfgs/dot-root "plugins" (:id item))
+                         dest (.join node-path cfgs/dot-root "plugins" (:id item))
                          _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
                          _ (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
 
@@ -230,8 +230,8 @@
 (defn uninstall!
   [id]
   (let [id (string/replace id #"^[.\/]+" "")
-        plugin-path (.join path (utils/get-ls-dotdir-root) "plugins" id)
-        settings-path (.join path (utils/get-ls-dotdir-root) "settings" (str id ".json"))]
+        plugin-path (.join node-path (utils/get-ls-dotdir-root) "plugins" id)
+        settings-path (.join node-path (utils/get-ls-dotdir-root) "settings" (str id ".json"))]
     (debug "[Uninstall]" plugin-path)
     (when (fs/pathExistsSync plugin-path)
       (fs/removeSync plugin-path)

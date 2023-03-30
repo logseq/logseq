@@ -22,6 +22,7 @@
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
+            [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -69,7 +70,8 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.path :as path]))
 
 ;; TODO: should we move all events here?
 
@@ -116,13 +118,18 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
-            (file-sync/maybe-onboarding-show status)
-            (whiteboard/onboarding-show)))))))
+            (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
   (sync/remove-all-pwd!)
-  (file-sync-handler/reset-user-state!))
+  (file-sync-handler/reset-user-state!)
+  (login/sign-out!))
+
+(defmethod handle :user/login [[_ host-ui?]]
+  (if (or host-ui? (not util/electron?))
+    (js/window.open config/LOGIN-URL)
+    (login/open-login-modal!)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
@@ -383,8 +390,9 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
+  ;; Replace initial fs watcher
   (fs-watcher/load-graph-files! repo)
-  ;; TODO: Notify user to update filename format when the UX is smooth enough
+  ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
   ;;    (fn []
@@ -469,7 +477,8 @@
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
       (when-let [^js html (js/document.querySelector ":root")]
-        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px")))
+        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
+        (.add (.-classList html) "has-mobile-keyboard"))
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
@@ -491,7 +500,8 @@
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
       (when-let [^js html (js/document.querySelector ":root")]
-        (.removeProperty (.-style html) "--ls-native-kb-height"))
+        (.removeProperty (.-style html) "--ls-native-kb-height")
+        (.remove (.-classList html) "has-mobile-keyboard"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
@@ -609,10 +619,13 @@
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (-> event
-                    (js->clj :keywordize-keys true)
-                    (update :path (fn [path]
-                                    (when (string? path) (capacitor-fs/normalize-file-protocol-path nil path)))))]
+        payload (js->clj event :keywordize-keys true)
+        dir (:dir payload)
+        payload (-> payload
+                    (update :path
+                           (fn [path]
+                             (when (string? path)
+                               (path/relative-path dir path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))

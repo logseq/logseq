@@ -139,6 +139,7 @@
           [b-cut m-cut nil]))
       [value nil nil])))
 
+;; FIXME: distinguish from get-repo-name
 (defn get-graph-name-from-path
   [path]
   (when (string? path)
@@ -147,4 +148,4 @@
       (-> (if (not= (first parts) "0")
             (util/string-join-path parts)
             (last parts))
-          js/decodeURI))))
+          js/decodeURIComponent))))

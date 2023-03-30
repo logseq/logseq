@@ -5,14 +5,14 @@
             [frontend.fs :as fs]
             [promesa.core :as p]
             ["fs" :as fs-node]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 (use-fixtures :once fixtures/redef-get-fs)
 
 (deftest-async create-if-not-exists-creates-correctly
   ;; dir needs to be an absolute path for fn to work correctly
-  (let [dir (path/resolve (test-helper/create-tmp-dir))
-        some-file (path/join dir "something.txt")]
+  (let [dir (node-path/resolve (test-helper/create-tmp-dir))
+        some-file (node-path/join dir "something.txt")]
 
     (->
      (p/do!
@@ -29,8 +29,8 @@
         (fs-node/rmdirSync dir))))))
 
 (deftest-async create-if-not-exists-does-not-create-correctly
-  (let [dir (path/resolve (test-helper/create-tmp-dir))
-        some-file (path/join dir "something.txt")]
+  (let [dir (node-path/resolve (test-helper/create-tmp-dir))
+        some-file (node-path/join dir "something.txt")]
     (fs-node/writeFileSync some-file "OLD")
 
     (->

@@ -217,11 +217,6 @@
      ;; graph -> state
      :graph/parsing-state                   {}
 
-     ;; copied blocks
-     :copy/blocks                           {:copy/content nil
-                                             :copy/graph nil
-                                             :copy/blocks nil}
-
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
@@ -601,9 +596,7 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (and
-    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
-    (:feature/enable-whiteboards? (sub-config repo)))))
+   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
 (defn enable-git-auto-push?
   [repo]
@@ -752,10 +745,10 @@ Similar to re-frame subscriptions"
   (get-in (get-route-match) [:query-params :p]))
 
 (defn get-current-repo
+  "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+      "local"))
 
 (defn get-remote-graphs
   []
@@ -1119,7 +1112,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (cursor/pos (gdom/getElement edit-input-id))})))
+       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+                            (count (:block/content edit-block)))})))
 
 (defn clear-edit!
   []
@@ -1712,16 +1706,6 @@ Similar to re-frame subscriptions"
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
 
-(defn get-copied-blocks
-  []
-  (:copy/blocks @state))
-
-(defn set-copied-blocks!
-  [content blocks]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
-                            :copy/blocks blocks}))
-
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
@@ -2076,6 +2060,10 @@ Similar to re-frame subscriptions"
 (defn get-current-pdf
   []
   (:pdf/current @state))
+
+(defn nfs-user-granted?
+  [repo]
+  (get-in @state [:nfs/user-granted? repo]))
 
 (defn set-current-pdf!
   [inflated-file]

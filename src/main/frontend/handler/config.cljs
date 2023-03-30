@@ -3,7 +3,6 @@
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.config :as config]
             [frontend.db :as db]
             [borkdude.rewrite-edn :as rewrite]))
 
@@ -24,11 +23,9 @@
         (file-handler/set-file-content! repo path new-content) nil))))
 
 (defn set-config!
-  ([k v]
-   (set-config! (state/get-current-repo) k v))
-  ([repo k v]
-   (let [path (config/get-repo-config-path repo)]
-     (repo-config-set-key-value path k v))))
+  [k v]
+  (let [path "logseq/config.edn"]
+    (repo-config-set-key-value path k v)))
 
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]

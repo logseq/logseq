@@ -47,10 +47,12 @@
     (when-not (or config/publishing?
                   logged?
                   (not sync-enabled?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-       [:span (t :login)]
-       (when loading?
-         [:span.ml-2 (ui/loading "")])])))
+      [:span.flex.space-x-2
+       [:a.button.text-sm.font-medium.block
+        {:on-click #(state/pub-event! [:user/login])}
+        [:span (t :login)]
+        (when loading?
+          [:span.ml-2 (ui/loading "")])]])))
 
 (rum/defc publish < rum/reactive
   < {:key-fn #(identity "publish-button")}

@@ -18,7 +18,8 @@
             [cljs.core.match :refer [match]]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn- paste-text-parseable
   [format text]
@@ -81,83 +82,96 @@
                            (clojure.string/includes? matched-text selection))))
               some?))))
 
+;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
+;; for a similar example
+(defn get-copied-blocks []
+  (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
+                            (js/navigator.clipboard.read))
+          blocks-blob ^js (when clipboard-items
+                            (let [types (.-types ^js (first clipboard-items))]
+                              (when (contains? (set types) "web application/logseq")
+                                (.getType ^js (first clipboard-items)
+                                          "web application/logseq"))))
+          blocks-str (when blocks-blob (.text blocks-blob))]
+         (when blocks-str
+           (gp-util/safe-read-string blocks-str))))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
-  (let [copied-blocks (state/get-copied-blocks)
-        input (state/get-input)
-        input-id (state/get-edit-input-id)
-        text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-        replace-text-f (fn [text]
-                         (commands/delete-selection! input-id)
-                         (commands/simple-insert! input-id text nil))
-        internal-paste? (and
-                         (seq (:copy/blocks copied-blocks))
-                         ;; not copied from the external clipboard
-                         (= (string/trimr text)
-                            (string/trimr (:copy/content copied-blocks))))]
-    (if internal-paste?
-      (let [blocks (:copy/blocks copied-blocks)]
-        (when (seq blocks)
-          (editor-handler/paste-blocks blocks {})))
-      (let [shape-refs-text (when (and (not (string/blank? html))
-                                       (get-whiteboard-tldr-from-text html))
-                              ;; text should always be prepared block-ref generated in tldr
-                              text)
-            {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-            text-url? (gp-util/url? text)
-            selection-url? (gp-util/url? selection)]
-        (cond
-          (not (string/blank? shape-refs-text))
-          (commands/simple-insert! input-id shape-refs-text nil)
+  (->
+   (p/let [copied-blocks (get-copied-blocks)]
+     (let [input (state/get-input)
+           input-id (state/get-edit-input-id)
+           text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
+           replace-text-f (fn [text]
+                            (let [input-id (state/get-edit-input-id)]
+                              (commands/delete-selection! input-id)
+                              (commands/simple-insert! input-id text nil)))
+           internal-paste? (seq copied-blocks)]
+       (if internal-paste?
+         (editor-handler/paste-blocks copied-blocks {})
+         (let [shape-refs-text (when (and (not (string/blank? html))
+                                          (get-whiteboard-tldr-from-text html))
+                                 ;; text should always be prepared block-ref generated in tldr
+                                 text)
+               {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+               text-url? (gp-util/url? text)
+               selection-url? (gp-util/url? selection)]
+           (cond
+             (not (string/blank? shape-refs-text))
+             (commands/simple-insert! input-id shape-refs-text nil)
 
-          (or (and (or text-url? selection-url?)
-                   (selection-within-link? selection-and-format))
-              (and text-url? selection-url?))
-          (replace-text-f text)
+             (or (and (or text-url? selection-url?)
+                      (selection-within-link? selection-and-format))
+                 (and text-url? selection-url?))
+             (replace-text-f text)
 
-          (and (or text-url?
-                   (and value (gp-util/url? (string/trim value))))
-               (not (string/blank? (util/get-selected-text))))
-          (editor-handler/html-link-format! text)
+             (and (or text-url?
+                      (and value (gp-util/url? (string/trim value))))
+                  (not (string/blank? (util/get-selected-text))))
+             (editor-handler/html-link-format! text)
 
-          (and (block-ref/block-ref? text)
-               (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
-          (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
+             (and (block-ref/block-ref? text)
+                  (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+             (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
 
-          :else
-          ;; from external
-          (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-                html-text (let [result (when-not (string/blank? html)
-                                         (try
-                                           (html-parser/convert format html)
-                                           (catch :default e
-                                             (log/error :exception e)
-                                             nil)))]
-                            (if (string/blank? result) nil result))
-                text (or html-text text)]
-            (match [format
-                    (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                    (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                    (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-              [:markdown false _ _]
-              (paste-text-parseable format text)
+             :else
+             ;; from external
+             (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+                   html-text (let [result (when-not (string/blank? html)
+                                            (try
+                                              (html-parser/convert format html)
+                                              (catch :default e
+                                                (log/error :exception e)
+                                                nil)))]
+                               (if (string/blank? result) nil result))
+                   text (or html-text text)]
+               (match [format
+                       (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                       (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                       (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+                 [:markdown false _ _]
+                 (paste-text-parseable format text)
 
-              [:org _ false _]
-              (paste-text-parseable format text)
+                 [:org _ false _]
+                 (paste-text-parseable format text)
 
-              [:markdown true _ false]
-              (paste-segmented-text format text)
+                 [:markdown true _ false]
+                 (paste-segmented-text format text)
 
-              [:markdown true _ true]
-              (replace-text-f text)
+                 [:markdown true _ true]
+                 (replace-text-f text)
 
-              [:org _ true false]
-              (paste-segmented-text format text)
+                 [:org _ true false]
+                 (paste-segmented-text format text)
 
-              [:org _ true true]
-              (replace-text-f text))))))))
+                 [:org _ true true]
+                 (replace-text-f text))))))))
+   (p/catch (fn [error]
+              (prn "Paste failed: ")
+              (log/error :exception error)))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -181,6 +195,16 @@
       (paste-text-in-one-block-at-point))
     (paste-copied-blocks-or-text text e html)))
 
+(defn- paste-file-if-exists [id e]
+  (when id
+    (let [clipboard-data (gobj/get e "clipboardData")
+          files (.-files clipboard-data)]
+      (when-let [file (first files)]
+        (when-let [block (state/get-edit-block)]
+          (editor-handler/upload-asset id #js[file] (:block/format block)
+                                       editor-handler/*asset-uploading? true)))
+      (util/stop e))))
+
 (defn editor-on-paste!
   "Pastes with formatting and includes the following features:
 - handles internal pastes to correctly paste at the block level
@@ -194,29 +218,19 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [input (state/get-input)
-          clipboard-data (gobj/get e "clipboardData")
+    (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
-          text (.getData clipboard-data "text")
-          files (.-files text)
-          paste-file-if-exist (fn []
-                                (when id
-                                  (let [_handled
-                                        (let [clipboard-data (gobj/get e "clipboardData")
-                                              files (.-files clipboard-data)]
-                                          (when-let [file (first files)]
-                                            (when-let [block (state/get-edit-block)]
-                                              (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                                           editor-handler/*asset-uploading? true))))]
-                                    (util/stop e))))]
+          text (.getData clipboard-data "text")]
       (cond
-        (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-        (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
+        (and (string/blank? text) (string/blank? html))
+        (paste-file-if-exists id e)
+        (and (seq (.-files clipboard-data)) (state/preferred-pasting-file?))
+        (paste-file-if-exists id e)
         :else
         (let [text' (or (when (gp-util/url? text)
                           (wrap-macro-url text))
                         text)]
-          (paste-text-or-blocks-aux input e text' html))))))
+          (paste-text-or-blocks-aux (state/get-input) e text' html))))))
 
 (defn editor-on-paste-raw!
   "Raw pastes without _any_ formatting. Can also replace selected text with a paste"

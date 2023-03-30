@@ -150,10 +150,6 @@ html[data-theme='light'] {
   color: whites;
 }
 
-.tl-zoom-bar {
-  @apply ml-4;
-}
-
 .tl-action-bar {
   @apply absolute bottom-0 flex items-center border-0 left-10 bottom-10;
 
@@ -171,7 +167,6 @@ html[data-theme='light'] {
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
-
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
@@ -289,10 +284,13 @@ html[data-theme='light'] {
 
   .tl-button {
     font-size: 16px;
+    flex: 0 0 auto;
   }
 }
 
 .tl-tools-floating-panel {
+  max-height: 90vh;
+  overflow-y: auto;
   flex-flow: column;
 }
 
@@ -1175,9 +1173,6 @@ button.tl-shape-links-panel-item-remove-button {
 
 .block-link-reference-row {
   @apply block;
-  > * {
-    @apply inline;
-  }
 }
 
 .tl-tooltip-content {
