@@ -88,7 +88,10 @@
 
 (defn- inline-link
   [{:keys [url label full_text]}]
-  (let [href (when (= "Search" (first url)) (second url))]
+  (let [href (case (first url)
+               "Search" (second url)
+               "Complex" (str (:protocol (second url)) "://" (:link (second url)))
+               nil)]
     (cond-> [:a]
       href (conj {:href href})
       href (concatv (mapv inline-ast->hiccup label))
