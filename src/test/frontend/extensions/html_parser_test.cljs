@@ -2,7 +2,10 @@
   (:require [clojure.test :as test :refer [deftest testing are]]
             [frontend.extensions.html-parser :as parser]))
 
-(deftest convert-test
+;; Disabled temporally because document is not supported on Node
+;; and jsdom can't be required
+
+#_(deftest convert-test
   (testing "markdown"
     (are [x y] (= (parser/convert :markdown x) y)
       "<ul><li>a</li><ul><li>b</li></ul></ul>"
