@@ -2,7 +2,7 @@
   "Common helper fns for tests"
   (:require [frontend.handler.repo :as repo-handler]
             [frontend.db.conn :as conn]
-            ["path" :as path]
+            ["path" :as node-path]
             ["fs" :as fs-node]))
 
 (defonce test-db "test-db")
@@ -31,9 +31,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
   ([] (create-tmp-dir nil))
   ([subdir]
    (when-not (fs-node/existsSync "tmp") (fs-node/mkdirSync "tmp"))
-   (let [dir (fs-node/mkdtempSync (path/join "tmp" "unit-test-"))]
+   (let [dir (fs-node/mkdtempSync (node-path/join "tmp" "unit-test-"))]
      (if subdir
        (do
-         (fs-node/mkdirSync (path/join dir subdir))
-         (path/join dir subdir))
+         (fs-node/mkdirSync (node-path/join dir subdir))
+         (node-path/join dir subdir))
        dir))))

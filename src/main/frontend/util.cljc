@@ -770,16 +770,15 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     ([s]
-      (utils/writeClipboard (clj->js {:text s})))
-     ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))
-     ([s html owner-window]
-      (-> (cond-> {:text s}
-            (not (string/blank? html))
-            (assoc :html html))
-          (bean/->js)
-          (utils/writeClipboard owner-window)))))
+     [text & {:keys [html blocks owner-window]}]
+     (let [data (clj->js
+                 (gp-util/remove-nils-non-nested
+                  {:text text
+                   :html html
+                   :blocks (when (seq blocks) (pr-str blocks))}))]
+       (if owner-window
+         (utils/writeClipboard data owner-window)
+         (utils/writeClipboard data)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
