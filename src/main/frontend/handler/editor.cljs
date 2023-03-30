@@ -3534,12 +3534,12 @@
 (defn collapse-all-selection!
   []
   (let [block-ids (->> (get-selected-toplevel-block-uuids)
-                    (map #(all-blocks-with-level {:incremental? false
-                                                  :expanded? true
-                                                  :root-block %}))
-                    flatten
-                    (map :block/uuid)
-                    distinct)]
+                       (map #(all-blocks-with-level {:incremental? false
+                                                     :expanded? true
+                                                     :root-block %}))
+                       flatten
+                       (map :block/uuid)
+                       distinct)]
     (set-blocks-collapsed! block-ids true)))
 
 (defn expand-all-selection!
