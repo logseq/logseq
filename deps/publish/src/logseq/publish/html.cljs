@@ -511,16 +511,16 @@
   [config page-name]
   (let [sanity-page-name (gp-util/page-name-sanity-lc (string/trim page-name))
         {:keys [page-id blocks]} (get (:embed-page-blocks config) sanity-page-name)]
-    [:div.color-level.embed.embed-page.bg-base-2
-     [:section.flex.items-center.p-1.embed-header
-      [:div.mr-3 "Page embed: "]
-      (page-reference page-name config nil nil)]
-     (blocks-container blocks (assoc config
-                                     :id page-name
-                                     :embed? true
-                                     :page-embed? true
-                                     :ref? false)
-                       page-id)]))
+    (when (seq blocks)
+      [:div.color-level.embed.embed-page.bg-base-2
+       [:section.flex.items-center.p-1.embed-header
+        (page-reference page-name config nil nil)]
+       (blocks-container blocks (assoc config
+                                       :id page-name
+                                       :embed? true
+                                       :page-embed? true
+                                       :ref? false)
+                         page-id)])))
 
 (defn- macro-embed-cp
   [config arguments]
@@ -1198,12 +1198,10 @@
 
 (rum/defc blocks-container
   [blocks config root-id]
-  (let [doc-mode? (:document/mode? config)]
+  (let [doc-mode? (:document/mode? config)
+        blocks (remove nil? blocks)]
     (when (seq blocks)
       (let [result (util/blocks->vec-tree blocks root-id)]
-        (prn {:root-id root-id
-              :blocks blocks
-              :result result})
         [:div.blocks-container
          {:class (when doc-mode? "document-mode")}
          (for [[idx item] (util/indexed result)]

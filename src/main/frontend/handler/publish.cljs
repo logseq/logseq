@@ -20,30 +20,6 @@
             [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]))
 
-(defn- get-embed-pages
-  [blocks]
-  (let [pages (->> (map :block/macros blocks)
-                   (apply concat)
-                   (map :db/id)
-                   (set)
-                   (db/pull-many '[*])
-                   (keep (fn [macro]
-                           (and (= (:block/type macro) "macro")
-                                (= "embed" (get-in macro [:block/properties :logseq.macro-name]))
-                                (when-let [page (first (get-in macro [:block/properties :logseq.macro-arguments]))]
-                                  (when (page-ref/page-ref? page)
-                                    (let [result (page-ref/get-page-name page)]
-                                      (when-not (string/blank? result)
-                                        result))))))))]
-    (->> (keep (fn [p]
-                 (let [page (gp-util/page-name-sanity-lc p)
-                       page-entity (db/entity [:block/name page])
-                       blocks (db/get-page-blocks-no-cache page)]
-                   (when (seq blocks)
-                     [page {:page-id (:block/uuid page-entity)
-                            :blocks blocks}]))) pages)
-         (into {}))))
-
 (defn- transform-blocks
   [root-block]
   (let [repo (state/get-current-repo)
@@ -64,11 +40,37 @@
                         (update (vec blocks) 0 dissoc :block/left :block/parent)
                         (map #(dissoc % :block/page)))
                        (let [page (db/pull (:db/id root-block))]
-                         (cons page blocks)))
-        blocks (util/distinct-by :block/uuid blocks')]
-    {:blocks blocks
+                         (cons page blocks)))]
+    {:original-blocks blocks
+     :blocks (->> blocks'
+                  (remove nil?)
+                  (util/distinct-by :block/uuid))
      :refs refs
      :refed-blocks refed-blocks}))
+
+(defn- get-embed-pages
+  [blocks]
+  (let [pages (->> (map :block/macros blocks)
+                   (apply concat)
+                   (map :db/id)
+                   (set)
+                   (db/pull-many '[*])
+                   (keep (fn [macro]
+                           (and (= (:block/type macro) "macro")
+                                (= "embed" (get-in macro [:block/properties :logseq.macro-name]))
+                                (when-let [page (first (get-in macro [:block/properties :logseq.macro-arguments]))]
+                                  (when (page-ref/page-ref? page)
+                                    (let [result (page-ref/get-page-name page)]
+                                      (when-not (string/blank? result)
+                                        result))))))))]
+    (->> (keep (fn [p]
+                 (let [page (gp-util/page-name-sanity-lc p)
+                       page-entity (db/entity [:block/name page])
+                       blocks (:blocks (transform-blocks page-entity))]
+                   (when (seq blocks)
+                     [page {:page-id (:block/uuid page-entity)
+                            :blocks blocks}]))) pages)
+         (into {}))))
 
 (defn publish
   [& {:keys [page-name]}]
@@ -82,26 +84,9 @@
         page         (if block-uuid
                        (db/pull [:block/uuid block-uuid])
                        (db/pull [:block/name (util/page-name-sanity-lc page-name)]))
-        blocks       (if block-uuid
-                       (db/get-block-and-children repo block-uuid)
-                       (db/get-page-blocks-no-cache page-name))
-        ref-ids      (->> (mapcat :block/refs blocks)
-                          (map :db/id)
-                          (set))
-        refs         (db/pull-many '[*] ref-ids)
-        refed-blocks (->> (filter #(nil? (:block/name %)) refs)
-                          (map (fn [b]
-                                 [(:block/uuid b) (db/get-block-and-children repo (:block/uuid b))]))
-                          (into {}))
-        embed-page-blocks (get-embed-pages blocks)
         page-id      (:block/uuid page)
-        blocks'      (if (and block-uuid (seq blocks))
-                       (->>
-                        (update (vec blocks) 0 dissoc :block/left :block/parent)
-                        (map #(dissoc % :block/page)))
-                       (cons page blocks))
-        blocks       (->> blocks'
-                          (util/distinct-by :block/uuid))
+        {:keys [original-blocks blocks refs refed-blocks]} (transform-blocks page)
+        embed-page-blocks (get-embed-pages original-blocks)
         body         (let [embed-page-blocks' (medley/map-vals :blocks embed-page-blocks)]
                        {:page-id      page-id
                         :blocks       blocks
