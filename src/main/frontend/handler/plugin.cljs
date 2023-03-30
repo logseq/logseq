@@ -132,9 +132,8 @@
         (p/catch (fn [^js e]
                    (state/reset-all-updates-state)
                    (error-handler e)
-                   (js/console.error e)))
-        (p/finally
-          #(state/set-state! :plugin/installing nil)))))
+                   (state/set-state! :plugin/installing nil)
+                   (js/console.error e))))))
 
 (defn get-plugin-inst
   [pid]
@@ -784,4 +783,5 @@
   {:pending        (count (:plugin/updates-pending @state/state))
    :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
    :coming         (count (:plugin/updates-coming @state/state))
+   :installing     (:plugin/installing @state/state)
    :downloading?   (boolean (:plugin/updates-downloading? @state/state))})
