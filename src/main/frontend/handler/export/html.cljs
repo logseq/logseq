@@ -403,8 +403,10 @@
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                      ast**)
-            hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))]
-        (-> hiccup h/render-html utils/prettifyXml)))))
+            hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))
+            ;; remove placeholder tag
+            hiccup* (vec (cons :ul (drop 2 hiccup)))]
+        (-> hiccup* h/render-html utils/prettifyXml)))))
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"
