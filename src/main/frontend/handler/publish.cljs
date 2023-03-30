@@ -15,7 +15,60 @@
             [logseq.publish :as publish]
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.editor :as editor-handler]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util :as gp-util]
+            [medley.core :as medley]))
+
+(defn- get-embed-pages
+  [blocks]
+  (let [pages (->> (map :block/macros blocks)
+                   (apply concat)
+                   (map :db/id)
+                   (set)
+                   (db/pull-many '[*])
+                   (keep (fn [macro]
+                           (and (= (:block/type macro) "macro")
+                                (= "embed" (get-in macro [:block/properties :logseq.macro-name]))
+                                (when-let [page (first (get-in macro [:block/properties :logseq.macro-arguments]))]
+                                  (when (page-ref/page-ref? page)
+                                    (let [result (page-ref/get-page-name page)]
+                                      (when-not (string/blank? result)
+                                        result))))))))]
+    (->> (keep (fn [p]
+                 (let [page (gp-util/page-name-sanity-lc p)
+                       page-entity (db/entity [:block/name page])
+                       blocks (db/get-page-blocks-no-cache page)]
+                   (when (seq blocks)
+                     [page {:page-id (:block/uuid page-entity)
+                            :blocks blocks}]))) pages)
+         (into {}))))
+
+(defn- transform-blocks
+  [root-block]
+  (let [repo (state/get-current-repo)
+        page-block? (:block/name root-block)
+        blocks (if page-block? ; page
+                 (db/get-page-blocks-no-cache (:block/name root-block))
+                 (db/get-block-and-children repo (:block/uuid root-block)))
+        ref-ids      (->> (mapcat :block/refs blocks)
+                          (map :db/id)
+                          (set))
+        refs         (db/pull-many '[*] ref-ids)
+        refed-blocks (->> (filter #(nil? (:block/name %)) refs)
+                          (map (fn [b]
+                                 [(:block/uuid b) (db/get-block-and-children repo (:block/uuid b))]))
+                          (into {}))
+        blocks'      (if (and (not page-block?) (seq blocks))
+                       (->>
+                        (update (vec blocks) 0 dissoc :block/left :block/parent)
+                        (map #(dissoc % :block/page)))
+                       (let [page (db/pull (:db/id root-block))]
+                         (cons page blocks)))
+        blocks (util/distinct-by :block/uuid blocks')]
+    {:blocks blocks
+     :refs refs
+     :refed-blocks refed-blocks}))
 
 (defn publish
   [& {:keys [page-name]}]
@@ -40,6 +93,7 @@
                           (map (fn [b]
                                  [(:block/uuid b) (db/get-block-and-children repo (:block/uuid b))]))
                           (into {}))
+        embed-page-blocks (get-embed-pages blocks)
         page-id      (:block/uuid page)
         blocks'      (if (and block-uuid (seq blocks))
                        (->>
@@ -48,10 +102,12 @@
                        (cons page blocks))
         blocks       (->> blocks'
                           (util/distinct-by :block/uuid))
-        body         {:page-id      page-id
-                      :blocks       blocks
-                      :refed-blocks refed-blocks
-                      :refs         refs}
+        body         (let [embed-page-blocks' (medley/map-vals :blocks embed-page-blocks)]
+                       {:page-id      page-id
+                        :blocks       blocks
+                        :refed-blocks refed-blocks
+                        :refs         refs
+                        :embed-page-blocks embed-page-blocks'})
         ;; TODO: refresh token if empty
         token        (state/get-auth-id-token)
         publish-api  (if config/dev?
@@ -65,14 +121,14 @@
                          (let [new-graph-id (random-uuid)]
                            (<! (p->c (fs-util/save-graph-id-if-not-exists! repo new-graph-id)))
                            new-graph-id))
-            html     (publish/->html {:graph-id graph-id} blocks refed-blocks refs page-id)
-            body (assoc body
-                        :graph-id graph-id
-                        :html html)
-            result (<! (http/post publish-api
-                                  {:oauth-token       token
-                                   :edn-params        body
-                                   :with-credentials? false}))]
+            html     (publish/->html {:graph-id graph-id} blocks refed-blocks refs page-id embed-page-blocks)
+            body     (assoc body
+                            :graph-id graph-id
+                            :html html)
+            result   (<! (http/post publish-api
+                                    {:oauth-token       token
+                                     :edn-params        body
+                                     :with-credentials? false}))]
         (state/set-state! [:ui/loading? :publish] false)
         (if (:success result)
           (do

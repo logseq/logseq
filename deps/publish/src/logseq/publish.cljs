@@ -7,11 +7,12 @@
 
 (defn ->html
   "Convert blocks into HTML."
-  [config blocks refed-blocks refs root-id]
+  [config blocks refed-blocks refs root-id embed-page-blocks]
   (react-dom-server/renderToString
    (html/blocks-container blocks (merge config
                                         {:refed-blocks refed-blocks
-                                         :refs refs}) root-id)))
+                                         :refs refs
+                                         :embed-page-blocks embed-page-blocks}) root-id)))
 
 (comment
   (require '["fs" :as fs])

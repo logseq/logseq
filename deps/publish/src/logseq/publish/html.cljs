@@ -507,6 +507,21 @@
                                      :embed-parent (:block config))
                        uuid)]))
 
+(rum/defc page-embed
+  [config page-name]
+  (let [sanity-page-name (gp-util/page-name-sanity-lc (string/trim page-name))
+        {:keys [page-id blocks]} (get (:embed-page-blocks config) sanity-page-name)]
+    [:div.color-level.embed.embed-page.bg-base-2
+     [:section.flex.items-center.p-1.embed-header
+      [:div.mr-3 "Page embed: "]
+      (page-reference page-name config nil nil)]
+     (blocks-container blocks (assoc config
+                                     :id page-name
+                                     :embed? true
+                                     :page-embed? true
+                                     :ref? false)
+                       page-id)]))
+
 (defn- macro-embed-cp
   [config arguments]
   (let [a (first arguments)
@@ -522,9 +537,7 @@
       (page-ref/page-ref? a)
       (let [page-name (text/get-page-name a)]
         (when-not (string/blank? page-name)
-          (page-reference page-name config nil false)
-          ;; TODO: page embed
-          ))
+          (page-embed config page-name)))
 
       (block-ref/string-block-ref? a)
       (when-let [s (-> a block-ref/get-string-block-ref-id string/trim)]
@@ -668,8 +681,6 @@
 (defn map-inline
   [config col]
   (map #(inline config %) col))
-
-(def *debug-time (atom {}))
 
 (defn inline-text
   ([format v]
@@ -938,8 +949,7 @@
                   :class "code-block"})
           code (apply str lines)]
       [:pre.pre-wrap-white-space
-       [:code attr
-        code]])))
+       [:code attr code]])))
 
 (declare block-container)
 
@@ -1094,8 +1104,7 @@
 
 (rum/defc block-content
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block}]
-  (let [{:keys [result time]} (util/profile-with-time (block/parse-title-and-body uuid format pre-block? content))
-        _ (swap! *debug-time update :parsing + time)
+  (let [result (block/parse-title-and-body uuid format pre-block? content)
         {:block/keys [title body] :as block} (merge block result)]
     [:div.flex.flex-col.block-content-wrapper
      [:div.flex-1.w-full.flex
@@ -1191,8 +1200,10 @@
   [blocks config root-id]
   (let [doc-mode? (:document/mode? config)]
     (when (seq blocks)
-      (let [{:keys [result time]} (util/profile-with-time (util/blocks->vec-tree blocks root-id))]
-        (swap! *debug-time update :blocks->vec-tree + time)
+      (let [result (util/blocks->vec-tree blocks root-id)]
+        (prn {:root-id root-id
+              :blocks blocks
+              :result result})
         [:div.blocks-container
          {:class (when doc-mode? "document-mode")}
          (for [[idx item] (util/indexed result)]
