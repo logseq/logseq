@@ -224,7 +224,7 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region.bg-blue-100
+     [:div.r.flex.drag-region
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
