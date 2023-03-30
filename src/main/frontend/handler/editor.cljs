@@ -362,6 +362,7 @@
                 block
                 (dissoc block :block/pre-block?))
         block (update block :block/refs remove-non-existed-refs!)
+        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         new-properties (merge
                         (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
@@ -800,6 +801,10 @@
            :new-content new-value})))))
 
 (declare save-block!)
+
+(defn- block-has-no-ref?
+  [block]
+  (empty? (:block/_refs (db/entity (:db/id block)))))
 
 (defn delete-block!
   ([repo]
@@ -2613,11 +2618,9 @@
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
-(defn- delete-concat [current-block]
+(defn- delete-concat
+  [current-block input current-pos value]
   (let [input-id (state/get-edit-input-id)
-        ^js input (state/get-input)
-        current-pos (cursor/pos input)
-        value (gobj/get input "value")
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
@@ -2632,6 +2635,19 @@
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
+      (block-has-no-ref? current-block)
+      (let [edit-block (state/get-edit-block)
+            transact-opts {:outliner-op :delete-block
+                           :concat-data {:last-edit-block (:block/uuid edit-block)
+                                         :end? true}}
+            new-content (str value "" (:block/content next-block))
+            next-block (assoc next-block :block/left (:block/left current-block))
+            repo (state/get-current-repo)]
+        (outliner-tx/transact! transact-opts
+                               (delete-block-aux! edit-block false)
+                               (save-block! repo next-block new-content))
+        (edit-block! next-block current-pos (:block/uuid next-block)))
+
       :else
       (let [edit-block (state/get-edit-block)
             transact-opts {:outliner-op :delete-block
@@ -2640,9 +2656,8 @@
             new-content (str value "" (:block/content next-block))
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
-          (save-block! repo edit-block new-content)
-          (delete-block-aux! next-block false))
-
+                               (save-block! repo edit-block new-content)
+                               (delete-block-aux! next-block false))
         (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))
 
@@ -2661,7 +2676,7 @@
         (delete-and-update input selected-start selected-end)
 
         (and end? current-block)
-        (delete-concat current-block)
+        (delete-concat current-block input current-pos value)
 
         :else
         (delete-and-update input current-pos (inc current-pos))))))
