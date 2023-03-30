@@ -1,6 +1,7 @@
 (ns frontend.extensions.html-parser-test
-  (:require [clojure.test :as test :refer [deftest testing are]]
-            [frontend.extensions.html-parser :as parser]))
+  #_(:require [clojure.test :as test :refer [deftest testing are]]
+              [frontend.extensions.html-parser :as parser])
+  )
 
 ;; Disabled temporally because document is not supported on Node
 ;; and jsdom can't be required
