@@ -11,5 +11,5 @@
     (when (and (= (api/tag regex) :regex)
                (re-matches double-escaped-checker regex-string))
      (api/reg-finding! (assoc (meta regex)
-                             :message (str "double slash (\\\\) found in this regular expression followed by a regex special character (, + , * , ? , ^ , $ , | , \\ ), are you mistakenly double escaped a special character? Only escape one-time is required. No escape is required in character class []. (use #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]} to ignore)")
+                             :message (str "double slash (\\\\) found in this regular expression followed by a regex special character (, + , * , ? , ^ , $ , | , \\ ), have you mistakenly double escaped a special character? Only escaping one-time is required. No escape is required in character class []. (use #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]} to ignore)")
                              :type :regex-checks/double-escaped-regex)))))
