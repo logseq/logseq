@@ -1046,13 +1046,13 @@
                                        (when-let [width-t (and (number? width-t)
                                                                (if-not (state/get-left-sidebar-open?)
                                                                  (- width-t width-l) width-t))]
-                                         (set-max-width! (- width-t width-c' 100))))]
+                                         (set-max-width! (max (- width-t width-c' 100) 76))))]
             (.addEventListener js/window "resize" calc-wrap-max-width)
             (js/setTimeout calc-wrap-max-width 16)
             #(.removeEventListener js/window "resize" calc-wrap-max-width))))
       [right-sidebar-resized])
 
-    [:div.list-wrap.bg-green-100
+    [:div.list-wrap
      {:ref *wrap-el}
      children]))
 
