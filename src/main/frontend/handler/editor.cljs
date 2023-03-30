@@ -2651,7 +2651,7 @@
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
-      (block-has-no-ref? current-block)
+      (and next-block (block-has-no-ref? current-block))
       (let [edit-block (state/get-edit-block)
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
