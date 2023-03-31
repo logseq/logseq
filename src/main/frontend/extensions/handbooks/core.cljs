@@ -1,6 +1,7 @@
 (ns frontend.extensions.handbooks.core
   (:require [clojure.string :as string]
             [rum.core :as rum]
+            [cljs.core.async :as async]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.search :as search]
@@ -394,7 +395,7 @@
 
 (rum/defc ^:large-vars/data-var content
   []
-  (let [[active-pane0, set-active-pane0!]
+  (let [[active-pane-state, set-active-pane-state!]
         (rum/use-state [:dashboard nil (t :handbook/title)])
 
         [handbooks-state, set-handbooks-state!]
@@ -424,12 +425,13 @@
                                      (p/catch #(update-handbooks! {:error (str %)}))
                                      (p/finally #(update-handbooks! {:status :completed})))))
 
-        active-pane          (first active-pane0)
-        pane-render          (first (get panes-mapping active-pane))
-        dashboard?           (= :dashboard active-pane)
-        settings?            (= :settings active-pane)
+        active-pane-name     (first active-pane-state)
+        pane-render          (first (get panes-mapping active-pane-name))
+        pane-dashboard?      (= :dashboard active-pane-name)
+        pane-settings?       (= :settings active-pane-name)
+        pane-topic?          (= :topic-detail active-pane-name)
         force-nav-dashboard! (fn []
-                               (set-active-pane0! [:dashboard])
+                               (set-active-pane-state! [:dashboard])
                                (set-history-state! '()))
 
         handbooks-loaded?    (and (seq (:data handbooks-state))
@@ -444,12 +446,25 @@
                                  (when-not in-chapters?
                                    (set-history-state!
                                      (conj (sequence history-state) prev-state))))
-                               (set-active-pane0! next-state))]
+                               (set-active-pane-state! next-state))]
 
     ;; load handbooks
     (rum/use-effect!
       #(load-handbooks!)
       [])
+
+    ;; navigation sentry
+    (rum/use-effect!
+      (fn []
+        (let [c (:handbook/route-chan @state/state)]
+          (async/go-loop []
+            (let [v (<! c)]
+              (when (not= v :return)
+                (when-let [to (get handbooks-nodes v)]
+                  (nav-to-pane! [:topic-detail to (:title to)] [:dashboard]))
+                (recur))))
+          #(async/go (>! c :return))))
+      [handbooks-nodes])
 
     (rum/use-effect!
       (fn []
@@ -470,11 +485,10 @@
     (rum/use-effect!
       (fn []
         (when handbooks-data
-          (set-handbooks-nodes!
-            (->> (tree-seq map? :children handbooks-data)
-                 (reduce #(assoc %1 (or (:key %2) "__root") (bind-parent-key %2)) {})))
-          ;; TODO: remove debug
-          (set! (.-handbook-nodes js/window) (bean/->js handbooks-nodes))))
+          (let [nodes (->> (tree-seq map? :children handbooks-data)
+                           (reduce #(assoc %1 (or (:key %2) "__root") (bind-parent-key %2)) {}))]
+            (set-handbooks-nodes! nodes)
+            (set! (.-handbook-nodes js/window) (bean/->js nodes)))))
       [handbooks-data])
 
     [:div.cp__handbooks-content
@@ -483,48 +497,50 @@
       [:div.hd.flex.justify-between.select-none.draggable-handle
 
        [:h1.text-lg.flex.items-center
-        (if dashboard?
+        (if pane-dashboard?
           [:span (t :handbook/title)]
           [:button.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
                                                 (nil? (seq prev))
                                                 [:dashboard])]
-                               (set-active-pane0! prev)
+                               (set-active-pane-state! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
-           [:span (or (last active-pane0) (t :handbook/title))]])]
+           [:span (or (last active-pane-state) (t :handbook/title))]])]
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
           [:a.flex.items-center {:aria-label (t :handbook/home) :tabIndex "0" :on-click #(force-nav-dashboard!)} (ui/icon "home")])
-        [:a.flex.items-center {:aria-label (t :handbook/settings) :tabIndex "0" :on-click #(nav-to-pane! [:settings nil "Settings"] active-pane0)} (ui/icon "settings")]
+        (when pane-topic?
+          [:a.flex.items-center {:aria-label "Copy topic link" :tabIndex "0" :on-click #(js/console.log (:key (second active-pane-state)))} (ui/icon "copy")])
+        [:a.flex.items-center {:aria-label (t :handbook/settings) :tabIndex "0" :on-click #(nav-to-pane! [:settings nil "Settings"] active-pane-state)} (ui/icon "settings")]
         [:a.flex.items-center {:aria-label (t :handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
-      (when (and (not settings?) (not handbooks-loaded?))
+      (when (and (not pane-settings?) (not handbooks-loaded?))
         [:div.flex.items-center.justify-center.pt-32
          (if-not (:error handbooks-state)
            (ui/loading "Loading ...")
            [:code (:error handbooks-state)])])
 
-      (when (or settings? handbooks-loaded?)
+      (when (or pane-settings? handbooks-loaded?)
         [:<>
          ;; search bar
-         (when (or dashboard? (= :topics active-pane))
-           (search-bar active-pane0 nav-to-pane!
+         (when (or pane-dashboard? (= :topics active-pane-name))
+           (search-bar active-pane-state nav-to-pane!
                        handbooks-nodes search-state set-search-state!))
 
          ;; entry pane
          (when pane-render
            (apply pane-render
-                  (case active-pane
+                  (case active-pane-name
                     :settings
                     [dev-watch? #(do (set-dev-watch? %)
                                      (storage/set :handbooks-dev-watch? %))]
 
                     ;; default inputs
-                    [handbooks-nodes active-pane0 nav-to-pane!])))])]
+                    [handbooks-nodes active-pane-state nav-to-pane!])))])]
 
      (when handbooks-loaded?
        ;; footer
