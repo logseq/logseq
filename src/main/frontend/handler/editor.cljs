@@ -1438,7 +1438,7 @@
                  (fn [dest]
                    [file-rpath
                     (if (string? dest) (js/File. #js[] dest) file)
-                    (.join util/node-path dir file-rpath)
+                    (path/path-join dir file-rpath)
                     matched-alias]))
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
@@ -1514,14 +1514,10 @@
   [file-path]
   (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
                             ;; fix dummy file path of page
-                                  (and (util/electron?)
-                                       (util/node-path.join
-                                        (config/get-repo-dir (state/get-current-repo))
-                                        (config/get-pages-directory) "_.md"))
                                   "pages/contents.md")]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           current-file-fpath (path/path-join repo-dir current-file-rpath)]
-      (util/get-relative-path current-file-fpath file-path))
+      (path/get-relative-path current-file-fpath file-path))
     file-path))
 
 (defn upload-asset
