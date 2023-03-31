@@ -108,6 +108,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe('no refhas a ref')
   await expect(page.locator('.warning')).toHaveCount(0)
 
@@ -117,6 +118,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe('no refhas a ref')
   await expect(page.locator('.warning')).toHaveCount(0)
 
@@ -133,6 +135,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).not.toBe('no refhas a ref')
   expect(await page.inputValue('textarea >> nth=0')).toContain('no refhas a ref')
   await expect(page.locator('.warning')).toHaveCount(1)
@@ -143,6 +146,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Home')
   await page.waitForTimeout(100)
   await page.keyboard.press('Backspace', { delay: 50 })
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe('tetestno ref')
   await expect(page.locator('.warning')).toHaveCount(0)
 
@@ -153,11 +157,13 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Home')
   await page.waitForTimeout(100)
   await page.keyboard.press('Backspace', { delay: 50 })
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe('tetestno refno ref')
   await expect(page.locator('.warning')).toHaveCount(0)
 
   // backspace across blocks, the current block and the prev block both have refs
   await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(100)
   await page.keyboard.press('Home')
   await page.waitForTimeout(100)
   await page.keyboard.press('Backspace', { delay: 50 })
