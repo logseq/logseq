@@ -1,61 +1,93 @@
 (ns logseq.publish-spa.export
-  (:require ["fs-extra$default" :as fs]
-            ["path" :as path]
+  (:require ["fs-extra" :as fse]
+            ["path" :as node-path]
+            ["fs" :as fs]
             [promesa.core :as p]))
 
-(defn handle-export-publish-assets
-  [html app-path custom-css-path export-css-path repo-path asset-filenames output-path]
-  (let [root-dir output-path
-        static-dir (path/join root-dir "static")
-        assets-from-dir (path/join repo-path "assets")
-        assets-to-dir (path/join root-dir "assets")
-        index-html-path (path/join root-dir "index.html")]
-    (p/let [_ (. fs ensureDir static-dir)
-            _ (. fs ensureDir assets-to-dir)
+(def js-files
+  "js files from publishing release build"
+  ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"])
+
+(def static-dirs
+  "dirs under static dir to copy over"
+  ["css" "fonts" "icons" "img" "js"])
+
+(defn- default-notification
+  [msg]
+  (if (= (:type msg) "success")
+    (js/console.log (:payload msg))
+    (js/console.error (:payload msg))))
+
+(defn- cleanup-js-dir
+  "Moves used js files to the correct dir and removes unused js files"
+  [output-static-dir]
+  (let [publishing-dir (node-path/join output-static-dir "js" "publishing")]
+    (p/let [_ (p/all (map (fn [file]
+                            (fs/rmSync (node-path/join output-static-dir "js" file) #js {:force true}))
+                          js-files))
+            _ (p/all (map (fn [file]
+                            (fs/renameSync
+                             (node-path/join publishing-dir file)
+                             (node-path/join output-static-dir "js" file)))
+                          js-files))
+            ;; remove publishing-dir
+            _ (p/all (map (fn [file]
+                            (fs/rmSync (node-path/join publishing-dir file)))
+                          (fs/readdirSync publishing-dir)))
+            _ (fs/rmdirSync publishing-dir)
+            ;; remove source map files
+            _ (p/all (map (fn [file]
+                            (fs/rmSync (node-path/join output-static-dir "js" (str file ".map")) #js {:force true}))
+                          ["main.js" "code-editor.js" "excalidraw.js"]))])))
+
+(defn- copy-static-files-and-assets
+  [static-dir repo-path output-dir {:keys [log-error-fn asset-filenames]
+                                    :or {asset-filenames []
+                                         log-error-fn js/console.error}}]
+  (let [assets-from-dir (node-path/join repo-path "assets")
+        assets-to-dir (node-path/join output-dir "assets")
+        output-static-dir (node-path/join output-dir "static")]
+    (p/let [_ (fs/mkdirSync assets-to-dir #js {:recursive true})
             _ (p/all (concat
-                      [(. fs writeFile index-html-path html)
-
-
-                       (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+                      [(fse/copy (node-path/join static-dir "404.html") (node-path/join output-dir "404.html"))]
 
                       (map
                        (fn [filename]
-                         (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                         (-> (fse/copy (node-path/join assets-from-dir filename) (node-path/join assets-to-dir filename))
                              (p/catch
                               (fn [e]
-                                ;; TODO: Make into a callback
-                                (println "Failed to copy"
-                                         (str {:from (path/join assets-from-dir filename)
-                                               :to (path/join assets-to-dir filename)})
-                                         e)))))
+                                (log-error-fn "Failed to copy"
+                                              (str {:from (node-path/join assets-from-dir filename)
+                                                    :to (node-path/join assets-to-dir filename)})
+                                              e)))))
                        asset-filenames)
 
                       (map
                        (fn [part]
-                         (. fs copy (path/join app-path part) (path/join static-dir part)))
-                       ["css" "fonts" "icons" "img" "js"])))
-            export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
-            _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
-            custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
-            _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
-            js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
-            _ (p/all (map (fn [file]
-                            (. fs removeSync (path/join static-dir "js" file)))
-                          js-files))
-            _ (p/all (map (fn [file]
-                            (. fs moveSync
-                              (path/join static-dir "js" "publishing" file)
-                              (path/join static-dir "js" file)))
-                          js-files))
-            _ (. fs removeSync (path/join static-dir "js" "publishing"))
-            ;; remove source map files
-            ;; TODO: ugly, replace with ls-files and filter with ".map"
-            _ (p/all (map (fn [file]
-                            (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                          ["main.js" "code-editor.js" "excalidraw.js"]))]
+                         (fse/copy (node-path/join static-dir part) (node-path/join output-static-dir part)))
+                       static-dirs)))])))
 
-           ;; TODO: Make into a callback
-           (println
-            :notification
-            {:type "success"
-             :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))
+(defn export
+  "Given a graph's directory, the generated html and the directory containing
+  html/static assets, creates an index.html with supporting assets at the
+  specified output directory"
+  [html static-dir repo-path output-dir {:keys [notification-fn]
+                                         :or {notification-fn default-notification}
+                                         :as options}]
+  (let [custom-css-path (node-path/join repo-path "logseq" "custom.css")
+        export-css-path (node-path/join repo-path "logseq" "export.css")
+        output-static-dir (node-path/join output-dir "static")
+        index-html-path (node-path/join output-dir "index.html")]
+    (-> (p/let [_ (fs/mkdirSync output-static-dir #js {:recursive true})
+                _ (fs/writeFileSync index-html-path html)
+                _ (copy-static-files-and-assets static-dir repo-path output-dir options)
+                export-css (if (fs/existsSync export-css-path) (str (fs/readFileSync export-css-path)) "")
+                _ (fs/writeFileSync (node-path/join output-static-dir "css" "export.css")  export-css)
+                custom-css (if (fs/existsSync custom-css-path) (str (fs/readFileSync custom-css-path)) "")
+                _ (fs/writeFileSync (node-path/join output-static-dir "css" "custom.css") custom-css)
+                _ (cleanup-js-dir output-static-dir)]
+               (notification-fn {:type "success"
+                                 :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
+        (p/catch (fn [error]
+                   (notification-fn {:type "error"
+                                     :payload (str "Export public pages unexpectedly failed with: " error)}))))))

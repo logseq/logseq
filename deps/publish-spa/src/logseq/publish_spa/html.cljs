@@ -3,6 +3,8 @@
             [goog.string :as gstring]
             [goog.string.format]))
 
+;; Copied from hiccup but tweaked for publish usage
+;; Any changes here should also be made in frontend.publishing/unescape-html
 (defn- escape-html
   "Change special characters into HTML character entities."
   [text]
@@ -24,16 +26,18 @@
       (gstring/format "<%s%s>%s</%s>\n" tag-name (html attrs) (html elts) tag-name))
     (map? v)
     (string/join ""
-              (map (fn [[k v]]
-                     (gstring/format " %s=\"%s\"" (name k) v)) v))
+                 (keep (fn [[k v]]
+                         ;; Skip nil values because some html tags haven't been
+                         ;; given values through html-options
+                         (when (some? v)
+                           (gstring/format " %s=\"%s\"" (name k) v))) v))
     (seq? v)
     (string/join " " (map html v))
     :else (str v)))
 
 (defn publishing-html
-  [transit-db app-state]
-  ;; TODO: Implement get-config
-  (let [{:keys [icon name alias title description url]} (:project {} #_(state/get-config))
+  [transit-db app-state options]
+  (let [{:keys [icon name alias title description url]} options
         icon (or icon "static/img/logo.png")
         project (or alias name)]
     (str "<!DOCTYPE html>\n"
@@ -83,7 +87,7 @@
            [:body
             [:div {:id "root"}]
             [:script (gstring/format "window.logseq_db=%s" (js/JSON.stringify (escape-html transit-db)))]
-            [:script (str "window.logseq_state=" (js/JSON.stringify app-state))]
+            [:script (str "window.logseq_state=" (js/JSON.stringify (pr-str app-state)))]
             [:script {:type "text/javascript"}
              "// Single Page Apps for GitHub Pages
       // https://github.com/rafgraph/spa-github-pages

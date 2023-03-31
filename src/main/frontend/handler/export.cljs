@@ -15,7 +15,7 @@
    [frontend.mobile.util :as mobile-util]
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
-   [frontend.publishing.html :as html]
+   [logseq.publish-spa.html :as html]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.property :as property]
@@ -89,15 +89,12 @@
                                      :config])
           state        (update state :config (fn [config]
                                                {"local" (get config repo)}))
-          _ (prn :STATE state)
-          raw-html-str (html/publishing-html db-str (pr-str state))
+          raw-html-str (html/publishing-html db-str state {})
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]
       (if (util/electron?)
         (js/window.apis.exportPublishAssets
          raw-html-str
-         (config/get-custom-css-path)
-         (config/get-export-css-path)
          (config/get-repo-dir repo)
          (clj->js asset-filenames)
          (util/mocked-open-dir-path))

@@ -6,9 +6,10 @@
     "@logseq/nbb-logseq": "^1.2.168"
   },
   "dependencies": {
-    "mldoc": "^1.5.1"
+    "mldoc": "^1.5.1",
+    "fs-extra": "9.1.0"
   },
   "scripts": {
-    "test": "nbb-logseq -cp src:test -m logseq.publish-spa.nbb-test-runner/run-tests"
+    "test": "nbb-logseq -cp src:test -m nextjournal.test-runner"
   }
 }
