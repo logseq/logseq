@@ -207,5 +207,6 @@
      [:div.mt-4
       (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
                  :on-click (fn []
-                             (util/copy-to-clipboard! @*content (when (= tp :html) @*content))
+                             (util/copy-to-clipboard! @*content
+                                                      :html (when (= tp :html) @*content))
                              (reset! *copied? true)))]]))

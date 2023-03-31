@@ -22,6 +22,8 @@
   (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
 
 ;; sidebars
+(def *right-sidebar-resized-at (atom (js/Date.now)))
+
 (defn- get-right-sidebar-width
   []
   (or (.. (js/document.getElementById "right-sidebar") -style -width)
