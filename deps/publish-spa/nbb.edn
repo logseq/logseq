@@ -1,4 +1,8 @@
-{:deps
+{:paths ["src"]
+ :deps
  {logseq/graph-parser
   ;; Nbb bug. Should just be "../graph-parser"
-  {:local/root "../../../../graph-parser"}}}
+  {:local/root "../../../../graph-parser"}
+  io.github.nextjournal/nbb-test-runner
+  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"
+   #_#_:local/root "../../../../../../nbb-test-runner"}}}
