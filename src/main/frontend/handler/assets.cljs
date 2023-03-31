@@ -91,7 +91,7 @@
 
       ;; BUG: avoid double encoding from PDF assets
       (path/absolute? path)
-      (if-let [has-encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" path))]
+      (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
         ;; Incoming path might be already URL encoded. from PDF assets
         (path/path-join "file://" (gp-util/safe-decode-uri-component path))
         (path/path-join "file://" path))
