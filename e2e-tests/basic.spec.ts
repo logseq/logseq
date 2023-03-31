@@ -85,7 +85,7 @@ test('delete and backspace', async ({ page, block }) => {
   // delete & backspace across blocks
   await block.enterNext()
   await block.mustFill('test')
-  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp', { delay: 50 })
   await page.keyboard.press('Delete', { delay: 50 })
   expect(await page.inputValue('textarea >> nth=0')).toBe('tetest')
   await block.enterNext()
@@ -103,8 +103,8 @@ test('delete and backspace', async ({ page, block }) => {
   await block.clickNext()
   await page.keyboard.press(modKey + '+v')
   await page.waitForTimeout(100)
-  await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp', { delay: 50 })
+  await page.keyboard.press('ArrowUp', { delay: 50 })
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
@@ -114,7 +114,7 @@ test('delete and backspace', async ({ page, block }) => {
 
   // delete across blocks, the current block has refs and the next block has no refs
   await page.keyboard.press('Enter')
-  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp', { delay: 50 })
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
@@ -130,8 +130,8 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Enter')
   await page.keyboard.press(modKey + '+v')
   await page.waitForTimeout(100)
-  await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp', { delay: 50 })
+  await page.keyboard.press('ArrowUp', { delay: 50 })
   await page.keyboard.press('End')
   await page.waitForTimeout(100)
   await page.keyboard.press('Delete', { delay: 50 })
@@ -162,8 +162,7 @@ test('delete and backspace', async ({ page, block }) => {
   await expect(page.locator('.warning')).toHaveCount(0)
 
   // backspace across blocks, the current block and the prev block both have refs
-  await page.keyboard.press('ArrowDown')
-  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowDown', { delay: 50 })
   await page.keyboard.press('Home')
   await page.waitForTimeout(100)
   await page.keyboard.press('Backspace', { delay: 50 })
