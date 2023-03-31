@@ -1513,7 +1513,9 @@
    Requires editing state"
   [file-path]
   (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
-                            ;; fix dummy file path of page
+                                  ;; fix dummy file path of page
+                                  (when (config/get-pages-directory)
+                                    (path/path-join (config/get-pages-directory) "_.md"))
                                   "pages/contents.md")]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           current-file-fpath (path/path-join repo-dir current-file-rpath)]
