@@ -1078,15 +1078,16 @@
 
         [:div.ui-items-container
          {:data-type (name type)}
-         (header-ui-items-list-wrap
-           (for [[_ {:keys [key pinned?] :as opts} pid] items]
-             (when (or (not toolbar?)
-                       (not (set? pinned-items)) pinned?)
-               (rum/with-key (ui-item-renderer pid type opts) key))))
 
          ;; manage plugin buttons
          (when toolbar?
-           (toolbar-plugins-manager-list items))]))))
+           [:<>
+            (header-ui-items-list-wrap
+              (for [[_ {:keys [key pinned?] :as opts} pid] items]
+                (when (or (not toolbar?)
+                          (not (set? pinned-items)) pinned?)
+                  (rum/with-key (ui-item-renderer pid type opts) key))))
+            (toolbar-plugins-manager-list items)])]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]
