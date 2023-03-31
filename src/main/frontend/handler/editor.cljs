@@ -807,8 +807,8 @@
 (declare save-block!)
 
 (defn- block-has-no-ref?
-  [block]
-  (empty? (:block/_refs (db/entity (:db/id block)))))
+  [block-or-uuid]
+  (empty? (:block/_refs (db/entity (if (uuid? block-or-uuid) [:block/uuid block-or-uuid] (:db/id block-or-uuid))))))
 
 (defn delete-block!
   ([repo]
@@ -833,7 +833,7 @@
                  (let [block-parent (gdom/getElement block-parent-id)
                        ;; it's possible to find a block not belong to the same page of current editing block
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       delete_prev? (and (not (block-has-no-ref? block)) (block-has-no-ref? sibling-block))
+                       delete_prev? (and (not (block-has-no-ref? block)) (block-has-no-ref? (uuid (dom/attr sibling-block "blockid"))))
                        {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value (not delete_prev?))
                        concat-prev-block? (boolean (and prev-block new-content))
                        save-page? (= (:db/id (:block/page prev-block)) page-id)
