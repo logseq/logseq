@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.config :as config]
+            [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [camel-snake-kebab.core :as csk]
@@ -456,14 +457,15 @@
     ;; navigation sentry
     (rum/use-effect!
       (fn []
-        (let [c (:handbook/route-chan @state/state)]
-          (async/go-loop []
-            (let [v (<! c)]
-              (when (not= v :return)
-                (when-let [to (get handbooks-nodes v)]
-                  (nav-to-pane! [:topic-detail to (:title to)] [:dashboard]))
-                (recur))))
-          #(async/go (>! c :return))))
+        (when (seq handbooks-nodes)
+          (let [c (:handbook/route-chan @state/state)]
+            (async/go-loop []
+             (let [v (<! c)]
+               (when (not= v :return)
+                 (when-let [to (get handbooks-nodes v)]
+                   (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
+                 (recur))))
+            #(async/go (>! c :return)))))
       [handbooks-nodes])
 
     (rum/use-effect!
@@ -513,7 +515,15 @@
         (when (> (count history-state) 1)
           [:a.flex.items-center {:aria-label (t :handbook/home) :tabIndex "0" :on-click #(force-nav-dashboard!)} (ui/icon "home")])
         (when pane-topic?
-          [:a.flex.items-center {:aria-label "Copy topic link" :tabIndex "0" :on-click #(js/console.log (:key (second active-pane-state)))} (ui/icon "copy")])
+          [:a.flex.items-center
+           {:aria-label "Copy topic link" :tabIndex "0"
+            :on-click   (fn []
+                          (let [s (str "logseq://handbook/" (:key (second active-pane-state)))]
+                            (util/copy-to-clipboard! s)
+                            (notification/show!
+                              [:div [:strong.block "Handbook link copied!"]
+                               [:label.opacity-50 s]] :success)))}
+           (ui/icon "copy")])
         [:a.flex.items-center {:aria-label (t :handbook/settings) :tabIndex "0" :on-click #(nav-to-pane! [:settings nil "Settings"] active-pane-state)} (ui/icon "settings")]
         [:a.flex.items-center {:aria-label (t :handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]

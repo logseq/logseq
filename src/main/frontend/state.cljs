@@ -2097,3 +2097,18 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn handbook-open?
+  []
+  (:ui/handbooks-open? @state))
+
+(defn get-handbook-route-chan
+  []
+  (:handbook/route-chan @state))
+
+(defn open-handbook-pane!
+  [k]
+  (when-not (handbook-open?)
+    (set-state! :ui/handbooks-open? true))
+  (js/setTimeout #(async/go
+                    (>! (get-handbook-route-chan) k))))
