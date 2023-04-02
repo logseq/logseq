@@ -5235,10 +5235,10 @@
         :notification/clear-all                           "Zmazať všetko"}
 
    :uk {:accessibility/skip-to-main-content "Перейти до головної"
-        :tutorial/text #?(:cljs (rc/inline "tutorial-ua.md")
-                          :default "tutorial-ua.md")
-        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ua.md")
-                                 :default "dummy-notes-ua.md")
+        :tutorial/text #?(:cljs (rc/inline "tutorial-uk.md")
+                          :default "tutorial-uk.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-uk.md")
+                                 :default "dummy-notes-uk.md")
         :on-boarding/demo-graph "Це демонстраційний графік, зміни не будуть збереженні поки ви не відкриєте локальну папку."
         :on-boarding/add-graph "Додати графік"
         :on-boarding/open-local-dir "Відкрити локальну директорію"
