@@ -890,7 +890,7 @@
           content (property/remove-empty-properties content)]
       {:block/uuid (:block/uuid block)
        :block/properties properties
-       :block/properties-order (or (keys properties) {})
+       :block/properties-order (or (keys properties) [])
        :block/content content})))
 
 (defn- batch-set-block-property!
@@ -2724,8 +2724,11 @@
         (delete-and-update input selected-start selected-end)
 
         (and end? current-block)
-        (delete-concat current-block input current-pos value)
-
+        (let [editor-state (get-state)
+              custom-query? (get-in editor-state [:config :custom-query?])]
+          (when-not custom-query?
+            (delete-concat current-block input current-pos value)))
+            
         :else
         (delete-and-update input current-pos (inc current-pos))))))
 
@@ -2754,11 +2757,13 @@
         (delete-and-update input selected-start selected-end))
 
       (zero? current-pos)
-      (do
+      (let [editor-state (get-state)
+            custom-query? (get-in editor-state [:config :custom-query?])]
         (util/stop e)
         (when (and (if top-block? (string/blank? value) true)
                    (not root-block?)
-                   (not single-block?))
+                   (not single-block?)
+                   (not custom-query?))
           (delete-block! repo false)))
 
       (and (> current-pos 1)
