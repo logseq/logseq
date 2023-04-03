@@ -1,6 +1,7 @@
 (ns frontend.components.sidebar
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
+            [frontend.version :refer [version]]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
@@ -687,24 +688,50 @@
                {:on-click state/toggle-document-mode!}
                "D"])))
 
+(def help-menu-items
+  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Keyboard shortcuts" :icon "command" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Documentation" :icon "help" :href ""}
+   :hr
+   {:title "Report bug" :icon "bug" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Request feature" :icon "git-pull-request" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Submit feedback" :icon "messages" :on-click #(handbooks/toggle-handbooks)}
+   :hr
+   {:title "Ask the community" :icon "brand-discord" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Support forum" :icon "message" :on-click #(handbooks/toggle-handbooks)}
+   :hr
+   {:title "Release notes" :icon "asterisk" :on-click #(handbooks/toggle-handbooks)}])
+
+(rum/defc help-menu-popup
+  []
+
+  [:div.cp__sidebar-help-menu-popup
+   [:div.list-wrap
+    (for [{:keys [title icon href on-click] :as item} help-menu-items]
+      (case item
+        :hr
+        [:hr.my-2]
+
+        ;; default
+        [:a.it.flex.items-center.px-4.py-1.select-none
+         [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
+         [:strong.font-normal title]]))]
+   [:div.ft.pl-11.pb-3
+    [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
+
 (rum/defc help-button < rum/reactive
   []
-  [:div.cp__sidebar-help-btn
-   [:div.inner
-    {:title    (t :help-shortcut-title)
-     :on-click (fn []
-                 (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
-    "?"]])
+  (let [help-open?      (state/sub :ui/help-open?)
+        handbooks-open? (state/sub :ui/handbooks-open?)]
+    [:<>
+     [:div.cp__sidebar-help-btn
+      [:div.inner
+       {:title    (t :help-shortcut-title)
+        :on-click #(state/toggle! :ui/help-open?)}
+       "?"]]
 
-(rum/defc handbook-button < rum/reactive
-  []
-  (let [handbooks-open? (state/sub :ui/handbooks-open?)]
-    [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
-     [:div.inner
-      {:title    (t :help-shortcut-title)
-       :on-click (fn []
-                   (handbooks/toggle-handbooks))}
-      "📙"]
+     (when help-open?
+       (help-menu-popup))
 
      (when handbooks-open?
        (handbooks/handbooks-popup))]))
@@ -823,10 +850,6 @@
                                     :nfs-granted? granted?
                                     :db-restoring? db-restoring?})
       [:a#download.hidden]
-      (when
-       (and (not config/mobile?)
-            (not config/publishing?))
-        [:<>
-         (when develop-mode?
-           (handbook-button))
-         (help-button)])])))
+      (when (and (not config/mobile?)
+                 (not config/publishing?))
+        (help-button))])))

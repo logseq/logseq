@@ -74,6 +74,7 @@
 
      ;; right sidebar
      :ui/handbooks-open?                    false
+     :ui/help-open?                         false
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
