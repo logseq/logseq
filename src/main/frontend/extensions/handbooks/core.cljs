@@ -264,13 +264,16 @@
      [:h2 (t :handbook/help-categories)]
      [:div.categories-list
       (let [categories (:children root)]
-        (for [{:keys [key title children color] :as category} categories]
+        (for [{:keys [key title children color icon] :as category} categories]
           [:button.category-card.text-left
            {:key      key
-            :style    {:background-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
+            :style    {:border-left-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
             :on-click #(nav-to-pane! [:topics category title] pane-state)}
-           [:strong title]
-           [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))]]))]]))
+           [:div.icon-wrap
+            (ui/icon (or icon "chart-bubble") {:size 20})]
+           [:div.text-wrap
+            [:strong title]
+            [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))]]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]

@@ -18,6 +18,10 @@
     .search {
       @apply flex flex-col;
 
+      background-color: var(--ls-quaternary-background-color);
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+
       > .input-wrap {
         @apply mx-4 mb-2 flex rounded-lg mt-1.5;
 
@@ -109,15 +113,29 @@
     }
 
     .category-card {
-      @apply flex-col flex rounded px-3 py-3
-      active:opacity-90 cursor-pointer;
+      @apply flex rounded px-2 py-3 active:opacity-90 cursor-pointer transition-colors items-end;
 
-      > strong {
-        @apply font-normal leading-tight;
+      border-left: 4px solid var(--ls-secondary-background-color);
+      background-color: var(--ls-secondary-background-color);
+
+      &:hover, &:active {
+        background-color: var(--ls-primary-background-color);
       }
 
-      > span {
-        @apply text-[11px] opacity-90 pt-1;
+      > .icon-wrap {
+        @apply flex justify-end pr-2 pb-[2px] opacity-20;
+      }
+
+      > .text-wrap {
+        @apply flex flex-col min-h-[56px] justify-end;
+
+        > strong {
+          @apply font-[500] leading-tight;
+        }
+
+        > span {
+          @apply text-[11px] opacity-90 pt-1;
+        }
       }
     }
 
@@ -277,11 +295,11 @@
     @apply absolute rounded-lg overflow-hidden
     z-[9] shadow-lg flex justify-center flex-col;
 
-    background-color: var(--ls-quaternary-background-color);
+    background-color: var(--ls-tertiary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
     touch-action: none;
     height: 720px;
-    width: 450px;
+    width: 430px;
     left: -415px;
     top: -680px;
   }
@@ -312,9 +330,23 @@ html[data-theme="light"] {
       background-color: var(--ls-primary-background-color);
     }
 
+
+    .search {
+      background-color: var(--ls-primary-background-color);
+    }
+
     .chapters-select {
       .select-trigger {
         background-color: var(--ls-tertiary-background-color);
+      }
+    }
+
+    .categories-list {
+      .category-card {
+        &:hover, &:active {
+          background-color: var(--ls-tertiary-background-color);
+          opacity: .9;
+        }
       }
     }
   }
