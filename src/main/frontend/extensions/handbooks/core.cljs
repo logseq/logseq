@@ -74,13 +74,6 @@
           _ (when-not (aget js/window "Glide")
               (util/js-load$ (str util/JS_ROOT "/glide/glide.min.js")))]))
 
-;(rum/defc link-card
-;  [opts child]
-;
-;  [:div.link-card
-;   opts
-;   child])
-
 (rum/defc topic-card
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
   [:button.w-full.topic-card.flex.text-left
@@ -383,6 +376,13 @@
                          {:class (util/classnames [{:active (= selected idx)}])})
              (:key topic)))]])]))
 
+(rum/defc link-card
+  [opts child]
+
+  [:div.link-card
+   opts
+   child])
+
 ;(rum/defc related-topics
 ;  []
 ;  [:div.related-topics
@@ -460,11 +460,11 @@
         (when (seq handbooks-nodes)
           (let [c (:handbook/route-chan @state/state)]
             (async/go-loop []
-             (let [v (<! c)]
-               (when (not= v :return)
-                 (when-let [to (get handbooks-nodes v)]
-                   (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
-                 (recur))))
+                           (let [v (<! c)]
+                             (when (not= v :return)
+                               (when-let [to (get handbooks-nodes v)]
+                                 (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
+                               (recur))))
             #(async/go (>! c :return)))))
       [handbooks-nodes])
 
@@ -555,10 +555,29 @@
      (when handbooks-loaded?
        ;; footer
        [:div.ft
-        [:p [:a.text-xs.text-gray-400.opacity-80
-             {:href   "https://discord.com/invite/URphjhk"
-              :target "_blank"}
-             (t :handbook/join-community)]]
+        ;; discord
+        (link-card
+          {} [:div.inner.flex.items-center
+              [:div.l.flex.items-center.pl-1.opacity-50 (ui/icon "brand-discord" {:size 26})]
+              [:div.r.flex.flex-1.justify-between.items-center
+               [:div.flex.flex-col.pl-3
+                [:strong.font-semibold {:style {:font-size 16}} "Join our discord"]
+                [:small.flex.items-center
+                 [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
+                 [:span.pl-1.opacity-90 [:strong "? "] [:span.opacity-70 "users online currently"]]]]
+               [:span.flex.items-center.opacity-60 (ui/icon "external-link" {:size 17})]]])
+
+        ;; more links
+        [:div.flex.space-x-2
+         (link-card
+           {:class "flex-1"}
+           [:div.inner.flex.items-center.justify-center.space-x-1
+            (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Read the forum"]])
+
+         (link-card
+           {:class "flex-1 as-primary"}
+           [:div.inner.flex.items-center.justify-center.space-x-1
+            (ui/icon "messages" {:class "opacity-40"}) [:span.font-semibold "Give us feedback"]])]
 
         ;; TODO: how to get related topics?
         ;(when (= :topic-detail active-pane)

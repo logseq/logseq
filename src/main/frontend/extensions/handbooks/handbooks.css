@@ -54,7 +54,7 @@
 
     .topic-card, .link-card {
       @apply text-sm px-3 py-2.5 rounded-lg cursor-pointer
-      mb-2 active:opacity-90;
+      mb-2 active:opacity-90 select-none;
 
       background-color: var(--ls-secondary-background-color);
       border: 1px solid var(--ls-border-color);
@@ -96,6 +96,16 @@
 
     .link-card {
       @apply dark:text-gray-100;
+
+      border-color: var(--ls-tertiary-border-color);
+
+      &:hover {
+        border-color: var(--ls-tertiary-border-color);
+      }
+
+      &.as-primary {
+        @apply bg-indigo-500 text-white;
+      }
     }
 
     .category-card {
@@ -289,7 +299,7 @@ html[data-theme="light"] {
       }
     }
 
-    .topic-card, .link-card {
+    .topic-card, :not(.as-primary).link-card {
       &:hover, &.active {
         background-color: var(--ls-tertiary-background-color);
         border-color: var(--ls-secondary-border-color);
