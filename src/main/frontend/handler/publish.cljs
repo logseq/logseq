@@ -16,6 +16,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.user :as user-handler]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]))
@@ -76,6 +77,7 @@
   [& {:keys [page-name]}]
   (state/set-state! [:ui/loading? :publish] true)
   (let [repo         (state/get-current-repo)
+        user-name    (user-handler/user-name)
         page-name    (or page-name
                          (state/get-current-page)
                          (date/today))
@@ -88,7 +90,8 @@
         {:keys [original-blocks blocks refs refed-blocks]} (transform-blocks page)
         embed-page-blocks (get-embed-pages original-blocks)
         body         (let [embed-page-blocks' (medley/map-vals :blocks embed-page-blocks)]
-                       {:page-id      page-id
+                       {:user-name    user-name
+                        :page-id      page-id
                         :blocks       blocks
                         :refed-blocks refed-blocks
                         :refs         refs

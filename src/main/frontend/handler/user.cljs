@@ -75,6 +75,12 @@
    parse-jwt
    :sub))
 
+(defn user-name []
+  (some->
+   (state/get-auth-id-token)
+   parse-jwt
+   :cognito:username))
+
 (defn logged-in? []
   (some? (state/get-auth-refresh-token)))
 
