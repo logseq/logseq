@@ -379,9 +379,12 @@
 (rum/defc link-card
   [opts child]
 
-  [:div.link-card
-   opts
-   child])
+  (let [{:keys [href]} opts]
+    [:div.link-card
+     (cond-> opts
+             (string? href)
+             (assoc :on-click #(util/open-url href)))
+     child]))
 
 ;(rum/defc related-topics
 ;  []
@@ -393,6 +396,45 @@
    :topics       [pane-category-topics]
    :topic-detail [pane-topic-detail]
    :settings     [pane-settings]})
+
+(rum/defc footer-link-cards
+  []
+  (let [discord-endpoint "https://discord.com/api/v9/invites/VNfUaTtdFb?with_counts=true&with_expiration=true"
+        [ds-count, set-ds-count!] (rum/use-state nil)]
+
+    (rum/use-effect!
+      (fn []
+        (-> (js/window.fetch discord-endpoint)
+            (p/then #(.json %))
+            (p/then #(when-let [count (.-approximate_presence_count ^js %)]
+                       (set-ds-count! (.toLocaleString count))))))
+      [])
+
+    [:<>
+     ;; discord
+     (link-card
+       {:href "https://discord.gg/KpN4eHY"}
+       [:div.inner.flex.items-center
+        [:div.l.flex.items-center.pl-1.opacity-50 (ui/icon "brand-discord" {:size 26})]
+        [:div.r.flex.flex-1.justify-between.items-center
+         [:div.flex.flex-col.pl-3
+          [:strong.font-semibold {:style {:font-size 16}} "Join our discord"]
+          [:small.flex.items-center
+           [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
+           [:span.pl-1.opacity-90 [:strong (or ds-count "?")] [:span.opacity-70 " users online currently"]]]]
+         [:span.flex.items-center.opacity-60 (ui/icon "external-link" {:size 17})]]])
+
+     ;; more links
+     [:div.flex.space-x-2
+      (link-card
+        {:class "flex-1" :href "https://discuss.logseq.com"}
+        [:div.inner.flex.items-center.justify-center.space-x-1
+         (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Read the forum"]])
+
+      (link-card
+        {:class "flex-1 as-primary" :href "https://discuss.logseq.com/c/feedback/13"}
+        [:div.inner.flex.items-center.justify-center.space-x-1
+         (ui/icon "messages" {:class "opacity-40"}) [:span.font-semibold "Give us feedback"]])]]))
 
 (rum/defc ^:large-vars/data-var content
   []
@@ -555,29 +597,8 @@
      (when handbooks-loaded?
        ;; footer
        [:div.ft
-        ;; discord
-        (link-card
-          {} [:div.inner.flex.items-center
-              [:div.l.flex.items-center.pl-1.opacity-50 (ui/icon "brand-discord" {:size 26})]
-              [:div.r.flex.flex-1.justify-between.items-center
-               [:div.flex.flex-col.pl-3
-                [:strong.font-semibold {:style {:font-size 16}} "Join our discord"]
-                [:small.flex.items-center
-                 [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
-                 [:span.pl-1.opacity-90 [:strong "? "] [:span.opacity-70 "users online currently"]]]]
-               [:span.flex.items-center.opacity-60 (ui/icon "external-link" {:size 17})]]])
-
-        ;; more links
-        [:div.flex.space-x-2
-         (link-card
-           {:class "flex-1"}
-           [:div.inner.flex.items-center.justify-center.space-x-1
-            (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Read the forum"]])
-
-         (link-card
-           {:class "flex-1 as-primary"}
-           [:div.inner.flex.items-center.justify-center.space-x-1
-            (ui/icon "messages" {:class "opacity-40"}) [:span.font-semibold "Give us feedback"]])]
+        (when pane-dashboard?
+          (footer-link-cards))
 
         ;; TODO: how to get related topics?
         ;(when (= :topic-detail active-pane)
