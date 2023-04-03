@@ -1,7 +1,7 @@
 (ns logseq.publish-spa.export-test
   (:require [cljs.test :as t :refer [is use-fixtures async]]
             [logseq.publish-spa.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.publish-spa.export :as export]
+            [logseq.publish-spa.export :as publish-export]
             [promesa.core :as p]
             [clojure.set :as set]
             ["fs" :as fs]
@@ -35,11 +35,11 @@
          (reduce concat)
          (concat (get-files dir)))))
 
-(defn- export
+(defn- create-export
   [static-dir graph-dir output-dir {:keys [html assets]
                                     :or {html "<!DOCTYPE html>"
                                          assets []}}]
-  (export/export
+  (publish-export/create-export
    html
    static-dir
    graph-dir
@@ -52,10 +52,10 @@
 
 (defn- create-static-dir [dir]
   (fs/mkdirSync (path/join dir) #js {:recursive true})
-  (mapv #(fs/mkdirSync (path/join dir %)) export/static-dirs)
+  (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
   (fs/mkdirSync (path/join dir "js" "publishing"))
   (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
-        (conj export/js-files "manifest.edn"))
+        (conj publish-export/js-files "manifest.edn"))
   (fs/writeFileSync (path/join dir "404.html") ""))
 
 (defn- create-logseq-graph
@@ -65,17 +65,14 @@
   (fs/writeFileSync (path/join dir "logseq" "config.edn") "{}")
   (fs/mkdirSync (path/join dir "assets")))
 
-(deftest-async export-with-basic-graph
+(deftest-async create-export-with-basic-graph
   (create-static-dir "tmp/static")
   (create-logseq-graph "tmp/test-graph")
 
-  (p/let [_ (export "tmp/static" "tmp/test-graph" "tmp/published-graph" {:html "<div>WOOT</div>"})]
+  (p/let [_ (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {:html "<div>WOOT</div>"})]
          (let [original-paths (map path/basename (get-files-recursively "tmp/static"))
                copied-paths (map path/basename (get-files-recursively "tmp/published-graph"))
                new-files (set/difference (set copied-paths) (set original-paths))]
-           (prn :ORIGINAL original-paths)
-           (prn :COPIED copied-paths)
-           (prn :NEW new-files)
            (is (= #{"index.html" "custom.css" "export.css"}
                   new-files)
                "A published graph has the correct new files")
@@ -86,13 +83,13 @@
                   (str (fs/readFileSync "tmp/published-graph/static/js/main.js")))
                "cljs frontend compiled as main.js is copied correctly"))))
 
-(deftest-async export-with-css-files
+(deftest-async create-export-with-css-files
   (create-static-dir "tmp/static")
   (create-logseq-graph "tmp/test-graph")
   (fs/writeFileSync "tmp/test-graph/logseq/custom.css" ".foo {background-color: blue}")
   (fs/writeFileSync "tmp/test-graph/logseq/export.css" ".foo {background-color: red}")
 
-  (p/let [_ (export "tmp/static" "tmp/test-graph" "tmp/published-graph" {})]
+  (p/let [_ (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {})]
          (is (= ".foo {background-color: blue}"
                 (str (fs/readFileSync "tmp/published-graph/static/css/custom.css")))
              "custom.css is copied correctly")
@@ -100,16 +97,16 @@
                 (str (fs/readFileSync "tmp/published-graph/static/css/export.css")))
              "export.css is copied correctly")))
 
-(deftest-async export-with-assets
+(deftest-async create-export-with-assets
   (create-static-dir "tmp/static")
   (create-logseq-graph "tmp/test-graph")
   (fs/writeFileSync "tmp/test-graph/assets/foo.jpg" "foo")
   (fs/writeFileSync "tmp/test-graph/assets/bar.png" "bar")
 
-  (p/let [_ (export "tmp/static"
-                                          "tmp/test-graph"
-                                          "tmp/published-graph"
-                                          {:assets ["foo.jpg" "bar.png"]})]
+  (p/let [_ (create-export "tmp/static"
+                           "tmp/test-graph"
+                           "tmp/published-graph"
+                           {:assets ["foo.jpg" "bar.png"]})]
          (is (= "foo"
                 (str (fs/readFileSync "tmp/published-graph/assets/foo.jpg")))
              "first asset is copied correctly")

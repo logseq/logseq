@@ -26,9 +26,11 @@ TODO: Fail fast when process exits 1"
   "Given a git graph directory, returns allowed file paths and their contents in
   preparation for parsing"
   [dir]
-  (let [files (->> (str (.-stdout (sh ["git" "ls-files"]
+  ;; -z needed to avoid quoting unusual paths that cause slurp failures.
+  ;; See https://git-scm.com/docs/git-ls-files#_output for more
+  (let [files (->> (str (.-stdout (sh ["git" "ls-files" "-z"]
                                       {:cwd dir :stdio nil})))
-                   string/split-lines
+                   (#(string/split % #"\0"))
                    (map #(hash-map :file/path (str dir "/" %)))
                    graph-parser/filter-files)]
     (mapv #(assoc % :file/content (slurp (:file/path %))) files)))
