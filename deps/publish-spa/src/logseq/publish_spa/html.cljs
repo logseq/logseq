@@ -1,7 +1,11 @@
-(ns ^:no-doc logseq.publish-spa.html
+(ns logseq.publish-spa.html
+  "This frontend only ns builds the publishing html including doing all the
+necessary db filtering"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
-            [goog.string.format]))
+            [goog.string.format]
+            [datascript.transit :as dt]
+            [logseq.publish-spa.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -122,3 +126,18 @@
             [:script {:src "static/js/interact.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
             [:script {:src "static/js/code-editor.js"}]])))))
+
+(defn build-html
+  "Given the graph's db, filters the db using the given options and returns the
+generated index.html string and assets used by the html"
+  [db* {:keys [app-state repo-config html-options]}]
+  (let [[db asset-filenames'] (if (:publishing/all-pages-public? repo-config)
+                                (db/clean-export! db*)
+                                (db/filter-only-public-pages-and-blocks db*))
+        asset-filenames (remove nil? asset-filenames')
+        db-str (dt/write-transit-str db)
+        state (assoc app-state
+                     :config {"local" repo-config})
+        raw-html-str (publishing-html db-str state html-options)]
+    {:html raw-html-str
+     :asset-filenames asset-filenames}))

@@ -1,4 +1,6 @@
 (ns logseq.publish-spa.export
+  "This electron only ns (for the main process) exports files from multiple
+  locations to provide a complete publishing app"
   (:require ["fs-extra" :as fse]
             ["path" :as node-path]
             ["fs" :as fs]
@@ -67,10 +69,10 @@
                          (fse/copy (node-path/join static-dir part) (node-path/join output-static-dir part)))
                        static-dirs)))])))
 
-(defn export
+(defn create-export
   "Given a graph's directory, the generated html and the directory containing
-  html/static assets, creates an index.html with supporting assets at the
-  specified output directory"
+  html/static assets, creates the export at the specified output-dir and
+  includes the index.html with supporting assets"
   [html static-dir repo-path output-dir {:keys [notification-fn]
                                          :or {notification-fn default-notification}
                                          :as options}]

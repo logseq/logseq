@@ -38,8 +38,11 @@
       (spit config-edn config))))
 
 (defn build-publishing
-  []
+  "Builds release publishing asset when files have changed"
+  [& _args]
   (if-let [_files (seq (set (fs/modified-since (fs/file "static/js/publishing/main.js")
-                                               (fs/glob "." "src/main/**"))))]
-    (shell "clojure -M:cljs release publishing")
-    (println "publishing assets are up to date")))
+                                               (fs/glob "." "{src/main,deps/graph-parser/src}/**"))))]
+    (do
+      (println "Building publishing js asset...")
+      (shell "clojure -M:cljs release publishing"))
+    (println "Publishing js asset is up to date")))
