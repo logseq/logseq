@@ -56,13 +56,13 @@
                    (set)
                    (db/pull-many '[*])
                    (keep (fn [macro]
-                           (and (= (:block/type macro) "macro")
-                                (= "embed" (get-in macro [:block/properties :logseq.macro-name]))
-                                (when-let [page (first (get-in macro [:block/properties :logseq.macro-arguments]))]
-                                  (when (page-ref/page-ref? page)
-                                    (let [result (page-ref/get-page-name page)]
-                                      (when-not (string/blank? result)
-                                        result))))))))]
+                           (when (and (= (:block/type macro) "macro")
+                                      (= "embed" (get-in macro [:block/properties :logseq.macro-name])))
+                             (when-let [page (first (get-in macro [:block/properties :logseq.macro-arguments]))]
+                               (when (page-ref/page-ref? page)
+                                 (let [result (page-ref/get-page-name page)]
+                                   (when-not (string/blank? result)
+                                     result))))))))]
     (->> (keep (fn [p]
                  (let [page (gp-util/page-name-sanity-lc p)
                        page-entity (db/entity [:block/name page])
