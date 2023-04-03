@@ -779,6 +779,22 @@
          block-id
          (str (string/trim content) " #" card-hash-tag))))))
 
+(defn batch-make-cards!
+  ([] (batch-make-cards! (state/get-selection-block-ids)))
+  ([block-ids]
+   (let [block-content-fn (fn [block]
+                            [block (-> (property/remove-built-in-properties (:block/format block) (:block/content block))
+                                       (drawer/remove-logbook)
+                                       string/trim
+                                       (str " #" card-hash-tag))])
+         blocks (->> block-ids
+                     (map #(db/entity [:block/uuid %]))
+                     (remove card-block?)
+                     (map #(db/pull [:block/uuid (:block/uuid %)]))
+                     (map block-content-fn))]
+     (when-not (empty? blocks)
+       (editor-handler/save-blocks! blocks)))))
+
 (defonce *due-cards-interval (atom nil))
 
 (defn update-cards-due-count!

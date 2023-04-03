@@ -31,13 +31,22 @@
 (rum/defc custom-context-menu-content
   []
   [:.menu-links-wrapper
+   (ui/menu-background-color #(editor-handler/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
+                             #(editor-handler/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
+
+   (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
+                    #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
+                    #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
+
+   [:hr.menu-separator]
+
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
     (t :content/cut)
     nil)
    (ui/menu-link
-    {:key      "delete"
+    {:key "delete"
      :on-click #(do (editor-handler/delete-selection %)
                     (state/hide-custom-context-menu!))}
     "Delete"
@@ -68,10 +77,31 @@
 
    [:hr.menu-separator]
 
+   (when (state/enable-flashcards?)
+     (ui/menu-link
+      {:key "Make a Card"
+       :on-click #(srs/batch-make-cards!)}
+      "Make a Flashcard"
+      nil))
+
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
     "Cycle todos"
+    nil)
+
+   [:hr.menu-separator]
+
+   (ui/menu-link
+    {:key "Expand all"
+     :on-click editor-handler/expand-all-selection!}
+    "Expand all"
+    nil)
+
+   (ui/menu-link
+    {:key "Collapse all"
+     :on-click editor-handler/collapse-all-selection!}
+    "Collapse all"
     nil)])
 
 (defonce *template-including-parent? (atom nil))
@@ -84,7 +114,7 @@
               #(swap! *template-including-parent? not))])
 
 (rum/defcs block-template < rum/reactive
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (rum/local false ::edit?)
   (rum/local "" ::input)
   {:will-unmount (fn [state]
@@ -134,61 +164,19 @@
        "Make a Template"
        nil))))
 
-(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
+(rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
+  shortcut/disable-all-shortcuts
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [format (:block/format block)
-            heading (-> block :block/properties :heading)]
+      (let [heading (-> block :block/properties :heading (or false))]
         [:.menu-links-wrapper
-         [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-           (for [color ui/block-background-colors]
-             [:a.shadow-sm
-              {:title (t (keyword "color" color))
-               :on-click (fn [_e]
-                           (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-           [:a.shadow-sm
-            {:title    (t :remove-background)
-             :on-click (fn [_e]
-                         (editor-handler/remove-block-property! block-id "background-color"))}
-            [:div.heading-bg.remove "-"]]]]
+         (ui/menu-background-color #(editor-handler/set-block-property! block-id :background-color %)
+                                   #(editor-handler/remove-block-property! block-id :background-color))
 
-         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1.px-1
-           (for [i (range 1 7)]
-             (ui/button
-              ""
-              :disabled (= heading i)
-              :icon (str "h-" i)
-              :title (t :heading i)
-              :class "to-heading-button"
-              :on-click (fn [_e]
-                          (editor-handler/set-heading! block-id format i))
-              :intent "link"
-              :small? true))
-           (ui/button
-            ""
-            :icon "h-auto"
-            :disabled (= heading true)
-            :icon-props {:extension? true}
-            :class "to-heading-button"
-            :title (t :auto-heading)
-            :on-click (fn [_e]
-                        (editor-handler/set-heading! block-id format true))
-            :intent "link"
-            :small? true)
-           (ui/button
-            ""
-            :icon "heading-off"
-            :disabled (not heading)
-            :icon-props {:extension? true}
-            :class "to-heading-button"
-            :title (t :remove-heading)
-            :on-click (fn [_e]
-                        (editor-handler/remove-heading! block-id format))
-            :intent "link"
-            :small? true)]]
+         (ui/menu-heading heading
+                          #(editor-handler/set-heading! block-id %)
+                          #(editor-handler/set-heading! block-id true)
+                          #(editor-handler/remove-heading! block-id))
 
          [:hr.menu-separator]
 

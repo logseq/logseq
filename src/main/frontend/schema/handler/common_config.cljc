@@ -11,7 +11,7 @@
     [:preferred-workflow [:enum :now :todo]]
     [:hidden [:vector :string]]
     [:default-templates [:map
-                         [:journals :string]]]
+                         [:journals {:optional true} :string]]]
     [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
@@ -52,7 +52,7 @@
                                [:sequential any?]]]
     [:default-queries [:map
                        ;; Maybe validate these query maps later
-                       [:journals [:vector :map]]]]
+                       [:journals {:optional true} [:vector :map]]]]
     [:commands [:vector [:tuple
                          :string
                          [:or :string [:vector :some]]]]]
