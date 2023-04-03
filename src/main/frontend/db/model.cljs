@@ -21,7 +21,9 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
 
 ;; lazy loading
 
@@ -1268,9 +1270,14 @@ independent of format as format specific heading characters are stripped"
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)]
+    (let [future-days (state/get-scheduled-future-days)
+          date-format "yyyyMMdd"
+          current-day (tf/parse (tf/formatter date-format) (str date))
+          future-day (->> (t/plus current-day (t/days future-days))
+                          (tf/unparse date-format))]
       (when-let [repo (state/get-current-repo)]
-        (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
+        (->> (react/q repo [:custom :scheduled-deadline journal-title]
+               {:use-cache? false}
                       '[:find [(pull ?block ?block-attrs) ...]
                         :in $ ?day ?future ?block-attrs
                         :where
@@ -1287,7 +1294,7 @@ independent of format as format specific heading characters are stripped"
                                  [(true? ?repeated)]
                                  [(>= ?d ?day)])]
                       date
-                      (+ date future-days)
+                      future-day
                       block-attrs)
              react
              (sort-by-left-recursive)
