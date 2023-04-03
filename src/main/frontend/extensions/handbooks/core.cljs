@@ -263,17 +263,32 @@
 
      [:h2 (t :handbook/help-categories)]
      [:div.categories-list
-      (let [categories (:children root)]
+      (let [categories (:children root)
+            categories (conj (vec categories)
+                             {:key      "ls-shortcuts"
+                              :title    "Work faster"
+                              :children [:span "Keyboard shortcuts"]
+                              :color    "#2563EB"
+                              :icon     "command"})]
         (for [{:keys [key title children color icon] :as category} categories]
           [:button.category-card.text-left
            {:key      key
             :style    {:border-left-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
-            :on-click #(nav-to-pane! [:topics category title] pane-state)}
+            :on-click #(if (= key "ls-shortcuts")
+                         (do (state/toggle! :ui/handbooks-open?)
+                             (state/open-right-sidebar!)
+                             (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))
+                         (nav-to-pane! [:topics category title] pane-state))}
            [:div.icon-wrap
             (ui/icon (or icon "chart-bubble") {:size 20})]
            [:div.text-wrap
             [:strong title]
-            [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))]]]))]]))
+            (cond
+              (vector? children)
+              children
+
+              :else
+              [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))])]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]
