@@ -748,6 +748,7 @@ button.tl-select-input-trigger {
   .breadcrumb {
     text-overflow: ellipsis;
     overflow: hidden;
+    flex-wrap: nowrap;
   }
 
   .block-content {
@@ -1173,9 +1174,6 @@ button.tl-shape-links-panel-item-remove-button {
 
 .block-link-reference-row {
   @apply block;
-  > * {
-    @apply inline;
-  }
 }
 
 .tl-tooltip-content {

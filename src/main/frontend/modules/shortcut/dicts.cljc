@@ -772,7 +772,7 @@
              :command.editor/backward-kill-word       "Borrar palabra anterior"
              :command.editor/open-edit                "Editar bloque seleccionado"
              :command.editor/delete-selection         "Eliminar bloques seleccionados"
-             :command.editor/toggle-open-blocks       "Alternar bloques abieros, (colapsar o expandir todos)"}
+             :command.editor/toggle-open-blocks       "Alternar bloques abiertos, (colapsar o expandir todos)"}
 
    :ru      {:shortcut.category/formatting            "Форматирование"
              :shortcut.category/basics                "Базовые"

@@ -1038,9 +1038,9 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
-          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
-        (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
+        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+              copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1256,8 +1256,7 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (state/set-copied-blocks! md-content sorted-blocks)
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1473,7 +1472,7 @@
                  (fn [dest]
                    [file-rpath
                     (if (string? dest) (js/File. #js[] dest) file)
-                    (.join util/node-path dir file-rpath)
+                    (path/path-join dir file-rpath)
                     matched-alias]))
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
@@ -1548,15 +1547,13 @@
    Requires editing state"
   [file-path]
   (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
-                            ;; fix dummy file path of page
-                                  (and (util/electron?)
-                                       (util/node-path.join
-                                        (config/get-repo-dir (state/get-current-repo))
-                                        (config/get-pages-directory) "_.md"))
+                                  ;; fix dummy file path of page
+                                  (when (config/get-pages-directory)
+                                    (path/path-join (config/get-pages-directory) "_.md"))
                                   "pages/contents.md")]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           current-file-fpath (path/path-join repo-dir current-file-rpath)]
-      (util/get-relative-path current-file-fpath file-path))
+      (path/get-relative-path current-file-fpath file-path))
     file-path))
 
 (defn upload-asset
@@ -2086,7 +2083,7 @@
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
-                           blocks)
+                        blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?

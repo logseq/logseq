@@ -1674,6 +1674,23 @@ independent of format as format specific heading characters are stripped"
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
 
+(defn whiteboard-page?
+  "Given a page name or a page object, check if it is a whiteboard page"
+  [page]
+  (cond
+    (string? page)
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
+      (or
+       (= "whiteboard" (:block/type page))
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+           (gp-config/whiteboard? path)))))
+
+    (seq page)
+    (= "whiteboard" (:block/type page))
+
+    :else false))
+
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
     :or {repo (state/get-current-repo)
@@ -1697,6 +1714,7 @@ independent of format as format specific heading characters are stripped"
                                     (= 1 (count children))
                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
                                 (not (contains? built-in-pages name))
+                                (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
@@ -1719,23 +1737,6 @@ independent of format as format specific heading characters are stripped"
      [(= ?name ?macro-name)]]
    (conn/get-db repo)
    macro-name))
-
-(defn whiteboard-page?
-  "Given a page name or a page object, check if it is a whiteboard page"
-  [page]
-  (cond
-    (string? page)
-    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
-      (or
-       (= "whiteboard" (:block/type page))
-       (when-let [file (:block/file page)]
-         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-           (gp-config/whiteboard? path)))))
-
-    (seq page)
-    (= "whiteboard" (:block/type page))
-
-    :else false))
 
 (defn- block-or-page
   [page-name-or-uuid]
