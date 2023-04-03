@@ -32,7 +32,7 @@
         [:code.opacity-20.bg-transparent (:id result)]])]))
 
 (rum/defcs select < rum/reactive
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (rum/local "" ::input)
   {:init (fn [state]
            (assoc state ::selected-choices
