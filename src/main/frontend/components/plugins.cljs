@@ -4,7 +4,6 @@
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
-            [frontend.rum :as frontend-rum]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
@@ -1042,7 +1041,7 @@
 (rum/defc header-ui-items-list-wrap
   [children]
   (let [*wrap-el (rum/use-ref nil)
-        [right-sidebar-resized] (frontend-rum/use-atom ui-handler/*right-sidebar-resized-at)]
+        [right-sidebar-resized] (rum-utils/use-atom ui-handler/*right-sidebar-resized-at)]
 
     (rum/use-effect!
       (fn []
