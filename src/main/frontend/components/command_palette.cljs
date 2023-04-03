@@ -33,7 +33,7 @@
         [:code.ml-1 first-shortcut])]]))
 
 (rum/defcs command-palette <
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (rum/local "" ::input)
   [state {:keys [commands limit]
           :or {limit 100}}]

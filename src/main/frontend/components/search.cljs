@@ -480,7 +480,7 @@
     (t :search)))
 
 (rum/defcs search-modal < rum/reactive
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
