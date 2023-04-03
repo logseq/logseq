@@ -869,7 +869,7 @@
           content (property/remove-empty-properties content)]
       {:block/uuid (:block/uuid block)
        :block/properties properties
-       :block/properties-order (or (keys properties) {})
+       :block/properties-order (or (keys properties) [])
        :block/content content})))
 
 (defn- batch-set-block-property!
