@@ -732,7 +732,7 @@
 
 (defmethod handle :editor/set-org-mode-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
-    (editor-handler/set-heading! id :org heading)))
+    (editor-handler/set-heading! id heading)))
 
 (defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
   (when (db/get-db graph)

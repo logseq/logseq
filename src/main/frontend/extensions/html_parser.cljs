@@ -33,7 +33,12 @@
         block-pattern (if (= format :markdown)
                         "#"
                         (config/get-block-pattern format))
-        map-join (fn [children] (apply str (map #(transform-fn % opts) children)))
+        map-join (fn [children & {:keys [list?]}]
+                   (let [opts' (if list?
+                                 (let [level (inc (or (:level opts) 0))]
+                                   (assoc opts :level level))
+                                 opts)]
+                     (apply str (map #(transform-fn % opts') children))))
         block-transform (fn [level children]
                           (str (apply str (repeat level block-pattern))
                                " "
@@ -197,7 +202,11 @@
                              nil)
 
                            :li
-                           (str "- " (map-join children))
+                           (let [tabs (apply str (repeat (- (or (:level opts) 1) 1) "\t"))]
+                             (str tabs
+                                  (if (= format :markdown) "-" "*")
+                                  " "
+                                  (map-join children)))
 
                            :br
                            "\n"
@@ -238,6 +247,9 @@
                            (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
                            (export-hiccup x)
 
+                           :ul (map-join children :list? true)
+                           :ol (map-join children :list? true)
+                           :dl (map-join children :list? true)
                            :else (map-join children))]
               (wrapper tag result))
 

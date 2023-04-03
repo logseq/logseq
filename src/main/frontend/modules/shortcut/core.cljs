@@ -165,7 +165,7 @@
           :when (not= group :shortcut.handler/misc)]
     (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
-(defn disable-all-shortcuts []
+(def disable-all-shortcuts
   {:will-mount
    (fn [state]
      (unlisten-all)

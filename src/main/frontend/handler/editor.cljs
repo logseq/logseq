@@ -852,6 +852,26 @@
                             (dom/attr sibling-block "id")
                             "")))))
 
+(defn- set-block-property-aux!
+  [block-or-id key value]
+  (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
+                         (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
+                         :else block-or-id)]
+    (let [format (:block/format block)
+          content (:block/content block)
+          properties (:block/properties block)
+          properties (if (nil? value)
+                       (dissoc properties key)
+                       (assoc properties key value))
+          content (if (nil? value)
+                    (property/remove-property format key content)
+                    (property/insert-property format content key value))
+          content (property/remove-empty-properties content)]
+      {:block/uuid (:block/uuid block)
+       :block/properties properties
+       :block/properties-order (or (keys properties) {})
+       :block/content content})))
+
 (defn- batch-set-block-property!
   "col: a collection of [block-id property-key property-value]."
   [col]
@@ -898,6 +918,14 @@
           (edit-block! editing-block
                        input-pos
                        (state/get-edit-input-id)))))))
+
+(defn batch-add-block-property!
+  [block-ids property-key property-value]
+  (batch-set-block-property! (map #(vector % property-key property-value) block-ids)))
+
+(defn batch-remove-block-property!
+  [block-ids property-key]
+  (batch-set-block-property! (map #(vector % property-key nil) block-ids)))
 
 (defn remove-block-property!
   [block-id key]
@@ -1291,13 +1319,19 @@
   ([repo block-or-uuid content]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
-                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
-         format (:block/format block)]
-     (save-block! {:block block :repo repo :format format} content)))
+                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)]
+     (save-block! {:block block :repo repo} content)))
   ([{:keys [block repo] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
      (when (db/entity repo [:block/uuid (:block/uuid block)])
        (save-block-aux! block value {})))))
+
+(defn save-blocks!
+  [blocks]
+  (outliner-tx/transact!
+   {:outliner-op :save-block}
+    (doseq [[block value] blocks]
+      (save-block-if-changed! block value))))
 
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
@@ -1438,7 +1472,7 @@
                  (fn [dest]
                    [file-rpath
                     (if (string? dest) (js/File. #js[] dest) file)
-                    (.join util/node-path dir file-rpath)
+                    (path/path-join dir file-rpath)
                     matched-alias]))
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
@@ -1513,15 +1547,13 @@
    Requires editing state"
   [file-path]
   (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
-                            ;; fix dummy file path of page
-                                  (and (util/electron?)
-                                       (util/node-path.join
-                                        (config/get-repo-dir (state/get-current-repo))
-                                        (config/get-pages-directory) "_.md"))
+                                  ;; fix dummy file path of page
+                                  (when (config/get-pages-directory)
+                                    (path/path-join (config/get-pages-directory) "_.md"))
                                   "pages/contents.md")]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           current-file-fpath (path/path-join repo-dir current-file-rpath)]
-      (util/get-relative-path current-file-fpath file-path))
+      (path/get-relative-path current-file-fpath file-path))
     file-path))
 
 (defn upload-asset
@@ -3496,6 +3528,28 @@
          block-ids (map :block/uuid blocks)]
      (set-blocks-collapsed! block-ids false))))
 
+(defn collapse-all-selection!
+  []
+  (let [block-ids (->> (get-selected-toplevel-block-uuids)
+                       (map #(all-blocks-with-level {:incremental? false
+                                                     :expanded? true
+                                                     :root-block %}))
+                       flatten
+                       (map :block/uuid)
+                       distinct)]
+    (set-blocks-collapsed! block-ids true)))
+
+(defn expand-all-selection!
+  []
+  (let [block-ids (->> (get-selected-toplevel-block-uuids)
+                       (map #(all-blocks-with-level {:incremental? false
+                                                     :collapse? true
+                                                     :root-block %}))
+                       flatten
+                       (map :block/uuid)
+                       distinct)]
+    (set-blocks-collapsed! block-ids false)))
+
 (defn toggle-open! []
   (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
                                                       :collapse? true}))]
@@ -3645,26 +3699,70 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
-(defn remove-heading!
-  [block-id format]
-  (remove-block-property! block-id "heading")
-  (when (= format :markdown)
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          content' (commands/clear-markdown-heading (:block/content block))]
-      (save-block! repo block-id content'))))
+(defn- set-heading-aux!
+  [block-id heading]
+  (let [block (db/pull [:block/uuid block-id])
+        format (:block/format block)
+        old-heading (get-in block [:block/properties :heading])]
+    (if (= format :markdown)
+      (cond
+        ;; nothing changed
+        (or (and (nil? old-heading) (nil? heading))
+            (and (true? old-heading) (true? heading))
+            (= old-heading heading))
+        nil
+
+        (or (and (nil? old-heading) (true? heading))
+            (and (true? old-heading) (nil? heading)))
+        (set-block-property-aux! block :heading heading)
+
+        (and (or (nil? heading) (true? heading))
+             (number? old-heading))
+        (let [block' (set-block-property-aux! block :heading heading)
+              content (commands/clear-markdown-heading (:block/content block'))]
+          (merge block' {:block/content content}))
+
+        (and (or (nil? old-heading) (true? old-heading))
+             (number? heading))
+        (let [block' (set-block-property-aux! block :heading nil)
+              properties (assoc (:block/properties block) :heading heading)
+              content (commands/set-markdown-heading (:block/content block') heading)]
+          (merge block' {:block/content content :block/properties properties}))
+
+        ;; heading-num1 -> heading-num2
+        :else
+        (let [properties (assoc (:block/properties block) :heading heading)
+              content (-> block
+                          :block/content
+                          commands/clear-markdown-heading
+                          (commands/set-markdown-heading heading))]
+          {:block/uuid (:block/uuid block)
+           :block/properties properties
+           :block/content content}))
+      (set-block-property-aux! block :heading heading))))
 
 (defn set-heading!
-  [block-id format heading]
-  (remove-heading! block-id format)
-  (if (or (true? heading) (not= format :markdown))
-    (do
-      (save-current-block!)
-      (set-block-property! block-id "heading" heading))
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          content' (commands/set-markdown-heading (:block/content block) heading)]
-      (save-block! repo block-id content'))))
+  [block-id heading]
+  (when-let [block (set-heading-aux! block-id heading)]
+    (outliner-tx/transact!
+     {:outliner-op :save-block}
+     (outliner-core/save-block! block))))
+
+(defn remove-heading!
+  [block-id]
+  (set-heading! block-id nil))
+
+(defn batch-set-heading!
+  [block-ids heading]
+  (outliner-tx/transact!
+   {:outliner-op :save-block}
+   (doseq [block-id block-ids]
+     (when-let [block (set-heading-aux! block-id heading)]
+       (outliner-core/save-block! block)))))
+
+(defn batch-remove-heading!
+  [block-ids]
+  (batch-set-heading! block-ids nil))
 
 (defn block->data-transfer!
   "Set block or page name to the given event's dataTransfer. Used in dnd."
