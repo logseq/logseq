@@ -62,7 +62,7 @@
                  (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                    (state/set-modal!
                     #(export/export-blocks block-uuids))))}
-    "Copy as..."
+    (t :content/copy-as)
     nil)
    (ui/menu-link
     {:key "copy block refs"
@@ -81,7 +81,7 @@
      (ui/menu-link
       {:key "Make a Card"
        :on-click #(srs/batch-make-cards!)}
-      "Make a Flashcard"
+      (t :context-menu/make-a-flashcard)
       nil))
 
    (ui/menu-link
@@ -109,7 +109,7 @@
 (rum/defc template-checkbox
   [template-including-parent?]
   [:div.flex.flex-row.w-auto.items-center
-   [:p.text-medium.mr-2 "Including the parent block in the template?"]
+   [:p.text-medium.mr-2 (t :context-menu/template-include-parent-block)]
    (ui/toggle template-including-parent?
               #(swap! *template-including-parent? not))])
 
@@ -135,7 +135,7 @@
         (state/clear-edit!)
         [:<>
          [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
-          [:p "What's the template's name?"]
+          [:p (t :context-menu/input-template-name)]
           [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
            {:auto-focus true
             :on-change (fn [e]
@@ -148,7 +148,7 @@
                                    (when (not (string/blank? title))
                                      (if (page-handler/template-exists? title)
                                        (notification/show!
-                                        [:p "Template already exists!"]
+                                        [:p (t :context-menu/template-exists-warning)]
                                         :error)
                                        (do
                                          (editor-handler/set-block-property! block-id :template title)
@@ -161,7 +161,7 @@
         :on-click (fn [e]
                     (util/stop e)
                     (reset! edit? true))}
-       "Make a Template"
+       (t :context-menu/make-a-template)
        nil))))
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
@@ -212,14 +212,14 @@
                                tap-f (fn [block-id]
                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                            (editor-handler/copy-block-ref! block-id tap-f)))}
-            "Copy block URL"
+            (t :content/copy-block-url)
             nil))
 
          (ui/menu-link
           {:key      "Copy as"
            :on-click (fn [_]
                        (state/set-modal! #(export/export-blocks [block-id])))}
-          "Copy as..."
+          (t :content/copy-as)
           nil)
 
          (ui/menu-link
@@ -244,13 +244,13 @@
            (ui/menu-link
             {:key      "Preview Card"
              :on-click #(srs/preview (:db/id block))}
-            "Preview Card"
+            (t :context-menu/preview-flashcard)
             nil)
            (state/enable-flashcards?)
            (ui/menu-link
             {:key      "Make a Card"
              :on-click #(srs/make-block-a-card! block-id)}
-            "Make a Flashcard"
+            (t :context-menu/make-a-flashcard)
             nil)
            :else
            nil)
@@ -314,22 +314,22 @@
      (ui/menu-link
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
-      "Copy this reference"
+      (t :content/copy-ref)
       nil)
      (ui/menu-link
       {:key "delete"
        :on-click (fn [] (editor-handler/delete-current-ref! block block-ref-id))}
-      "Delete this reference"
+      (t :content/delete-ref)
       nil)
      (ui/menu-link
       {:key "replace-with-text"
        :on-click (fn [] (editor-handler/replace-ref-with-text! block block-ref-id))}
-      "Replace with text"
+      (t :content/replace-with-text)
       nil)
      (ui/menu-link
       {:key "replace-with-embed"
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
-      "Replace with embed"
+      (t :content/replace-with-embed)
       nil)]))
 
 (rum/defc page-title-custom-context-menu-content

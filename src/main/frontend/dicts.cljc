@@ -151,10 +151,22 @@
         :color/pink "Pink"
         :content/copy "Copy"
         :content/cut "Cut"
+        :content/copy-as "Copy as..."
+        :content/copy-block-url "Copy block URL"
         :content/copy-block-ref "Copy block ref"
         :content/copy-block-emebed "Copy block embed"
+        :content/copy-ref "Copy this reference"
+        :content/delete-ref "Delete this reference"
+        :content/replace-with-text "Replace with text"
+        :content/replace-with-embed "Replace with embed"
         :content/open-in-sidebar "Open in sidebar"
         :content/click-to-edit "Click to edit"
+        :context-menu/make-a-flashcard "Make a Flashcard"
+        :context-menu/preview-flashcard "Preview Flashcard"
+        :context-menu/make-a-template "Make a Template"
+        :context-menu/input-template-name "What's the template's name?"
+        :context-menu/template-include-parent-block "Including the parent block in the template?"
+        :context-menu/template-exists-warning "Template already exists!"
         :settings-page/git-confirm "You need to restart the app after updating the Git settings."
         :settings-page/git-switcher-label "Enable Git auto commit"
         :settings-page/git-commit-delay "Git auto commit seconds"
@@ -3446,7 +3458,7 @@
         :settings-page/sync "Синхронизация"
         :settings-page/enable-whiteboards "Интерактивные доски"
         :yes "Да"
-        
+
         :submit "Подтвердить"
         :cancel "Отмена"
         :close "Закрыть"
@@ -3463,7 +3475,7 @@
         :sync-from-local-files "Обновить"
         :sync-from-local-files-detail "Импортировать изменения из локальных файлов"
         :sync-from-local-changes-detected "При обновлении будут найдены и обработаны файлы, изменённые на диске и отличающиеся от текущего содержимого страниц Logseq. Продолжить?"
-        
+
         :search/publishing "Искать"
         :search "Искать или создать страницу"
         :whiteboard/link-whiteboard-or-block "Ссылка на доску/страницу/блок"
@@ -3518,9 +3530,9 @@
         :heading "Заголовок {1}"
         :auto-heading "Автоматический заголовок"
         :open-a-directory "Открыть локальный каталог"
-        
+
         :help/shortcut-page-title "Сочетания клавиш"
-        
+
         :plugin/installed "Установлено"
         :plugin/not-installed "Не установлено"
         :plugin/installing "Установка"
@@ -3554,33 +3566,33 @@
         :plugin.install-from-file/title "Установить расширения из plugins.edn"
         :plugin.install-from-file/notice "Следующие плагины заменят ваши плагины:"
         :plugin.install-from-file/success "Все расширения установлены!"
-        
+
         :pdf/copy-ref "Копировать ссылку"
         :pdf/copy-text "Копировать текст"
         :pdf/linked-ref "Связанные ссылки"
         :pdf/toggle-dashed "Пунктирный стиль для выделения области"
         :pdf/hl-block-colored "Цветная метка для выделенного блока"
         :pdf/doc-metadata "Метаданные документа"
-        
+
         :updater/new-version-install "Была загружена новая версия"
         :updater/quit-and-install "Перезапустить для установки"
-        
+
         :paginates/pages "Всего {1} страница"
         :paginates/prev "Предыдущая"
         :paginates/next "Следующая"
-        
+
         :tips/all-done "Все готово"
-        
+
         :command-palette/prompt "Введите команду"
         :select/default-prompt "Выберите"
         :select/default-select-multiple "Выберите один или несколько"
         :select.graph/prompt "Выберите граф"
         :select.graph/empty-placeholder-description "Нет подходящих графов. Хотите добавить другой?"
         :select.graph/add-graph "Да, добавить другой граф"
-        
+
         :file-sync/other-user-graph "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
         :file-sync/graph-deleted "Текущий удаленный граф был удален"
-        
+
         :notification/clear-all "Очистить все"}
 
    :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
