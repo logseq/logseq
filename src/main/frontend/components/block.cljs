@@ -1215,7 +1215,7 @@
 
 (declare ->hiccup)
 
-(defn- wrap-query-components
+(defn wrap-query-components
   [config]
   (merge config
          {:->hiccup ->hiccup
