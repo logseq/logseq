@@ -170,17 +170,19 @@
                 ;; Need the existing choices later to improve the UX
                 :selected-choices #{}
                 :prompt-key :select/default-select-multiple
-                :close-modal? false})
+                :close-modal? false
+                :on-apply (:toggle-fn opts)})
 
        "priority"
        (select db-default/built-in-priorities
-               (fn [value]
-                 (when (seq value)
-                   (append-tree! *tree opts loc (vec (cons :priority value)))))
-               {:multiple-choices? true
-                :selected-choices #{}
-                :prompt-key :select/default-select-multiple
-                :close-modal? false})
+         (fn [value]
+           (when (seq value)
+             (append-tree! *tree opts loc (vec (cons :priority value)))))
+         {:multiple-choices? true
+          :selected-choices #{}
+          :prompt-key :select/default-select-multiple
+          :close-modal? false
+          :on-apply (:toggle-fn opts)})
 
        "page"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
