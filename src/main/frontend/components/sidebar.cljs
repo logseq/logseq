@@ -690,20 +690,25 @@
 
 (def help-menu-items
   [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Keyboard shortcuts" :icon "command" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Documentation" :icon "help" :href ""}
+   {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
+   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
    :hr
-   {:title "Report bug" :icon "bug" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Request feature" :icon "git-pull-request" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Submit feedback" :icon "messages" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Report bug" :icon "bug" :href (rfe/href :bug-report)}
+   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
+   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
-   {:title "Ask the community" :icon "brand-discord" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Support forum" :icon "message" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
+   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
    :hr
-   {:title "Release notes" :icon "asterisk" :on-click #(handbooks/toggle-handbooks)}])
+   {:title "Release notes" :icon "asterisk" :href "https://github.com/logseq/logseq/releases"}])
 
 (rum/defc help-menu-popup
   []
+
+  (rum/use-effect!
+    (fn []
+      (state/set-state! :ui/handbooks-open? false))
+    [])
 
   [:div.cp__sidebar-help-menu-popup
    [:div.list-wrap
@@ -714,6 +719,11 @@
 
         ;; default
         [:a.it.flex.items-center.px-4.py-1.select-none
+         {:on-click (fn []
+                      (cond
+                        (fn? on-click) (on-click)
+                        (string? href) (util/open-url href))
+                      (state/set-state! :ui/help-open? false))}
          [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
          [:strong.font-normal title]]))]
    [:div.ft.pl-11.pb-3
