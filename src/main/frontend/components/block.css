@@ -100,8 +100,9 @@
 }
 
 .breadcrumb {
-  .asset-container img {
+  .asset-container > img {
     height: 18px;
+    width: unset !important;
   }
 }
 

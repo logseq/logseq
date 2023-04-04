@@ -275,7 +275,7 @@
       (lightbox/preview-images! images))))
 
 (defonce *resizing-image? (atom false))
-(rum/defcs resizable-image <
+(rum/defcs ^:large-vars/data-var resizable-image <
   (rum/local nil ::size)
   {:will-unmount (fn [state]
                    (reset! *resizing-image? false)
