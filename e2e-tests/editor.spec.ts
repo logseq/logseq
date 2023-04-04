@@ -48,6 +48,16 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await block.mustFill("done")
 })
 
+test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.activeEditing(0)
+
+  await page.type('textarea >> nth=0', '#[[', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+})
+
 test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
