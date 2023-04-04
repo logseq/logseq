@@ -41,7 +41,8 @@
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.core :as mobile]))
 
 (defn set-global-error-notification!
   []
@@ -216,6 +217,8 @@
   (events/run!)
 
   (p/do!
+   (when (mobile-util/native-platform?)
+     (mobile/mobile-preinit))
    (-> (p/let [repos (get-repos)
                _ (state/set-repos! repos)
                _ (restore-and-setup! repos)]

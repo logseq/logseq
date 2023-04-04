@@ -73,7 +73,7 @@
              (user-pane sign-out! user')))))]))
 
 (rum/defcs page <
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   [_state]
   (page-impl))
 
