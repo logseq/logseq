@@ -52,7 +52,6 @@
         :handbook/home "Home"
         :handbook/settings "Settings"
         :handbook/close "Close"
-        :handbook/join-community "Join community for more help!"
         :more "More"
         :search/result-for "Search result for "
         :search/items "items"
