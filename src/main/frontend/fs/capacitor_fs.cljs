@@ -299,11 +299,16 @@
                                                            nil))) ;; NOTE: If pick folder fails, let it crash
           _ (when (and (mobile-util/native-ios?)
                        (not (or (local-container-path? path localDocumentsPath)
-                                (mobile-util/iCloud-container-path? path))))
+                                (mobile-util/in-iCloud-container-path? path))))
               (state/pub-event! [:modal/show-instruction]))
+          exists? (<dir-exists? path)
+          _ (when-not exists?
+             (p/rejected (str "Cannot access selected directory: " path)))
+          _ (when (mobile-util/is-iCloud-container-path? path)
+              (p/rejected (str "Please avoid accessing the top-level iCloud container path: " path)))
           path (if (mobile-util/native-ios?)
-                  (ios-force-include-private path)
-                  path)
+                 (ios-force-include-private path)
+                 path)
           _ (js/console.log "Opening or Creating graph at directory: " path)
           files (get-files path)]
     {:path path
