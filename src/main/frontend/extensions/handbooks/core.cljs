@@ -1,7 +1,7 @@
 (ns frontend.extensions.handbooks.core
   (:require [clojure.string :as string]
             [rum.core :as rum]
-            [cljs.core.async :as async]
+            [cljs.core.async :as async :refer [<! >!]]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.search :as search]

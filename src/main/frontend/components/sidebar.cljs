@@ -781,7 +781,6 @@
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
-        develop-mode? (state/sub :ui/developer-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
