@@ -359,23 +359,23 @@
                         (state/set-modal! confirm-fn))))}
                  (ui/icon "trash")])
 
-           [:button.asset-action-btn
-            {:title         (t :asset/copy)
-             :tabIndex      "-1"
-             :on-mouse-down util/stop
-             :on-click      (fn [e]
-                              (util/stop e)
-                              (-> (util/copy-image-to-clipboard image-src)
-                                  (p/then #(notification/show! "Copied!" :success))))}
-            (ui/icon "copy")]
+              [:button.asset-action-btn
+               {:title         (t :asset/copy)
+                :tabIndex      "-1"
+                :on-mouse-down util/stop
+                :on-click      (fn [e]
+                                 (util/stop e)
+                                 (-> (util/copy-image-to-clipboard image-src)
+                                     (p/then #(notification/show! "Copied!" :success))))}
+               (ui/icon "copy")]
 
-           [:button.asset-action-btn
-            {:title (t :asset/maximize)
-             :tabIndex "-1"
-             :on-mouse-down util/stop
-             :on-click open-lightbox}
+              [:button.asset-action-btn
+               {:title         (t :asset/maximize)
+                :tabIndex      "-1"
+                :on-mouse-down util/stop
+                :on-click      open-lightbox}
 
-            (ui/icon "maximize")]]])]))))
+               (ui/icon "maximize")]]])])]))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
