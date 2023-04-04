@@ -710,6 +710,13 @@
       (state/set-state! :ui/handbooks-open? false))
     [])
 
+  (rum/use-effect!
+    (fn []
+      (let [h #(state/set-state! :ui/help-open? false)]
+        (.addEventListener js/document.body "click" h)
+        #(.removeEventListener js/document.body "click" h)))
+    [])
+
   [:div.cp__sidebar-help-menu-popup
    [:div.list-wrap
     (for [{:keys [title icon href on-click] :as item} help-menu-items]
