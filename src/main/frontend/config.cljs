@@ -408,7 +408,7 @@
 (defn get-string-repo-dir
   [repo-dir]
   (if (mobile-util/native-ios?)
-    (str (if (mobile-util/iCloud-container-path? repo-dir)
+    (str (if (mobile-util/in-iCloud-container-path? repo-dir)
            "iCloud"
            (cond (mobile-util/native-iphone?)
                  "On My iPhone"

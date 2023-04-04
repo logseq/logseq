@@ -1,6 +1,6 @@
 (ns electron.search
   "Provides both page level and block level index"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
@@ -113,7 +113,7 @@
 (defn get-search-dir
   []
   (let [path (.getPath ^object app "userData")]
-    (path/join path "search")))
+    (node-path/join path "search")))
 
 (defn ensure-search-dir!
   []
@@ -123,14 +123,14 @@
   [db-name]
   (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
-    [db-name (path/join search-dir db-name)]))
+    [db-name (node-path/join search-dir db-name)]))
 
 (defn get-db-path
   "Search cache paths"
   [db-name]
   (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
-    [db-name (path/join search-dir db-name)]))
+    [db-name (node-path/join search-dir db-name)]))
 
 (defn open-db!
   [db-name]

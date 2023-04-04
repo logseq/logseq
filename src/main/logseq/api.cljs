@@ -525,8 +525,7 @@
 
 (def ^:export get_selected_blocks
   (fn []
-    (when-let [blocks (and (state/in-selection-mode?)
-                           (seq (state/get-selection-blocks)))]
+    (when-let [blocks (state/selection?)]
       (let [blocks (->> blocks
                         (map (fn [^js el] (some-> (state/get-block-id el)
                                                   (db-model/query-block-by-uuid)))))]

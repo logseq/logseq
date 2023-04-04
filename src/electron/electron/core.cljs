@@ -13,7 +13,7 @@
             [cljs-bean.core :as bean]
             [electron.fs-watcher :as fs-watcher]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
@@ -31,7 +31,7 @@
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
-(defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
+(defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
@@ -83,7 +83,7 @@
 
            path' (.-pathname url')
            path' (utils/safe-decode-uri-component path')
-           path' (.join path ROOT path')]
+           path' (.join node-path ROOT path')]
 
        (callback #js {:path path'}))))
 
@@ -96,51 +96,51 @@
           asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
     (when root-dir
-      (let [static-dir (path/join root-dir "static")
-            assets-from-dir (path/join repo-path "assets")
-            assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")]
+      (let [static-dir (node-path/join root-dir "static")
+            assets-from-dir (node-path/join repo-path "assets")
+            assets-to-dir (node-path/join root-dir "assets")
+            index-html-path (node-path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
                           [(. fs writeFile index-html-path html)
 
 
-                           (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+                           (. fs copy (node-path/join app-path "404.html") (node-path/join root-dir "404.html"))]
 
                           (map
                            (fn [filename]
-                             (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                             (-> (. fs copy (node-path/join assets-from-dir filename) (node-path/join assets-to-dir filename))
                                  (p/catch
                                   (fn [e]
                                     (logger/error "Failed to copy"
-                                            (str {:from (path/join assets-from-dir filename)
-                                                  :to (path/join assets-to-dir filename)})
+                                            (str {:from (node-path/join assets-from-dir filename)
+                                                  :to (node-path/join assets-to-dir filename)})
                                             e)))))
                            asset-filenames)
 
                           (map
                            (fn [part]
-                             (. fs copy (path/join app-path part) (path/join static-dir part)))
+                             (. fs copy (node-path/join app-path part) (node-path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
                 export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
-                _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
+                _ (. fs writeFile (node-path/join static-dir "css" "export.css")  export-css)
                 custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
-                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
+                _ (. fs writeFile (node-path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
                 _ (p/all (map (fn [file]
-                                (. fs removeSync (path/join static-dir "js" file)))
+                                (. fs removeSync (node-path/join static-dir "js" file)))
                               js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
-                                   (path/join static-dir "js" "publishing" file)
-                                   (path/join static-dir "js" file)))
+                                   (node-path/join static-dir "js" "publishing" file)
+                                   (node-path/join static-dir "js" file)))
                               js-files))
-                _ (. fs removeSync (path/join static-dir "js" "publishing"))
+                _ (. fs removeSync (node-path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
-                                (. fs removeSync (path/join static-dir "js" (str file ".map"))))
+                                (. fs removeSync (node-path/join static-dir "js" (str file ".map"))))
                               ["main.js" "code-editor.js" "excalidraw.js"]))]
 
           (send-to-renderer
@@ -200,7 +200,7 @@
 (defn- set-app-menu! []
   (let [about-fn (fn []
                    (.showMessageBox dialog (clj->js {:title "Logseq"
-                                                     :icon (path/join js/__dirname "icons/logseq.png")
+                                                     :icon (node-path/join js/__dirname "icons/logseq.png")
                                                      :message (str "Version " updater/electron-version)})))
         template (if mac?
                    [{:label (.-name app)

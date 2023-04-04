@@ -9,7 +9,7 @@
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
-            ["path" :as path]
+            ["path" :as node-path]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.core.async :as async]
@@ -51,7 +51,7 @@
                  (remove #(string/starts-with? (.-name ^js %) "."))
                  (map #(do
                          [(.isDirectory %)
-                          (.join path dir (.-name %))])))))
+                          (.join node-path dir (.-name %))])))))
         [true root-dir])
        (filter (complement first))
        (map second)
@@ -94,10 +94,10 @@
              (string? new-content)
              (string-some-deleted? db-content new-content))
     (logger/info ::backup "backup db file" path)
-    (backup-file/backup-file repo :backup-dir path (path/extname path) db-content)))
+    (backup-file/backup-file repo :backup-dir path (node-path/extname path) db-content)))
 
 (defmethod handle :addVersionFile [_window [_ repo path content]]
-  (backup-file/backup-file repo :version-file-dir path (path/extname path) content))
+  (backup-file/backup-file repo :version-file-dir path (node-path/extname path) content))
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
@@ -128,7 +128,7 @@
       (catch :default e
         (logger/warn ::write-file path e)
         (let [backup-path (try
-                            (backup-file/backup-file repo :backup-dir path (path/extname path) content)
+                            (backup-file/backup-file repo :backup-dir path (node-path/extname path) content)
                             (catch :default e
                               (logger/error ::write-file "backup file failed:" e)))]
           (utils/send-to-renderer window "notification" {:type "error"
@@ -152,7 +152,7 @@
 
 (defn get-ext
   [p]
-  (-> (.extname path p)
+  (-> (.extname node-path p)
       (subs 1)
       keyword))
 
@@ -200,7 +200,7 @@
       (try
         (p/resolved (bean/->js {:path path
                                 :files (get-files path)}))
-        (catch js/Error e 
+        (catch js/Error e
           (do
             (utils/send-to-renderer window "notification" {:type "error"
                                                            :payload (str "Opening the specified directory failed.\n"
@@ -232,8 +232,8 @@
 (defn- get-graphs-dir
   []
   (let [dir (if utils/ci?
-              (.resolve path js/__dirname "../tmp/graphs")
-              (.join path (.homedir os) ".logseq" "graphs"))]
+              (.resolve node-path js/__dirname "../tmp/graphs")
+              (.join node-path (.homedir os) ".logseq" "graphs"))]
     (fs-extra/ensureDirSync dir)
     dir))
 
@@ -243,7 +243,7 @@
   (let [dir (get-graphs-dir)]
     (->> (readdir dir)
          (remove #{dir})
-         (map #(path/basename % ".transit"))
+         (map #(node-path/basename % ".transit"))
          (map graph-name->path))))
 
 ;; TODO support alias mechanism
@@ -263,7 +263,7 @@
 (defn- read-txid-info!
   [root]
   (try
-    (let [txid-path (.join path root "logseq/graphs-txid.edn")]
+    (let [txid-path (.join node-path root "logseq/graphs-txid.edn")]
       (when (fs/existsSync txid-path)
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
@@ -289,7 +289,7 @@
   (when graph-name
     (let [graph-name (sanitize-graph-name graph-name)
           dir (get-graphs-dir)]
-      (.join path dir (str graph-name ".transit")))))
+      (.join node-path dir (str graph-name ".transit")))))
 
 (defn- get-serialized-graph
   [graph-name]
@@ -366,7 +366,7 @@
 
   (let [path (.getPath ^object app "userData")]
     (doseq [dir ["search" "IndexedDB"]]
-      (let [path (path/join path dir)]
+      (let [path (node-path/join path dir)]
         (try
           (fs-extra/removeSync path)
           (catch :default e
@@ -430,7 +430,7 @@
   (zipmap urls (for [url urls]
                  (try
                    (and (fs-extra/pathExistsSync url)
-                        (fs-extra/pathExistsSync (path/join url "package.json")))
+                        (fs-extra/pathExistsSync (node-path/join url "package.json")))
                    (catch :default _e false)))))
 
 (defmethod handle :relaunchApp []
@@ -456,7 +456,7 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (when-let [assets-path (.join path graph-path "assets")]
+    (when-let [assets-path (.join node-path graph-path "assets")]
       (when (fs-extra/pathExistsSync assets-path)
         (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
           files)))))
