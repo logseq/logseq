@@ -748,6 +748,7 @@ button.tl-select-input-trigger {
   .breadcrumb {
     text-overflow: ellipsis;
     overflow: hidden;
+    flex-wrap: nowrap;
   }
 
   .block-content {

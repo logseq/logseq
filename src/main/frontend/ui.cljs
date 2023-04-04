@@ -64,6 +64,20 @@
    "purple"
    "gray"])
 
+(rum/defc menu-background-color
+  [add-bgcolor-fn rm-bgcolor-fn]
+  [:div.flex.flex-row.justify-between.py-1.px-2.items-center
+   [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
+    (for [color block-background-colors]
+      [:a.shadow-sm
+       {:title (t (keyword "color" color))
+        :on-click #(add-bgcolor-fn color)}
+       [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
+    [:a.shadow-sm
+     {:title (t :remove-background)
+      :on-click rm-bgcolor-fn}
+     [:div.heading-bg.remove "-"]]]])
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
@@ -984,15 +998,15 @@
         klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
-       {:type     "button"
-        :title    title
-        :disabled disabled?
-        :class    (str (util/hiccup->class klass) " " class)}
-       (dissoc option :background :class :small? :large?)
-       (when href
-         {:on-click (fn []
-                      (util/open-url href)
-                      (when (fn? on-click) (on-click)))}))
+      {:type  "button"
+       :title title
+       :disabled disabled?
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small? :large? :disabled?)
+      (when href
+        {:on-click (fn []
+                     (util/open-url href)
+                     (when (fn? on-click) (on-click)))}))
      (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
@@ -1104,3 +1118,40 @@
       [])
      (when portal-anchor
        (rum/portal (rum/fragment children) portal-anchor)))))
+
+(rum/defc menu-heading
+  ([add-heading-fn auto-heading-fn rm-heading-fn]
+   (menu-heading nil add-heading-fn auto-heading-fn rm-heading-fn))
+  ([heading add-heading-fn auto-heading-fn rm-heading-fn]
+   [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+    [:div.flex.flex-row.justify-between.flex-1.px-1
+     (for [i (range 1 7)]
+       (button
+        ""
+        :disabled? (and (some? heading) (= heading i))
+        :icon (str "h-" i)
+        :title (t :heading i)
+        :class "to-heading-button"
+        :on-click #(add-heading-fn i)
+        :intent "link"
+        :small? true))
+     (button
+      ""
+      :icon "h-auto"
+      :disabled? (and (some? heading) (true? heading))
+      :icon-props {:extension? true}
+      :class "to-heading-button"
+      :title (t :auto-heading)
+      :on-click auto-heading-fn
+      :intent "link"
+      :small? true)
+     (button
+      ""
+      :icon "heading-off"
+      :disabled? (and (some? heading) (not heading))
+      :icon-props {:extension? true}
+      :class "to-heading-button"
+      :title (t :remove-heading)
+      :on-click rm-heading-fn
+      :intent "link"
+      :small? true)]]))
