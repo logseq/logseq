@@ -163,12 +163,12 @@
                                      pid (assoc cmd :page page-name) action)}}))
 
           (when developer-mode?
-            {:title   "(Dev) Show page data"
+            {:title   (t :command.dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})
 
           (when developer-mode?
-            {:title   "(Dev) Show page AST"
+            {:title   (t :command.dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
                                      (dev-common-handler/show-content-ast

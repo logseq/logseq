@@ -43,18 +43,18 @@
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
-    (t :content/cut)
+    (t :command.editor/cut)
     (ui/keyboard-shortcut-from-config :editor/cut))
    (ui/menu-link
     {:key "delete"
      :on-click #(do (editor-handler/delete-selection %)
                     (state/hide-custom-context-menu!))}
-    "Delete"
+    (t :command.editor/delete-selection)
     (ui/keyboard-shortcut-from-config :editor/delete))
    (ui/menu-link
     {:key "copy"
      :on-click editor-handler/copy-selection-blocks}
-    (t :content/copy)
+    (t :command.editor/copy)
     (ui/keyboard-shortcut-from-config :editor/copy))
    (ui/menu-link
     {:key "copy as"
@@ -67,12 +67,12 @@
    (ui/menu-link
     {:key "copy block refs"
      :on-click editor-handler/copy-block-refs}
-    "Copy block refs"
+    (t :content/copy-block-ref)
     nil)
    (ui/menu-link
     {:key "copy block embeds"
      :on-click editor-handler/copy-block-embeds}
-    "Copy block embeds"
+    (t :content/copy-block-emebed)
     nil)
 
    [:hr.menu-separator]
@@ -87,7 +87,7 @@
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
-    "Cycle todos"
+    (t :command.editor/cycle-todo)
     (ui/keyboard-shortcut-from-config :editor/cycle-todo))
 
    [:hr.menu-separator]
@@ -95,13 +95,13 @@
    (ui/menu-link
     {:key "Expand all"
      :on-click editor-handler/expand-all-selection!}
-    "Expand all"
+    (t :command.editor/expand-block-children)
     (ui/keyboard-shortcut-from-config :editor/expand-block-children))
 
    (ui/menu-link
     {:key "Collapse all"
      :on-click editor-handler/collapse-all-selection!}
-    "Collapse all"
+    (t :command.editor/collapse-block-children)
     (ui/keyboard-shortcut-from-config :editor/collapse-block-children))])
 
 (defonce *template-including-parent? (atom nil))
@@ -142,7 +142,7 @@
                          (reset! input (util/evalue e)))}]
           (when has-children?
             (template-checkbox template-including-parent?))
-          (ui/button "Submit"
+          (ui/button (t :submit)
                      :on-click (fn []
                                  (let [title (string/trim @input)]
                                    (when (not (string/blank? title))
@@ -226,13 +226,13 @@
           {:key      "Cut"
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
-          (t :content/cut)
+          (t :command.editor/cut)
           (ui/keyboard-shortcut-from-config :editor/cut))
 
          (ui/menu-link
           {:key      "delete"
            :on-click #(editor-handler/delete-block-aux! block true)}
-          "Delete"
+          (t :command.editor/delete-selection)
           (ui/keyboard-shortcut-from-config :editor/delete))
 
          [:hr.menu-separator]
@@ -261,14 +261,14 @@
           {:key      "Expand all"
            :on-click (fn [_e]
                        (editor-handler/expand-all! block-id))}
-          "Expand all"
+          (t :command.editor/expand-block-children)
           (ui/keyboard-shortcut-from-config :editor/expand-block-children))
 
          (ui/menu-link
           {:key      "Collapse all"
            :on-click (fn [_e]
                        (editor-handler/collapse-all! block-id {}))}
-          "Collapse all"
+          (t :command.editor/collapse-block-children)
           (ui/keyboard-shortcut-from-config :editor/collapse-block-children))
 
          (when (state/sub [:plugin/simple-commands])
@@ -286,7 +286,7 @@
             {:key      "(Dev) Show block data"
              :on-click (fn []
                          (dev-common-handler/show-entity-data [:block/uuid block-id]))}
-            "(Dev) Show block data"
+            (t :command.dev/show-block-data)
             nil))
 
          (when (state/sub [:ui/developer-mode?])
@@ -295,7 +295,7 @@
              :on-click (fn []
                          (let [block (db/pull [:block/uuid block-id])]
                            (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
-            "(Dev) Show block AST"
+            (t :command.dev/show-block-ast)
             nil))])))
 
 (rum/defc block-ref-custom-context-menu-content
@@ -309,7 +309,7 @@
                     (state/get-current-repo)
                     block-ref-id
                     :block-ref))}
-      "Open in sidebar"
+      (t :content/open-in-sidebar)
       ["⇧" "click"])
      (ui/menu-link
       {:key "copy"
