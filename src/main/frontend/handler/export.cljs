@@ -15,7 +15,7 @@
    [frontend.mobile.util :as mobile-util]
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
-   [logseq.publish-spa.html :as publish-html]
+   [logseq.publishing.html :as publish-html]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.property :as property]

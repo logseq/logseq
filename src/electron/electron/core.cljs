@@ -22,7 +22,7 @@
             [electron.window :as win]
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as js-utils]
-            [logseq.publish-spa.export :as publish-export]))
+            [logseq.publishing.export :as publish-export]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")

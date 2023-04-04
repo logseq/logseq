@@ -1,9 +1,10 @@
-(ns logseq.publish-spa.db
+(ns logseq.publishing.db
+  "Provides db fns and associated util fns for publishing"
   (:require [datascript.core :as d]
             [logseq.db.schema :as db-schema]
             [clojure.string :as string]))
 
-(defn get-area-block-asset-url
+(defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be indepent from the frontend app"
   [block page]

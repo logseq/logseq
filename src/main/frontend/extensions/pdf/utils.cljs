@@ -4,7 +4,7 @@
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [datascript.core :as d]
-            [logseq.publish-spa.db :as publish-db]
+            [logseq.publishing.db :as publish-db]
             [clojure.string :as string]))
 
 (defonce MAX-SCALE 5.0)

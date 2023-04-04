@@ -34,9 +34,9 @@
   dev:build-publishing
   logseq.tasks.dev/build-publishing
 
-  dev:publish-spa
+  dev:publishing
   {:depends [dev:build-publishing]
-   :doc "Build publish spa app given graph and output dirs"
+   :doc "Build publishing spa app given graph and output dirs"
    :task (apply shell {:dir "scripts"}
            "yarn -s nbb-logseq -cp src -m logseq.tasks.dev.publishing"
            (into ["static"] *command-line-args*))}

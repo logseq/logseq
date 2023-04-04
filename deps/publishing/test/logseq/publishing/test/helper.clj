@@ -1,4 +1,4 @@
-(ns logseq.publish-spa.test.helper)
+(ns logseq.publishing.test.helper)
 
 ;; Copied from https://github.com/babashka/nbb/blob/e5d84b0fac59774f5d7a4a9e807240cce04bf252/test/nbb/test_macros.clj
 (defmacro deftest-async

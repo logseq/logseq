@@ -7,7 +7,7 @@
   {:aliases {clojure.string string}}}
 
  :lint-as
- {logseq.publish-spa.test.helper/deftest-async clojure.test/deftest
+ {logseq.publishing.test.helper/deftest-async clojure.test/deftest
   promesa.core/let clojure.core/let}
  :skip-comments true
  :output {:progress true}}

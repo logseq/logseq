@@ -1,7 +1,7 @@
-(ns logseq.publish-spa
+(ns logseq.publishing
   "This node only ns provides api fns for exporting a publishing app"
-  (:require [logseq.publish-spa.html :as publish-html]
-            [logseq.publish-spa.export :as publish-export]))
+  (:require [logseq.publishing.html :as publish-html]
+            [logseq.publishing.export :as publish-export]))
 
 (defn export
   "Exports the given graph-dir and db to the specific output-dir. Most of the graph
