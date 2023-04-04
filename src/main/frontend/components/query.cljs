@@ -299,8 +299,7 @@
                (fn []
                  (custom-query-inner config q opts))
                {:default-collapsed? collapsed?
-                :title-trigger? true})
-              (custom-query-inner config q opts)]
+                :title-trigger? true})]
              [:div.bd
               (when-not collapsed?'
                 (custom-query-inner config q opts))])])))))
