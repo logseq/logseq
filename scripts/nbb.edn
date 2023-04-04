@@ -3,5 +3,5 @@
  {logseq/graph-parser
   ;; Nbb bug. Should just be "../graph-parser"
   {:local/root "../../../../deps/graph-parser"}
-  logseq/publish-spa
-  {:local/root "../../../../deps/publish-spa"}}}
+  logseq/publishing
+  {:local/root "../../../../deps/publishing"}}}

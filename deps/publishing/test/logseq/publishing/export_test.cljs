@@ -1,7 +1,7 @@
-(ns logseq.publish-spa.export-test
+(ns logseq.publishing.export-test
   (:require [cljs.test :as t :refer [is use-fixtures async]]
-            [logseq.publish-spa.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.publish-spa.export :as publish-export]
+            [logseq.publishing.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [logseq.publishing.export :as publish-export]
             [promesa.core :as p]
             [clojure.set :as set]
             ["fs" :as fs]

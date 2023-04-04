@@ -1,5 +1,5 @@
 {
-  "name": "@logseq/publish-spa",
+  "name": "@logseq/publishing",
   "version": "1.0.0",
   "private": true,
   "devDependencies": {

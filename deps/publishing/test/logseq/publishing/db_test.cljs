@@ -1,7 +1,7 @@
-(ns logseq.publish-spa.db-test
+(ns logseq.publishing.db-test
   (:require [cljs.test :refer [deftest is]]
             [clojure.set :as set]
-            [logseq.publish-spa.db :as publish-db]
+            [logseq.publishing.db :as publish-db]
             [logseq.graph-parser :as graph-parser]
             [datascript.core :as d]
             [logseq.db :as ldb]))

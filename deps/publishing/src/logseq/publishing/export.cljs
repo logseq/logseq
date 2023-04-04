@@ -1,4 +1,4 @@
-(ns logseq.publish-spa.export
+(ns logseq.publishing.export
   "This electron only ns (for the main process) exports files from multiple
   locations to provide a complete publishing app"
   (:require ["fs-extra" :as fse]
@@ -6,11 +6,11 @@
             ["fs" :as fs]
             [promesa.core :as p]))
 
-(def js-files
+(def ^:api js-files
   "js files from publishing release build"
   ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"])
 
-(def static-dirs
+(def ^:api static-dirs
   "dirs under static dir to copy over"
   ["css" "fonts" "icons" "img" "js"])
 

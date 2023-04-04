@@ -1,11 +1,11 @@
-(ns logseq.publish-spa.html
+(ns logseq.publishing.html
   "This frontend only ns builds the publishing html including doing all the
 necessary db filtering"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
-            [logseq.publish-spa.db :as db]))
+            [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -20,7 +20,7 @@ necessary db filtering"
       (string/replace "'" "logseq____&apos;")))
 
 ;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
-(defn html [v]
+(defn- html [v]
   (cond (vector? v)
     (let [tag (first v)
           attrs (second v)
@@ -39,7 +39,7 @@ necessary db filtering"
     (string/join " " (map html v))
     :else (str v)))
 
-(defn publishing-html
+(defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
   (let [{:keys [icon name alias title description url]} options
         icon (or icon "static/img/logo.png")
