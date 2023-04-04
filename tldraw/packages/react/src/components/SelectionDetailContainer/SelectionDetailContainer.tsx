@@ -38,6 +38,7 @@ export const SelectionDetailContainer = observer(function SelectionDetail<S exte
       ref={rBounds}
       className={`tl-counter-scaled-positioned ${hidden ? `tl-fade-out` : ''}`}
       aria-label="bounds-detail-container"
+      data-html2canvas-ignore="true"
     >
       <SelectionDetail
         shapes={shapes}

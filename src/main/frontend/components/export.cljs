@@ -1,5 +1,6 @@
 (ns frontend.components.export
-  (:require [frontend.context.i18n :refer [t]]
+  (:require ["/frontend/utils" :as utils]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
@@ -77,6 +78,7 @@
 (rum/defcs ^:large-vars/cleanup-todo
   export-blocks < rum/static
   (rum/local false ::copied?)
+
   (rum/local nil ::text-remove-options)
   (rum/local nil ::text-indent-style)
   (rum/local nil ::text-other-options)
@@ -107,10 +109,23 @@
                  :on-click #(do (reset! *export-block-type :opml)
                                 (reset! *content (export-helper root-block-uuids-or-page-name))))
       (ui/button "HTML"
-                 :class "w-20"
+                 :class "mr-4 w-20"
                  :on-click #(do (reset! *export-block-type :html)
-                                (reset! *content (export-helper root-block-uuids-or-page-name))))]
-     [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}]
+                                (reset! *content (export-helper root-block-uuids-or-page-name))))
+
+      (ui/button "PNG"
+                 :class "w-20"
+                 :on-click #(do (reset! *export-block-type :png)
+                                (reset! *content nil)
+                                (when (and (string? root-block-uuids-or-page-name) (not @*content))
+                                  (-> (js/html2canvas (js/document.querySelector "#main-content-container"))
+                                      (.then (fn [canvas] (.toBlob canvas (fn [blob] (reset! *content blob)) "image/png")))))))]
+
+     (if (= :png tp)
+       (when @*content
+         [:img {:scr (.createObjectURL js/window.URL @*content)}])
+       [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
+
      (let [options (->> text-indent-style-options
                         (mapv (fn [opt]
                                 (if (= @*text-indent-style (:label opt))
@@ -206,7 +221,11 @@
 
      [:div.mt-4
       (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
+                 :class "mr-4"
                  :on-click (fn []
                              (util/copy-to-clipboard! @*content
                                                       :html (when (= tp :html) @*content))
-                             (reset! *copied? true)))]]))
+                             (reset! *copied? true)))
+      (ui/button "Save file"
+                 :on-click (fn []
+                             (utils/saveToFile (js/Blob. [@*content]) root-block-uuids-or-page-name (if (= tp :text) "txt" (name tp)))))]]))
