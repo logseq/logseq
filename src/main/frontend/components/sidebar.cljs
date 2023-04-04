@@ -693,7 +693,7 @@
    {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
    {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
    :hr
-   {:title "Report bug" :icon "bug" :href (rfe/href :bug-report)}
+   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
    {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
    {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
