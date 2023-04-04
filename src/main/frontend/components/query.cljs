@@ -150,17 +150,18 @@
          (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-         (->hiccup result (cond-> (assoc config
-                                         :custom-query? true
-                                         :dsl-query? dsl-query?
-                                         :query query
-                                         :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                             breadcrumb-show?
-                                                             true)
-                                         :group-by-page? blocks-grouped-by-page?
-                                         :ref? true)
-                            children?
-                            (assoc :ref? true))
+         (->hiccup result
+                   (cond-> (assoc config
+                                  :custom-query? true
+                                  :dsl-query? dsl-query?
+                                  :query query
+                                  :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                      breadcrumb-show?
+                                                      true)
+                                  :group-by-page? blocks-grouped-by-page?
+                                  :ref? true)
+                     children?
+                     (assoc :ref? true))
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
 

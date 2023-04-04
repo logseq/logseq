@@ -1221,6 +1221,7 @@
          {:->hiccup ->hiccup
           :->elem ->elem
           :page-cp page-cp
+          :inline-text inline-text
           :map-inline map-inline}))
 
 ;;;; Macro component render functions

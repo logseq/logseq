@@ -187,9 +187,11 @@
            (rum/with-key
              (ui/catch-error
               (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (query/custom-query {:attr {:class "mt-10"}
-                                   :editor-box editor/box
-                                   :page page} query))
+              (query/custom-query (component-block/wrap-query-components
+                                   {:attr {:class "mt-10"}
+                                    :editor-box editor/box
+                                    :page page})
+                                  query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
