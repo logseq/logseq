@@ -311,6 +311,31 @@ export const toPosixPath = (input) => {
   return input && input.replace(/\\+/g, '/')
 }
 
+export const saveToFile = (data, fileName, format) => {
+  if (!data) return
+  const url = URL.createObjectURL(data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.${format}`
+  link.click()
+}
+
+export const canvasToImage = (canvas, title = 'Untitled', format = 'png' , quality = 1) => {
+  canvas.toBlob(
+    (blob) => {
+      saveToFile(blob, title, format)
+    },
+    `image/.${format}`,
+    quality
+  )
+}
+
+export const htmlToImage = (selector, title = 'Untitled') => {
+  html2canvas(document.querySelector(selector)).then(canvas => {
+    canvasToImage(canvas, title)
+  })
+}
+
 export const nodePath = Object.assign({}, path, {
   basename (input) {
     input = toPosixPath(input)

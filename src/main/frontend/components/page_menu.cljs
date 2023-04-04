@@ -134,7 +134,7 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (state/get-current-page)
+          (when (or (state/get-current-page) whiteboard?)
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []
