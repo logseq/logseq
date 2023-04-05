@@ -348,9 +348,9 @@
  ;; Specify the format of the filename for journal files.
  ;; Warning:
  ;;   Changing this setting may cause issues if not configured correctly.
- ;;   After changing this setting, you must reindex.
- ;; Available values:
- ;;  - "yyyy-MM-dd" (default)
- ;;  - "yyyy_MM_dd" 
+ ;;   This configuration option is not retroactive and will only affect newly created journals.
+ ;; You can use any date format with valid characters for your filesystem.
+ ;; The default value is "yyyy-MM-dd".
  ;; :journal/file-name-format "yyyy_MM_dd"
+
  }
