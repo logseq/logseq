@@ -345,7 +345,12 @@
  ;;     ;use Percent-encoding for other invalid characters
  :file/name-format :triple-lowbar
 
- ;; specify the format of the filename for journal files
+ ;; Specify the format of the filename for journal files.
+ ;; Warning:
+ ;;   Changing this setting may cause issues if not configured correctly.
+ ;;   After changing this setting, you must reindex.
+ ;; Available values:
+ ;;  - "yyyy-MM-dd" (default)
+ ;;  - "yyyy_MM_dd" 
  ;; :journal/file-name-format "yyyy_MM_dd"
-
  }
