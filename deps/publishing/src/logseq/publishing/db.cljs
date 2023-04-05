@@ -6,7 +6,7 @@
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
-  because it is used by this dep and needs to be indepent from the frontend app"
+  because it is used by this dep and needs to be independent from the frontend app"
   [block page]
   (when-some [props (and block page (:block/properties block))]
     (when-some [uuid (:block/uuid block)]
