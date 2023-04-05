@@ -5,6 +5,7 @@
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export :as export]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -75,15 +76,39 @@
              current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
+(defn- get-image-blob
+  [block-uuids-or-page-name transparent-bg? callback]
+  (let [style (js/window.getComputedStyle js/document.body.parentNode)
+        background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
+        selector (if (string? block-uuids-or-page-name) ;; is page?
+                   "#main-content-container"
+                   (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))]
+    (-> (js/html2canvas
+         (js/document.querySelector selector)
+         #js {:allowTaint true
+              :useCORS true
+              :backgroundColor (or background "transparent")
+              :scrollX 0
+              :scrollY 0
+              :windowHeight (when (string? block-uuids-or-page-name)
+                              (.-scrollHeight (js/document.querySelector selector)))
+              :onclone (fn [el])})
+        (.then (fn [canvas] (.toBlob canvas
+                                     (fn [blob]
+                                       (let [img (js/document.getElementById "export-preview")
+                                             img-url (image/create-object-url blob)]
+                                         (set! (.-src img) img-url)
+                                         (callback blob))) "image/png"))))))
+
 (rum/defcs ^:large-vars/cleanup-todo
   export-blocks < rum/static
   (rum/local false ::copied?)
-
   (rum/local nil ::text-remove-options)
   (rum/local nil ::text-indent-style)
   (rum/local nil ::text-other-options)
   (rum/local nil ::content)
   {:will-mount (fn [state]
+                 (reset! *export-block-type :text)
                  (let [content (export-helper (last (:rum/args state)))]
                    (reset! (::content state) content)
                    (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
@@ -117,115 +142,126 @@
                  :class "w-20"
                  :on-click #(do (reset! *export-block-type :png)
                                 (reset! *content nil)
-                                (when (and (string? root-block-uuids-or-page-name) (not @*content))
-                                  (-> (js/html2canvas (js/document.querySelector "#main-content-container"))
-                                      (.then (fn [canvas] (.toBlob canvas (fn [blob] (reset! *content blob)) "image/png")))))))]
+                                (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob)))))]
 
      (if (= :png tp)
-       (when @*content
-         [:img {:scr (.createObjectURL js/window.URL @*content)}])
+       [:div.flex.items-center.justify-center
+        (when (not @*content) (ui/loading ""))
+        [:img {:alt "export preview" :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
+
        [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
 
-     (let [options (->> text-indent-style-options
-                        (mapv (fn [opt]
-                                (if (= @*text-indent-style (:label opt))
-                                  (assoc opt :selected true)
-                                  opt))))]
-       [:div [:div.flex.items-center
-              [:label.mr-4
-               {:style {:visibility (if (= :text tp) "visible" "hidden")}}
-               "Indentation style:"]
-              [:select.block.my-2.text-lg.rounded.border.py-0.px-1
-               {:style     {:visibility (if (= :text tp) "visible" "hidden")}
-                :on-change (fn [e]
-                             (let [value (util/evalue e)]
-                               (state/set-export-block-text-indent-style! value)
-                               (reset! *text-indent-style value)
-                               (reset! *content (export-helper root-block-uuids-or-page-name))))}
-               (for [{:keys [label value selected]} options]
-                 [:option (cond->
-                           {:key   label
-                            :value (or value label)}
-                            selected
-                            (assoc :selected selected))
-                  label])]]
-        [:div.flex.items-center
-         (ui/checkbox {:class "mr-2"
-                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                       :checked (contains? @*text-remove-options :page-ref)
-                       :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :page-ref)
-                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
-         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "[[text]] -> text"]
+     (if (= :png tp)
+       [:div.flex.items-center
+        [:div "Transparent background"]
+        (ui/checkbox {:class "mr-2 ml-4"
+                      :on-change (fn [e]
+                                   (reset! *content nil)
+                                   (get-image-blob root-block-uuids-or-page-name e.currentTarget.checked (fn [blob] (reset! *content blob))))})]
+       (let [options (->> text-indent-style-options
+                          (mapv (fn [opt]
+                                  (if (= @*text-indent-style (:label opt))
+                                    (assoc opt :selected true)
+                                    opt))))]
+         [:div [:div.flex.items-center
+                [:label.mr-4
+                 {:style {:visibility (if (= :text tp) "visible" "hidden")}}
+                 "Indentation style:"]
+                [:select.block.my-2.text-lg.rounded.border.py-0.px-1
+                 {:style     {:visibility (if (= :text tp) "visible" "hidden")}
+                  :on-change (fn [e]
+                               (let [value (util/evalue e)]
+                                 (state/set-export-block-text-indent-style! value)
+                                 (reset! *text-indent-style value)
+                                 (reset! *content (export-helper root-block-uuids-or-page-name))))}
+                 (for [{:keys [label value selected]} options]
+                   [:option (cond->
+                             {:key   label
+                              :value (or value label)}
+                              selected
+                              (assoc :selected selected))
+                    label])]]
+          [:div.flex.items-center
+           (ui/checkbox {:class "mr-2"
+                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                         :checked (contains? @*text-remove-options :page-ref)
+                         :on-change (fn [e]
+                                      (state/update-export-block-text-remove-options! e :page-ref)
+                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
+           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+            "[[text]] -> text"]
 
-         (ui/checkbox {:class "mr-2 ml-4"
-                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                       :checked (contains? @*text-remove-options :emphasis)
-                       :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :emphasis)
-                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
+           (ui/checkbox {:class "mr-2 ml-4"
+                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                         :checked (contains? @*text-remove-options :emphasis)
+                         :on-change (fn [e]
+                                      (state/update-export-block-text-remove-options! e :emphasis)
+                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
-         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "remove emphasis"]
+           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+            "remove emphasis"]
 
-         (ui/checkbox {:class "mr-2 ml-4"
-                       :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                       :checked (contains? @*text-remove-options :tag)
-                       :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :tag)
-                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
+           (ui/checkbox {:class "mr-2 ml-4"
+                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                         :checked (contains? @*text-remove-options :tag)
+                         :on-change (fn [e]
+                                      (state/update-export-block-text-remove-options! e :tag)
+                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
-         [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "remove #tags"]]
+           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+            "remove #tags"]]
 
-        [:div.flex.items-center
-         (ui/checkbox {:class "mr-2"
-                       :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                       :checked (boolean (:newline-after-block @*text-other-options))
-                       :on-change (fn [e]
-                                    (state/update-export-block-text-other-options!
-                                     :newline-after-block (boolean (util/echecked? e)))
-                                    (reset! *text-other-options (state/get-export-block-text-other-options))
-                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
-         [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-          "newline after block"]
+          [:div.flex.items-center
+           (ui/checkbox {:class "mr-2"
+                         :style {:visibility (if (#{:text} tp) "visible" "hidden")}
+                         :checked (boolean (:newline-after-block @*text-other-options))
+                         :on-change (fn [e]
+                                      (state/update-export-block-text-other-options!
+                                       :newline-after-block (boolean (util/echecked? e)))
+                                      (reset! *text-other-options (state/get-export-block-text-other-options))
+                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
+           [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
+            "newline after block"]
 
-         (ui/checkbox {:class "mr-2 ml-4"
-                       :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                       :checked (contains? @*text-remove-options :property)
-                       :on-change (fn [e]
-                                    (state/update-export-block-text-remove-options! e :property)
-                                    (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                    (reset! *content (export-helper root-block-uuids-or-page-name)))})
-         [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-          "remove properties"]]
+           (ui/checkbox {:class "mr-2 ml-4"
+                         :style {:visibility (if (#{:text} tp) "visible" "hidden")}
+                         :checked (contains? @*text-remove-options :property)
+                         :on-change (fn [e]
+                                      (state/update-export-block-text-remove-options! e :property)
+                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
+           [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
+            "remove properties"]]
 
-        [:div.flex.items-center
-         [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-          "level <="]
-         [:select.block.my-2.text-lg.rounded.border.px-2.py-0
-          {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-           :value (or (:keep-only-level<=N @*text-other-options) :all)
-           :on-change (fn [e]
-                        (let [value (util/evalue e)
-                              level (if (= "all" value) :all (util/safe-parse-int value))]
-                          (state/update-export-block-text-other-options! :keep-only-level<=N level)
-                          (reset! *text-other-options (state/get-export-block-text-other-options))
-                          (reset! *content (export-helper root-block-uuids-or-page-name))))}
-          (for [n (cons "all" (range 1 10))]
-            [:option {:key n :value n} n])]]])
+          [:div.flex.items-center
+           [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+            "level <="]
+           [:select.block.my-2.text-lg.rounded.border.px-2.py-0
+            {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+             :value (or (:keep-only-level<=N @*text-other-options) :all)
+             :on-change (fn [e]
+                          (let [value (util/evalue e)
+                                level (if (= "all" value) :all (util/safe-parse-int value))]
+                            (state/update-export-block-text-other-options! :keep-only-level<=N level)
+                            (reset! *text-other-options (state/get-export-block-text-other-options))
+                            (reset! *content (export-helper root-block-uuids-or-page-name))))}
+            (for [n (cons "all" (range 1 10))]
+              [:option {:key n :value n} n])]]]))
 
-     [:div.mt-4
-      (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
-                 :class "mr-4"
-                 :on-click (fn []
-                             (util/copy-to-clipboard! @*content
-                                                      :html (when (= tp :html) @*content))
-                             (reset! *copied? true)))
-      (ui/button "Save file"
-                 :on-click (fn []
-                             (utils/saveToFile (js/Blob. [@*content]) root-block-uuids-or-page-name (if (= tp :text) "txt" (name tp)))))]]))
+     (when @*content
+       [:div.mt-4
+        (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
+                   :class "mr-4"
+                   :on-click (fn []
+                               (util/copy-to-clipboard! @*content
+                                                        :html (case tp
+                                                                :html @*content
+                                                                :png (str "<img src='" (image/create-object-url @*content) ">")
+                                                                nil))
+                               (reset! *copied? true)))
+        (ui/button "Save to file"
+                   :on-click (fn []
+                               (utils/saveToFile (js/Blob. [@*content]) root-block-uuids-or-page-name (if (= tp :text) "txt" (name tp)))))])]))

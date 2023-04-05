@@ -642,11 +642,10 @@
          (fn [open?]
            (filter-expand-area
             open?
-            [:div.p-6
-             [:div [:a {:on-click #(utils/canvasToImage (js/document.querySelector "#global-graph canvas") "graph" "png")}
-              "as PNG"]]
-             [:div[:a {:on-click #(utils/canvasToImage (js/document.querySelector "#global-graph canvas") "graph" "jpg")}
-              "as JPG"]]]))
+            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
+              [:div.p-6
+               [:div [:a {:on-click #(utils/canvasToImage canvas "graph" "png")} "as PNG"]]
+               [:div [:a {:on-click #(utils/canvasToImage canvas "graph" "jpg")} "as JPG"]]])))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
