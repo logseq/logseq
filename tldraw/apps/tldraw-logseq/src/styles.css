@@ -81,6 +81,7 @@ html[data-theme='light'] {
 
 .tl-container {
   overflow: hidden;
+  background-color: transparent !important;
 }
 
 .tl-menu-item {

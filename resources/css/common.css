@@ -921,4 +921,8 @@ html.is-mobile {
         @apply grid grid-flow-col auto-cols-max;
         place-items: center;
     }
+
+  img {
+    @apply inline-block;
+  }
 }

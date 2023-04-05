@@ -264,6 +264,7 @@
               :-webkit-font-smoothing "subpixel-antialiased"}}
 
      [:div.whiteboard-page-title-root
+      {:data-html2canvas-ignore true}
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
                 :user-select "none"}
