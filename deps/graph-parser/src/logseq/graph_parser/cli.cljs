@@ -30,7 +30,7 @@ TODO: Fail fast when process exits 1"
   ;; See https://git-scm.com/docs/git-ls-files#_output for more
   (let [files (->> (str (.-stdout (sh ["git" "ls-files" "-z"]
                                       {:cwd dir :stdio nil})))
-                   (#(string/split % #"\0"))
+                   (#(string/split % (re-pattern "\0")))
                    (map #(hash-map :file/path (str dir "/" %)))
                    graph-parser/filter-files)]
     (mapv #(assoc % :file/content (slurp (:file/path %))) files)))

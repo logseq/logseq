@@ -52,9 +52,11 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Babashka
+      # Clojure needed for bb step
+      - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@10.1
         with:
+          cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Fetch yarn deps
