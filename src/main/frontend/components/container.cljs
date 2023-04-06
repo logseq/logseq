@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.bottom-bar :as bottom-bar]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -506,7 +507,7 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
@@ -551,7 +552,9 @@
           main-content])
 
        (when onboarding-and-home?
-         (onboarding/intro onboarding-and-home?))]]]))
+         (onboarding/intro onboarding-and-home?))]
+
+      (bottom-bar/bar)]]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic

@@ -1,0 +1,7 @@
+#ls-bottom-bar {
+    @apply shadow-lg text-sm p-1 fixed bottom-0 rounded-md;
+
+    .items {
+        @apply flex flex-row flex-1;
+    }
+}
