@@ -3,7 +3,7 @@
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.components.sidebar :as sidebar]
+            [frontend.components.container :as container]
             [frontend.handler.search :as search-handler]
             [frontend.handler.notification :as notification]
             [frontend.components.onboarding.quick-tour :as quick-tour]
@@ -29,7 +29,7 @@
   component is purposefully stupid simple as it needs to render under any number
   of broken conditions"
   []
-  ;; This layout emulates most of sidebar/sidebar
+  ;; This layout emulates most of container/sidebar
   [:div#main-container.cp__sidebar-main-layout.flex-1.flex
    [:div.#app-container
     [:div#left-container
@@ -104,7 +104,7 @@
          (helpful-default-error-screen)
          (if (= :draw route-name)
            (view route-match)
-           (sidebar/sidebar
+           (container/sidebar
             route-match
             (view route-match))))))))
 
@@ -113,7 +113,7 @@
         ;;       no-animate? (contains? #{:repos :repo-add :file}
         ;;                              route-name)]
         ;;   (when-let [view (:view (:data route-match))]
-        ;;     (sidebar/sidebar
+        ;;     (container/sidebar
         ;;      route-match
         ;;      (if no-animate?
         ;;        (route-view view route-match)
