@@ -11,11 +11,7 @@
   []
   (let [page-only-mode? (state/sub :history/page-only-mode?)
         undo-page-id    (state/sub :history/page)]
-    (prn "render bar " {:page-only-mode? page-only-mode?
-                        :undo-page-id undo-page-id})
-    (when (or (and page-only-mode? undo-page-id)
-              ;; others
-              )
+    (when (and page-only-mode? undo-page-id)
       [:div#ls-bottom-bar
        [:div.items
         (when undo-page-id
