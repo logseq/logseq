@@ -700,7 +700,7 @@
    {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
    {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
    :hr
-   {:title "Release notes" :icon "asterisk" :href "https://github.com/logseq/logseq/releases"}])
+   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
 
 (rum/defc help-menu-popup
   []
