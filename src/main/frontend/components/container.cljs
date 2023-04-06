@@ -1,4 +1,4 @@
-(ns frontend.components.sidebar
+(ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.components.find-in-page :as find-in-page]
