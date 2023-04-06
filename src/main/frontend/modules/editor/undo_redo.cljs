@@ -176,5 +176,10 @@
                     :txs tx-data
                     :tx-meta tx-meta
                     :editor-cursor (:editor-cursor tx-meta)
-                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
+                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)
+                    :app-state (select-keys @state/state
+                                            [:route-match
+                                             :ui/sidebar-open?
+                                             :ui/sidebar-collapsed-blocks
+                                             :sidebar/blocks])}]
         (push-undo entity)))))
