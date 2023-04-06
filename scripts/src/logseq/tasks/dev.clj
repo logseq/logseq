@@ -40,8 +40,9 @@
 (defn build-publishing
   "Builds release publishing asset when files have changed"
   [& _args]
-  (if-let [_files (seq (set (fs/modified-since (fs/file "static/js/publishing/main.js")
-                                               (fs/glob "." "{src/main,deps/graph-parser/src}/**"))))]
+  (if-let [_files (and (not (System/getenv "SKIP_ASSET"))
+                       (seq (set (fs/modified-since (fs/file "static/js/publishing/main.js")
+                                                    (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
       (shell "clojure -M:cljs release publishing"))
