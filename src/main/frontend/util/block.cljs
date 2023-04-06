@@ -4,7 +4,7 @@
             [frontend.util :as util]))
 
 (defn get-block-id
-  "Retrives the block id from the dom element"
+  "Retrieves the block id from the dom element"
   [block-el]
   (dom/attr block-el "data-block-id"))
 
