@@ -149,8 +149,8 @@
                                 (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob)))))]
 
      (if (= :png tp)
-       [:div.flex.items-center.justify-center
-        (when (not @*content) (ui/loading ""))
+       [:div.flex.items-center.justify-center.relative
+        (when (not @*content) [:div.absolute (ui/loading "")])
         [:img {:alt "export preview" :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
 
        [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
