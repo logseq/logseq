@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, modKey, searchAndJumpToPage, renamePage, randomString } from './utils'
+import { createRandomPage, modKey, searchAndJumpToPage, renamePage, randomString, newInnerBlock } from './utils'
 
 test('undo/redo on a page should work as expected', async ({ page, block }) => {
   const page1 = await createRandomPage(page)
@@ -69,6 +69,34 @@ test('undo/redo of a block should be allowed on page context', async ({ page, bl
   await page.waitForTimeout(100)
 
   await expect(page.locator('text="text 1"')).toHaveCount(0)
+})
+
+test('undo/redo of a block should be allowed on nested context', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustType('text 1')
+  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
+
+  await newInnerBlock(page)
+  await page.waitForTimeout(500)
+
+  await page.type('textarea >> nth=0', 'text 2')
+
+  await page.keyboard.press("Tab")
+
+  await page.keyboard.press('Escape', { delay: 50 })
+
+  await page.locator('span.bullet-container >> nth=1').click()
+  await page.waitForTimeout(200)
+
+  await page.type('textarea >> nth=0', 'text 3')
+
+  await page.locator('.navigation.nav-left').click()
+
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('text="text 3"')).toHaveCount(0)
 })
 
 test('undo/redo of a renamed page should be preserved', async ({ page, block }) => {
