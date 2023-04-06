@@ -58,6 +58,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
           style={{
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
+            background: `url('https://img.youtube.com/vi/${this.embedId}/mqdefault.jpg') no-repeat center/cover`,
           }}
         >
           {this.embedId ? (
