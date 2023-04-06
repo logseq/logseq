@@ -5,12 +5,12 @@
             [cljs.core.async :as async :refer [<!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
-            [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
             [frontend.util :as util]
+            [frontend.util.block :as block-util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -623,25 +623,12 @@ Similar to re-frame subscriptions"
   [id]
   (sub [:editor/content id]))
 
-(defn get-block-id
-  [el]
-  (when el
-    (dom/attr el "data-block-id")))
-
-(defn- get-selected-block-ids
-  [blocks]
-  (->> blocks
-       (remove nil?)
-       (keep #(when-let [id (get-block-id %)]
-                (uuid id)))
-       (distinct)))
-
 (defn sub-block-selected?
   [block-uuid]
   (rum/react
    (rum/derived-atom [state] [::select-block block-uuid]
      (fn [state]
-       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+       (contains? (set (block-util/get-block-ids (:selection/blocks state)))
                   block-uuid)))))
 
 (defn block-content-max-length
@@ -961,27 +948,12 @@ Similar to re-frame subscriptions"
   (->> (:selection/blocks @state)
        (remove nil?)))
 
-(defn should-select-block?
-  "Checks if the block belongs to the same page and container"
-  ([block]
-   (should-select-block? (first (get-selection-blocks)) block))
-  ([first-selected-block block]
-   (if first-selected-block
-     (let [container (util/get-block-container first-selected-block)
-           first-selected-block-id (get-block-id first-selected-block)
-           first-selected-block ((resolve 'frontend.db.model/get-block-by-uuid) first-selected-block-id)
-           page-id (get-in first-selected-block [:block/page :db/id])]
-       (and (= container (util/get-block-container block))
-            (= page-id (get-in ((resolve 'frontend.db.model/get-block-by-uuid) (get-block-id block))
-                               [:block/page :db/id]))))
-     true)))
-
 (defn set-selection-blocks!
   ([blocks]
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (filter #(should-select-block? (first blocks) %) blocks)
+     (let [blocks (filter #(block-util/should-select-block? (first blocks) %) blocks)
            blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
               :selection/mode true
@@ -1003,7 +975,7 @@ Similar to re-frame subscriptions"
 
 (defn get-selection-block-ids
   []
-  (get-selected-block-ids (get-selection-blocks)))
+  (block-util/get-block-ids (get-selection-blocks)))
 
 (defn get-selection-start-block-or-first
   []
@@ -1022,7 +994,7 @@ Similar to re-frame subscriptions"
 
 (defn conj-selection-block!
   [block direction]
-  (when (should-select-block? block)
+  (when (block-util/should-select-block? (first (get-selection-blocks)) block)
     (swap! state assoc
            :selection/mode true
            :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)

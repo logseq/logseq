@@ -18,6 +18,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.block :as block-util]
             [frontend.modules.shortcut.core :as shortcut]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -353,7 +354,7 @@
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
-                            block-id (state/get-block-id target)
+                            block-id (block-util/get-block-id target)
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         (cond

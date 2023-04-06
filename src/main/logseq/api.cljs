@@ -30,6 +30,7 @@
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.block :as block-util]
             [frontend.util.cursor :as cursor]
             [frontend.loader :as loader]
             [goog.dom :as gdom]
@@ -527,7 +528,7 @@
   (fn []
     (when-let [blocks (state/selection?)]
       (let [blocks (->> blocks
-                        (map (fn [^js el] (some-> (state/get-block-id el)
+                        (map (fn [^js el] (some-> (block-util/get-block-id el)
                                                   (db-model/query-block-by-uuid)))))]
         (bean/->js (normalize-keyword-for-json blocks))))))
 
@@ -716,7 +717,7 @@
           block (or block
                     (some-> (or (first (state/get-selection-blocks))
                                 (gdom/getElement (state/get-editing-block-dom-id)))
-                            (state/get-block-id)
+                            (block-util/get-block-id)
                             (db-model/get-block-by-uuid)))]
       (get_block (:db/id block) opts))))
 
