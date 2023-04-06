@@ -16,7 +16,6 @@
 (defn- get-state
   [page]
   (let [repo (state/get-current-repo)]
-    (assert (string? repo) "Repo should satisfy string?")
     (when page
       (if-let [state (get-in @undo-redo-states [repo page])]
         state
@@ -41,7 +40,6 @@
   [page]
   (when page
     (let [repo (state/get-current-repo)]
-      (assert (string? repo) "Repo should satisfy string?")
       (swap! undo-redo-states assoc-in [repo page] {:undo-stack (atom [])
                                                     :redo-stack (atom [])}))))
 
@@ -84,9 +82,7 @@
         container (or container (page-util/get-current-page-name))]
     (or (db-model/page? container) ; always allow on pages (top level context)
         (= prev-container container) ; allow on same context
-        (try (.querySelectorAll js/document (str "#" container " [data-block-id='" prev-container "']")) ; allow on nested context
-             (catch :default _
-               false)))))
+        (.querySelector (.getElementById js/document container) (str "[data-block-id='" prev-container "']"))))) ; allow on nested context
 
 (defn- should-undo?
   []
