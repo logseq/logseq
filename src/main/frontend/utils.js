@@ -330,12 +330,6 @@ export const canvasToImage = (canvas, title = 'Untitled', format = 'png' , quali
   )
 }
 
-export const htmlToImage = (selector, title = 'Untitled') => {
-  html2canvas(document.querySelector(selector)).then(canvas => {
-    canvasToImage(canvas, title)
-  })
-}
-
 export const nodePath = Object.assign({}, path, {
   basename (input) {
     input = toPosixPath(input)
