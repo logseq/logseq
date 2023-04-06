@@ -852,7 +852,7 @@
         updates      (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
-     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (count updates))]
+     [:h1.mb-4.text-2xl.p-1 (t :plugin/found-n-updates (count updates))]
 
      (if (seq updates)
        ;; lists
@@ -887,11 +887,11 @@
 
      ;; actions
      (when (seq updates)
-       [:div.pt-5
+       [:div.pt-5.flex.justify-end
         (ui/button
           (if downloading?
-            [:span (ui/loading " Downloading...")]
-            [:span "Update all of selected"])
+            [:span (ui/loading (t :plugin/updates-downloading))]
+            [:span.flex.items-center (ui/icon "download") (t :plugin/update-all-selected)])
 
           :on-click
           #(when-not downloading?
@@ -1032,7 +1032,7 @@
 
          (when badge-updates?
            {:title   [:div.flex.items-center.space-x-5.leading-none
-                      [:span "New updates"] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
+                      [:span (t :plugin/found-updates)] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
                       :class    "extra-item"}
             :icon    (ui/icon "download")})])
