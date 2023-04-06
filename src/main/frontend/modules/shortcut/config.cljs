@@ -15,6 +15,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -258,7 +259,7 @@
                                     :fn      editor-handler/zoom-out!}
 
    :editor/toggle-undo-redo-mode   {:binding "mod+c mod+u"
-                                    :fn      state/toggle-undo-redo-mode!}
+                                    :fn      undo-redo/toggle-undo-redo-mode!}
 
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}

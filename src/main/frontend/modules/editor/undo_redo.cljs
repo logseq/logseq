@@ -44,7 +44,8 @@
    (when-let [id (if (= :undo action)
                    (get-page-from-block @(get-undo-stack))
                    (get-page-from-block @(get-redo-stack)))]
-     (swap! state/state assoc :history/page id))))
+     (swap! state/state assoc :history/page id)
+     id)))
 
 (defn push-undo
   [txs]
@@ -217,6 +218,17 @@
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/redo e]))
       (assoc e :txs-op new-txs))))
+
+(defn toggle-undo-redo-mode!
+  []
+  (if (:history/page-only-mode? @state/state)
+    (swap! state/state assoc
+           :history/page-only-mode? false
+           :history/page nil)
+    (when-let [page-id (get-history-page :undo)]
+      (swap! state/state assoc
+            :history/page-only-mode? true
+            :history/page page-id))))
 
 (defn pause-listener!
   []

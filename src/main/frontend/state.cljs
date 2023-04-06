@@ -2095,13 +2095,3 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
-
-(defn toggle-undo-redo-mode!
-  []
-  (if (:history/page-only-mode? @state)
-    (swap! state assoc
-           :history/page-only-mode? false
-           :history/page nil)
-    (swap! state assoc
-           :history/page-only-mode? true
-           :history/page nil)))
