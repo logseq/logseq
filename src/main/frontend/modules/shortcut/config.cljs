@@ -257,6 +257,9 @@
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
+   :editor/toggle-undo-redo-mode   {:binding "t u"
+                                    :fn      state/toggle-undo-redo-mode!}
+
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
 
@@ -586,6 +589,7 @@
                           :editor/select-all-blocks
                           :editor/zoom-in
                           :editor/zoom-out
+                          :editor/toggle-undo-redo-mode
                           :editor/undo
                           :editor/redo
                           :ui/toggle-brackets
@@ -743,6 +747,7 @@
    :shortcut.category/toggle
    [:ui/toggle-help
     :editor/toggle-open-blocks
+    :editor/toggle-undo-redo-mode
     :ui/toggle-wide-mode
     :ui/toggle-cards
     :ui/toggle-document-mode

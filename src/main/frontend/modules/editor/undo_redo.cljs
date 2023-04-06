@@ -4,7 +4,8 @@
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [medley.core :as medley]))
 
 ;;;; APIs
 
@@ -29,6 +30,21 @@
 (defn- get-redo-stack
   []
   (-> (get-state) :redo-stack))
+
+(defn- get-page-from-block
+  [stack]
+  (let [last-blocks (:blocks (last stack))]
+    (or (:db/id (some #(when (:block/name %) %) last-blocks))
+        (:db/id (some :block/page last-blocks)))))
+
+(defn- get-history-page
+  [action]
+  (or
+   (:history/page @state/state)
+   (when-let [id (if (= :undo action)
+                   (get-page-from-block @(get-undo-stack))
+                   (get-page-from-block @(get-redo-stack)))]
+     (swap! state/state assoc :history/page id))))
 
 (defn push-undo
   [txs]
@@ -74,6 +90,33 @@
      (swap! redo-stack pop)
      removed-e)))
 
+(defn page-pop-redo
+  [page-id]
+  (prn "[debug] redo: " (:block/original-name (db/pull page-id)))
+  (when-let [redo-stack (get-redo-stack)]
+    (when-let [stack @redo-stack]
+      (when (seq stack)
+        (let [reversed-stack (medley/indexed (reverse stack))
+              idx (some (fn [[idx item]]
+                          (some #(when (or (= (:db/id %) page-id)
+                                           (= (:db/id (:block/page %)) page-id)) idx) (:blocks item))) reversed-stack)]
+          (when idx
+            (let [idx' (- (count stack) idx 1)
+                  before (subvec stack 0 idx')
+                  after (subvec stack (inc idx'))
+                  others (vec (concat before after))]
+              (reset! redo-stack others)
+              (prn "[debug] redo remove: " (nth stack idx'))
+              (nth stack idx'))))))))
+
+(defn- smart-pop-redo
+  []
+  (if (:history/page-only-mode? @state/state)
+    (if-let [page-id (get-history-page :redo)]
+      (page-pop-redo page-id)
+      (pop-redo))
+    (pop-redo)))
+
 (defn reset-redo
   []
   (let [redo-stack (get-redo-stack)]
@@ -98,9 +141,35 @@
   (let [conn (conn/get-db false)]
     (d/transact! conn txs tx-meta)))
 
+(defn page-pop-undo
+  [page-id]
+  (let [undo-stack (get-undo-stack)]
+    (when-let [stack @undo-stack]
+      (when (seq stack)
+        (let [reversed-stack (medley/indexed (reverse stack))
+              idx (some (fn [[idx item]]
+                          (some #(when (or (= (:db/id %) page-id)
+                                           (= (:db/id (:block/page %)) page-id)) idx) (:blocks item))) reversed-stack)]
+          (when idx
+            (let [idx' (- (count stack) idx 1)
+                  before (subvec stack 0 idx')
+                  after (subvec stack (inc idx'))
+                  others (vec (concat before after))]
+              (reset! undo-stack others)
+              (prn "[debug] undo remove: " (nth stack idx'))
+              [(nth stack idx') others])))))))
+
+(defn- smart-pop-undo
+  []
+  (if (:history/page-only-mode? @state/state)
+    (if-let [page-id (get-history-page :undo)]
+      (page-pop-undo page-id)
+      (pop-undo))
+    (pop-undo)))
+
 (defn undo
   []
-  (let [[e prev-e] (pop-undo)]
+  (let [[e prev-e] (smart-pop-undo)]
     (when e
       (let [{:keys [txs tx-meta]} e
             new-txs (get-txs false txs)
@@ -139,7 +208,7 @@
 
 (defn redo
   []
-  (when-let [{:keys [txs tx-meta] :as e} (pop-redo)]
+  (when-let [{:keys [txs tx-meta] :as e} (smart-pop-redo)]
     (let [new-txs (get-txs true txs)]
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
