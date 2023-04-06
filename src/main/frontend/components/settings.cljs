@@ -751,7 +751,7 @@
      (whiteboards-switcher-row enable-whiteboards?)
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
-     (when (and (util/electron?) (state/developer-mode?))
+     (when (util/electron?)
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)

@@ -1837,8 +1837,7 @@ Similar to re-frame subscriptions"
 
 (defn feature-http-server-enabled?
   []
-  (and (developer-mode?)
-       (storage/get ::storage-spec/http-server-enabled)))
+  (boolean (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]
