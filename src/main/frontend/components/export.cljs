@@ -1,6 +1,7 @@
 (ns frontend.components.export
   (:require ["/frontend/utils" :as utils]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
@@ -82,7 +83,10 @@
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
         selector (if (string? block-uuids-or-page-name) ;; is page?
                    "#main-content-container"
-                   (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))]
+                   (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))
+        uuid (:block/uuid (db/get-page block-uuids-or-page-name))
+        whiteboard-camera (js->clj (js/JSON.parse (.getItem js/sessionStorage (str "logseq.tldraw.camera:" uuid))))
+        zoom (get whiteboard-camera "zoom")]
     (-> (js/html2canvas
          (js/document.querySelector selector)
          #js {:allowTaint true
@@ -90,9 +94,9 @@
               :backgroundColor (or background "transparent")
               :scrollX 0
               :scrollY 0
+              :scale (if zoom (/ 1 zoom) 1)
               :windowHeight (when (string? block-uuids-or-page-name)
-                              (.-scrollHeight (js/document.querySelector selector)))
-              :onclone (fn [el])})
+                              (.-scrollHeight (js/document.querySelector selector)))})
         (.then (fn [canvas] (.toBlob canvas
                                      (fn [blob]
                                        (let [img (js/document.getElementById "export-preview")
