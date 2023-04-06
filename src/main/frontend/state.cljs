@@ -275,7 +275,9 @@
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
      :whiteboard/last-persisted-at          {}
-     :whiteboard/pending-tx-data            {}})))
+     :whiteboard/pending-tx-data            {}
+     :history/page-only-mode?               false
+     :history/page                          nil})))
 
 ;; Block ast state
 ;; ===============
@@ -2093,3 +2095,13 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn toggle-undo-redo-mode!
+  []
+  (if (:history/page-only-mode? @state)
+    (swap! state assoc
+           :history/page-only-mode? false
+           :history/page nil)
+    (swap! state assoc
+           :history/page-only-mode? true
+           :history/page nil)))
