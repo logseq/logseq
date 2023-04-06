@@ -34,7 +34,7 @@ export const DirectionIndicator = observer(function DirectionIndicator<
     }
   }, [direction, bounds])
   return (
-    <div ref={rIndicator} className="tl-direction-indicator">
+    <div ref={rIndicator} className="tl-direction-indicator" data-html2canvas-ignore="true">
       <svg height={12} width={12}>
         <polygon points="0,0 12,6 0,12" />
       </svg>

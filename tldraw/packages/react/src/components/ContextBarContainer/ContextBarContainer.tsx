@@ -48,7 +48,7 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
   }
 
   return (
-    <div ref={rBounds} className="tl-counter-scaled-positioned" aria-label="context-bar-container">
+    <div ref={rBounds} className="tl-counter-scaled-positioned" aria-label="context-bar-container" data-html2canvas-ignore="true">
       <ContextBar
         hidden={hidden}
         shapes={shapes}
