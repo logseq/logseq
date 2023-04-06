@@ -1,4 +1,4 @@
-import '@aws-amplify/ui-react/styles.css'
+import './styles.css'
 import { Amplify, Auth, Hub, I18n } from 'aws-amplify'
 import { LSAuthenticator, LSAuthenticatorChangePassword } from './LSAuthenticator'
 import { dict } from 'aws-amplify-react/lib-esm/AmplifyI18n'
