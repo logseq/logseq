@@ -1,4 +1,5 @@
 import { useApp } from '@tldraw/react'
+import { LogseqContext } from '../../lib/logseq-context'
 import { MOD_KEY, AlignType, DistributeType, isDev } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
@@ -19,6 +20,7 @@ export const ContextMenu = observer(function ContextMenu({
   collisionRef,
 }: ContextMenuProps) {
   const app = useApp()
+  const { handlers } = React.useContext(LogseqContext)
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {
@@ -253,17 +255,25 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
+          <>
+          <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(app.api.deleteShapes)}
+            >
+              Deselect all
+            </ReactContextMenu.Item>
+          </>
           {app.selectedShapes?.size > 0 && !app.readOnly && (
             <>
+              <ReactContextMenu.Separator className="menu-separator" />
               <ReactContextMenu.Item
                 className="tl-menu-item"
-                onClick={() => runAndTransition(app.api.deleteShapes)}
+                onClick={() => runAndTransition(() => handlers.exportToImage(app.currentPageId))}
               >
-                <TablerIcon className="tl-menu-icon" name="backspace" />
-                Delete
+                <TablerIcon className="tl-menu-icon" name="file-export" />
+                Export
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
-                    <code>Del</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>
