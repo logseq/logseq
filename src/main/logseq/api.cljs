@@ -4,6 +4,8 @@
             [logseq.sdk.core]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
+            [logseq.sdk.git :as sdk-git]
+            [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
             [datascript.core :as d]
             [electron.ipc :as ipc]
@@ -896,26 +898,9 @@
     (shell/run-git-command! args)))
 
 ;; git
-(defn ^:export git_exec_command
-  [^js args]
-  (when-let [args (and args (seq (bean/->clj args)))]
-    (shell/run-git-command2! args)))
-
-(defn ^:export git_load_ignore_file
-  []
-  (when-let [repo (state/get-current-repo)]
-    (p/let [file    ".gitignore"
-            dir     (config/get-repo-dir repo)
-            _       (fs/create-if-not-exists repo dir file)
-            content (fs/read-file dir file)]
-      content)))
-
-(defn ^:export git_save_ignore_file
-  [content]
-  (when-let [repo (and (string? content) (state/get-current-repo))]
-    (p/let [file ".gitignore"
-            dir  (config/get-repo-dir repo)
-            _    (fs/write-file! repo dir file content {:skip-compare? true})])))
+(def ^:export git_exec_command sdk-git/exec_command)
+(def ^:export git_load_ignore_file sdk-git/load_ignore_file)
+(def ^:export git_save_ignore_file sdk-git/save_ignore_file)
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
@@ -923,10 +908,9 @@
 (def ^:export ui_close_msg sdk-ui/close_msg)
 
 ;; assets
-(defn ^:export assets_list_files_of_current_graph
-  [^js exts]
-  (p/let [files (ipc/ipc :getAssetsFiles {:exts exts})]
-    (bean/->js files)))
+(def ^:export assets_list_files_of_current_graph sdk-assets/list_files_of_current_graph)
+(def ^:export assets_make_url sdk-assets/make_url)
+(def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
 (defn ^:export exper_load_scripts
@@ -1034,7 +1018,5 @@
   []
   (p/let [_ (el/persist-dbs!)]
     true))
-
-(def ^:export make_asset_url editor-handler/make-asset-url)
 
 (def ^:export set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))

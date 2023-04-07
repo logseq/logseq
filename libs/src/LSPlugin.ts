@@ -907,6 +907,13 @@ export interface IAssetsProxy {
    * @added 0.0.10
    */
   makeSandboxStorage(): IAsyncStorage
+
+  /**
+   * make assets scheme url based on current graph
+   * @added 0.0.15
+   * @param path
+   */
+  makeUrl(path: string): Promise<string>
 }
 
 export interface ILSPluginThemeManager {

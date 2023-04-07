@@ -12,11 +12,11 @@
 
 (defn run-git-command!
   [command]
-  (ipc/ipc "runGit" command))
+  (ipc/ipc :runGit command))
 
 (defn run-git-command2!
   [command]
-  (ipc/ipc "runGitWithinCurrentGraph" command))
+  (ipc/ipc :runGitWithinCurrentGraph command))
 
 (defn run-cli-command!
   [command args]
