@@ -62,7 +62,7 @@
                  (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                    (state/set-modal!
                     #(export/export-blocks block-uuids false))))}
-    (t :content/copy-as)
+    (t :content/copy-export-as)
     nil)
    (ui/menu-link
     {:key "copy block refs"
@@ -219,7 +219,7 @@
           {:key      "Copy as"
            :on-click (fn [_]
                        (state/set-modal! #(export/export-blocks [block-id] false)))}
-          (t :content/copy-as)
+          (t :content/copy-export-as)
           nil)
 
          (ui/menu-link
