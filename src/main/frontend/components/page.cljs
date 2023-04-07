@@ -601,7 +601,7 @@
                                (reset! *excluded-pages? value)
                                (set-setting! :excluded-pages? value)))
                            true)]]
-              (when (seq focus-nodes)
+              (when (rest focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}
                   "N hops from selected nodes"]
