@@ -320,13 +320,14 @@ export const saveToFile = (data, fileName, format) => {
   link.click()
 }
 
-export const canvasToImage = (canvas, title = 'Untitled', format = 'png' , quality = 1) => {
+export const canvasToImage = (canvas, title = 'Untitled', format = 'png') => {
+  console.log(format)
   canvas.toBlob(
     (blob) => {
+      console.log(blob)
       saveToFile(blob, title, format)
     },
-    `image/.${format}`,
-    quality
+    `image/.${format}`
   )
 }
 
