@@ -271,11 +271,9 @@
         (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
                    :class "mr-4"
                    :on-click (fn []
-                               (util/copy-to-clipboard! @*content
-                                                        :html (case tp
-                                                                :html @*content
-                                                                :png (str "<img src='" (image/create-object-url @*content) ">")
-                                                                nil))
+                               (if (= tp :png)
+                                 (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
+                                 (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                                (reset! *copied? true)))
         (ui/button "Save to file"
                    :on-click (fn []
