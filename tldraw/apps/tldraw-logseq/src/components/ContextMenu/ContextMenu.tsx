@@ -238,6 +238,18 @@ export const ContextMenu = observer(function ContextMenu({
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
             className="tl-menu-item"
+            onClick={() => runAndTransition(() => handlers.exportToImage(app.currentPageId))}
+          >
+            <TablerIcon className="tl-menu-icon" name="file-export" />
+            Export
+            <div className="tl-menu-right-slot">
+              <span className="keyboard-shortcut">
+              </span>
+            </div>
+          </ReactContextMenu.Item>
+          <ReactContextMenu.Separator className="menu-separator" />
+          <ReactContextMenu.Item
+            className="tl-menu-item"
             onClick={() => runAndTransition(app.api.selectAll)}
           >
             Select all
@@ -255,25 +267,17 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
-          <>
-          <ReactContextMenu.Item
-              className="tl-menu-item"
-              onClick={() => runAndTransition(app.api.deleteShapes)}
-            >
-              Deselect all
-            </ReactContextMenu.Item>
-          </>
           {app.selectedShapes?.size > 0 && !app.readOnly && (
             <>
-              <ReactContextMenu.Separator className="menu-separator" />
               <ReactContextMenu.Item
                 className="tl-menu-item"
-                onClick={() => runAndTransition(() => handlers.exportToImage(app.currentPageId))}
+                onClick={() => runAndTransition(app.api.deleteShapes)}
               >
-                <TablerIcon className="tl-menu-icon" name="file-export" />
-                Export
+                <TablerIcon className="tl-menu-icon" name="backspace" />
+                Delete
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
+                    <code>Del</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>
