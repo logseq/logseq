@@ -77,32 +77,39 @@
              current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
+(defn- get-zoom-level
+  [page-uuid]
+  (let [uuid (:block/uuid (db/get-page page-uuid))
+        whiteboard-camera (->> (str "logseq.tldraw.camera:" uuid)
+                               (.getItem js/sessionStorage)
+                               (js/JSON.parse)
+                               (js->clj))]
+    (or (get whiteboard-camera "zoom") 1)))
+
 (defn- get-image-blob
   [block-uuids-or-page-name transparent-bg? callback]
-  (let [style (js/window.getComputedStyle js/document.body.parentNode)
+  (let [html js/document.body.parentNode
+        style (js/window.getComputedStyle html)
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
-        selector (if (string? block-uuids-or-page-name) ;; is page?
+        page? (string? block-uuids-or-page-name)
+        selector (if page?
                    "#main-content-container"
                    (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))
-        uuid (:block/uuid (db/get-page block-uuids-or-page-name))
-        whiteboard-camera (js->clj (js/JSON.parse (.getItem js/sessionStorage (str "logseq.tldraw.camera:" uuid))))
-        zoom (get whiteboard-camera "zoom")]
-    (-> (js/html2canvas
-         (js/document.querySelector selector)
-         #js {:allowTaint true
-              :useCORS true
-              :backgroundColor (or background "transparent")
-              :scrollX 0
-              :scrollY 0
-              :scale (if zoom (/ 1 zoom) 1)
-              :windowHeight (when (string? block-uuids-or-page-name)
-                              (.-scrollHeight (js/document.querySelector selector)))})
-        (.then (fn [canvas] (.toBlob canvas
-                                     (fn [blob]
-                                       (let [img (js/document.getElementById "export-preview")
-                                             img-url (image/create-object-url blob)]
-                                         (set! (.-src img) img-url)
-                                         (callback blob))) "image/png"))))))
+        options #js {:allowTaint true
+                     :useCORS true
+                     :backgroundColor (or background "transparent")
+                     :scrollX 0
+                     :scrollY 0
+                     :scale (if page? (/ 1 (get-zoom-level block-uuids-or-page-name)) 1)
+                     :windowHeight (when (string? block-uuids-or-page-name)
+                                     (.-scrollHeight (js/document.querySelector selector)))}]
+    (-> (js/html2canvas (js/document.querySelector selector) options)
+        (.then (fn [canvas] (.toBlob canvas (fn [blob]
+                                              (when blob
+                                                (let [img (js/document.getElementById "export-preview")
+                                                      img-url (image/create-object-url blob)]
+                                                  (set! (.-src img) img-url)
+                                                  (callback blob)))) "image/png"))))))
 
 (rum/defcs ^:large-vars/cleanup-todo
   export-blocks < rum/static
@@ -112,14 +119,17 @@
   (rum/local nil ::text-other-options)
   (rum/local nil ::content)
   {:will-mount (fn [state]
-                 (reset! *export-block-type :text)
-                 (let [content (export-helper (last (:rum/args state)))]
-                   (reset! (::content state) content)
-                   (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
-                   (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
-                   (reset! (::text-other-options state) (state/get-export-block-text-other-options))
-                   state))}
-  [state root-block-uuids-or-page-name]
+                 (when (last (:rum/args state)) ; whiteboard?
+                   (do (reset! *export-block-type :png)))
+                 (if (= @*export-block-type :png)
+                   (do (reset! (::content state) nil)
+                       (get-image-blob (first (:rum/args state)) false (fn [blob] (reset! (::content state) blob))))
+                   (reset! (::content state) (export-helper (first (:rum/args state)))))
+                 (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
+                 (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
+                 (reset! (::text-other-options state) (state/get-export-block-text-other-options))
+                 state)}
+  [state root-block-uuids-or-page-name whiteboard?]
   (let [tp @*export-block-type
         *text-other-options (::text-other-options state)
         *text-remove-options (::text-remove-options state)
@@ -127,26 +137,27 @@
         *copied? (::copied? state)
         *content (::content state)]
     [:div.export.resize
-     [:div.flex
-      {:class "mb-2"}
-      (ui/button "Text"
-                 :class "mr-4 w-20"
-                 :on-click #(do (reset! *export-block-type :text)
-                                (reset! *content (export-helper root-block-uuids-or-page-name))))
-      (ui/button "OPML"
-                 :class "mr-4 w-20"
-                 :on-click #(do (reset! *export-block-type :opml)
-                                (reset! *content (export-helper root-block-uuids-or-page-name))))
-      (ui/button "HTML"
-                 :class "mr-4 w-20"
-                 :on-click #(do (reset! *export-block-type :html)
-                                (reset! *content (export-helper root-block-uuids-or-page-name))))
-
-      (ui/button "PNG"
-                 :class "w-20"
-                 :on-click #(do (reset! *export-block-type :png)
-                                (reset! *content nil)
-                                (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob)))))]
+     (when-not whiteboard?
+       [:div.flex
+        {:class "mb-2"}
+        (ui/button "Text"
+                   :class "mr-4 w-20"
+                   :on-click #(do (reset! *export-block-type :text)
+                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
+        (ui/button "OPML"
+                   :class "mr-4 w-20"
+                   :on-click #(do (reset! *export-block-type :opml)
+                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
+        (ui/button "HTML"
+                   :class "mr-4 w-20"
+                   :on-click #(do (reset! *export-block-type :html)
+                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
+        (when (not (seq? root-block-uuids-or-page-name))
+         (ui/button "PNG"
+                    :class "w-20"
+                    :on-click #(do (reset! *export-block-type :png)
+                                   (reset! *content nil)
+                                   (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob))))))])
 
      (if (= :png tp)
        [:div.flex.items-center.justify-center.relative
