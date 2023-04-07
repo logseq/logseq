@@ -15,6 +15,15 @@
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
 
+(defn encode-pdf-asset-url
+  [url]
+  (let [encode #(string/replace % #"[?#&=]+" js/encodeURIComponent)
+        dir    (util/node-path.dirname url)
+        name   (util/node-path.name url)]
+    (-> url
+        (string/replace dir (encode dir))
+        (string/replace name (encode name)))))
+
 (defn clean-asset-path-prefix
   [path]
   (when (string? path)
