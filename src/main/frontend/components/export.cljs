@@ -87,7 +87,7 @@
     (or (get whiteboard-camera "zoom") 1)))
 
 (defn- get-image-blob
-  [block-uuids-or-page-name transparent-bg? callback]
+  [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
   (let [html js/document.body.parentNode
         style (js/window.getComputedStyle html)
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
@@ -95,15 +95,21 @@
         selector (if page?
                    "#main-content-container"
                    (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))
+        container  (js/document.querySelector selector)
+        scale (if page? (/ 1 (or zoom (get-zoom-level block-uuids-or-page-name))) 1)
         options #js {:allowTaint true
                      :useCORS true
                      :backgroundColor (or background "transparent")
+                     :x (or (/ x scale) 0)
+                     :y (or (/ y scale) 0)
+                     :width (when width (/ width scale))
+                     :height (when height (/ height scale))
                      :scrollX 0
                      :scrollY 0
-                     :scale (if page? (/ 1 (get-zoom-level block-uuids-or-page-name)) 1)
+                     :scale scale
                      :windowHeight (when (string? block-uuids-or-page-name)
-                                     (.-scrollHeight (js/document.querySelector selector)))}]
-    (-> (js/html2canvas (js/document.querySelector selector) options)
+                                     (.-scrollHeight container))}]
+    (-> (js/html2canvas container options)
         (.then (fn [canvas] (.toBlob canvas (fn [blob]
                                               (when blob
                                                 (let [img (js/document.getElementById "export-preview")
@@ -123,13 +129,15 @@
                    (do (reset! *export-block-type :png)))
                  (if (= @*export-block-type :png)
                    (do (reset! (::content state) nil)
-                       (get-image-blob (first (:rum/args state)) false (fn [blob] (reset! (::content state) blob))))
+                       (get-image-blob (first (:rum/args state))
+                                       (merge (second (:rum/args state)) {:transparent-bg? false})
+                                       (fn [blob] (reset! (::content state) blob))))
                    (reset! (::content state) (export-helper (first (:rum/args state)))))
                  (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
                  (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
                  (reset! (::text-other-options state) (state/get-export-block-text-other-options))
                  state)}
-  [state root-block-uuids-or-page-name whiteboard?]
+  [state root-block-uuids-or-page-name {:keys [whiteboard?] :as options}]
   (let [tp @*export-block-type
         *text-other-options (::text-other-options state)
         *text-remove-options (::text-remove-options state)
@@ -157,7 +165,7 @@
                      :class "w-20"
                      :on-click #(do (reset! *export-block-type :png)
                                     (reset! *content nil)
-                                    (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob))))))])
+                                    (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
 
      (if (= :png tp)
        [:div.flex.items-center.justify-center.relative
@@ -172,7 +180,7 @@
         (ui/checkbox {:class "mr-2 ml-4"
                       :on-change (fn [e]
                                    (reset! *content nil)
-                                   (get-image-blob root-block-uuids-or-page-name e.currentTarget.checked (fn [blob] (reset! *content blob))))})]
+                                   (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
        (let [options (->> text-indent-style-options
                           (mapv (fn [opt]
                                   (if (= @*text-indent-style (:label opt))

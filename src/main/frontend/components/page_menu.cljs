@@ -138,7 +138,7 @@
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []
-                                     (export/export-blocks (:block/name page) whiteboard?)))}})
+                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?})))}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
