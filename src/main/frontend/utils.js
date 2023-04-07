@@ -321,7 +321,6 @@ export const saveToFile = (data, fileName, format) => {
 }
 
 export const canvasToImage = (canvas, title = 'Untitled', format = 'png') => {
-  console.log(format)
   canvas.toBlob(
     (blob) => {
       console.log(blob)

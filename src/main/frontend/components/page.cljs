@@ -644,8 +644,8 @@
             open?
             (when-let [canvas (js/document.querySelector "#global-graph canvas")]
               [:div.p-6
-               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]
-               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "jpg")))} "as JPG"]]])))
+               ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
+               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
