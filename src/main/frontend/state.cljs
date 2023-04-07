@@ -496,7 +496,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 14)))
+    (or (when (int? days) days) 7)))
 
 (defn get-start-of-week
   []
