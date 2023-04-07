@@ -5,7 +5,8 @@ import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { withClampedStyles } from './style-props'
 
-export const YOUTUBE_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
+export const YOUTUBE_REGEX =
+  /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
 
 export interface YouTubeShapeProps extends TLBoxShapeProps {
   type: 'youtube'
