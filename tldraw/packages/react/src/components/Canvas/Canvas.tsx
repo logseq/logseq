@@ -129,7 +129,12 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
         {showGrid && components.Grid && <components.Grid size={gridSize} />}
         <HTMLLayer>
           {components.SelectionBackground && selectedShapes && selectionBounds && showSelection && (
-            <Container data-type="SelectionBackground" bounds={selectionBounds} zIndex={2} data-html2canvas-ignore="true">
+            <Container
+              data-type="SelectionBackground"
+              bounds={selectionBounds}
+              zIndex={2}
+              data-html2canvas-ignore="true"
+            >
               <components.SelectionBackground
                 shapes={selectedShapes}
                 bounds={selectionBounds}

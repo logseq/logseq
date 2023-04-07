@@ -243,8 +243,7 @@ export const ContextMenu = observer(function ContextMenu({
             <TablerIcon className="tl-menu-icon" name="file-export" />
             Export
             <div className="tl-menu-right-slot">
-              <span className="keyboard-shortcut">
-              </span>
+              <span className="keyboard-shortcut"></span>
             </div>
           </ReactContextMenu.Item>
           <ReactContextMenu.Separator className="menu-separator" />
