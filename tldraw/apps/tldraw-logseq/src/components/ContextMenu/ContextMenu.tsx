@@ -325,7 +325,6 @@ export const ContextMenu = observer(function ContextMenu({
                       </span>
                     </div>
                   </ReactContextMenu.Item>
-                  )
                 </>
               )}
 
