@@ -21,6 +21,13 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
+(defn mobile-preinit
+  "preinit logic of mobile platforms: setup document folder permission"
+  []
+  (when (mobile-util/native-ios?)
+    ;; Caution: This must be called before any file accessing
+    (capacitor-fs/ios-ensure-documents!)))
+
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []

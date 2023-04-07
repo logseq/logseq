@@ -326,8 +326,9 @@
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (when-not backward-truncate-number
-                         (or last-pattern (state/get-editor-command-trigger)))
+    (let [last-pattern (when-not (= last-pattern :skip-check)
+                         (when-not backward-truncate-number
+                          (or last-pattern (state/get-editor-command-trigger))))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or

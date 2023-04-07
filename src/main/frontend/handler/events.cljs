@@ -540,7 +540,7 @@
 (defmethod handle :validate-appId [[_ graph-switch-f graph]]
   (when-let [deprecated-repo (or graph (state/get-current-repo))]
     ;; Installation is not changed for iCloud
-    (if (mobile-util/iCloud-container-path? deprecated-repo)
+    (if (mobile-util/in-iCloud-container-path? deprecated-repo)
       (when graph-switch-f
         (graph-switch-f graph true)
         (state/pub-event! [:graph/ready (state/get-current-repo)]))
