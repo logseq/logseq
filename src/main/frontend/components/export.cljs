@@ -152,12 +152,12 @@
                    :class "mr-4 w-20"
                    :on-click #(do (reset! *export-block-type :html)
                                   (reset! *content (export-helper root-block-uuids-or-page-name))))
-        (when (not (seq? root-block-uuids-or-page-name))
-         (ui/button "PNG"
-                    :class "w-20"
-                    :on-click #(do (reset! *export-block-type :png)
-                                   (reset! *content nil)
-                                   (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob))))))])
+        (when-not (seq? root-block-uuids-or-page-name)
+          (ui/button "PNG"
+                     :class "w-20"
+                     :on-click #(do (reset! *export-block-type :png)
+                                    (reset! *content nil)
+                                    (get-image-blob root-block-uuids-or-page-name false (fn [blob] (reset! *content blob))))))])
 
      (if (= :png tp)
        [:div.flex.items-center.justify-center.relative
