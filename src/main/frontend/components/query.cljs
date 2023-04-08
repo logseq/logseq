@@ -251,10 +251,11 @@
           [:div.custom-query (get config :attr {})
            (when-not built-in?
              [:div.th
-              (or [:div {:style {:font-size "initial"}} title]
-                  [:div.flex.flex-1.flex-row
-                   (ui/icon "search" {:size 14})
-                   [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]])
+              (if dsl-query?
+                [:div.flex.flex-1.flex-row
+                 (ui/icon "search" {:size 14})
+                 [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]]
+                [:div {:style {:font-size "initial"}} title])
 
               (when (or (not dsl-query?) (not collapsed?'))
                 [:div.flex.flex-row.items-center.fade-in
