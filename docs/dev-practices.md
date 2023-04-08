@@ -271,6 +271,8 @@ point out:
   Subsequent runs are quick.
 
   ```sh
+  # One time setup
+  $ cd scripts && yarn install && cd -
   # Build the export
   $ bb dev:publishing /path/to/graph-dir tmp/publish
   # View the app in a browser
