@@ -213,8 +213,8 @@
   [highlight ^js viewer]
   (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
     (util/copy-to-clipboard!
-     (block-ref/->block-ref (:block/uuid ref-block)) nil
-     (pdf-windows/resolve-own-window viewer))))
+     (block-ref/->block-ref (:block/uuid ref-block))
+     :owner-window (pdf-windows/resolve-own-window viewer))))
 
 (defn open-block-ref!
   [block]

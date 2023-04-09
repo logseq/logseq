@@ -6,7 +6,7 @@
             [frontend.handler.global-config :as global-config-handler]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
             ["fs" :as fs-node]
-            ["path" :as path]
+            ["path" :as node-path]
             [clojure.edn :as edn]
             [malli.generator :as mg]
             [promesa.core :as p]
@@ -18,17 +18,17 @@
 (defn- create-global-config-dir
   []
   (let [dir (test-helper/create-tmp-dir "config")
-        root-dir (path/dirname dir)]
+        root-dir (node-path/dirname dir)]
     (reset! global-config-handler/root-dir root-dir)
     dir))
 
 (defn- delete-global-config-dir
   [config-dir]
   (doseq [relative-file (fs-node/readdirSync config-dir)]
-    (fs-node/unlinkSync (path/join config-dir relative-file)))
+    (fs-node/unlinkSync (node-path/join config-dir relative-file)))
   (reset! global-config-handler/root-dir nil)
   (fs-node/rmdirSync config-dir)
-  (fs-node/rmdirSync (path/dirname config-dir)))
+  (fs-node/rmdirSync (node-path/dirname config-dir)))
 
 (deftest-async add-or-update-plugin
   (let [dir (create-global-config-dir)
@@ -73,7 +73,9 @@
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Malformed plugins.edn")
             "User sees correct notification"))
-       (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(do
+                     (reset)
+                     (delete-global-config-dir dir)))))))
 
 (deftest-async open-replace-plugins-modal-invalid-edn
   (let [dir (create-global-config-dir)
@@ -89,7 +91,9 @@
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Invalid plugins.edn")
             "User sees correct notification"))
-       (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(do
+                     (reset)
+                     (delete-global-config-dir dir)))))))
 
 (defn- installed-plugins->edn-plugins
   "Converts installed plugins state to edn.plugins format"

@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createPage, randomLowerString, newBlock, newInnerBlock, randomString, lastBlock } from './utils'
+import { IsMac, createPage, randomLowerString, newInnerBlock, randomString, lastBlock } from './utils'
 
 /***
  * Test rename feature

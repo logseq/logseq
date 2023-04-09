@@ -165,8 +165,8 @@
           :when (not= group :shortcut.handler/misc)]
     (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
-(defn disable-all-shortcuts []
-  {:did-mount
+(def disable-all-shortcuts
+  {:will-mount
    (fn [state]
      (unlisten-all)
      state)
@@ -181,7 +181,6 @@
   []
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
     (state/set-state! :ui/shortcut-handler-refreshing? true)
-    (log/info :shortcut/refresh @*installed)
 
     (doseq [id (keys @*installed)]
       (uninstall-shortcut! id))

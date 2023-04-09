@@ -92,8 +92,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/custom-query-components            {}
-     :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -218,15 +216,12 @@
      ;; graph -> state
      :graph/parsing-state                   {}
 
-     ;; copied blocks
-     :copy/blocks                           {:copy/content nil
-                                             :copy/graph nil
-                                             :copy/blocks nil}
-
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                 #{})
+     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                {})
      :date-picker/date                      nil
 
      :youtube/players                       {}
@@ -315,6 +310,7 @@
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
+   :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
    ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
@@ -501,7 +497,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
+    (or (when (int? days) days) 7)))
 
 (defn get-start-of-week
   []
@@ -601,9 +597,7 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (and
-    ((resolve 'frontend.handler.user/feature-available?) :whiteboard) ;; using resolve to avoid circular dependency
-    (:feature/enable-whiteboards? (sub-config repo)))))
+   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
 (defn enable-git-auto-push?
   [repo]
@@ -675,6 +669,10 @@ Similar to re-frame subscriptions"
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
+
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -748,10 +746,10 @@ Similar to re-frame subscriptions"
   (get-in (get-route-match) [:query-params :p]))
 
 (defn get-current-repo
+  "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+      "local"))
 
 (defn get-remote-graphs
   []
@@ -1115,7 +1113,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (cursor/pos (gdom/getElement edit-input-id))})))
+       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+                            (count (:block/content edit-block)))})))
 
 (defn clear-edit!
   []
@@ -1248,22 +1247,6 @@ Similar to re-frame subscriptions"
   [value]
   (when value
     (set-state! :journals-length value)))
-
-(defn add-custom-query-component!
-  [query-string component]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (assoc m query-string component))))
-
-(defn remove-custom-query-component!
-  [query-string]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (dissoc m query-string))))
-
-(defn get-custom-query-components
-  []
-  (vals (get @state :ui/custom-query-components)))
 
 (defn save-scroll-position!
   ([value]
@@ -1724,16 +1707,6 @@ Similar to re-frame subscriptions"
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
 
-(defn get-copied-blocks
-  []
-  (:copy/blocks @state))
-
-(defn set-copied-blocks!
-  [content blocks]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
-                            :copy/blocks blocks}))
-
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
@@ -1752,6 +1725,13 @@ Similar to re-frame subscriptions"
                    #(f % k))
     (storage/set :copy/export-block-text-remove-options
                  (get-export-block-text-remove-options))))
+
+(defn get-export-block-text-other-options []
+  (:copy/export-block-text-other-options @state))
+
+(defn update-export-block-text-other-options!
+  [k v]
+  (update-state! :copy/export-block-text-other-options #(assoc % k v)))
 
 (defn set-editor-args!
   [args]
@@ -2081,6 +2061,10 @@ Similar to re-frame subscriptions"
 (defn get-current-pdf
   []
   (:pdf/current @state))
+
+(defn nfs-user-granted?
+  [repo]
+  (get-in @state [:nfs/user-granted? repo]))
 
 (defn set-current-pdf!
   [inflated-file]

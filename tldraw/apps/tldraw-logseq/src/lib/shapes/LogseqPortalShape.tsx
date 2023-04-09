@@ -146,20 +146,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
       if (!collapsed) {
-        // this will also persist the state, so we can skip persist call
-        await delay()
         this.onResetBounds()
       }
-      this.persist?.()
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
-      console.log(
-        collapsed,
-        collapsed ? this.getHeaderHeight() : this.props.collapsedHeight,
-        this.getHeaderHeight(),
-        this.props.collapsedHeight
-      )
       this.update({
         isAutoResizing: !collapsed,
         collapsed: collapsed,
@@ -167,6 +158,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
     }
+    this.persist?.()
   }
 
   @computed get scaleLevel() {
@@ -284,6 +276,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
     const { Page, Block } = renderers
+    const [loaded, setLoaded] = React.useState(false)
 
     React.useEffect(() => {
       if (this.props.isAutoResizing) {
@@ -293,12 +286,20 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           this.update({
             size: [this.props.size[0], newHeight],
           })
-          app.persist(true)
+
+          if (loaded) app.persist(true)
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
 
-    const [loaded, setLoaded] = React.useState(false)
+    React.useEffect(() => {
+      if (!this.initialHeightCalculated) {
+        setTimeout(() => {
+          this.onResetBounds()
+          app.persist(true)
+        })
+      }
+    }, [this.initialHeightCalculated])
 
     React.useEffect(() => {
       setTimeout(function () {
@@ -507,13 +508,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
                 {showingPortal && <PortalComponent {...componentProps} />}
               </div>
-              <CircleButton
-                active={!!this.collapsed}
-                style={{ opacity: isSelected ? 1 : 0 }}
-                icon={this.props.blockType === 'B' ? 'block' : 'page'}
-                onClick={this.toggleCollapsed}
-                otherIcon={'whiteboard-element'}
-              />
+              {!app.readOnly && (
+                <CircleButton
+                  active={!!this.collapsed}
+                  style={{ opacity: isSelected ? 1 : 0 }}
+                  icon={this.props.blockType === 'B' ? 'block' : 'page'}
+                  onClick={this.toggleCollapsed}
+                  otherIcon={'whiteboard-element'}
+                />
+              )}
             </>
           )}
         </div>

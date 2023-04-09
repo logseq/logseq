@@ -99,6 +99,14 @@
   }
 }
 
+.breadcrumb {
+  .asset-container > img {
+    height: 18px;
+    width: unset !important;
+  }
+}
+
+
 .open-block-ref-link {
   background-color: var(--ls-page-properties-background-color);
   padding: 1px 4px;
@@ -535,6 +543,12 @@ a:hover > .bullet-container {
 
   .block-children-container {
     margin-left: 18px;
+  }
+}
+
+.ls-block .custom-query {
+  > .th {
+    @apply flex flex-row flex-1 items-center justify-between my-1 text-xs opacity-90;
   }
 }
 

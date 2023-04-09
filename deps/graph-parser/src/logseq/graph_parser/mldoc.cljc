@@ -13,7 +13,8 @@
             [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -117,6 +118,7 @@
         original-ast))))
 
 (defn ->edn
+  {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
   [content config]
   (if (string? content)
     (try

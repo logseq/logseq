@@ -4,6 +4,7 @@
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
+            [frontend.rum :as frontend-rum]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
@@ -391,7 +392,8 @@
                        {:label "Direct" :value "direct" :selected (= type "direct")}
                        {:label "HTTP"   :value "http"   :selected (= type "http")}
                        {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
-                      #(set-opts! (assoc opts :type % :protocol %)))]]
+             (fn [_e value]
+               (set-opts! (assoc opts :type value :protocol value))))]]
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
@@ -1023,6 +1025,37 @@
       :icon    (ui/icon "adjustments")}])
    {:trigger-class "toolbar-plugins-manager-trigger"}))
 
+(rum/defc header-ui-items-list-wrap
+  [children]
+  (let [*wrap-el (rum/use-ref nil)
+        [right-sidebar-resized] (frontend-rum/use-atom ui-handler/*right-sidebar-resized-at)]
+
+    (rum/use-effect!
+      (fn []
+        (when-let [^js wrap-el (rum/deref *wrap-el)]
+          (let [^js header-el       (.closest wrap-el ".cp__header")
+                ^js header-l        (.querySelector header-el "* > .l")
+                ^js header-r        (.querySelector header-el "* > .r")
+                set-max-width!      #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
+                calc-wrap-max-width #(let [width-l (.-offsetWidth header-l)
+                                           width-t (-> (js/document.querySelector "#main-content-container") (.-offsetWidth))
+                                           children (to-array (.-children header-r))
+                                           width-c'  (reduce (fn [acc ^js e]
+                                                              (when (some-> e (.-classList) (.contains "ui-items-container") (not))
+                                                                (+ acc (or (.-offsetWidth e) 0)))) 0 children)]
+                                       (when-let [width-t (and (number? width-t)
+                                                               (if-not (state/get-left-sidebar-open?)
+                                                                 (- width-t width-l) width-t))]
+                                         (set-max-width! (max (- width-t width-c' 100) 76))))]
+            (.addEventListener js/window "resize" calc-wrap-max-width)
+            (js/setTimeout calc-wrap-max-width 16)
+            #(.removeEventListener js/window "resize" calc-wrap-max-width))))
+      [right-sidebar-resized])
+
+    [:div.list-wrap
+     {:ref *wrap-el}
+     children]))
+
 (rum/defcs hook-ui-items < rum/reactive
                            < {:key-fn #(identity "plugin-hook-items")}
                            "type of :toolbar, :pagebar"
@@ -1043,16 +1076,18 @@
                                    items)
                               items))]
 
-        [:div {:class     (str "ui-items-container")
-               :data-type (name type)}
-         (conj (for [[_ {:keys [key pinned?] :as opts} pid] items]
-                 (when (or (not toolbar?)
-                           (not (set? pinned-items)) pinned?)
-                   (rum/with-key (ui-item-renderer pid type opts) key))))
+        [:div.ui-items-container
+         {:data-type (name type)}
 
          ;; manage plugin buttons
          (when toolbar?
-           (toolbar-plugins-manager-list items))]))))
+           [:<>
+            (header-ui-items-list-wrap
+              (for [[_ {:keys [key pinned?] :as opts} pid] items]
+                (when (or (not toolbar?)
+                          (not (set? pinned-items)) pinned?)
+                  (rum/with-key (ui-item-renderer pid type opts) key))))
+            (toolbar-plugins-manager-list items)])]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]
@@ -1142,7 +1177,8 @@
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
   (rum/use-effect!
    (fn []
-     (when (and (not db-restoring?)
+     (when (and (not-empty current-repo)
+                (not db-restoring?)
                 (or (not util/nfs?) nfs-granted?))
        (ui-handler/exec-js-if-exists-&-allowed! t)))
    [current-repo db-restoring? nfs-granted?])

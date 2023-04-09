@@ -5,7 +5,9 @@
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.config :as gp-config]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.common.path :as path]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn alias-enabled?
   []
@@ -40,7 +42,7 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
-(defn convert-platform-protocol
+(defn- convert-platform-protocol
   [full-path]
 
   (cond-> full-path
@@ -50,50 +52,53 @@
      #"^(file://|assets://)" gp-config/capacitor-protocol-with-prefix)))
 
 (defn resolve-asset-real-path-url
-  [repo full-path]
-  (when-let [full-path (and (string? full-path)
-                            (string/replace full-path #"^[.\/\\]+" ""))]
+  [repo rpath]
+  (when-let [rpath (and (string? rpath)
+                        (string/replace rpath #"^[.\/\\]+" ""))]
     (if config/publishing?
-      (str "./" full-path)
-      (let [ret (let [full-path      (if-not (string/starts-with? full-path gp-config/local-assets-dir)
-                                       (util/node-path.join gp-config/local-assets-dir full-path)
-                                       full-path)
-                      encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" full-path))
-                      full-path      (if encoded-chars? full-path (js/encodeURI full-path))
+      (str "./" rpath)
+      (let [ret (let [rpath          (if-not (string/starts-with? rpath gp-config/local-assets-dir)
+                                       (path/path-join gp-config/local-assets-dir rpath)
+                                       rpath)
+                      encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
+                      rpath          (if encoded-chars? (js/decodeURI rpath) rpath)
                       graph-root     (config/get-repo-dir repo)
                       has-schema?    (string/starts-with? graph-root "file:")]
 
-                  (if-let [[full-path' alias]
+                  (if-let [[rpath' alias]
                            (and (alias-enabled?)
-                                (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
+                                (let [rpath' (string/replace rpath (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
                                   (and
-                                   (string/starts-with? full-path' "@")
+                                   (string/starts-with? rpath' "@")
                                    (some->> (and (seq (get-alias-dirs))
-                                                 (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
-                                            (vector full-path')))))]
+                                                 (second (get-alias-by-name (second (re-find #"^@([^\/]+)" rpath')))))
+                                            (vector rpath')))))]
 
-                    (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
+                    (str "assets://" (string/replace rpath' (str "@" (:name alias)) (:dir alias)))
 
-                    (str (if has-schema? "" "file://")
-                         (util/node-path.join graph-root full-path))))]
+                    (if has-schema? (path/path-join graph-root rpath)
+                        (path/path-join "file://" graph-root rpath))))]
         (convert-platform-protocol ret)))))
 
 (defn normalize-asset-resource-url
-  ;; try to convert resource file to url asset link
-  [full-path]
-  (let [_filename      (util/node-path.basename full-path)
-        protocol-link? (->> #{:file :http :https :assets}
-                            (some #(string/starts-with? full-path (str (name %) ":/"))))]
-
+  "try to convert resource file to url asset link"
+  [path]
+  (let [protocol-link? (->> #{"file://" "http://" "https://" "assets://"}
+                            (some #(string/starts-with? (string/lower-case path) %)))]
     (cond
       protocol-link?
-      full-path
+      path
 
-      (util/absolute-path? full-path)
-      (str "file://" full-path)
+      ;; BUG: avoid double encoding from PDF assets
+      (path/absolute? path)
+      (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
+        ;; Incoming path might be already URL encoded. from PDF assets
+        (path/path-join "file://" (gp-util/safe-decode-uri-component path))
+        (path/path-join "file://" path))
 
-      :else
-      (resolve-asset-real-path-url (state/get-current-repo) full-path))))
+
+      :else ;; relative path or alias path
+      (resolve-asset-real-path-url (state/get-current-repo) path))))
 
 (defn get-matched-alias-by-ext
   [ext]

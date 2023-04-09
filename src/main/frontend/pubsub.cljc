@@ -70,7 +70,8 @@
             :remote->local-full-sync-failed
             :local->remote-full-sync-failed
             :get-remote-graph-failed
-            :get-deletion-logs-failed]]
+            :get-deletion-logs-failed
+            :get-remote-all-files-failed]]
    [:data :map]]
   :topic-fn :event
   :ch-buffer (a/sliding-buffer 10))

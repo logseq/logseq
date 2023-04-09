@@ -915,3 +915,10 @@ html.is-mobile {
     margin-top: 5px;
   }
 }
+
+@layer base {
+    .ls-grid-cols {
+        @apply grid grid-flow-col auto-cols-max;
+        place-items: center;
+    }
+}

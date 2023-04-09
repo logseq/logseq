@@ -177,7 +177,9 @@
         max-ratio 0.7
         keyboard-step 5
         add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
-        remove-resizing-class #(.. js/document.documentElement -classList (remove "is-resizing-buf"))
+        remove-resizing-class (fn []
+                                (.. js/document.documentElement -classList (remove "is-resizing-buf"))
+                                (reset! ui-handler/*right-sidebar-resized-at (js/Date.now)))
         set-width! (fn [ratio element]
                      (when (and el-ref element)
                        (let [width (str (* ratio 100) "%")]
@@ -233,6 +235,14 @@
              (.on "keyup" remove-resizing-class)))
        #())
      [])
+
+    (rum/use-effect!
+      (fn []
+        ;; sidebar animation duration
+        (js/setTimeout
+          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+      [sidebar-open?])
+
     [:.resizer {:ref el-ref
                 :role "separator"
                 :aria-orientation "vertical"

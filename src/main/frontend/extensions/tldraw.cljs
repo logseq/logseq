@@ -3,6 +3,7 @@
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
+            [frontend.config :as config]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -93,7 +94,7 @@
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
-   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text html))
+   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
@@ -152,8 +153,9 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :onPersist (fn [app _info]
+                :readOnly config/publishing?
+                :onPersist (fn [app info]
                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
                              (util/profile "tldraw persist"
-                                           (whiteboard-handler/transact-tldr-delta! page-name app)))
+                                           (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
                 :model data})])))

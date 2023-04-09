@@ -64,6 +64,20 @@
    "purple"
    "gray"])
 
+(rum/defc menu-background-color
+  [add-bgcolor-fn rm-bgcolor-fn]
+  [:div.flex.flex-row.justify-between.py-1.px-2.items-center
+   [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
+    (for [color block-background-colors]
+      [:a.shadow-sm
+       {:title (t (keyword "color" color))
+        :on-click #(add-bgcolor-fn color)}
+       [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
+    [:a.shadow-sm
+     {:title (t :remove-background)
+      :on-click rm-bgcolor-fn}
+     [:div.heading-bg.remove "-"]]]])
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
@@ -109,11 +123,12 @@
      :will-unmount (fn [state]
                      (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
                      state)}
-  [dropdown-state _close-fn content class]
+  [dropdown-state _close-fn content class style-opts]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
-     {:class (str class " "
+     {:style style-opts
+      :class (str class " "
                   (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
@@ -129,13 +144,13 @@
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)
         close-fn (:close-fn state)]
-    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
+    [:div.relative.ui__dropdown-trigger {:class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 (defn render-keyboard-shortcut [sequence]
@@ -483,7 +498,7 @@
            item-render
            class
            header]}]
-  (let [current-idx (get state ::current-idx)]
+  (let [*current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
@@ -492,17 +507,20 @@
           [:<>
            {:key idx}
            (let [item-cp
-                 [:div {:key idx}
-                  (let [chosen? (= @current-idx idx)]
+                 [:div.menu-link-wrap
+                  {:key            idx
+                   ;; mouse-move event to indicate that cursor moved by user
+                   :on-mouse-move  #(reset! *current-idx idx)}
+                  (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                     {:id            (str "ac-" idx)
-                      :class         (when chosen? "chosen")
-                      :on-mouse-down (fn [e]
-                                       (util/stop e)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item)))}
-                     (if item-render (item-render item chosen?) item) nil))]]
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -559,9 +577,9 @@
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.absolute.top-0.right-0.pt-2.pr-2
+   [:div.ui__modal-close-wrap
     (when-not (false? close-btn?)
-      [:a.ui__modal-close.opacity-60.hover:opacity-100
+      [:a.ui__modal-close
        {:aria-label "Close"
         :type       "button"
         :on-click   close-fn}
@@ -704,8 +722,33 @@
    {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
    (svg/caret-right)])
 
-(rum/defcs foldable < db-mixins/query rum/reactive
+(rum/defcs foldable-title <
   (rum/local false ::control?)
+  [state {:keys [on-mouse-down header title-trigger? collapsed?]}]
+  (let [control? (get state ::control?)]
+    [:div.content
+    [:div.flex-1.flex-row.foldable-title (cond->
+                                           {:on-mouse-over #(reset! control? true)
+                                            :on-mouse-out  #(reset! control? false)}
+                                           title-trigger?
+                                           (assoc :on-mouse-down on-mouse-down
+                                                  :class "cursor"))
+     [:div.flex.flex-row.items-center
+      (when-not (mobile-util/native-platform?)
+        [:a.block-control.opacity-50.hover:opacity-100.mr-2
+         (cond->
+           {:style    {:width       14
+                       :height      16
+                       :margin-left -30}}
+           (not title-trigger?)
+           (assoc :on-mouse-down on-mouse-down))
+         [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
+          (rotating-arrow @collapsed?)]])
+      (if (fn? header)
+        (header @collapsed?)
+        header)]]]))
+
+(rum/defcs foldable < db-mixins/query rum/reactive
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]
                  (let [args (:rum/args state)]
@@ -718,35 +761,17 @@
                 state)}
   [state header content {:keys [title-trigger? on-mouse-down
                                 _default-collapsed? _init-collapsed]}]
-  (let [control? (get state ::control?)
-        collapsed? (get state ::collapsed?)
+  (let [collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
                         (swap! collapsed? not)
                         (when on-mouse-down
                           (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
-     [:div.content
-      [:div.flex-1.flex-row.foldable-title (cond->
-                                            {:on-mouse-over #(reset! control? true)
-                                             :on-mouse-out  #(reset! control? false)}
-                                             title-trigger?
-                                             (assoc :on-mouse-down on-mouse-down
-                                                    :class "cursor"))
-       [:div.flex.flex-row.items-center
-        (when-not (mobile-util/native-platform?)
-          [:a.block-control.opacity-50.hover:opacity-100.mr-2
-           (cond->
-            {:style    {:width       14
-                        :height      16
-                        :margin-left -30}}
-             (not title-trigger?)
-             (assoc :on-mouse-down on-mouse-down))
-           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-            (rotating-arrow @collapsed?)]])
-        (if (fn? header)
-          (header @collapsed?)
-          header)]]]
+     (foldable-title {:on-mouse-down on-mouse-down
+                      :header header
+                      :title-trigger? title-trigger?
+                      :collapsed? collapsed?})
      [:div {:class (if @collapsed? "hidden" "initial")
             :on-mouse-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
@@ -814,11 +839,11 @@
   ([options on-change]
    (select options on-change nil))
   ([options on-change class]
-   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+   [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
     {:class     (or class "form-select")
      :on-change (fn [e]
                   (let [value (util/evalue e)]
-                    (on-change value)))}
+                    (on-change e value)))}
     (for [{:keys [label value selected disabled]
            :or {selected false disabled false}} options]
       [:option (cond->
@@ -982,7 +1007,7 @@
        :title title
        :disabled disabled?
        :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large?)
+      (dissoc option :background :class :small? :large? :disabled?)
       (when href
         {:on-click (fn []
                      (util/open-url href)
@@ -1090,3 +1115,40 @@
       [])
      (when portal-anchor
        (rum/portal (rum/fragment children) portal-anchor)))))
+
+(rum/defc menu-heading
+  ([add-heading-fn auto-heading-fn rm-heading-fn]
+   (menu-heading nil add-heading-fn auto-heading-fn rm-heading-fn))
+  ([heading add-heading-fn auto-heading-fn rm-heading-fn]
+   [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+    [:div.flex.flex-row.justify-between.flex-1.px-1
+     (for [i (range 1 7)]
+       (button
+        ""
+        :disabled? (and (some? heading) (= heading i))
+        :icon (str "h-" i)
+        :title (t :heading i)
+        :class "to-heading-button"
+        :on-click #(add-heading-fn i)
+        :intent "link"
+        :small? true))
+     (button
+      ""
+      :icon "h-auto"
+      :disabled? (and (some? heading) (true? heading))
+      :icon-props {:extension? true}
+      :class "to-heading-button"
+      :title (t :auto-heading)
+      :on-click auto-heading-fn
+      :intent "link"
+      :small? true)
+     (button
+      ""
+      :icon "heading-off"
+      :disabled? (and (some? heading) (not heading))
+      :icon-props {:extension? true}
+      :class "to-heading-button"
+      :title (t :remove-heading)
+      :on-click rm-heading-fn
+      :intent "link"
+      :small? true)]]))

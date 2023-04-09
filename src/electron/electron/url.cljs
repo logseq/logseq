@@ -90,9 +90,6 @@
   [^js win parsed-url]
   (let [url-host (.-host parsed-url)] ;; return "" when no pathname provided
     (cond
-      (= "auth-callback" url-host)
-      (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
-
       (= "x-callback-url" url-host)
       (x-callback-url-handler win parsed-url)
 

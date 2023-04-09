@@ -1,0 +1,9 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+
+  :consistent-alias
+  {:aliases {clojure.string string}}}
+ :skip-comments true
+ :output {:progress true}}

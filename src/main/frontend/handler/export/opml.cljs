@@ -1,20 +1,21 @@
 (ns frontend.handler.export.opml
   "export blocks/pages as opml"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
-  (:require
-   [clojure.string :as string]
-   [clojure.zip :as z]
-   [frontend.db :as db]
-   [frontend.extensions.zip :as zip]
-   [frontend.handler.export.common :as common :refer
+  (:require ["/frontend/utils" :as utils]
+            [clojure.string :as string]
+            [clojure.zip :as z]
+            [frontend.db :as db]
+            [frontend.extensions.zip :as zip]
+            [frontend.handler.export.common :as common :refer
              [*state* raw-text simple-asts->string space]]
-   [frontend.handler.export.zip-helper :refer [get-level goto-last goto-level]]
-   [frontend.state :as state]
-   [frontend.util :as util :refer [concatv mapcatv removev]]
-   [hiccups.runtime :as h]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [promesa.core :as p]
-   [goog.dom :as gdom]))
+            [frontend.handler.export.zip-helper :refer [get-level goto-last
+                                                        goto-level]]
+            [frontend.state :as state]
+            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [goog.dom :as gdom]
+            [hiccups.runtime :as h]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [promesa.core :as p]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -90,10 +91,11 @@
   (let [[_ _ & body] hiccup]
     (str
      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-     (h/render-html
-      [:opml {:version "2.0"}
-       [:head [:title title]]
-       (concatv [:body] body)]))))
+     (utils/prettifyXml
+      (h/render-html
+       [:opml {:version "2.0"}
+        [:head [:title title]]
+        (concatv [:body] body)])))))
 
 ;;; utils for construct opml hiccup (ends)
 
@@ -390,16 +392,22 @@
 ;;; export fns
 (defn- export-helper
   [content format options]
-  (let [remove-options (set (:remove-options options))]
+  (let [remove-options (set (:remove-options options))
+        other-options (:other-options options)]
     (binding [*state* (merge *state*
                              {:export-options
                               {:remove-emphasis? (contains? remove-options :emphasis)
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
-                               :remove-tags? (contains? remove-options :tag)}})
+                               :remove-tags? (contains? remove-options :tag)
+                               :keep-only-level<=N (:keep-only-level<=N other-options)}})
               *opml-state* *opml-state*]
       (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
+            keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
+            ast (if (pos? keep-level<=n)
+                  (common/keep-only-level<=n ast keep-level<=n)
+                  ast)
             ast* (common/replace-block&page-reference&embed ast)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (mapv common/replace-Heading-with-Paragraph ast*)
@@ -420,8 +428,7 @@
         (zip-loc->opml hiccup "untitled")))))
 
 (defn export-blocks-as-opml
-  "options:
-  :remove-options [:emphasis :page-ref :tag]"
+  "options: see also `export-blocks-as-markdown`"
   [repo root-block-uuids-or-page-name options]
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}

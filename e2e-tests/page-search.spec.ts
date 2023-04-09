@@ -1,7 +1,8 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
 import { Block } from './types'
-import { modKey, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
+import { modKey, createRandomPage, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
+import { searchPage, closeSearchBox } from './util/search-modal'
 
 /***
  * Test alias features
@@ -37,18 +38,9 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed
-  await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.type('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand, { delay: 10 })
-
-  await page.waitForTimeout(2000) // wait longer for search contents to render
-  // 2 blocks + 1 page + 1 page content
-  const searchResults = page.locator('#ui__ac-inner>div')
-  await expect(searchResults).toHaveCount(5) // 1 page + 2 block + 2 page content
-
-  await page.keyboard.press("Escape") // escape search box typing
-  await page.waitForTimeout(500)
-  await page.keyboard.press("Escape") // escape modal
+  const results = await searchPage(page, 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
+  await expect(results.length).toEqual(5) // 1 page + 2 block + 2 page content
+  await closeSearchBox(page)
 })
 
 test('Search CJK', async ({ page, block }) => {
@@ -67,19 +59,10 @@ test('Search CJK', async ({ page, block }) => {
 
   await page.waitForTimeout(500)
 
-  // check if diacritics are indexed
-  await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.type('[placeholder="Search or create page"]', '进度', { delay: 10 })
-
-  await page.waitForTimeout(2000) // wait longer for search contents to render
-  // 2 blocks + 1 page + 1 page content
-  const searchResults = page.locator('#ui__ac-inner>div')
-  await expect(searchResults).toHaveCount(4) // 1 new page + 1 page + 1 block + 1 page content
-
-  await page.keyboard.press("Escape") // escape search box typing
-  await page.waitForTimeout(500)
-  await page.keyboard.press("Escape") // escape modal
+  // check if CJK are indexed
+  const results = await searchPage(page, '进度')
+  await expect(results.length).toEqual(5) // 1 page + 1 block + 1 page content + new whiteboard
+  await closeSearchBox(page)
 })
 
 async function alias_test(block: Block, page: Page, page_name: string, search_kws: string[]) {
@@ -165,13 +148,8 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   for (let kw of search_kws) {
     let kw_name = kw + ' alias ' + rand
 
-    await page.click('#search-button')
-    await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.type('[placeholder="Search or create page"]', kw_name)
-    await page.waitForTimeout(500)
-
-    const results = await page.$$('#ui__ac-inner>div')
-    expect(results.length).toEqual(5) // page + block + alias property + page content
+    const results = await searchPage(page, kw_name)
+    await expect(results.length).toEqual(5) // page + block + alias property + page content
 
     // test search results
     expect(await results[0].innerText()).toContain("Alias -> " + target_name)
@@ -186,10 +164,8 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
     expect(await page.locator('.ls-block span.inline >> nth=2').innerHTML()).toBe(alias_test_content_3)
 
     // test search clicking (block)
-    await page.click('#search-button')
-    await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.type('[placeholder="Search or create page"]', kw_name)
-    await page.waitForTimeout(500)
+    await searchPage(page, kw_name)
+
     page.click(":nth-match(.search-result, 3)")
     await page.waitForNavigation()
     await page.waitForSelector('.selected a.page-ref')

@@ -10,19 +10,17 @@
             [frontend.db.model :as model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
-            [frontend.storage :as storage]
-            [frontend.config :as config]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.config :as config]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -237,7 +235,7 @@
         [:div.gap-8.grid.grid-rows-auto
          {:style {:visibility (when (nil? container-width) "hidden")
                   :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
-         (dashboard-create-card)
+         (when-not config/publishing? (dashboard-create-card))
          (for [whiteboard-name whiteboard-names]
            [:<> {:key whiteboard-name}
             (dashboard-preview-card whiteboard-name
@@ -294,27 +292,14 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (when (user-handler/feature-available? :whiteboard)
-    (let [name (get-in route-match [:parameters :path :name])
-          {:keys [block-id]} (get-in route-match [:parameters :query])]
-      (whiteboard-page name block-id))))
-
-(defn onboarding-show
-  []
-  (when (and (user-handler/feature-available? :whiteboard)
-             (not (or (state/sub :whiteboard/onboarding-tour?)
-                      (config/demo-graph?)
-                      (util/mobile?))))
-    (state/pub-event! [:whiteboard/onboarding])
-    (state/set-state! [:whiteboard/onboarding-tour?] true)
-    (storage/set :whiteboard-onboarding-tour? true)))
+  (let [name (get-in route-match [:parameters :path :name])
+        {:keys [block-id]} (get-in route-match [:parameters :query])]
+    (whiteboard-page name block-id)))
 
 (rum/defc onboarding-welcome
   [close-fn]
   [:div.cp__whiteboard-welcome
-   [:span.head-bg
-
-    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
+   [:span.head-bg]
 
    [:h1.text-2xl.font-bold.flex-col.sm:flex-row
     (t :on-boarding/welcome-whiteboard-modal-title)]

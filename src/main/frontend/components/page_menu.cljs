@@ -16,7 +16,8 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]))
+            [frontend.handler.file-sync :as file-sync-handler]
+            [logseq.common.path :as path]))
 
 (defn- delete-page!
   [page-name]
@@ -72,7 +73,7 @@
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
-          file-path (when (util/electron?) (page-util/get-page-file-path page-name))
+          file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
@@ -125,11 +126,13 @@
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when file-path
-            [{:title   (t :page/open-in-finder)
-              :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-             {:title   (t :page/open-with-default-app)
-              :options {:on-click #(js/window.apis.openPath file-path)}}])
+          (when file-rpath
+            (let [repo-dir (config/get-repo-dir repo)
+                  file-fpath (path/path-join repo-dir file-rpath)]
+              [{:title   (t :page/open-in-finder)
+                :options {:on-click #(js/window.apis.showItemInFolder file-fpath)}}
+               {:title   (t :page/open-with-default-app)
+                :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
           (when (state/get-current-page)
             {:title   (t :export-page)
@@ -146,12 +149,12 @@
                           (if public? false true))
                          (state/close-modal!))}})
 
-          (when (and (util/electron?) file-path
+          (when (and (util/electron?) file-rpath
                      (not (file-sync-handler/synced-file-graph? repo)))
             {:title   (t :page/open-backup-directory)
              :options {:on-click
                        (fn []
-                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
+                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-rpath))}})
 
           (when config/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
@@ -160,12 +163,12 @@
                                      pid (assoc cmd :page page-name) action)}}))
 
           (when developer-mode?
-            {:title   "(Dev) Show page data"
+            {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})
 
           (when developer-mode?
-            {:title   "(Dev) Show page AST"
+            {:title   (t :dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
                                      (dev-common-handler/show-content-ast
