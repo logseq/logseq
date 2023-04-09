@@ -1231,8 +1231,7 @@
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
      (query/custom-query (wrap-query-components (assoc config :dsl-query? true))
-                         {:title (rum/with-key (query-builder-component/builder query config)
-                                   query)
+                         {:builder (query-builder-component/builder query config)
                           :query query}))])
 
 (defn- macro-function-cp

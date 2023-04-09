@@ -198,13 +198,11 @@
        [:span.opacity-60.text-sm.ml-2.results-count
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
-(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive rum/static
   (rum/local nil ::query-result)
-  (rum/local false ::query-triggered?)
   {:init (fn [state] (assoc state :query-error (atom nil)))}
-  [state config {:keys [title query view collapsed? table-view?] :as q}]
+  [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]
   (let [*query-error (:query-error state)
-        *query-triggered? (::query-triggered? state)
         built-in? (built-in-custom-query? title)
         *query-result (::query-result state)
         result (rum/react *query-result)
@@ -244,7 +242,7 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      (if-not @*query-triggered?
+      (if-not (rum/react *query-triggered?)
         ;; trigger custom query
         (custom-query-inner config q opts)
         (when-not (and built-in? (empty? @*query-result))
@@ -293,6 +291,9 @@
                                                       :on-mouse-down (fn [e]
                                                                        (util/stop e)
                                                                        (trigger-custom-query! state *query-error *query-triggered?))}))]])])
+
+           (when dsl-query? builder)
+
            (if built-in?
              [:div {:style {:margin-left 2}}
               (ui/foldable
@@ -305,11 +306,13 @@
               (when-not collapsed?'
                 (custom-query-inner config q opts))])])))))
 
-(rum/defc custom-query
-  [config q]
+(rum/defcs custom-query < rum/static
+  (rum/local false ::query-triggered?)
+  [state config q]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q))
+    (fn []
+      (custom-query* config q (::query-triggered? state)))
     {:debug-id q
      :trigger-once? false})))
