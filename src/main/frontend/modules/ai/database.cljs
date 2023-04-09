@@ -23,6 +23,12 @@
                    (bean/->js {:vectors {:size 384 ; all-MiniLM-L6-v2
                                          :distance "Dot"}}))})))
 
+(defn delete-collection!
+  [graph-id]
+  (fetch (str api "collections/" graph-id)
+         {:method "DELETE"
+          :headers {:Content-Type "application/json"}}))
+
 (defn get-collection
   [graph-id]
   (fetch (str api "collections/" graph-id)
@@ -44,16 +50,19 @@
              :vector result
              :payload block})) blocks)))
 
-(defn add-points!
+(defn index-graph!
   [graph-id]
   (let [blocks (partition-all 100 (get-blocks))]
-    (doseq [segment blocks]
-      (p/let [points (blocks->points segment)]
-        (fetch (str api "collections/" graph-id "/points?wait=true")
-               {:method "PUT"
-                :headers {:Content-Type "application/json"}
-                :body (js/JSON.stringify
-                       (bean/->js {:points points}))})))))
+    (p/loop [blocks blocks]
+      (when (seq blocks)
+        (let [segment (first blocks)]
+          (p/let [points (blocks->points segment)
+                  _ (fetch (str api "collections/" graph-id "/points?wait=true")
+                           {:method "PUT"
+                            :headers {:Content-Type "application/json"}
+                            :body (js/JSON.stringify
+                                   (bean/->js {:points points}))})]
+            (p/recur (rest blocks))))))))
 
 (defn get-top-k
   [graph-id q {:keys [top]
@@ -68,9 +77,20 @@
 
 
 (comment
-  (p/let [result (get-top-k "docs" "new to logseq" {})]
-    (doseq [{:keys [id]} (:result result)]
-      (let [block (-> (db/pull [:block/uuid (uuid id)])
-                      (select-keys [:block/content :block/page :block/uuid]))]
-        (prn block))))
+  (delete-collection! "docs")
+  (create-collection! "docs")
+
+  (defn q
+    [query]
+    (prn "Matched results: ")
+    (p/let [result (get-top-k "docs" query {})]
+      (doseq [{:keys [id]} (:result result)]
+        (let [block (-> (db/pull [:block/uuid (uuid id)])
+                        (select-keys [:block/content :block/page :block/uuid]))]
+          (prn block)))))
+
+  (let [start (system-time)]
+    (p/let [_ (index-graph! "docs")
+            end (system-time)]
+      (prn "Time: " (- end start))))
   )
