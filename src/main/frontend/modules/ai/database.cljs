@@ -55,7 +55,7 @@
           vectors (zipmap block-contents vectors-result)
           blocks (map (fn [b] (assoc b :vector (get vectors (get-in b [:payload :block/content]))))
                    (blocks->points blocks))
-          segments (partition-all 500 blocks)]
+          segments (partition-all 2000 blocks)]
     (p/loop [segments segments]
       (when-let [segment (first segments)]
         (p/let [_ (fetch (str api "collections/" graph-id "/points?wait=true")

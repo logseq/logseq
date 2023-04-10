@@ -9,10 +9,12 @@ class Texts(BaseModel):
 
 app = FastAPI()
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+pool = model.start_multi_process_pool()
 
 def encode(texts: List[str]):
-    data = model.encode(texts, convert_to_numpy=True).tolist()
+    data = model.encode_multi_process(texts, pool, batch_size=8).tolist()
     return data
 
 @app.post("/embedding/")
