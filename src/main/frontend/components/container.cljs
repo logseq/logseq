@@ -552,9 +552,8 @@
           main-content])
 
        (when onboarding-and-home?
-         (onboarding/intro onboarding-and-home?))]
-
-      (bottom-bar/bar)]]))
+         (onboarding/intro onboarding-and-home?))]]
+     (bottom-bar/bar)]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
