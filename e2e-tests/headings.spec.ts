@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { createRandomPage, editFirstBlock, newInnerBlock } from './utils'
 
-test('set heading to 1 using', async ({ page }) => {
+test('set heading to 1', async ({ page }) => {
     await createRandomPage(page)
 
     await page.type('textarea >> nth=0', 'foo')
