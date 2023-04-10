@@ -87,13 +87,18 @@
         (prn "Re-index vector db time: " (- end start))))))
 
 (comment
+
+  (re-index-graph! "docs")
+
   (defn q
-    [query]
+    [graph query]
     (prn "Matched results: ")
-    (p/let [result (get-top-k "docs" query {})]
+    (p/let [result (get-top-k graph query {})]
       (doseq [{:keys [id]} (:result result)]
         (let [block (-> (db/pull [:block/uuid (uuid id)])
                         (select-keys [:block/content :block/page :block/uuid]))]
           (prn block)))))
+
+  (q "docs" "logseq query")
 
   )
