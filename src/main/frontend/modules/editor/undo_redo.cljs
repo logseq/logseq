@@ -12,7 +12,7 @@
 (def ^:private undo-redo-states (atom {}))
 (def *pause-listener (atom false))
 
-(defn- get-state
+(defn get-state
   []
   (let [repo (state/get-current-repo)]
     (assert (string? repo) "Repo should satisfy string?")
