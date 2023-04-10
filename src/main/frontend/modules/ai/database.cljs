@@ -42,27 +42,28 @@
 
 (defn- blocks->points
   [blocks]
-  (p/all
-   (map (fn [block]
-          (p/let [content (:block/content block)
-                  result (embedding/sentence-transformer content)]
-            {:id (str (:block/uuid block))
-             :vector result
-             :payload block})) blocks)))
+  (map (fn [block]
+         {:id (str (:block/uuid block))
+          ;; :vector result
+          :payload block}) blocks))
 
 (defn index-graph!
   [graph-id]
-  (let [blocks (partition-all 100 (get-blocks))]
-    (p/loop [blocks blocks]
-      (when (seq blocks)
-        (let [segment (first blocks)]
-          (p/let [points (blocks->points segment)
-                  _ (fetch (str api "collections/" graph-id "/points?wait=true")
-                           {:method "PUT"
-                            :headers {:Content-Type "application/json"}
-                            :body (js/JSON.stringify
-                                   (bean/->js {:points points}))})]
-            (p/recur (rest blocks))))))))
+  (p/let [blocks (get-blocks)
+          block-contents (map :block/content blocks)
+          vectors-result (embedding/sentence-transformer block-contents)
+          vectors (zipmap block-contents vectors-result)
+          blocks (map (fn [b] (assoc b :vector (get vectors (get-in b [:payload :block/content]))))
+                   (blocks->points blocks))
+          segments (partition-all 500 blocks)]
+    (p/loop [segments segments]
+      (when-let [segment (first segments)]
+        (p/let [_ (fetch (str api "collections/" graph-id "/points?wait=true")
+                         {:method "PUT"
+                          :headers {:Content-Type "application/json"}
+                          :body (js/JSON.stringify
+                                 (bean/->js {:points segment}))})]
+          (p/recur (rest segments)))))))
 
 (defn get-top-k
   [graph-id q {:keys [top]
@@ -75,11 +76,17 @@
                    (bean/->js {:vector vector
                                :top top}))})))
 
+(defn- re-index-graph!
+  [graph-id]
+  (p/do!
+    (delete-collection! graph-id)
+    (create-collection! graph-id)
+    (let [start (system-time)]
+      (p/let [_ (index-graph! graph-id)
+              end (system-time)]
+        (prn "Re-index vector db time: " (- end start))))))
 
 (comment
-  (delete-collection! "docs")
-  (create-collection! "docs")
-
   (defn q
     [query]
     (prn "Matched results: ")
@@ -89,8 +96,4 @@
                         (select-keys [:block/content :block/page :block/uuid]))]
           (prn block)))))
 
-  (let [start (system-time)]
-    (p/let [_ (index-graph! "docs")
-            end (system-time)]
-      (prn "Time: " (- end start))))
   )

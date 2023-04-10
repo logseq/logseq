@@ -5,13 +5,17 @@ from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 class Texts(BaseModel):
-    texts: List
+    texts: List[str]
 
 app = FastAPI()
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
+def encode(texts: List[str]):
+    data = model.encode(texts, convert_to_numpy=True).tolist()
+    return data
+
 @app.post("/embedding/")
 async def embedding(texts: Texts):
-    data = model.encode(list(texts), convert_to_numpy=True).tolist()
-    return {"embedding": data}
+    data = encode(texts.texts)
+    return data
