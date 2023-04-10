@@ -44,7 +44,6 @@
   [blocks]
   (map (fn [block]
          {:id (str (:block/uuid block))
-          ;; :vector result
           :payload block}) blocks))
 
 (defn index-graph!
@@ -68,7 +67,8 @@
 (defn get-top-k
   [graph-id q {:keys [top]
                :or {top 5}}]
-  (p/let [vector (embedding/sentence-transformer q)]
+  (p/let [vector (embedding/sentence-transformer [q])
+          vector (first vector)]
     (fetch (str api "collections/" graph-id "/points/search")
            {:method "POST"
             :headers {:Content-Type "application/json"}
