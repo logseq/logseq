@@ -57,11 +57,11 @@
  ;; :feature/disable-scheduled-and-deadline-query? true
 
  ;; Specify the number of days in the future to display in the
- ;; scheduled tasks and deadlines query, with a default value of 0 which
- ;; only displays tasks for today.
+ ;; scheduled tasks and deadlines query, with a default value of 7 which
+ ;; displays tasks for the next 7 days.
  ;; Example usage:
- ;; Display all scheduled tasks and deadlines in the next 7 days
- ;; :scheduled/future-days 7
+ ;; Display all scheduled and deadline blocks for the next 14 days
+ ;; :scheduled/future-days 14
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6

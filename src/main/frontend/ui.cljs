@@ -724,8 +724,33 @@
    {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
    (svg/caret-right)])
 
-(rum/defcs foldable < db-mixins/query rum/reactive
+(rum/defcs foldable-title <
   (rum/local false ::control?)
+  [state {:keys [on-mouse-down header title-trigger? collapsed?]}]
+  (let [control? (get state ::control?)]
+    [:div.content
+    [:div.flex-1.flex-row.foldable-title (cond->
+                                           {:on-mouse-over #(reset! control? true)
+                                            :on-mouse-out  #(reset! control? false)}
+                                           title-trigger?
+                                           (assoc :on-mouse-down on-mouse-down
+                                                  :class "cursor"))
+     [:div.flex.flex-row.items-center
+      (when-not (mobile-util/native-platform?)
+        [:a.block-control.opacity-50.hover:opacity-100.mr-2
+         (cond->
+           {:style    {:width       14
+                       :height      16
+                       :margin-left -30}}
+           (not title-trigger?)
+           (assoc :on-mouse-down on-mouse-down))
+         [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
+          (rotating-arrow @collapsed?)]])
+      (if (fn? header)
+        (header @collapsed?)
+        header)]]]))
+
+(rum/defcs foldable < db-mixins/query rum/reactive
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]
                  (let [args (:rum/args state)]
@@ -738,35 +763,17 @@
                 state)}
   [state header content {:keys [title-trigger? on-mouse-down
                                 _default-collapsed? _init-collapsed]}]
-  (let [control? (get state ::control?)
-        collapsed? (get state ::collapsed?)
+  (let [collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
                         (swap! collapsed? not)
                         (when on-mouse-down
                           (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
-     [:div.content
-      [:div.flex-1.flex-row.foldable-title (cond->
-                                            {:on-mouse-over #(reset! control? true)
-                                             :on-mouse-out  #(reset! control? false)}
-                                             title-trigger?
-                                             (assoc :on-mouse-down on-mouse-down
-                                                    :class "cursor"))
-       [:div.flex.flex-row.items-center
-        (when-not (mobile-util/native-platform?)
-          [:a.block-control.opacity-50.hover:opacity-100.mr-2
-           (cond->
-            {:style    {:width       14
-                        :height      16
-                        :margin-left -30}}
-             (not title-trigger?)
-             (assoc :on-mouse-down on-mouse-down))
-           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-            (rotating-arrow @collapsed?)]])
-        (if (fn? header)
-          (header @collapsed?)
-          header)]]]
+     (foldable-title {:on-mouse-down on-mouse-down
+                      :header header
+                      :title-trigger? title-trigger?
+                      :collapsed? collapsed?})
      [:div {:class (if @collapsed? "hidden" "initial")
             :on-mouse-down (fn [e] (.stopPropagation e))}
       (if (fn? content)

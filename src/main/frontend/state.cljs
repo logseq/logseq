@@ -92,7 +92,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -497,7 +496,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
+    (or (when (int? days) days) 7)))
 
 (defn get-start-of-week
   []

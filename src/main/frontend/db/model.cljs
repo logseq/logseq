@@ -10,18 +10,18 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
             [logseq.db.rules :as rules]
-            [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
 
 ;; lazy loading
 
@@ -1268,9 +1268,14 @@ independent of format as format specific heading characters are stripped"
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)]
+    (let [future-days (state/get-scheduled-future-days)
+          date-format "yyyyMMdd"
+          current-day (tf/parse (tf/formatter date-format) (str date))
+          future-day (->> (t/plus current-day (t/days future-days))
+                          (tf/unparse date-format))]
       (when-let [repo (state/get-current-repo)]
-        (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
+        (->> (react/q repo [:custom :scheduled-deadline journal-title]
+               {:use-cache? false}
                       '[:find [(pull ?block ?block-attrs) ...]
                         :in $ ?day ?future ?block-attrs
                         :where
@@ -1287,7 +1292,7 @@ independent of format as format specific heading characters are stripped"
                                  [(true? ?repeated)]
                                  [(>= ?d ?day)])]
                       date
-                      (+ date future-days)
+                      future-day
                       block-attrs)
              react
              (sort-by-left-recursive)
@@ -1350,43 +1355,6 @@ independent of format as format specific heading characters are stripped"
   "sanitized page-name only"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
-
-(defn get-public-pages
-  [db]
-  (-> (d/q
-       '[:find ?p
-         :where
-         [?p :block/name]
-         [?p :block/properties ?properties]
-         [(get ?properties :public) ?pub]
-         [(= true ?pub)]]
-       db)
-      (db-utils/seq-flatten)))
-
-(defn get-public-false-pages
-  [db]
-  (-> (d/q
-       '[:find ?p
-         :where
-         [?p :block/name]
-         [?p :block/properties ?properties]
-         [(get ?properties :public) ?pub]
-         [(= false ?pub)]]
-       db)
-      (db-utils/seq-flatten)))
-
-(defn get-public-false-block-ids
-  [db]
-  (-> (d/q
-       '[:find ?b
-         :where
-         [?p :block/name]
-         [?p :block/properties ?properties]
-         [(get ?properties :public) ?pub]
-         [(= false ?pub)]
-         [?b :block/page ?p]]
-       db)
-      (db-utils/seq-flatten)))
 
 (defn get-all-templates
   []
@@ -1509,73 +1477,6 @@ independent of format as format specific heading characters are stripped"
                      :block/content (:block/content e)
                      :block/format (:block/format e)}))))
          (remove nil?))))
-
-(defn get-assets
-  [datoms]
-  (let [get-page-by-eid
-        (memoize #(some->
-                   (db-utils/pull %)
-                   :block/page
-                   :db/id
-                   db-utils/pull))]
-    (flatten
-     (keep
-      (fn [datom]
-        (cond-> []
-
-          (= :block/content (:a datom))
-          (concat (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))]
-                    (when (seq matched)
-                      (for [[_ path] matched]
-                        (when (and (string? path)
-                                   (not (string/ends-with? path ".js")))
-                          path)))))
-          ;; area image assets
-          (= (:hl-type (:v datom)) "area")
-          (#(let [path (some-> (db-utils/pull (:e datom))
-                               (pdf-utils/get-area-block-asset-url
-                                (get-page-by-eid (:e datom))))
-                  path (pdf-utils/clean-asset-path-prefix path)]
-              (conj % path)))))
-      datoms))))
-
-(defn clean-export!
-  [db]
-  (let [remove? #(contains? #{"me" "recent" "file"} %)
-        non-public-pages (get-public-false-pages db)
-        non-public-datoms (get-public-false-block-ids db)
-        non-public-datom-ids (set (concat non-public-pages non-public-datoms))
-        filtered-db (d/filter db
-                              (fn [_db datom]
-                                (let [ns (namespace (:a datom))]
-                                  (and (not (remove? ns))
-                                       (not (contains? #{:block/file} (:a datom)))
-                                       (not (contains? non-public-datom-ids (:e datom)))))))
-        datoms (d/datoms filtered-db :eavt)
-        assets (get-assets datoms)]
-    [@(d/conn-from-datoms datoms db-schema/schema) assets]))
-
-(defn filter-only-public-pages-and-blocks
-  [db]
-  (let [public-pages (get-public-pages db)]
-    (when (seq public-pages)
-      (let [public-pages (set public-pages)
-            exported-namespace? #(contains? #{"block" "me" "recent"} %)
-            filtered-db (d/filter db
-                                  (fn [db datom]
-                                    (let [ns (namespace (:a datom))]
-                                      (and
-                                       (not (contains? #{:block/file} (:a datom)))
-                                       (not= ns "file")
-                                       (or
-                                        (not (exported-namespace? ns))
-                                        (and (= ns "block")
-                                             (or
-                                              (contains? public-pages (:e datom))
-                                              (contains? public-pages (:db/id (:block/page (db-utils/entity db (:e datom))))))))))))
-            datoms (d/datoms filtered-db :eavt)
-            assets (get-assets datoms)]
-        [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
 ;; Deprecated?
 (defn delete-blocks
