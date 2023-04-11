@@ -264,7 +264,7 @@
               :-webkit-font-smoothing "subpixel-antialiased"}}
 
      [:div.whiteboard-page-title-root
-      {:data-html2canvas-ignore true}
+      {:data-html2canvas-ignore true} ; excludes title component from image export
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
                 :user-select "none"}
