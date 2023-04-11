@@ -82,13 +82,13 @@
        (= typ (second (first ast)))))
 
 (defn extract-first-query-from-ast [ast]
-  (->
-   (walk/postwalk
-    (fn [f]
-      (if (and (vector? f)
-               (= "Custom" (first f))
-               (= "query" (second f)))
-        (last f)
-        f))
-    ast)
-   ffirst))
+  (let [*result (atom nil)]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f)
+                (= "Custom" (first f))
+                (= "query" (second f)))
+         (reset! *result (last f))
+         f))
+     ast)
+    @*result))
