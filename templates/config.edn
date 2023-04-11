@@ -90,7 +90,7 @@
  ;; 3. `:two-spaces` as two spaces
  ;; :export/bullet-indentation :tab
 
- ;; When :all-pages-public? true, export repo would export all pages within that repo.
+ ;; When :all-pages-public? true, export Graph would export all pages within that Graph.
  ;; Regardless of whether you've set any page to public or not.
  ;; Example:
  ;; :publishing/all-pages-public? true
@@ -111,14 +111,21 @@
  ;; 3. Setup page "home" as home page with multiple pages in sidebar
  ;; :default-home {:page "home" :sidebar ["page a" "page b"]}
 
- ;; Tell logseq to use a specific folder in the repo as a default location for notes
- ;; if not specified, notes are stored in `pages` directory
+ ;; Instruct Logseq to utilize a designated folder within the graph folder as
+ ;;  the default location for notes.
+ ;; If not specified, notes will be stored in the pages directory
  ;; :pages-directory "your-directory"
 
- ;; Tell logseq to use a specific folder in the repo as a default location for journals
- ;; if not specified, journals are stored in `journals` directory
+ ;; Instruct Logseq to utilize a designated folder within the graph folder as
+ ;; the default storage for journals.
+ ;; If not specified, journals will be sotred in the journals directory
  ;; :journals-directory "your-directory"
 
+ ;; Instruct Logseq to utilize a designated folder within the graph folder as
+ ;; the default location for whiteboards.
+ ;; If not specified, whiteboards will be stored in the whiteboards directory
+ ;; :whiteboards-directory "your-directory"
+ 
  ;; Set this to true will convert
  ;; `[[Grant Ideas]]` to `[[file:./grant_ideas.org][Grant Ideas]]` for org-mode
  ;; For more, see https://github.com/logseq/logseq/issues/672
