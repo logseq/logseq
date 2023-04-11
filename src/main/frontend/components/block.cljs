@@ -3063,8 +3063,9 @@
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
 
+;; TODO: move query related fns/components to components.query
 (defn- trigger-custom-query!
-  [state *query-error]
+  [state *query-error *query-triggered?]
   (let [[config query _query-result] (:rum/args state)
         repo (state/get-current-repo)
         result-atom (or (:query-atom state) (atom nil))
@@ -3096,6 +3097,8 @@
                      (catch :default e
                        (reset! *query-error e)
                        (atom nil)))]
+    (when *query-triggered?
+      (reset! *query-triggered? true))
     (if (instance? Atom query-atom)
       query-atom
       result-atom)))
@@ -3119,38 +3122,45 @@
     {:on-mouse-down on-mouse-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
+(defn- get-query-result
+  [state config *query-error *query-triggered? current-block-uuid q not-grouped-by-page? query-result-atom]
+  (or (when-let [*result (:query-result config)] @*result)
+      (let [query-atom (trigger-custom-query! state *query-error *query-triggered?)
+            query-result (and query-atom (rum/react query-atom))
+            ;; exclude the current one, otherwise it'll loop forever
+            remove-blocks (if current-block-uuid [current-block-uuid] nil)
+            transformed-query-result (when query-result
+                                       (db/custom-query-result-transform query-result remove-blocks q))
+            result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                     (let [result (db-utils/group-by-page transformed-query-result)]
+                       (if (map? result)
+                         (dissoc result nil)
+                         result))
+                     transformed-query-result)]
+        (when query-result-atom
+          (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
+        (when-let [query-result (:query-result config)]
+          (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+            (reset! query-result result)))
+        result)))
+
 (rum/defcs custom-query-inner < rum/reactive db-mixins/query
   [state config {:keys [query children? breadcrumb-show?] :as q}
    {:keys [query-result-atom
            query-error-atom
+           query-triggered-atom
            current-block
            current-block-uuid
            table?
            dsl-query?
            page-list?
-           built-in-query?
            view-f]}]
   (let [*query-error query-error-atom
-        query-atom (if built-in-query? query-result-atom (trigger-custom-query! state *query-error))
-        query-result (and query-atom (rum/react query-atom))
-        ;; exclude the current one, otherwise it'll loop forever
-        remove-blocks (if current-block-uuid [current-block-uuid] nil)
-        transformed-query-result (when query-result
-                                   (db/custom-query-result-transform query-result remove-blocks q))
+        *query-triggered? query-triggered-atom
         not-grouped-by-page? (or table?
                                  (boolean (:result-transform q))
                                  (and (string? query) (string/includes? query "(by-page false)")))
-        result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                 (let [result (db-utils/group-by-page transformed-query-result)]
-                   (if (map? result)
-                     (dissoc result nil)
-                     result))
-                 transformed-query-result)
-        _ (when (and query-result-atom (not built-in-query?))
-            (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
-        _ (when-let [query-result (:query-result config)]
-            (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-              (reset! query-result result)))
+        result (get-query-result state config *query-error *query-triggered? current-block-uuid q not-grouped-by-page? query-result-atom)
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and (seq result)
                                      (not not-grouped-by-page?)
@@ -3230,13 +3240,13 @@
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   (rum/local nil ::query-result)
+  (rum/local false ::query-triggered?)
   {:init (fn [state] (assoc state :query-error (atom nil)))}
   [state config {:keys [title query view collapsed? table-view?] :as q}]
   (let [*query-error (:query-error state)
+        *query-triggered? (::query-triggered? state)
         built-in? (built-in-custom-query? title)
-        *query-result (if built-in?
-                        (trigger-custom-query! state *query-error)
-                        (::query-result state))
+        *query-result (::query-result state)
         result (rum/react *query-result)
         dsl-query? (:dsl-query? config)
         current-block-uuid (or (:block/uuid (:block config))
@@ -3260,21 +3270,24 @@
                              (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
                                (util/electron?)
-                               (symbol? (safe-read-string query false)))]
+                               (symbol? (safe-read-string query false)))
+        opts {:query-result-atom *query-result
+              :query-error-atom *query-error
+              :query-triggered-atom *query-triggered?
+              :current-block current-block
+              :dsl-query? dsl-query?
+              :current-block-uuid current-block-uuid
+              :table? table?
+              :view-f view-f
+              :page-list? page-list?}]
     (if (:custom-query? config)
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      (when-not (and built-in? (empty? result))
-        (let [opts {:query-result-atom *query-result
-                    :query-error-atom *query-error
-                    :current-block current-block
-                    :dsl-query? dsl-query?
-                    :current-block-uuid current-block-uuid
-                    :table? table?
-                    :view-f view-f
-                    :page-list? page-list?
-                    :built-in-query? built-in?}]
+      (if-not @*query-triggered?
+        ;; trigger custom query
+        (custom-query-inner config q opts)
+        (when-not (and built-in? (empty? @*query-result))
           [:div.custom-query (get config :attr {})
            (when-not built-in?
              [:div.th
@@ -3316,7 +3329,7 @@
                     (query-refresh-button query-time {:full-text-search? full-text-search?
                                                       :on-mouse-down (fn [e]
                                                                        (util/stop e)
-                                                                       (trigger-custom-query! state *query-error))}))]])])
+                                                                       (trigger-custom-query! state *query-error *query-triggered?))}))]])])
            (if (or built-in? (not dsl-query?))
              [:div {:style {:margin-left 2}}
               (ui/foldable
