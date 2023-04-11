@@ -1,6 +1,6 @@
 import { useApp } from '@tldraw/react'
 import { LogseqContext } from '../../lib/logseq-context'
-import { MOD_KEY, AlignType, DistributeType, isDev, GRID_SIZE } from '@tldraw/core'
+import { MOD_KEY, AlignType, DistributeType, isDev, EXPORT_PADDING } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
@@ -241,10 +241,10 @@ export const ContextMenu = observer(function ContextMenu({
             onClick={() =>
               runAndTransition(() =>
                 handlers.exportToImage(app.currentPageId, {
-                  x: app.selectionBounds.minX + app.viewport.camera.point[0] - GRID_SIZE,
-                  y: app.selectionBounds.minY + app.viewport.camera.point[1] - GRID_SIZE,
-                  width: app.selectionBounds?.width + GRID_SIZE * 2,
-                  height: app.selectionBounds?.height + GRID_SIZE * 2,
+                  x: app.selectionBounds.minX + app.viewport.camera.point[0] - EXPORT_PADDING,
+                  y: app.selectionBounds.minY + app.viewport.camera.point[1] - EXPORT_PADDING,
+                  width: app.selectionBounds?.width + EXPORT_PADDING * 2,
+                  height: app.selectionBounds?.height + EXPORT_PADDING * 2,
                   zoom: app.viewport.camera.zoom,
                 })
               )
