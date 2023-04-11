@@ -101,8 +101,10 @@
 
 (rum/defc history < rum/reactive
   []
-  (let [state (undo-redo/get-state)]
+  (let [state (undo-redo/get-state)
+        page-only-mode? (state/sub :history/page-only-mode?)]
     [:div.ml-4
+     [:div.ml-3.font-bold (if page-only-mode? "page only" "global")]
      [:div.p-4 [:.ml-4.mb-2
                 (history-stack "Undos" (rum/react (:undo-stack state)))
                 (history-stack "Redos" (rum/react (:redo-stack state)))]]]))
