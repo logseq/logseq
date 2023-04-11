@@ -13,7 +13,7 @@ two main namespaces, `logseq.db` and `logseq.db.rules`.
 
 ## Usage
 
-See usage in `deps/graph-parser` and in the Logseq app.
+See the frontend for example usage.
 
 ## Dev
 
