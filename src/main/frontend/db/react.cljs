@@ -145,8 +145,9 @@
 (defn get-query-cached-result
   [k]
   (when-let [result (get @query-state k)]
-    (set! (.-state (:result result))
-          (with-meta @(:result result) {:query-time (:query-time result)}))
+    (when (satisfies? IWithMeta @(:result result))
+      (set! (.-state (:result result))
+           (with-meta @(:result result) {:query-time (:query-time result)})))
     (:result result)))
 
 (defn q
