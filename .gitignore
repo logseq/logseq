@@ -11,6 +11,7 @@ pom.xml.asc
 /.nrepl-port
 .hgignore
 .hg/
+.nbb/
 
 node_modules/
 static/**

@@ -42,17 +42,24 @@ This step is not needed if you're just running the frontend application.
 
 Since this library is compatible with cljs and nbb-logseq, tests are run against both languages.
 
+Nbb tests use [nbb-test-runner](https://github.com/nextjournal/nbb-test-runner).
+Some basic usage:
+
+```
+# Run all tests
+$ yarn test
+# List available options
+$ yarn test -H
+# Run tests with :focus metadata flag
+$ yarn test -i focus
+```
+
 ClojureScript tests use https://github.com/Olical/cljs-test-runner. To run tests:
 ```
 clojure -M:test
 ```
 
 To see available options that can run specific tests or namespaces: `clojure -M:test --help`
-
-To run nbb-logseq tests:
-```
-yarn test
-```
 
 ### Managing dependencies
 
