@@ -345,6 +345,7 @@
 
   &.selected {
     border-bottom-color: var(--ls-primary-background-color);
+    border-radius: 2px;
 
     &:last-child {
       border-bottom-color: transparent;
