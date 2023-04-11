@@ -2351,7 +2351,9 @@
           (when (and (not block-ref-with-title?)
                      (seq body)
                      (or (not title-collapse-enabled?)
-                         (and title-collapse-enabled? (not collapsed?))))
+                         (and title-collapse-enabled?
+                              (or (not collapsed?)
+                                  (some? (mldoc/extract-first-query-from-ast body))))))
             [:div.block-body
              ;; TODO: consistent id instead of the idx (since it could be changed later)
              (let [body (block/trim-break-lines! (:block/body block))]
