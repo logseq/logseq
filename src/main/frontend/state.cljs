@@ -276,8 +276,7 @@
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
      :whiteboard/last-persisted-at          {}
      :whiteboard/pending-tx-data            {}
-     :history/page-only-mode?               false
-     :history/page                          nil})))
+     :history/page-only-mode?               false})))
 
 ;; Block ast state
 ;; ===============

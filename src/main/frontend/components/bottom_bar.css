@@ -1,8 +1,0 @@
-#ls-bottom-bar {
-    @apply shadow-lg text-sm p-1 absolute bottom-0;
-    background-color: var(--ls-primary-background-color);
-
-    .items {
-        @apply flex flex-row flex-1;
-    }
-}

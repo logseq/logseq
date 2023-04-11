@@ -27,14 +27,15 @@
 
 (defn restore-app-state!
   [state]
-  (let [route-match (:route-match state)
-        current-route (:route-match @state/state)
-        prev-route-data (get-route-data route-match)
-        current-route-data (get-route-data current-route)]
-    (when (and (not= prev-route-data current-route-data)
-               prev-route-data)
-      (route-handler/redirect! prev-route-data))
-    (swap! state/state merge state)))
+  (when-not (:history/page-only-mode? @state/state)
+   (let [route-match (:route-match state)
+         current-route (:route-match @state/state)
+         prev-route-data (get-route-data route-match)
+         current-route-data (get-route-data current-route)]
+     (when (and (not= prev-route-data current-route-data)
+                prev-route-data)
+       (route-handler/redirect! prev-route-data))
+     (swap! state/state merge state))))
 
 (defn undo!
   [e]

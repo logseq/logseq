@@ -2,7 +2,9 @@
   (:require [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.handler.notification :as notification]
             [frontend.modules.datascript-report.core :as db-report]
+            [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
             [medley.core :as medley]))
@@ -30,22 +32,6 @@
 (defn- get-redo-stack
   []
   (-> (get-state) :redo-stack))
-
-(defn- get-page-from-block
-  [stack]
-  (let [last-blocks (:blocks (last stack))]
-    (or (:db/id (some #(when (:block/name %) %) last-blocks))
-        (:db/id (some :block/page last-blocks)))))
-
-(defn- get-history-page
-  [action]
-  (or
-   (:history/page @state/state)
-   (when-let [id (if (= :undo action)
-                   (get-page-from-block @(get-undo-stack))
-                   (get-page-from-block @(get-redo-stack)))]
-     (swap! state/state assoc :history/page id)
-     id)))
 
 (defn push-undo
   [txs]
@@ -113,7 +99,7 @@
 (defn- smart-pop-redo
   []
   (if (:history/page-only-mode? @state/state)
-    (if-let [page-id (get-history-page :redo)]
+    (if-let [page-id (page-util/get-editing-page-id)]
       (page-pop-redo page-id)
       (pop-redo))
     (pop-redo)))
@@ -163,7 +149,7 @@
 (defn- smart-pop-undo
   []
   (if (:history/page-only-mode? @state/state)
-    (if-let [page-id (get-history-page :undo)]
+    (if-let [page-id (page-util/get-editing-page-id)]
       (page-pop-undo page-id)
       (pop-undo))
     (pop-undo)))
@@ -221,14 +207,10 @@
 
 (defn toggle-undo-redo-mode!
   []
-  (if (:history/page-only-mode? @state/state)
-    (swap! state/state assoc
-           :history/page-only-mode? false
-           :history/page nil)
-    (when-let [page-id (get-history-page :undo)]
-      (swap! state/state assoc
-            :history/page-only-mode? true
-            :history/page page-id))))
+  (swap! state/state update :history/page-only-mode? not)
+  (let [mode (if (:history/page-only-mode? @state/state) "Page only" "Global")]
+    (notification/show!
+     [:p (str "Undo/redo mode: " mode)])))
 
 (defn pause-listener!
   []

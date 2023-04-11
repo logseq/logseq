@@ -12,7 +12,6 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.bottom-bar :as bottom-bar]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -552,8 +551,7 @@
           main-content])
 
        (when onboarding-and-home?
-         (onboarding/intro onboarding-and-home?))]]
-     (bottom-bar/bar)]))
+         (onboarding/intro onboarding-and-home?))]]]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
