@@ -1714,7 +1714,7 @@
                            (or ref? query?)
                            (assoc :ref-query-child? true))]
               (rum/with-key (block-container config child)
-                            (:block/uuid child)))))]])))
+                (str (:blocks-container-id config) "-" (:block/uuid child))))))]])))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]
@@ -2786,7 +2786,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (when-not slide? (state/sub-block-selected? uuid))]
+        selected? (when-not slide?
+                    (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -3195,6 +3196,7 @@
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result (cond-> (assoc config
+                                         :id (str q)
                                          :custom-query? true
                                          :dsl-query? dsl-query?
                                          :query query
@@ -3584,7 +3586,7 @@
                      :block/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
-      (str (:block/uuid item)))))
+      (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
 (defn- block-list
   [config blocks]
