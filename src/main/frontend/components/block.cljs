@@ -2593,7 +2593,7 @@
                                    [block
                                     (when title
                                       (if (seq title)
-                                        (->elem :span (map-inline config title))
+                                        (->elem :span.inline-wrap (map-inline config title))
                                         (->elem :div (markup-elements-cp config body))))]))))
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
@@ -2603,7 +2603,7 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.flex-wrap.items-center
+          [:div.breadcrumb.block-parents
            {:class (when (seq breadcrumb)
                      (str (when-not (:search? config)
                             " my-2")
