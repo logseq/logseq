@@ -248,7 +248,9 @@
      ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
      ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
      ["Current time" #(date/get-current-time) "Insert current time"]
-     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]
+     ["Toggle Number list" [[:editor/clear-current-slash]
+                     [:editor/toggle-children-number-list]] "Make children as number list"]]
 
     ;; task management
     (get-preferred-workflow)
@@ -653,6 +655,10 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
+
+(defmethod handle-step :editor/toggle-children-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-children-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
