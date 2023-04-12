@@ -2576,7 +2576,7 @@
           more? (> (count parents) level-limit)
           parents (if more? (take-last level-limit parents) parents)
           config (assoc config :breadcrumb? true)]
-      (when (and show? (seq parents))
+      (when show?
         (let [page-name-props (when show-page?
                                 [page
                                  (page-cp (dissoc config :breadcrumb? true) page)
@@ -2603,17 +2603,18 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents
-           {:class (when (seq breadcrumb)
-                     (str (when-not (:search? config)
-                            " my-2")
-                          (when indent?
-                            " ml-4")))}
-           (when (and (false? (:top-level? config))
-                      (seq parents))
-             (breadcrumb-separator))
-           breadcrumb
-           (when end-separator? (breadcrumb-separator))])))))
+          (when (seq breadcrumb)
+            [:div.breadcrumb.block-parents
+             {:class (when (seq breadcrumb)
+                       (str (when-not (:search? config)
+                              " my-2")
+                            (when indent?
+                              " ml-4")))}
+             (when (and (false? (:top-level? config))
+                        (seq parents))
+               (breadcrumb-separator))
+             breadcrumb
+             (when end-separator? (breadcrumb-separator))]))))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
