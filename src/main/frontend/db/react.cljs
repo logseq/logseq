@@ -144,7 +144,11 @@
 
 (defn get-query-cached-result
   [k]
-  (:result (get @query-state k)))
+  (when-let [result (get @query-state k)]
+    (when (satisfies? IWithMeta @(:result result))
+      (set! (.-state (:result result))
+           (with-meta @(:result result) {:query-time (:query-time result)})))
+    (:result result)))
 
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
@@ -179,7 +183,7 @@
                                             transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
-            (set! (.-state result-atom) (util/safe-with-meta result {:query-time time}))
+            (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
               (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))
