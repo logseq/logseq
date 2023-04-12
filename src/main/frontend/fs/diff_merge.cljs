@@ -1,9 +1,5 @@
 (ns frontend.fs.diff-merge
-  ;; Disable clj linters since we don't support clj
-  #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
-                                        :unresolved-symbol {:level :off}}}})
-  (:require #?(:org.babashka/nbb ["@logseq/diff-merge$default" :refer [Merger Differ visualizeAsHTML attach_uuids]]
-               :default ["@logseq/diff-merge" :refer [Differ Merger visualizeAsHTML attach_uuids]])
+  (:require ["@logseq/diff-merge" :refer [Differ attach_uuids]]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
@@ -48,8 +44,14 @@
                     blocks levels)]
     blocks))
 
-;; TODO Junyi: merge back to gp-block/extract-blocks
-;; From back to first to ensure end_pos is correct
+;; Diverged from gp-block/extract-blocks for decoupling
+;; The process of doing 2 way diff is like:
+;; 1. Given a base ver. of page (AST in DB), and a branch ver. of page (externally modified file content)
+;; 2. Transform both base ver (done by THIS fn). & branch ver. into the same format (diff-blocks)
+;; 3. Apply diff-merge/diff on them, which returns the resolved uuids of the branch ver
+;; 4. Attach these resolved uuids into the blocks newly parsed by graph-parser
+;; Keep all the diff-merge fns, including diff-merge/ast->diff-blocks out of the graph-parser,
+;;   Only inject the step 4 into graph-parser as a hook
 (defn ast->diff-blocks
   "Prepare the blocks for diff-merge
    blocks: ast of blocks
