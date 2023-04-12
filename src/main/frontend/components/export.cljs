@@ -125,8 +125,7 @@
   (rum/local nil ::text-other-options)
   (rum/local nil ::content)
   {:will-mount (fn [state]
-                 (when (last (:rum/args state)) ; whiteboard?
-                   (do (reset! *export-block-type :png)))
+                 (reset! *export-block-type (if (:whiteboard? (last (:rum/args state))) :png :text))
                  (if (= @*export-block-type :png)
                    (do (reset! (::content state) nil)
                        (get-image-blob (first (:rum/args state))
