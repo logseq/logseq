@@ -807,8 +807,8 @@
 (declare save-block!)
 
 (defn- block-has-no-ref?
-  [block-or-uuid]
-  (empty? (:block/_refs (db/entity (if (uuid? block-or-uuid) [:block/uuid block-or-uuid] (:db/id block-or-uuid))))))
+  [eid]
+  (empty? (:block/_refs (db/entity eid))))
 
 (defn delete-block!
   ([repo]
@@ -833,7 +833,8 @@
                  (let [block-parent (gdom/getElement block-parent-id)
                        ;; it's possible to find a block not belong to the same page of current editing block
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       delete_prev? (and (not (block-has-no-ref? block)) (block-has-no-ref? (uuid (dom/attr sibling-block "blockid"))))
+                       delete_prev? (and (not (block-has-no-ref? (:db/id block)))
+                                         (block-has-no-ref? [:block/uuid (uuid (dom/attr sibling-block "blockid"))]))
                        {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value (not delete_prev?))
                        concat-prev-block? (boolean (and prev-block new-content))
                        save-page? (= (:db/id (:block/page prev-block)) page-id)
@@ -2683,7 +2684,7 @@
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
-      (and next-block (block-has-no-ref? current-block))
+      (and next-block (block-has-no-ref? (:db/id current-block)))
       (let [edit-block (state/get-edit-block)
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
