@@ -84,7 +84,7 @@
 
  ;; Set Bullet indentation when exporting
  ;; default option: tab
- ;; Possible options are for `:sidebar` are
+ ;; Possible options for `:export/bullet-indentation` are
  ;; 1. `:eight-spaces` as eight spaces
  ;; 2. `:four-spaces` as four spaces
  ;; 3. `:two-spaces` as two spaces
