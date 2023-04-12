@@ -2796,7 +2796,8 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect"))
+                    (when selected? " selected noselect")
+                    (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
 
