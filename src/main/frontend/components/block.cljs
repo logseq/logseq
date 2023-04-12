@@ -857,7 +857,7 @@
   [config id label]
   (if-let [block-id (parse-uuid id)]
     (let [db-id (:db/id (db/pull [:block/uuid block-id]))
-          block (when db-id (db/pull-block db-id))
+          block (when db-id (db/sub-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)
@@ -2753,7 +2753,7 @@
                   (first tree))
                 block)
         block (if ref?
-                (merge block (db/pull-block (:db/id block)))
+                (merge block (db/sub-block (:db/id block)))
                 block)
         {:block/keys [uuid children pre-block? top? refs level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)

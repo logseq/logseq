@@ -120,7 +120,7 @@
                                         portal?]
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
-         page (model/pull-block (:db/id page-entity))
+         page (model/sub-block (:db/id page-entity))
          block-uuid (:block/uuid page-entity)
          refs-count (count (:block/_refs page))]
      (when (> refs-count 0)
