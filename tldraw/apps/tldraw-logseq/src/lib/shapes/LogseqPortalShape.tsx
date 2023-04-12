@@ -64,7 +64,9 @@ const LogseqPortalShapeHeader = observer(
 
     const fillGradient =
         fill && fill !== 'var(--ls-secondary-background-color)'
-          ? `var(--ls-highlight-color-${fill})`
+          ? isBuiltInColor(fill)
+            ? `var(--ls-highlight-color-${fill})`
+            : fill
           : 'var(--ls-secondary-background-color)'
 
     return (
