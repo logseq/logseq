@@ -2576,7 +2576,7 @@
           more? (> (count parents) level-limit)
           parents (if more? (take-last level-limit parents) parents)
           config (assoc config :breadcrumb? true)]
-      (when show?
+      (when (and show? (seq parents))
         (let [page-name-props (when show-page?
                                 [page
                                  (page-cp (dissoc config :breadcrumb? true) page)
