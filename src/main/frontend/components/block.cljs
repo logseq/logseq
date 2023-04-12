@@ -1691,10 +1691,12 @@
 
 (rum/defc block-children < rum/reactive
   [config block children collapsed?]
-  (let [ref? (:ref? config)
-        query? (:custom-query? config)
-        children (when (coll? children)
-                   (remove nil? children))]
+  (let [ref?        (:ref? config)
+        query?      (:custom-query? config)
+        children    (when (coll? children)
+                      (remove nil? children))
+        children-as (some-> (:block/properties block)
+                            :logseq.children-as str string/lower-case)]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -1703,12 +1705,14 @@
         {:on-click (fn [_]
                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
        [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
-        (for [child children]
+        (for [[idx child] (medley/indexed children)]
           (when (map? child)
             (let [child  (dissoc child :block/meta)
                   config (cond->
                            (-> config
                                (assoc :block/uuid (:block/uuid child))
+                               (assoc :as-list-of children-as)
+                               (assoc :as-index-of idx)
                                (dissoc :breadcrumb-show? :embed-parent))
                            (or ref? query?)
                            (assoc :ref-query-child? true))]
@@ -1732,7 +1736,11 @@
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)]
+        fold-button-right? (state/enable-fold-button-right?)
+        as-list-of (:as-list-of config)
+        as-index-of (:as-index-of config)
+        as-typed-list? (string? (:as-list-of config))
+        number-list? (= as-list-of "number-list")]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
@@ -1750,8 +1758,7 @@
                                     (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (let [bullet [:a {:on-click (fn [event]
-                                   (bullet-on-click event block uuid))}
+     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid)}
                    [:span.bullet-container.cursor
                     {:id (str "dot-" uuid)
                      :draggable true
@@ -1759,11 +1766,15 @@
                                       (bullet-drag-start event block uuid block-id))
                      :blockid (str uuid)
                      :class (str (when collapsed? "bullet-closed")
-                                 " "
                                  (when (and (:document/mode? config)
                                             (not collapsed?))
-                                   "hide-inner-bullet"))}
-                    [:span.bullet {:blockid (str uuid)}]]]]
+                                   " hide-inner-bullet")
+                                 (when number-list? " as-number-list")
+                                 (when as-typed-list? " typed-list"))}
+
+                    [:span.bullet {:blockid (str uuid)}
+                     (when number-list?
+                       [:label (str (inc as-index-of) ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
@@ -2783,6 +2794,7 @@
         whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
+        as-list-of (:as-list-of config)
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2798,10 +2810,12 @@
         :data-refs data-refs
         :data-refs-self data-refs-self
         :data-collapsed (and collapsed? has-child?)
+        :data-child-idx (:as-index-of config)
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect")
+                    (when as-list-of (str " " as-list-of))
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
@@ -2885,7 +2899,7 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
-                          config-compare-keys [:show-cloze?]
+                          config-compare-keys [:show-cloze? :as-list-of :as-index-of]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
                           result (or

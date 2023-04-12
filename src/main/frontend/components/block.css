@@ -506,25 +506,38 @@
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
-  .bullet {
-    border-radius: 50%;
-    width: 6px;
-    height: 6px;
-    background-color: var(--ls-block-bullet-color, #394b59);
-    transition: transform 0.2s;
+  &.as-number-list {
+    min-width: 24px;
+    white-space: nowrap;
+    justify-content: end;
+  }
+
+  &:not(.typed-list) {
+    .bullet {
+      border-radius: 50%;
+      width: 6px;
+      height: 6px;
+      background-color: var(--ls-block-bullet-color, #394b59);
+      transition: transform 0.2s;
+    }
   }
 
   &.bullet-closed {
     background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    font-size: 12px;
   }
 }
 
-a:hover > .bullet-container .bullet {
-  transform: scale(1.4);
-}
+.bullet-link-wrap {
+  color: var(--ls-primary-text-color);
 
-a:hover > .bullet-container {
-  background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  &:hover > .bullet-container .bullet {
+    transform: scale(1.4);
+  }
+
+  &:hover > .bullet-container:not(.typed-list) {
+    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  }
 }
 
 .content.doc-mode {
