@@ -1,6 +1,5 @@
 (ns frontend.fs.diff-merge-test
-  (:require [datascript.core :as d]
-            [cljs.test :refer [deftest are is]]
+  (:require [cljs.test :refer [deftest are is]]
             [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
             [frontend.fs.diff-merge :as fs-diff]
@@ -311,29 +310,31 @@
         foo-content (str "- abc\n"
                          "- def\n")
         bar-content (str "- ghi\n"
-                         "\t- jkl\n")]
+                         "\t- jkl\n")
+        foo-new-content (str foo-content "- newline\n")
+        new-bar-content (str  "- newline\n" bar-content)]
     (graph-parser/parse-file conn "foo.md" foo-content {})
     (graph-parser/parse-file conn "bar.md" bar-content {})
-    (are [ast content page-name uuids]
+    ;; Compare if the uuids are the same as those inside DB when the modified content (adding new line) is parsed
+    (are [ast content page-name DB-uuids->new-uuids-fn]
          (= (with-redefs [conn/get-db (constantly @conn)]
               (#'file-common-handler/diff-merge-uuids :markdown ast content {:page-name page-name
                                                                              :block-pattern "-"}))
             ;; Get all uuids under the page
-            (conj (->> page-name
-                       (test-db->diff-blocks conn)
-                       (map :uuid)
-                       (vec)) nil))
+            (->> page-name
+                 (test-db->diff-blocks conn)
+                 (map :uuid)
+                 (vec)
+                 (DB-uuids->new-uuids-fn)))
 
-      (gp-mldoc/->edn (str foo-content "- newline\n") (gp-mldoc/default-config :markdown))
-      (str foo-content "- newline\n")
+      ;; Append a new line to foo
+      (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
+      foo-new-content
       "foo"
-      ["11451400-0000-0000-0000-000000000000"
-       "63246324-6324-6324-6324-632463246324"
-       nil]
-
-      (gp-mldoc/->edn (str bar-content "- newline\n") (gp-mldoc/default-config :markdown))
-      (str bar-content "- newline\n")
+      (fn [db-uuids] (conj db-uuids nil))
+      
+      ;; Prepend a new line to bar
+      (gp-mldoc/->edn new-bar-content (gp-mldoc/default-config :markdown))
+      new-bar-content
       "bar"
-      ["11451411-1111-1111-1111-111111111111"
-       "63241234-1234-1234-1234-123412341234"
-       nil])))
+      (fn [db-uuids] (cons nil db-uuids)))))
