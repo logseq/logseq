@@ -554,7 +554,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <rect
           fill={
             this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
-              ? `var(--ls-highlight-color-${this.props.fill})`
+              ? isBuiltInColor(this.props.fill)
+                ? `var(--ls-highlight-color-${this.props.fill})`
+                : this.props.fill
               : 'var(--ls-secondary-background-color)'
           }
           stroke={getComputedColor(this.props.fill, 'background')}
