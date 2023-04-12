@@ -91,6 +91,7 @@ html[data-theme='light'] {
 
 .tl-container {
   overflow: hidden;
+  background-color: transparent !important;
 }
 
 .tl-menu-item {
@@ -724,10 +725,6 @@ button.tl-select-input-trigger {
   opacity: 1;
   user-select: text;
   transform-origin: top left;
-
-  &[data-collapsed='true'][data-editing='false'] {
-    @apply overflow-hidden;
-  }
 
   &[data-portal-selected='true'] {
     filter: brightness(0.9) contrast(0.5);

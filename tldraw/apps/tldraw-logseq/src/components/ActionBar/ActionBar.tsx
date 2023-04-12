@@ -29,7 +29,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   }, [app])
 
   return (
-    <div className="tl-action-bar">
+    <div className="tl-action-bar" data-html2canvas-ignore="true">
       {!app.readOnly && (
         <div className="tl-toolbar tl-history-bar">
           <Button tooltip="Undo" onClick={undo}>

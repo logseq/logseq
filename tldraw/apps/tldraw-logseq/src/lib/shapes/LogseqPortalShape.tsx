@@ -62,6 +62,11 @@ const LogseqPortalShapeHeader = observer(
         ? getComputedColor(fill, 'background')
         : 'var(--ls-tertiary-background-color)'
 
+    const fillGradient =
+        fill && fill !== 'var(--ls-secondary-background-color)'
+          ? `var(--ls-highlight-color-${fill})`
+          : 'var(--ls-secondary-background-color)'
+
     return (
       <div
         className={`tl-logseq-portal-header tl-logseq-portal-header-${
@@ -72,7 +77,7 @@ const LogseqPortalShapeHeader = observer(
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
-            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
+            background: type === 'P' ? bgColor : `linear-gradient(0deg, ${fillGradient}, ${bgColor})`,
           }}
         ></div>
         <div className="relative">{children}</div>

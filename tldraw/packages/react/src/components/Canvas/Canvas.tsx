@@ -129,7 +129,12 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
         {showGrid && components.Grid && <components.Grid size={gridSize} />}
         <HTMLLayer>
           {components.SelectionBackground && selectedShapes && selectionBounds && showSelection && (
-            <Container data-type="SelectionBackground" bounds={selectionBounds} zIndex={2}>
+            <Container
+              data-type="SelectionBackground"
+              bounds={selectionBounds}
+              zIndex={2}
+              data-html2canvas-ignore="true"
+            >
               <components.SelectionBackground
                 shapes={selectedShapes}
                 bounds={selectionBounds}
@@ -184,6 +189,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               {showSelection && components.SelectionForeground && (
                 <Container
                   data-type="SelectionForeground"
+                  data-html2canvas-ignore="true"
                   bounds={selectionBounds}
                   zIndex={editingShape && selectedShapes.includes(editingShape) ? 1002 : 10002}
                 >
@@ -198,6 +204,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               {showHandles && onlySelectedShapeWithHandles && components.Handle && (
                 <Container
                   data-type="onlySelectedShapeWithHandles"
+                  data-html2canvas-ignore="true"
                   bounds={selectionBounds}
                   zIndex={10003}
                 >
@@ -217,6 +224,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               {selectedShapes && components.SelectionDetail && (
                 <SelectionDetailContainer
                   key={'detail' + selectedShapes.map(shape => shape.id).join('')}
+                  data-html2canvas-ignore="true"
                   shapes={selectedShapes}
                   bounds={selectionBounds}
                   detail={showSelectionRotation ? 'rotation' : 'size'}
@@ -235,7 +243,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           />
         )}
 
-        <div id="tl-dev-tools-canvas-anchor" />
+        <div id="tl-dev-tools-canvas-anchor" data-html2canvas-ignore="true" />
       </div>
       <HTMLLayer>
         {selectedShapes && selectionBounds && (

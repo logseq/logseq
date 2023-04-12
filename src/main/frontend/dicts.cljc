@@ -159,7 +159,7 @@
         :dev/show-block-data "(Dev) Show block data"
         :dev/show-block-ast "(Dev) Show block AST"
         :dev/show-page-ast "(Dev) Show page AST"
-        :content/copy-as "Copy as..."
+        :content/copy-export-as "Copy / Export as.."
         :content/copy-block-url "Copy block URL"
         :content/copy-block-ref "Copy block ref"
         :content/copy-block-emebed "Copy block embed"
