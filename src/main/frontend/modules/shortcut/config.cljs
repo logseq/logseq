@@ -258,8 +258,7 @@
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode   {:binding "mod+c mod+u"
-                                    :fn      undo-redo/toggle-undo-redo-mode!}
+   :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
 
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
