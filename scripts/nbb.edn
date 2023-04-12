@@ -1,7 +1,6 @@
 {:paths ["src"]
  :deps
  {logseq/graph-parser
-  ;; Nbb bug. Should just be "../graph-parser"
-  {:local/root "../../../../deps/graph-parser"}
+  {:local/root "../deps/graph-parser"}
   logseq/publishing
-  {:local/root "../../../../deps/publishing"}}}
+  {:local/root "../deps/publishing"}}}

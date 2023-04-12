@@ -3263,6 +3263,10 @@
            :notification/clear-all "Limpar tudo"}
 
    :ru {:accessibility/skip-to-main-content "Перейти к основному содержимому"
+        :tutorial/text #?(:cljs (rc/inline "tutorial-ru.md")
+                          :default "tutorial-ru.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ru.md")
+                                 :default "dummy-notes-ru.md")
         :on-boarding/demo-graph "Это демонстрационный граф, изменения не будут сохранены, пока вы не откроете локальный файл."
         :on-boarding/add-graph "Добавить новый граф"
         :on-boarding/open-local-dir "Открыть локальный каталог"

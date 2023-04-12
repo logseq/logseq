@@ -7,6 +7,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  isBuiltInColor,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -320,7 +321,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             textRendering: app.viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto',
             background:
               fill && fill !== 'var(--ls-secondary-background-color)'
-                ? `var(--ls-highlight-color-${fill})`
+                ? isBuiltInColor(fill)
+                  ? `var(--ls-highlight-color-${fill})`
+                  : fill
                 : 'var(--ls-secondary-background-color)',
             opacity,
           }}
