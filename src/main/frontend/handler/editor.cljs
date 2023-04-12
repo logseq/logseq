@@ -3148,16 +3148,7 @@
     (when-let [block-id (:block/uuid current-block)]
       (if (= format "embed")
        (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
-       (copy-block-ref! block-id block-ref/->block-ref))
-      (notification/show!
-       [:div
-        [:span.mb-1.5 (str "Block " format " copied!")]
-        [:div [:code.whitespace.break-all (if (= format "embed")
-                                         (str "{{embed ((" block-id "))}}")
-                                         (block-ref/->block-ref block-id))]]]
-       :success true
-       ;; use uuid to make sure there is only one toast a time
-       (str "copied-block-ref:" block-id)))))
+       (copy-block-ref! block-id block-ref/->block-ref)))))
 
 (defn copy-current-block-embed []
   (copy-current-block-ref "embed"))

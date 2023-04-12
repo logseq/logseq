@@ -31,6 +31,7 @@ export const Indicator = observer(function Shape({
   return (
     <Container
       data-type="Indicator"
+      data-html2canvas-ignore="true"
       bounds={bounds}
       rotation={rotation}
       scale={scale}

@@ -78,6 +78,7 @@
    :editor/select-parent           "Select parent block"
    :editor/zoom-in                 "Zoom in editing block / Forwards otherwise"
    :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
+   :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
    :ui/toggle-brackets             "Toggle whether to display brackets"
    :go/search-in-page              "Search blocks in the current page"
    :go/electron-find-in-page       "Find text in page"
@@ -1624,6 +1625,7 @@
              :command.editor/select-all-blocks       "Tüm blokları seç"
              :command.editor/zoom-in                 "Düzenlenen bloğu yakınlaştır / Aksi takdirde ileri git"
              :command.editor/zoom-out                "Düzenlenen bloğu uzaklaştır / Aksi takdirde geri git"
+             :command.editor/toggle-undo-redo-mode   "Geri alma / yineleme modunu değiştir (yalnızca sayfa veya genel)"
              :command.ui/toggle-brackets             "Köşeli ayraçların görüntülenip görüntülenmeyeceğini değiştir"
              :command.go/search-in-page              "Geçerli sayfada ara"
              :command.go/electron-find-in-page       "Sayfada bul"
@@ -1668,6 +1670,7 @@
              :command.editor/open-file-in-default-app "Dosyayı varsayılan uygulamada aç"
              :command.editor/open-file-in-directory   "Dosyayı üst dizinde aç"
              :command.editor/copy-current-file        "Geçerli dosyayı kopyala"
+             :command.editor/copy-page-url           "Sayfa url'sini kopyala"
              :command.ui/toggle-wide-mode             "Geniş modu aç/kapat"
              :command.ui/select-theme-color           "Kullanılabilir tema renklerini seçin"
              :command.ui/goto-plugins                 "Eklentiler panosuna git"
@@ -1678,9 +1681,9 @@
              :command.git/commit                      "Mesajlı git commit oluştur"
              :command.editor/select-parent            "Üst bloğu seçin"
              :command.dev/show-block-data             "(Dev) Blok verilerini göster"
-             :command.dev/show-block-ast              "(Dev) Blok AST'ını göster"
+             :command.dev/show-block-ast              "(Dev) Blok AST'sini göster"
              :command.dev/show-page-data              "(Dev) Sayfa verilerini göster"
-             :command.dev/show-page-ast               "(Dev) Sayfa AST'ını göster"}
+             :command.dev/show-page-ast               "(Dev) Sayfa AST'sini göster"}
 
    :ko      {:shortcut.category/formatting             "포맷"
              :shortcut.category/basics                "기본 동작"

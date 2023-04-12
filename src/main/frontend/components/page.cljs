@@ -1,5 +1,6 @@
 (ns frontend.components.page
-  (:require [clojure.string :as string]
+  (:require ["/frontend/utils" :as utils]
+            [clojure.string :as string]
             [frontend.components.block :as component-block]
             [frontend.components.query :as query]
             [frontend.components.content :as content]
@@ -638,6 +639,16 @@
                  "Clear All"]]
                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
                 "Click to search"])]))
+         {:search-filters search-graph-filters})
+        (graph-filter-section
+         [:span.font-medium "Export"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
+              [:div.p-6
+               ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
+               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))

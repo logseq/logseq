@@ -1,5 +1,6 @@
 import { useApp } from '@tldraw/react'
-import { MOD_KEY, AlignType, DistributeType, isDev } from '@tldraw/core'
+import { LogseqContext } from '../../lib/logseq-context'
+import { MOD_KEY, AlignType, DistributeType, isDev, EXPORT_PADDING } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
@@ -19,6 +20,7 @@ export const ContextMenu = observer(function ContextMenu({
   collisionRef,
 }: ContextMenuProps) {
   const app = useApp()
+  const { handlers } = React.useContext(LogseqContext)
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {
@@ -236,6 +238,27 @@ export const ContextMenu = observer(function ContextMenu({
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
             className="tl-menu-item"
+            onClick={() =>
+              runAndTransition(() =>
+                handlers.exportToImage(app.currentPageId, {
+                  x: app.selectionBounds.minX + app.viewport.camera.point[0] - EXPORT_PADDING,
+                  y: app.selectionBounds.minY + app.viewport.camera.point[1] - EXPORT_PADDING,
+                  width: app.selectionBounds?.width + EXPORT_PADDING * 2,
+                  height: app.selectionBounds?.height + EXPORT_PADDING * 2,
+                  zoom: app.viewport.camera.zoom,
+                })
+              )
+            }
+          >
+            <TablerIcon className="tl-menu-icon" name="file-export" />
+            Export
+            <div className="tl-menu-right-slot">
+              <span className="keyboard-shortcut"></span>
+            </div>
+          </ReactContextMenu.Item>
+          <ReactContextMenu.Separator className="menu-separator" />
+          <ReactContextMenu.Item
+            className="tl-menu-item"
             onClick={() => runAndTransition(app.api.selectAll)}
           >
             Select all
@@ -311,7 +334,6 @@ export const ContextMenu = observer(function ContextMenu({
                       </span>
                     </div>
                   </ReactContextMenu.Item>
-                  )
                 </>
               )}
 

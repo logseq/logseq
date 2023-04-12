@@ -98,7 +98,7 @@
         (when query-atom
           (util/safe-with-meta result (meta @query-atom))))))
 
-(rum/defcs custom-query-inner < rum/reactive db-mixins/query
+(rum/defcs custom-query-inner < rum/reactive
   [state config {:keys [query children? breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
@@ -190,7 +190,7 @@
        [:span.opacity-60.text-sm.ml-2.results-count
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
-(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive rum/static
+(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive rum/static db-mixins/query
   (rum/local nil ::query-result)
   {:init (fn [state] (assoc state :query-error (atom nil)))}
   [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]

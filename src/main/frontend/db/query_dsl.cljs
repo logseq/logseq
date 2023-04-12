@@ -587,22 +587,26 @@ Some bindings in this fn:
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
-  [repo query-string]
-  (when (and (string? query-string) (not= "\"\"" query-string))
-    (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
-      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
-        (let [sort-by (or sort-by identity)
-              random-samples (if @sample
-                               (fn [col]
-                                 (take @sample (shuffle col)))
-                               identity)
-              transform-fn (comp sort-by random-samples)]
-          (query-react/react-query repo
-                                   {:query query'
-                                    :query-string query-string
-                                    :rules rules}
-                                   {:use-cache? false
-                                    :transform-fn transform-fn}))))))
+  ([repo query-string]
+   (query repo query-string {}))
+  ([repo query-string query-opts]
+   (when (and (string? query-string) (not= "\"\"" query-string))
+     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
+       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
+         (let [sort-by (or sort-by identity)
+               random-samples (if @sample
+                                (fn [col]
+                                  (take @sample (shuffle col)))
+                                identity)
+               transform-fn (comp sort-by random-samples)]
+           (query-react/react-query repo
+                                    {:query query'
+                                     :query-string query-string
+                                     :rules rules}
+                                    (merge
+                                     {:use-cache? false
+                                      :transform-fn transform-fn}
+                                     query-opts))))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"

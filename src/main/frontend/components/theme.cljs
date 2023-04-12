@@ -48,7 +48,7 @@
         (plugin-config-handler/setup-install-listener!)
         (plugin-handler/load-plugin-preferences)
         (fn []
-          (js/window.apis.removeAllListeners "lsp-installed")))
+          (js/window.apis.removeAllListeners (name :lsp-updates))))
      [])
 
     (rum/use-effect!

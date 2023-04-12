@@ -857,7 +857,7 @@
   [config id label]
   (if-let [block-id (parse-uuid id)]
     (let [db-id (:db/id (db/pull [:block/uuid block-id]))
-          block (when db-id (db/pull-block db-id))
+          block (when db-id (db/sub-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)
@@ -1717,7 +1717,7 @@
                            (or ref? query?)
                            (assoc :ref-query-child? true))]
               (rum/with-key (block-container config child)
-                            (:block/uuid child)))))]])))
+                (str (:blocks-container-id config) "-" (:block/uuid child))))))]])))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]
@@ -2604,7 +2604,7 @@
                                    [block
                                     (when title
                                       (if (seq title)
-                                        (->elem :span (map-inline config title))
+                                        (->elem :span.inline-wrap (map-inline config title))
                                         (->elem :div (markup-elements-cp config body))))]))))
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
@@ -2614,17 +2614,18 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.flex-wrap.items-center
-           {:class (when (seq breadcrumb)
-                     (str (when-not (:search? config)
-                            " my-2")
-                          (when indent?
-                            " ml-4")))}
-           (when (and (false? (:top-level? config))
-                      (seq parents))
-             (breadcrumb-separator))
-           breadcrumb
-           (when end-separator? (breadcrumb-separator))])))))
+          (when (seq breadcrumb)
+            [:div.breadcrumb.block-parents
+             {:class (when (seq breadcrumb)
+                       (str (when-not (:search? config)
+                              " my-2")
+                            (when indent?
+                              " ml-4")))}
+             (when (and (false? (:top-level? config))
+                        (seq parents))
+               (breadcrumb-separator))
+             breadcrumb
+             (when end-separator? (breadcrumb-separator))]))))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2764,7 +2765,7 @@
                   (first tree))
                 block)
         block (if ref?
-                (merge block (db/pull-block (:db/id block)))
+                (merge block (db/sub-block (:db/id block)))
                 block)
         {:block/keys [uuid children pre-block? top? refs level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
@@ -2803,7 +2804,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (when-not slide? (state/sub-block-selected? uuid))]
+        selected? (when-not slide?
+                    (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -3290,7 +3292,7 @@
                      :block/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
-      (str (:block/uuid item)))))
+      (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
 (defn- block-list
   [config blocks]

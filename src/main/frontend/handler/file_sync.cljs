@@ -69,10 +69,10 @@
               nil
 
               (contains? #{400 404} (get-in (ex-data r) [:err :status]))
-              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
+              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000 nil)
 
               :else
-              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000))))))))
+              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000 nil))))))))
 
 (defn <delete-graph
   [graph-uuid]

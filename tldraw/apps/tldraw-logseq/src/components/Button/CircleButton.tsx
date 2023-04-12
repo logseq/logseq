@@ -28,6 +28,7 @@ export const CircleButton = ({
     <button
       data-active={active}
       data-recently-changed={recentlyChanged}
+      data-html2canvas-ignore="true"
       style={style}
       className="tl-circle-button"
       onPointerDown={onClick}
