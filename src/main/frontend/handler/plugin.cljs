@@ -24,17 +24,25 @@
   [input]
   (when input
     (walk/postwalk
-     (fn [a]
-       (cond
-         (keyword? a) (csk/->camelCase (name a))
-         (uuid? a) (str a)
-         :else a)) input)))
+      (fn [a]
+        (cond
+          (keyword? a) (csk/->camelCase (name a))
+          (uuid? a) (str a)
+          :else a)) input)))
 
 (defn invoke-exported-api
   [type & args]
   (try
     (apply js-invoke (aget js/window.logseq "api") type args)
     (catch :default e (js/console.error e))))
+
+(defn markdown-to-html
+  [s]
+  (try
+    (if (string? s)
+      (js/window.marked s) s)
+    (catch js/Error e
+      (js/console.error e) s)))
 
 ;; state handlers
 (defonce central-endpoint "https://raw.githubusercontent.com/logseq/marketplace/master/")
@@ -48,16 +56,16 @@
       (p/then #(bean/->clj %))
       (p/then #(state/set-state! :plugin/preferences %))
       (p/catch
-       #(js/console.error %))))
+        #(js/console.error %))))
 
 (defn save-plugin-preferences!
   ([input] (save-plugin-preferences! input true))
   ([input reload-state?]
    (when-let [^js input (and (map? input) (bean/->js input))]
      (p/then
-      (js/LSPluginCore.saveUserPreferences input)
-      #(when reload-state?
-         (load-plugin-preferences))))))
+       (js/LSPluginCore.saveUserPreferences input)
+       #(when reload-state?
+          (load-plugin-preferences))))))
 
 (defn gh-repo-url [repo]
   (str "https://github.com/" repo))
@@ -71,67 +79,61 @@
   [refresh?]
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
-     (fn [resolve reject]
-       (let [on-ok (fn [res]
-                     (if-let [res (and res (bean/->clj res))]
-                       (let [pkgs (:packages res)]
-                         (state/set-state! :plugin/marketplace-pkgs pkgs)
-                         (resolve pkgs))
-                       (reject nil)))]
-         (if (state/http-proxy-enabled-or-val?)
-           (-> (ipc/ipc :httpFetchJSON plugins-url)
-               (p/then on-ok)
-               (p/catch reject))
-           (util/fetch plugins-url on-ok reject)))))
+      (fn [resolve reject]
+        (let [on-ok (fn [res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (let [pkgs (:packages res)]
+                          (state/set-state! :plugin/marketplace-pkgs pkgs)
+                          (resolve pkgs))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON plugins-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch plugins-url on-ok reject)))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
   [refresh?]
   (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
     (p/create
-     (fn [resolve reject]
-       (let [on-ok (fn [^js res]
-                     (if-let [res (and res (bean/->clj res))]
-                       (do
-                         (state/set-state!
-                          :plugin/marketplace-stats
-                          (into {} (map (fn [[k stat]]
-                                          [k (assoc stat
-                                                    :total_downloads
-                                                    (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
-                                        res)))
-                         (resolve nil))
-                       (reject nil)))]
-         (if (state/http-proxy-enabled-or-val?)
-           (-> (ipc/ipc :httpFetchJSON stats-url)
-               (p/then on-ok)
-               (p/catch reject))
-           (util/fetch stats-url on-ok reject)))))
+      (fn [resolve reject]
+        (let [on-ok (fn [^js res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (do
+                          (state/set-state!
+                            :plugin/marketplace-stats
+                            (into {} (map (fn [[k stat]]
+                                            [k (assoc stat
+                                                 :total_downloads
+                                                 (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                          res)))
+                          (resolve nil))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON stats-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
-(defn check-or-update-marketplace-plugin
+(defn check-or-update-marketplace-plugin!
   [{:keys [id] :as pkg} error-handler]
   (when-not (and (:plugin/installing @state/state)
                  (not (plugin-common-handler/installed? id)))
-    (p/catch
-     (p/then
-      (do (state/set-state! :plugin/installing pkg)
-          (p/catch
-           (load-marketplace-plugins false)
-           (fn [^js e]
-             (state/reset-all-updates-state)
-             (throw e))))
-      (fn [mfts]
+    (state/set-state! :plugin/installing pkg)
 
-        (let [mft (some #(when (= (:id %) id) %) mfts)]
-          ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
-          (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
-        true))
-
-     (fn [^js e]
-       (error-handler e)
-       (state/set-state! :plugin/installing nil)
-       (js/console.error e)))))
+    (-> (load-marketplace-plugins false)
+        (p/then (fn [mfts]
+                  (let [mft (some #(when (= (:id %) id) %) mfts)]
+                    ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+                    (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
+                  true))
+        (p/catch (fn [^js e]
+                   (state/reset-all-updates-state)
+                   (error-handler e)
+                   (state/set-state! :plugin/installing nil)
+                   (js/console.error e))))))
 
 (defn get-plugin-inst
   [pid]
@@ -152,7 +154,7 @@
     (when-let [matched (medley/find-first #(= (:key (second %)) key) commands)]
       (let [[_ cmd action pid] matched]
         (state/pub-event!
-         [:exec-plugin-cmd {:type type :key key :pid pid :cmd (assoc cmd :args args) :action action}])))))
+          [:exec-plugin-cmd {:type type :key key :pid pid :cmd (assoc cmd :args args) :action action}])))))
 
 (defn open-updates-downloading
   []
@@ -182,9 +184,9 @@
 
 (defn setup-install-listener!
   []
-  (let [channel  (name :lsp-installed)
-        listener (fn [^js _ ^js e]
-                   (js/console.debug :lsp-installed e)
+  (let [channel  (name :lsp-updates)
+        listener (fn [_ ^js e]
+                   (js/console.debug (str :lsp-updates) e)
 
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (case (keyword status)
@@ -193,52 +195,54 @@
                        (let [{:keys [id dst name title theme]} payload
                              name (or title name "Untitled")]
                          (if only-check
-                           (state/consume-updates-coming-plugin payload false)
+                           (state/consume-updates-from-coming-plugin! payload false)
                            (if (plugin-common-handler/installed? id)
                              (when-let [^js pl (get-plugin-inst id)] ;; update
                                (p/then
-                                (.reload pl)
-                                #(do
-                                   ;;(if theme (select-a-plugin-theme id))
-                                   (notification/show!
-                                    (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
-                                   (state/consume-updates-coming-plugin payload true))))
+                                 (.reload pl)
+                                 #(do
+                                    ;;(if theme (select-a-plugin-theme id))
+                                    (notification/show!
+                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                    (state/consume-updates-from-coming-plugin! payload true))))
 
                              (do                            ;; register new
                                (p/then
-                                (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (notification/show!
-                                (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
+                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
-                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
+                       (let [error-code  (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
+                             fake-error? (contains? #{:no-new-version} error-code)
                              [msg type] (case error-code
 
                                           :no-new-version
                                           [(str (t :plugin/up-to-date) " :)") :success]
 
                                           [error-code :error])
-                             pending?   (seq (:plugin/updates-pending @state/state))]
+                             pending?    (seq (:plugin/updates-pending @state/state))]
 
                          (if (and only-check pending?)
-                           (state/consume-updates-coming-plugin payload false)
+                           (state/consume-updates-from-coming-plugin! payload false)
 
                            (do
                              ;; consume failed download updates
                              (when (and (not only-check) (not pending?))
-                               (state/consume-updates-coming-plugin payload true))
+                               (state/consume-updates-from-coming-plugin! payload true))
 
                              ;; notify human tips
                              (notification/show!
-                              (str
-                               (if (= :error type) "[Error]" "")
-                               (str "<" (:id payload) "> ")
-                               msg) type)))
+                               (str
+                                 (if (= :error type) "[Error]" "")
+                                 (str "<" (:id payload) "> ")
+                                 msg) type)))
 
-                         (js/console.error payload))
+                         (when-not fake-error?
+                           (js/console.error "Update Error:" (:error-code payload))))
 
-                       :dunno))
+                       :default))
 
                    ;; reset
                    (js/setTimeout #(state/set-state! :plugin/installing nil) 512)
@@ -286,7 +290,7 @@
                                    (get keybinding-mode-handler-map (keyword mode)))
                      :action     (fn []
                                    (state/pub-event!
-                                    [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
+                                     [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
     palette-cmd))
 
 (defn simple-cmd-keybinding->shortcut-args
@@ -439,11 +443,11 @@
     (when-not (string/blank? content)
       (let [content (if-not (string/blank? url)
                       (string/replace
-                       content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
-                       (fn [[matched link]]
-                         (if (and link (not (string/starts-with? link "http")))
-                           (string/replace matched link (util/node-path.join url link))
-                           matched)))
+                        content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
+                        (fn [[matched link]]
+                          (if (and link (not (string/starts-with? link "http")))
+                            (string/replace matched link (util/node-path.join url link))
+                            matched)))
                       content)]
         (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
     (catch :default e
@@ -567,21 +571,64 @@
 (defn- get-user-default-plugins
   []
   (p/catch
-   (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
-           files (js->clj files)]
-     (map #(hash-map :url %) files))
-   (fn [e]
-     (js/console.error e))))
+    (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
+            files (js->clj files)]
+      (map #(hash-map :url %) files))
+    (fn [e]
+      (js/console.error e))))
 
-(defn check-enabled-for-updates
+(defn set-auto-checking!
+  [v]
+  (let [v (boolean v)]
+    (println "Updates: " (if v "start" "finish") " auto-checking...")
+    (state/set-state! :plugin/updates-auto-checking? v)))
+
+(defn get-auto-checking?
+  []
+  (:plugin/updates-auto-checking? @state/state))
+
+(defn get-user-checking?
+  []
+  (boolean (seq (:plugin/updates-pending @state/state))))
+
+(defn get-updates-downloading?
+  []
+  (boolean (:plugin/updates-downloading? @state/state)))
+
+(defn cancel-user-checking!
+  []
+  (when (and (get-user-checking?)
+             (not (get-auto-checking?)))
+    (state/set-state! :plugin/updates-pending {})))
+
+(defn user-check-enabled-for-updates!
   [theme?]
-  (let [pending? (seq (:plugin/updates-pending @state/state))]
-    (when-let [plugins (and (not pending?)
-                            ;; TODO: too many requests may be limited by Github api
-                            (seq (take 32 (state/get-enabled?-installed-plugins theme?))))]
-      (state/set-state! :plugin/updates-pending
-                        (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
-      (state/pub-event! [:plugin/consume-updates]))))
+  (let [user-checking? (get-user-checking?)
+        auto-checking? (get-auto-checking?)]
+    (when auto-checking?
+      (set-auto-checking! false))
+    (when (or auto-checking? (not user-checking?))
+      ;; TODO: too many requests may be limited by Github api
+      (when-let [plugins (seq (take 32 (state/get-enabled?-installed-plugins theme?)))]
+        (->> plugins
+             (map (fn [v] [(keyword (:id v)) v]))
+             (into {})
+             (state/set-state! :plugin/updates-pending))
+        (state/pub-event! [:plugin/consume-updates])))))
+
+(defn auto-check-enabled-for-updates!
+  []
+  (when (and (not (get-updates-downloading?))
+             (not (get-auto-checking?))
+             (not (get-user-checking?)))
+    ;; TODO: take some plugins used recently
+    (when-let [plugins (seq (take 16 (shuffle (state/get-enabled?-installed-plugins nil))))]
+      (->> plugins
+           (map (fn [v] [(keyword (:id v)) v]))
+           (into {})
+           (state/set-state! :plugin/updates-pending))
+      (state/pub-event! [:plugin/consume-updates])
+      (set-auto-checking! true))))
 
 (defn call-plugin
   [^js pl type payload]
@@ -617,7 +664,7 @@
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
     (rum/mount
-     (lsp-indicator) el))
+      (lsp-indicator) el))
 
   (state/set-state! :plugin/indicator-text "LOADING")
 
@@ -637,12 +684,12 @@
                                 (.on "registered"
                                      (fn [^js pl]
                                        (register-plugin
-                                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                                         (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
                                 (.on "reloaded"
                                      (fn [^js pl]
                                        (register-plugin
-                                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                                         (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
                                 (.on "unregistered" (fn [pid]
                                                       (let [pid (keyword pid)]
@@ -698,15 +745,15 @@
                                                (when-let [plugins (and perf-table (.entries perf-table))]
                                                  (->> plugins
                                                       (keep
-                                                       (fn [[_k ^js v]]
-                                                         (when-let [end (and (some-> v (.-o) (.-disabled) (not))
-                                                                             (.-e v))]
-                                                           (when (and (number? end)
-                                                                      ;; valid end time
-                                                                      (> end 0)
-                                                                      ;; greater than 3s
-                                                                      (> (- end (.-s v)) 3000))
-                                                             v))))
+                                                        (fn [[_k ^js v]]
+                                                          (when-let [end (and (some-> v (.-o) (.-disabled) (not))
+                                                                              (.-e v))]
+                                                            (when (and (number? end)
+                                                                       ;; valid end time
+                                                                       (> end 0)
+                                                                       ;; greater than 3s
+                                                                       (> (- end (.-s v)) 3000))
+                                                              v))))
                                                       ((fn [perfs]
                                                          (doseq [perf perfs]
                                                            (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
@@ -716,13 +763,13 @@
               _               (.register js/LSPluginCore (bean/->js (if (seq default-plugins) default-plugins [])) true)])
 
       (p/then
-       (fn []
-         (state/set-state! :plugin/indicator-text "END")
-         (callback)))
+        (fn []
+          (state/set-state! :plugin/indicator-text "END")
+          (callback)))
       (p/catch
-       (fn [^js e]
-         (log/error :setup-plugin-system-error e)
-         (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
+        (fn [^js e]
+          (log/error :setup-plugin-system-error e)
+          (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
 
 (defn setup!
   "setup plugin core handler"
@@ -730,3 +777,11 @@
   (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))
+
+
+(comment
+  {:pending        (count (:plugin/updates-pending @state/state))
+   :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
+   :coming         (count (:plugin/updates-coming @state/state))
+   :installing     (:plugin/installing @state/state)
+   :downloading?   (boolean (:plugin/updates-downloading? @state/state))})

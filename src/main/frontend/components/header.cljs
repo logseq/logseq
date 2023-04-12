@@ -238,7 +238,9 @@
         (login))
 
       (when config/lsp-enabled?
-        (plugins/hook-ui-items :toolbar))
+        [:<>
+         (plugins/hook-ui-items :toolbar)
+         (plugins/updates-notifications)])
 
       (when (state/feature-http-server-enabled?)
         (server/server-indicator (state/sub :electron/server)))

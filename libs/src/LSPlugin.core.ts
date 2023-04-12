@@ -23,6 +23,7 @@ import {
   PluginLogger,
 } from './helpers'
 import * as pluginHelpers from './helpers'
+import DOMPurify from 'dompurify'
 import Debug from 'debug'
 import {
   LSPluginCaller,
@@ -1606,6 +1607,7 @@ function setupPluginCore(options: any) {
   debug('=== 🔗 Setup Logseq Plugin System 🔗 ===')
 
   window.LSPluginCore = pluginCore
+  window.DOMPurify = DOMPurify
 }
 
 export { PluginLocal, pluginHelpers, setupPluginCore }

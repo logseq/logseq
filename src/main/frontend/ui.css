@@ -14,11 +14,11 @@
         justify-content: space-between;
 
         small {
-          visibility: hidden;
+          visibility: visible;
           cursor: help;
 
           svg {
-            opacity: .5;
+            opacity: .3;
           }
 
           &:hover svg {
@@ -26,7 +26,7 @@
           }
         }
       }
-
+      
       &:hover, &.chosen {
         .has-help small {
           visibility: visible;

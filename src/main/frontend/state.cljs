@@ -197,6 +197,7 @@
      :plugin/marketplace-stats              nil
      :plugin/installing                     nil
      :plugin/active-readme                  nil
+     :plugin/updates-auto-checking?         false
      :plugin/updates-pending                {}
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
@@ -1836,8 +1837,7 @@ Similar to re-frame subscriptions"
 
 (defn feature-http-server-enabled?
   []
-  (and (developer-mode?)
-       (storage/get ::storage-spec/http-server-enabled)))
+  (boolean (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]
@@ -1850,7 +1850,7 @@ Similar to re-frame subscriptions"
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (= (boolean theme?) (:theme %))))
+           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
@@ -1860,17 +1860,18 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
-(defn consume-updates-coming-plugin
+(defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
-    (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
+    (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
+      (println "Updates: consumed pending - " id)
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
           (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
           (swap! state update :plugin/updates-coming dissoc id))
         (swap! state update :plugin/updates-coming assoc id payload))
-      (pub-event! [:plugin/consume-updates id pending? updated?]))))
+      (pub-event! [:plugin/consume-updates id prev-pending? updated?]))))
 
 (defn coming-update-new-version?
   [pkg]
@@ -1882,9 +1883,9 @@ Similar to re-frame subscriptions"
     (coming-update-new-version? pkg)))
 
 (defn all-available-coming-updates
-  []
-  (when-let [updates (vals (:plugin/updates-coming @state))]
-    (filterv #(coming-update-new-version? %) updates)))
+  ([] (all-available-coming-updates (:plugin/updates-coming @state)))
+  ([updates] (when-let [updates (vals updates)]
+               (filterv #(coming-update-new-version? %) updates))))
 
 (defn get-next-selected-coming-update
   []
@@ -1904,6 +1905,7 @@ Similar to re-frame subscriptions"
 (defn reset-all-updates-state
   []
   (swap! state assoc
+         :plugin/updates-auto-checking?         false
          :plugin/updates-pending                {}
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))

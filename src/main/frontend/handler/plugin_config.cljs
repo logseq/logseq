@@ -118,10 +118,10 @@ returns map of plugins to install and uninstall"
                           (assoc payload
                                  :version (:installed-version payload)
                                  :effect (boolean effect)
-                                 ;; Manual install doesn't have theme field but
+                                 ;; Manual installation doesn't have theme field but
                                  ;; plugin.edn requires this field
                                  :theme (boolean theme)))))))]
-    (js/window.apis.addListener "lsp-installed" listener)))
+    (js/window.apis.addListener (name :lsp-updates) listener)))
 
 (defn start
   "This component has just one responsibility on start, to create a plugins.edn
