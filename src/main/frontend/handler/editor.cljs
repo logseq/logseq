@@ -3369,6 +3369,17 @@
                          (catch :default _e
                            nil)))))))))
 
+(defn- valid-custom-query-block?
+  "Whether block has a valid customl query."
+  [block]
+  (let [entity (db/entity (:db/id block))
+        content (:block/content entity)]
+    (when (and (string/includes? content "#+BEGIN_QUERY")
+               (string/includes? content "#+END_QUERY"))
+      (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config (or (:block/format entity) :markdown)))
+            q (mldoc/extract-first-query-from-ast ast)]
+        (some? (:query (gp-util/safe-read-string q)))))))
+
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
@@ -3378,6 +3389,7 @@
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (or (db-model/has-children? block-id)
            (valid-dsl-query-block? block)
+           (valid-custom-query-block? block)
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)

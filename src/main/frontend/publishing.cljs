@@ -1,5 +1,6 @@
 (ns frontend.publishing
-  "Entry ns for publishing build. Handles primary publishing app behaviors"
+  "Entry ns for publishing build. Provides frontend for publishing single page
+  application"
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]
@@ -7,7 +8,7 @@
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.page :as page]
-            [frontend.util :as util]
+            [clojure.string :as string]
             [frontend.routes :as routes]
             [frontend.context.i18n :as i18n]
             [reitit.frontend :as rf]
@@ -37,11 +38,20 @@
 ;;    data should include all the public pages and blocks.
 ;; 2. Built-in sync with GitHub Pages, you should specify a GitHub repo for publishing.
 
+(defn- unescape-html
+  [text]
+  (-> text
+      (string/replace "logseq____&amp;" "&")
+      (string/replace "logseq____&lt;" "<")
+      (string/replace "logseq____&gt;" ">")
+      (string/replace "logseq____&quot;" "\"")
+      (string/replace "logseq____&apos;" "'")))
+
 (defn restore-from-transit-str!
   []
   (state/set-current-repo! "local")
   (when-let [data js/window.logseq_db]
-    (let [data (util/unescape-html data)
+    (let [data (unescape-html data)
           db-conn (d/create-conn db-schema/schema)
           _ (swap! db/conns assoc "logseq-db/local" db-conn)
           db (db/string->db data)]
