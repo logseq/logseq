@@ -122,9 +122,10 @@ necessary db filtering"
       }(window.location))"]
             ;; TODO: should make this configurable
             [:script {:src "static/js/main.js"}]
-            [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/interact.min.js"}]
+            [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
+            [:script {:src "static/js/html2canvas.min.js"}]
             [:script {:src "static/js/code-editor.js"}]])))))
 
 (defn build-html
