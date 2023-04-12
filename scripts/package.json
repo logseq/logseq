@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "^1.2.168"
+    "@logseq/nbb-logseq": "^1.2.173"
   },
   "dependencies": {
-    "mldoc": "^1.5.1",
-    "fs-extra": "9.1.0"
+    "fs-extra": "9.1.0",
+    "mldoc": "^1.5.1"
   }
 }
