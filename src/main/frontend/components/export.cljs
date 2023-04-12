@@ -1,5 +1,6 @@
 (ns frontend.components.export
-  (:require ["/frontend/utils" :as utils]
+  (:require [cljs-time.core :as t]
+            ["/frontend/utils" :as utils]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.export.text :as export-text]
@@ -283,5 +284,8 @@
                                  (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                                (reset! *copied? true)))
         (ui/button "Save to file"
-                   :on-click (fn []
-                               (utils/saveToFile (js/Blob. [@*content]) root-block-uuids-or-page-name (if (= tp :text) "txt" (name tp)))))])]))
+                   :on-click #(let [file-name (if (string? root-block-uuids-or-page-name)
+                                                (-> (db/get-page root-block-uuids-or-page-name)
+                                                    (util/get-page-original-name))
+                                                (t/now))]
+                                (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]))
