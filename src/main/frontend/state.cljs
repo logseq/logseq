@@ -631,9 +631,9 @@ Similar to re-frame subscriptions"
        (distinct)))
 
 (defn sub-block-selected?
-  [block-uuid]
+  [container-id block-uuid]
   (rum/react
-   (rum/derived-atom [state] [::select-block block-uuid]
+   (rum/derived-atom [state] [::select-block container-id block-uuid]
      (fn [state]
        (contains? (set (get-selected-block-ids (:selection/blocks state)))
                   block-uuid)))))
