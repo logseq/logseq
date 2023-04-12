@@ -62,7 +62,7 @@
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
-(defn pull-block
+(defn sub-block
   [id]
   (when-let [repo (state/get-current-repo)]
     (->

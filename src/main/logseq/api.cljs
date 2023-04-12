@@ -17,7 +17,6 @@
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react :refer [sub-key-value]]
             [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -44,6 +43,8 @@
             [frontend.modules.layout.core]
             [frontend.handler.code :as code-handler]
             [frontend.handler.search :as search-handler]))
+
+;; Alert: this namespace shouldn't invoke any reactive queries
 
 ;; helpers
 (defn ^:export install-plugin-hook
@@ -126,16 +127,16 @@
 
 (def ^:export get_current_graph_recent
   (fn []
-    (some->> (sub-key-value :recent/pages)
+    (some->> (db/get-key-value :recent/pages)
              (remove string/blank?)
              (filter string?)
              (bean/->js))))
 
 (def ^:export get_current_graph_templates
   (fn []
-    (when-let [_repo (state/get-current-repo)]
+    (when (state/get-current-repo)
       (some-> (db-model/get-all-templates)
-              (update-vals #(db-model/pull-block %))
+              (update-vals db/pull)
               (sdk-utils/normalize-keyword-for-json)
               (bean/->js)))))
 
@@ -873,7 +874,8 @@
 (defn ^:export custom_query
   [query-string]
   (let [result (let [query (cljs.reader/read-string query-string)]
-                 (db/custom-query {:query query}))]
+                 (db/custom-query {:query query
+                                   :disable-reactive? true}))]
     (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result)))))
 
 (defn ^:export download_graph_db
