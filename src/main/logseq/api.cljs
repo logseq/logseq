@@ -850,7 +850,8 @@
 (defn ^:export q
   [query-string]
   (when-let [repo (state/get-current-repo)]
-    (when-let [result (query-dsl/query repo query-string)]
+    (when-let [result (query-dsl/query repo query-string
+                        {:disable-reactive? true})]
       (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result))))))
 
 (defn ^:export datascript_query
