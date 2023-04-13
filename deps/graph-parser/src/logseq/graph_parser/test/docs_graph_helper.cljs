@@ -94,8 +94,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 5495 :org 457} ;; 2 pages for namespaces are not parsed
-           (get-block-format-counts db))
+    (is (= {:markdown 5499 :org 457} (get-block-format-counts db))
         "Block format counts")
 
     (is (= {:description 81, :updated-at 46, :tags 5, :logseq.macro-arguments 104
@@ -129,11 +128,17 @@
         "Counts for blocks with common block attributes")
 
     (is (= #{"term" "setting" "book" "templates" "Query table" "page"
-             "Whiteboard" "Whiteboard/Tool" "Community" "Tweet"}
+             "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
+             "Whiteboard/Property" "Community" "Tweet"}
            (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                 (map (comp :block/original-name first))
                 set))
-        "Has correct namespaces")))
+        "Has correct namespaces")
+
+    (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
+                     (map first)
+                     (filter #(string/includes? % "___"))))
+        "Block names don't have the slash/triple-lowbar delimiter")))
 
 (defn docs-graph-assertions
   "These are common assertions that should pass in both graph-parser and main
@@ -145,7 +150,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 306 (count files)) "Correct file count")
-    (is (= 69679 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 69508 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 5866
            (ffirst
