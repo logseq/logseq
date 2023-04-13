@@ -160,6 +160,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     this.update({
       scaleLevel: v,
       fontSize: levelToScale[v ?? 'md'],
+      strokeWidth: levelToScale[v ?? 'md'] / 10,
     })
     this.onResetBounds()
   }

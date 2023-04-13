@@ -330,6 +330,7 @@ const handleCreatingShapes = async (
             pageId: blockRef,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
           },
         ]
@@ -346,6 +347,7 @@ const handleCreatingShapes = async (
           pageId: pageName,
           fill: app.settings.color,
           stroke: app.settings.color,
+          scaleLevel: app.settings.scaleLevel,
           blockType: 'P' as 'P',
         },
       ]
@@ -370,6 +372,7 @@ const handleCreatingShapes = async (
             pageId: uuid,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
             compact: true,
           },
