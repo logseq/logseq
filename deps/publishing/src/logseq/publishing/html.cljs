@@ -132,7 +132,10 @@ necessary db filtering"
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
   [db* {:keys [app-state repo-config html-options]}]
-  (let [[db asset-filenames'] (if (:publishing/all-pages-public? repo-config)
+  (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
+                            val
+                            (:all-pages-public? repo-config))
+        [db asset-filenames'] (if all-pages-public?
                                 (db/clean-export! db*)
                                 (db/filter-only-public-pages-and-blocks db*))
         asset-filenames (remove nil? asset-filenames')
