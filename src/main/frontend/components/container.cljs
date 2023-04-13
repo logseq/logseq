@@ -583,8 +583,9 @@
                                      (remove string/blank?))]
                  (doseq [page pages]
                    (let [page (util/safe-page-name-sanity-lc page)
-                         [db-id block-type] (if (= page "contents")
-                                              ["contents" :contents]
+                         [db-id block-type] (case page
+                                              "contents" ["contents" :contents]
+                                              "page-graph" [page :page-graph]
                                               [page :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
