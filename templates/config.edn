@@ -1,64 +1,79 @@
 {:meta/version 1
 
- ;; Currently, we support either "Markdown" or "Org".
- ;; This can overwrite your global preference so that
- ;; maybe your personal preferred format is Org but you'd
- ;; need to use Markdown for some projects.
- ;; :preferred-format ""
+ ;; Set the preferred format.
+ ;; Available Options:
+ ;; - "Markdown" (default)
+ ;; - "Org"
+ ;; :preferred-format "Markdown"
 
- ;; Preferred workflow style.
- ;; Value is either ":now" for NOW/LATER style,
- ;; or ":todo" for TODO/DOING style.
+ ;; Set the preferred workflow style.
+ ;; Available Options:
+ ;; - ":now" for NOW/LATER style (default)
+ ;; - ":todo" for TODO/DOING style
  :preferred-workflow :now
 
- ;; The app will ignore those directories or files.
- ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
+ ;; Exclude directories/files.
+ ;; Example usage:
+ ;; :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
- ;; When creating the new journal page, the app will use your template if there is one.
- ;; You only need to input your template name here.
- :default-templates
- {:journals ""}
+ ;; Define the default journal page template.
+ ;; Simply enter the template name between the quotes.
+ :default-templates {:journals ""}
 
- ;; Set a custom date format for journal page title
- ;; Example:
- ;; :journal/page-title-format "EEE, do MMM yyyy"
+ ;; Set a custom date format for the journal page title.
+ ;; Default value:  "MMM do, yyyy".
+ :journal/page-title-format "MMM do, yyyy"
 
- ;; Whether to enable hover on tooltip preview feature
- ;; Default is true, you can also toggle this via setting page
+ ;; Specify the format of the filename for journal files.
+ ;; !Warning:
+ ;;   - Changing this setting may cause issues if not configured correctly.
+ ;;     This configuration option is not retroactive and
+ ;;     will only affect newly created journals.
+ ;; You may use any valid date format string.
+ ;; Default value:  "yyyy-MM-dd"
+ ;; :journal/file-name-format "yyyy_MM_dd"
+
+ ;; Enable the hover tooltip preview feature
+ ;; Default value:  true
  :ui/enable-tooltip? true
 
- ;; Show brackets around page references
- ;; :ui/show-brackets? true
+ ;; Display brackets around [[page references]]
+ ;; Default value:  true
+ :ui/show-brackets? true
 
- ;; Enable showing the body of blocks when referencing them.
+ ;; Display the complete block content when referencing.
+ ;; Default value:  false
  :ui/show-full-blocks? false
 
- ;; Expand block references automatically when zoom-in
+ ;; Automatically expand block references when zooming in.
+ ;; Default value:  true
  :ui/auto-expand-block-refs? true
 
  ;; Enable Block timestamp
+ ;; Default value:  false
  :feature/enable-block-timestamps? false
 
- ;; Enable remove accents when searching.
- ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ ;; Enable accent removal in search.
+ ;; After changing this setting, rebuild the search index by pressing (^C ^S).
  :feature/enable-search-remove-accents? true
 
  ;; Enable journals
- ;; :feature/enable-journals? true
+ :feature/enable-journals? true
 
  ;; Enable flashcards
- ;; :feature/enable-flashcards? true
+ :feature/enable-flashcards? true
 
  ;; Enable Whiteboards
- ;; :feature/enable-whiteboards? true
+ :feature/enable-whiteboards? true
 
- ;; Disable the built-in Scheduled tasks and deadlines query
+ ;; Disable the built-in Scheduled tasks and deadlines query in the journal.
+ ;; To do this, uncomment the following line:
  ;; :feature/disable-scheduled-and-deadline-query? true
 
- ;; Specify the number of days in the future to display in the
- ;; scheduled tasks and deadlines query, with a default value of 7 which
- ;; displays tasks for the next 7 days.
+ ;; Specify the number of days to display in the future for the
+ ;; scheduled tasks and deadlines query. The default value is 7, which
+ ;; display tasks for the next 7 days.
  ;; Example usage:
  ;; Display all scheduled and deadline blocks for the next 14 days
  ;; :scheduled/future-days 14
@@ -68,14 +83,14 @@
  :start-of-week 6
 
  ;; Specify a custom CSS import
- ;; This option take precedence over your local `logseq/custom.css` file
- ;; You may find a list of awesome logseq themes here:
+ ;; This option takes precedence over your local `logseq/custom.css` file
+ ;; You may find a list of awesome Logseq themes here:
  ;; https://github.com/logseq/awesome-logseq#css-themes
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
 
  ;; Specify a custom js import
- ;; This option take precedence over your local `logseq/custom.js` file
+ ;; This option takes precedence over your local `logseq/custom.js` file
  ;; :custom-js-url ""
 
  ;; Set a custom Arweave gateway
@@ -91,7 +106,7 @@
  ;; :export/bullet-indentation :tab
 
  ;; When :all-pages-public? true, export Graph would export all pages within that Graph.
- ;; Regardless of whether you've set any page to public or not.
+ ;; Regardless of whether you've set any page to be public or not.
  ;; Example:
  ;; :publishing/all-pages-public? true
 
@@ -109,7 +124,7 @@
  ;; 2. Setup page "Jun 3rd, 2021" as home page without sidebar
  ;; :default-home {:page "Jun 3rd, 2021"}
  ;; 3. Setup page "home" as home page with multiple pages in sidebar
- ;; :default-home {:page "home" :sidebar ["page a" "page b"]}
+ ;; :default-home  {:page "home" :sidebar ["page a" "page b"]}
 
  ;; Instruct Logseq to utilize a designated folder within the graph folder as
  ;;  the default location for notes.
@@ -118,14 +133,14 @@
 
  ;; Instruct Logseq to utilize a designated folder within the graph folder as
  ;; the default storage for journals.
- ;; If not specified, journals will be sotred in the journals directory
+ ;; If not specified, journals will be stored in the journals directory
  ;; :journals-directory "your-directory"
 
  ;; Instruct Logseq to utilize a designated folder within the graph folder as
  ;; the default location for whiteboards.
  ;; If not specified, whiteboards will be stored in the whiteboards directory
  ;; :whiteboards-directory "your-directory"
- 
+
  ;; Set this to true will convert
  ;; `[[Grant Ideas]]` to `[[file:./grant_ideas.org][Grant Ideas]]` for org-mode
  ;; For more, see https://github.com/logseq/logseq/issues/672
@@ -177,7 +192,7 @@
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 
- ;; The app will show those queries in today's journal page,
+ ;; The app will show those queries on today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
  ;; the "NEXT" query asks the future tasks.
  :default-queries
@@ -214,7 +229,7 @@
     :group-by-page? false
     :collapsed? false}]}
 
- ;; Add your own commands to slash menu to speedup.
+ ;; Add your commands to the slash menu.
  ;; E.g.
  ;; :commands
  ;; [
@@ -350,14 +365,4 @@
  ;;   :file/name-format :triple-lowbar
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar
-
- ;; Specify the format of the filename for journal files.
- ;; Warning:
- ;;   Changing this setting may cause issues if not configured correctly.
- ;;   This configuration option is not retroactive and will only affect newly created journals.
- ;; You can use any date format with valid characters for your filesystem.
- ;; The default value is "yyyy-MM-dd".
- ;; :journal/file-name-format "yyyy_MM_dd"
-
- }
+ :file/name-format :triple-lowbar}
