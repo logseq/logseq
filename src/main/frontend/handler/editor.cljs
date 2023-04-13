@@ -1987,16 +1987,18 @@
         (cond->> new-content
              (not keep-uuid?) (property/remove-property format "id")
              true             (property/remove-property format "custom_id"))]
-    (merge (dissoc block
-                   :block/pre-block?
-                   :block/meta)
+    (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            {:block/page {:db/id (:db/id page)}
             :block/format format
             :block/properties (apply dissoc (:block/properties block)
-                                (concat
-                                  (when (not keep-uuid?) [:id])
-                                  [:custom_id :custom-id]
-                                  exclude-properties))
+                                     (concat
+                                      (when-not keep-uuid? [:id])
+                                      [:custom_id :custom-id]
+                                      exclude-properties))
+            :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                                                 (concat
+                                                  (when-not keep-uuid? [:id])
+                                                  exclude-properties))
             :block/content new-content})))
 
 (defn- edit-last-block-after-inserted!
@@ -2076,6 +2078,8 @@
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
+          (frontend.util/pprint blocks)
+          (frontend.util/pprint blocks')
           (state/set-block-op-type! nil)
           (edit-last-block-after-inserted! result))))))
 
