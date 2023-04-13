@@ -58,14 +58,14 @@
 
     .topic-card, .link-card {
       @apply text-sm px-3 py-2.5 rounded-lg cursor-pointer
-      mb-2 active:opacity-90 select-none;
+      mb-2 active:opacity-90 select-none items-center;
 
       background-color: var(--ls-secondary-background-color);
       border: 1px solid var(--ls-border-color);
       transition: background-color .3s;
 
       > .l {
-        @apply pr-2.5 w-[64px] h-[48px] bg-transparent rounded overflow-hidden;
+        @apply pr-2.5 w-[64px] bg-transparent rounded overflow-hidden;
 
         img {
           mix-blend-mode: luminosity;
@@ -74,7 +74,7 @@
       }
 
       > .r {
-        @apply leading-none;
+        @apply leading-none flex-1;
 
         > strong {
           @apply font-semibold text-[14px] py-1.5;
