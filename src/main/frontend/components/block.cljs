@@ -1732,15 +1732,17 @@
 
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id collapsed? *control-show? edit? has-child?]
-  (let [doc-mode? (state/sub :document/mode?)
-        control-show? (util/react *control-show?)
-        ref? (:ref? config)
-        empty-content? (block-content-empty? block)
+  (let [doc-mode?          (state/sub :document/mode?)
+        control-show?      (util/react *control-show?)
+        ref?               (:ref? config)
+        empty-content?     (block-content-empty? block)
         fold-button-right? (state/enable-fold-button-right?)
-        as-list-of (:as-list-of config)
-        as-index-of (:as-index-of config)
-        as-typed-list? (string? (:as-list-of config))
-        number-list? (= as-list-of "number-list")]
+        as-list-of         (:as-list-of config)
+        as-index-of        (:as-index-of config)
+        child-typed-list?  (string? (:as-list-of config))
+        child-number-list? (= as-list-of "number-list")
+        own-number-list?   (:own-order-number-list? config)
+        number-list?       (or child-number-list? own-number-list?)]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
@@ -1770,7 +1772,7 @@
                                             (not collapsed?))
                                    " hide-inner-bullet")
                                  (when number-list? " as-number-list")
-                                 (when as-typed-list? " typed-list"))}
+                                 (when (or own-number-list? child-typed-list?) " typed-list"))}
 
                     [:span.bullet {:blockid (str uuid)}
                      (when number-list?
@@ -1782,14 +1784,14 @@
          bullet
 
          (or
-          (and empty-content?
-               (not edit?)
-               (not (:block/top? block))
-               (not (:block/bottom? block))
-               (not (util/react *control-show?)))
-          (and doc-mode?
-               (not collapsed?)
-               (not (util/react *control-show?))))
+           (and empty-content?
+                (not edit?)
+                (not (:block/top? block))
+                (not (:block/bottom? block))
+                (not (util/react *control-show?)))
+           (and doc-mode?
+                (not collapsed?)
+                (not (util/react *control-show?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -2796,6 +2798,8 @@
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         as-list-of (:as-list-of config)
+        own-order-list-type (some-> properties :logseq.order-list-type str string/lower-case)
+        own-order-number-list? (= own-order-list-type "number")
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2805,7 +2809,9 @@
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
         selected? (when-not slide?
-                    (state/sub-block-selected? blocks-container-id uuid))]
+                    (state/sub-block-selected? blocks-container-id uuid))
+        config (assoc config :own-order-list-type own-order-list-type
+                             :own-order-number-list? own-order-number-list?)]
     [:div.ls-block
      (cond->
        {:id block-id
