@@ -4,17 +4,12 @@ import type { SizeLevel } from '../../lib'
 import { useApp } from '@tldraw/react'
 
 interface ScaleInputProps extends React.HTMLAttributes<HTMLButtonElement> {
-  scaleLevel?: SizeLevel,
-  compact?: boolean,
+  scaleLevel?: SizeLevel
+  compact?: boolean
   popoverSide?: Side
 }
 
-export function ScaleInput({
-  scaleLevel,
-  compact,
-  popoverSide,
-  ...rest
-}: ScaleInputProps) {
+export function ScaleInput({ scaleLevel, compact, popoverSide, ...rest }: ScaleInputProps) {
   const app = useApp<Shape>()
 
   const sizeOptions: SelectOption[] = [
