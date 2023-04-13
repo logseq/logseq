@@ -59,6 +59,15 @@
        (map (fn [[k v]] [k (count v)]))
        (into {})))
 
+(defn- get-journal-page-count [db]
+  (->> (d/q '[:find (count ?b)
+              :where
+              [?b :block/journal? true]
+              [?b :block/name]
+              [?b :block/file]]
+            db)
+       ffirst))
+
 (defn- query-assertions
   [db files]
   (testing "Query based stats"
@@ -76,13 +85,7 @@
         "Files on disk should equal ones in db")
 
     (is (= (count (filter #(re-find #"journals/" %) files))
-           (->> (d/q '[:find (count ?b)
-                       :where
-                       [?b :block/journal? true]
-                       [?b :block/name]
-                       [?b :block/file]]
-                     db)
-                ffirst))
+           (get-journal-page-count db))
         "Journal page count on disk equals count in db")
 
     (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5 "TODO" 22}
