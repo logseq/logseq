@@ -2078,8 +2078,6 @@
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
-          (frontend.util/pprint blocks)
-          (frontend.util/pprint blocks')
           (state/set-block-op-type! nil)
           (edit-last-block-after-inserted! result))))))
 
