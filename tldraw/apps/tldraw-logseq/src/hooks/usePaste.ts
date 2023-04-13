@@ -115,7 +115,7 @@ const handleCreatingShapes = async (
       size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
     }
     return asset
-}
+  }
 
   async function createAssetsFromFiles(files: File[]) {
     const tasks = files
@@ -251,10 +251,7 @@ const handleCreatingShapes = async (
     const rawText = await getDataFromType(item, 'text/plain')
     if (rawText) {
       const text = rawText.trim()
-      return tryCreateShapeHelper(
-        tryCreateShapeFromURL,
-        tryCreateShapeFromIframeString
-      )(text)
+      return tryCreateShapeHelper(tryCreateShapeFromURL, tryCreateShapeFromIframeString)(text)
     }
 
     return null

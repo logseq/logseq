@@ -48,7 +48,13 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'TwitterLink', 'IFrameSource', 'Links']
+const singleShapeActions: ContextBarActionType[] = [
+  'Edit',
+  'YoutubeLink',
+  'TwitterLink',
+  'IFrameSource',
+  'Links',
+]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -122,7 +128,8 @@ const EditAction = observer(() => {
               pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
             }
 
-            const firstNonePropertyBlock = pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
+            const firstNonePropertyBlock =
+              pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
 
             uuid = firstNonePropertyBlock?.uuid
           }
@@ -212,9 +219,7 @@ const ScaleLevelAction = observer(() => {
   const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
 
-  return (
-    <ScaleInput scaleLevel={scaleLevel} compact={isMobile()} />
-  )
+  return <ScaleInput scaleLevel={scaleLevel} compact={isMobile()} />
 })
 
 const IFrameSourceAction = observer(() => {
