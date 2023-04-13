@@ -14,7 +14,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
   }, [])
 
   return (
-    <div className="tl-primary-tools">
+    <div className="tl-primary-tools" data-html2canvas-ignore="true">
       <div className="tl-toolbar tl-tools-floating-panel">
         <ToolButton tooltip="Select" id="select" icon="select-cursor" />
         <ToolButton

@@ -9,6 +9,7 @@ import { modKey } from './util/basic'
 // Criteria: If the same selector is shared in multiple functions, they should be in the same file
 export * from './util/basic'
 export * from './util/search-modal'
+export * from './util/page'
 
 /**
 * Locate the last block in the inner editor
@@ -152,11 +153,6 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   await expect(page.locator('.notification-close-button').first()).not.toBeVisible({ timeout: 2000 })
 
   console.log('Graph loaded for ' + path)
-}
-
-export async function activateNewPage(page: Page) {
-  await page.click('.ls-block >> nth=0')
-  await page.waitForTimeout(500)
 }
 
 export async function editFirstBlock(page: Page) {

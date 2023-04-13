@@ -7,6 +7,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  isBuiltInColor,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -61,6 +62,13 @@ const LogseqPortalShapeHeader = observer(
         ? getComputedColor(fill, 'background')
         : 'var(--ls-tertiary-background-color)'
 
+    const fillGradient =
+        fill && fill !== 'var(--ls-secondary-background-color)'
+          ? isBuiltInColor(fill)
+            ? `var(--ls-highlight-color-${fill})`
+            : fill
+          : 'var(--ls-secondary-background-color)'
+
     return (
       <div
         className={`tl-logseq-portal-header tl-logseq-portal-header-${
@@ -71,7 +79,7 @@ const LogseqPortalShapeHeader = observer(
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
-            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
+            background: type === 'P' ? bgColor : `linear-gradient(0deg, ${fillGradient}, ${bgColor})`,
           }}
         ></div>
         <div className="relative">{children}</div>
@@ -315,7 +323,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             textRendering: app.viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto',
             background:
               fill && fill !== 'var(--ls-secondary-background-color)'
-                ? `var(--ls-highlight-color-${fill})`
+                ? isBuiltInColor(fill)
+                  ? `var(--ls-highlight-color-${fill})`
+                  : fill
                 : 'var(--ls-secondary-background-color)',
             opacity,
           }}
@@ -546,7 +556,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <rect
           fill={
             this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
-              ? `var(--ls-highlight-color-${this.props.fill})`
+              ? isBuiltInColor(this.props.fill)
+                ? `var(--ls-highlight-color-${this.props.fill})`
+                : this.props.fill
               : 'var(--ls-secondary-background-color)'
           }
           stroke={getComputedColor(this.props.fill, 'background')}

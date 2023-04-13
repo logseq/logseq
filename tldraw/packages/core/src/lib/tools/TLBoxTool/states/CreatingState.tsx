@@ -87,8 +87,10 @@ export class CreatingState<
     this.tool.transition('idle')
     if (this.creatingShape) {
       this.app.setSelectedShapes([this.creatingShape as unknown as S])
+      this.app.api.editShape(this.creatingShape)
+    } else {
+      this.app.transition('select')
     }
-    this.app.transition('select')
     this.app.persist()
   }
 

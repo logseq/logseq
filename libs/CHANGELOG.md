@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.15]
+
+### Added
+- Support a plug-in flag for the plugin slash commands item
+- Support api of `logseq.App.setCurrentGraphConfigs: (configs: {}) => Promise<void>`
+- Support hook of `logseq.App.onTodayJournalCreated: IUserHook<{ title: string }`
+- Support more template-related APIs
+- Support auto-check updates for the installed plugins from Marketplace
+ 
+### Fixed
+- Select and Input elements rendered using provideUI via `onMacroRendererSlotted` don't function [#8374](https://github.com/logseq/logseq/issues/8374)
+- `logseq.Editor.getPageBlocksTree` does not work when page uuid is passed in as param [#4920](https://github.com/logseq/logseq/issues/4920)
+
+
 ## [0.0.14]
 
 ### Fixed

@@ -6,6 +6,18 @@
             [cljs-bean.core :as bean]
             [goog.functions :refer [debounce]]))
 
+(defn- dom-purify
+  [html opts]
+  (try
+    (js-invoke js/DOMPurify "sanitize" html (bean/->js opts))
+    (catch js/Error e
+      (js/console.warn e) html)))
+
+(rum/defc html-content
+  [html]
+  [:div.html-content.pl-1.flex-1.text-sm
+   {:dangerouslySetInnerHTML {:__html (dom-purify html nil)}}])
+
 (rum/defc edit-settings-file
   [pid {:keys [class]}]
   [:a.text-sm.hover:underline
@@ -21,7 +33,7 @@
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:label.form-control
-    [:small.pl-1.flex-1 description]
+    (html-content description)
 
     (let [input-as (util/safe-lower-case (or inputAs (name type)))
           input-as (if (= input-as "string") :text (keyword input-as))]
@@ -43,7 +55,7 @@
      [:label.form-control
       (ui/checkbox {:checked   val
                     :on-change #(update-setting! key (not val))})
-      [:small.pl-1.flex-1 description]]]))
+      (html-content description)]]))
 
 (rum/defc render-item-enum
   [val {:keys [key title description default enumChoices enumPicker]} update-setting!]
@@ -59,7 +71,7 @@
 
      [:div.form-control
       [(if (contains? #{:radio :checkbox} picker) :div.wrap :label.wrap)
-       [:small.pl-1 description]
+       (html-content description)
 
        (case picker
          :radio (ui/radio-list options #(update-setting! key %) nil)
@@ -76,7 +88,7 @@
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:div.form-control
-    [:small.pl-1.flex-1 description]
+    (html-content description)
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc render-item-heading
@@ -85,7 +97,7 @@
   [:div.heading-item
    {:data-key key}
    [:h2 title]
-   [:small description]])
+   (html-content description)])
 
 (rum/defc settings-container
   [schema ^js pl]
@@ -113,7 +125,8 @@
        (for [desc schema
              :let [key (:key desc)
                    val (get settings (keyword key))
-                   type (keyword (:type desc))]]
+                   type (keyword (:type desc))
+                   desc (update desc :description #(plugin-handler/markdown-to-html %))]]
 
          (condp contains? type
            #{:string :number} (render-item-input val desc update-setting!)

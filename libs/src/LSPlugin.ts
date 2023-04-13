@@ -317,7 +317,10 @@ export interface IPluginSearchServiceHooks {
 
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: {
+    added: Array<SearchBlockItem>,
+    removed: Array<EntityID>
+  }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
@@ -425,9 +428,11 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
-  getCurrentGraphConfigs: () => Promise<any>
+  getCurrentGraphConfigs: (...keys: string[]) => Promise<any>
+  setCurrentGraphConfigs: (configs: {}) => Promise<void>
   getCurrentGraphFavorites: () => Promise<Array<string> | null>
   getCurrentGraphRecent: () => Promise<Array<string> | null>
+  getCurrentGraphTemplates: () => Promise<Record<string, BlockEntity> | null>
 
   // router
   pushState: (
@@ -440,6 +445,13 @@ export interface IAppProxy {
     params?: Record<string, any>,
     query?: Record<string, any>
   ) => void
+
+  // templates
+  getTemplate: (name: string) => Promise<BlockEntity | null>
+  existTemplate: (name: string) => Promise<Boolean>
+  createTemplate: (target: BlockUUID, name: string, opts?: { overwrite: boolean }) => Promise<any>
+  removeTemplate: (name: string) => Promise<any>
+  insertTemplate: (target: BlockUUID, name: string) => Promise<any>
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
@@ -481,6 +493,7 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
+  onTodayJournalCreated: IUserHook<{ title: string }>
 
   /**
    * provide ui slot to specific block with UUID
@@ -894,6 +907,13 @@ export interface IAssetsProxy {
    * @added 0.0.10
    */
   makeSandboxStorage(): IAsyncStorage
+
+  /**
+   * make assets scheme url based on current graph
+   * @added 0.0.15
+   * @param path
+   */
+  makeUrl(path: string): Promise<string>
 }
 
 export interface ILSPluginThemeManager {

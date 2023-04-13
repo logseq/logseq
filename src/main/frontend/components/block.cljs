@@ -16,17 +16,15 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
             [frontend.components.plugins :as plugins]
-            [frontend.components.query-table :as query-table]
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
+            [frontend.components.query :as query]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -53,7 +51,6 @@
             [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.search :as search]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -84,17 +81,7 @@
             [datascript.impl.entity :as e]
             [logseq.common.path :as path]))
 
-(defn safe-read-string
-  ([s]
-   (safe-read-string s true))
-  ([s warn?]
-   (try
-     (reader/read-string s)
-     (catch :default e
-       (log/error :read-string-error e :string s)
-       (when warn?
-         [:div.warning {:title "read-string failed"}
-          s])))))
+
 
 ;; local state
 (defonce *dragging?
@@ -443,7 +430,7 @@
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
-                   (safe-read-string metadata false))
+                   (gp-util/safe-read-string metadata))
         title (second (first label))]
     (ui/catch-error
      [:span.warning full_text]
@@ -870,7 +857,7 @@
   [config id label]
   (if-let [block-id (parse-uuid id)]
     (let [db-id (:db/id (db/pull [:block/uuid block-id]))
-          block (when db-id (db/pull-block db-id))
+          block (when db-id (db/sub-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)
@@ -985,12 +972,10 @@
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 page-ref/right-brackets])]))
 
-(declare custom-query)
-
 (defn- show-link?
   [config metadata s full-text]
   (let [media-formats (set (map name config/media-formats))
-        metadata-show (:show (safe-read-string metadata))
+        metadata-show (:show (gp-util/safe-read-string metadata))
         format (get-in config [:block :block/format])]
     (or
      (and
@@ -1228,16 +1213,26 @@
              (assoc :title title))
            (map-inline config label)))))))
 
+(declare ->hiccup)
+
+(defn wrap-query-components
+  [config]
+  (merge config
+         {:->hiccup ->hiccup
+          :->elem ->elem
+          :page-cp page-cp
+          :inline-text inline-text
+          :map-inline map-inline}))
+
 ;;;; Macro component render functions
 (defn- macro-query-cp
   [config arguments]
   [:div.dsl-query.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
-     (custom-query (assoc config :dsl-query? true)
-                   {:title (rum/with-key (query-builder-component/builder query config)
-                             query)
-                    :query query}))])
+     (query/custom-query (wrap-query-components (assoc config :dsl-query? true))
+                         {:builder (query-builder-component/builder query config)
+                          :query query}))])
 
 (defn- macro-function-cp
   [config arguments]
@@ -1544,9 +1539,13 @@
 
 (defn hiccup->html
   [s]
-  (-> (safe-read-string s)
-      (hiccups.core/html)
-      (security/sanitize-html)))
+  (let [result (gp-util/safe-read-string s)
+        result' (if (seq result) result
+                    [:div.warning {:title "Invalid hiccup"}
+                     s])]
+    (-> result'
+       (hiccups.core/html)
+       (security/sanitize-html))))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -1714,7 +1713,7 @@
                            (or ref? query?)
                            (assoc :ref-query-child? true))]
               (rum/with-key (block-container config child)
-                            (:block/uuid child)))))]])))
+                (str (:blocks-container-id config) "-" (:block/uuid child))))))]])))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]
@@ -2263,6 +2262,29 @@
                     [:a.fade-link
                      summary]])]))))
 
+(defn- block-content-inner
+  [config block body plugin-slotted? collapsed? block-ref-with-title?]
+  (if plugin-slotted?
+    [:div.block-slotted-body
+     (plugins/hook-block-slot
+      :block-content-slotted
+      (-> block (dissoc :block/children :block/page)))]
+
+    (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+      (when (and (not block-ref-with-title?)
+                 (seq body)
+                 (or (not title-collapse-enabled?)
+                     (and title-collapse-enabled?
+                          (or (not collapsed?)
+                              (some? (mldoc/extract-first-query-from-ast body))))))
+        [:div.block-body
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+             (when-let [block (markup-element-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))]))))
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
@@ -2340,24 +2362,7 @@
                  (not= block-type :whiteboard-shape))
         (properties-cp config block))
 
-      (if plugin-slotted?
-        [:div.block-slotted-body
-         (plugins/hook-block-slot
-          :block-content-slotted
-          (-> block (dissoc :block/children :block/page)))]
-
-        (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-          (when (and (not block-ref-with-title?)
-                     (seq body)
-                     (or (not title-collapse-enabled?)
-                         (and title-collapse-enabled? (not collapsed?))))
-            [:div.block-body
-             ;; TODO: consistent id instead of the idx (since it could be changed later)
-             (let [body (block/trim-break-lines! (:block/body block))]
-               (for [[idx child] (medley/indexed body)]
-                 (when-let [block (markup-element-cp config child)]
-                   (rum/with-key (block-child block)
-                                 (str uuid "-" idx)))))])))
+      (block-content-inner config block body plugin-slotted? collapsed? block-ref-with-title?)
 
       (case (:block/warning block)
         :multiple-blocks
@@ -2586,7 +2591,7 @@
                                    [block
                                     (when title
                                       (if (seq title)
-                                        (->elem :span (map-inline config title))
+                                        (->elem :span.inline-wrap (map-inline config title))
                                         (->elem :div (markup-elements-cp config body))))]))))
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
@@ -2596,17 +2601,18 @@
                                                (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                              [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          [:div.breadcrumb.block-parents.flex.flex-row.flex-1.flex-wrap.items-center
-           {:class (when (seq breadcrumb)
-                     (str (when-not (:search? config)
-                            " my-2")
-                          (when indent?
-                            " ml-4")))}
-           (when (and (false? (:top-level? config))
-                      (seq parents))
-             (breadcrumb-separator))
-           breadcrumb
-           (when end-separator? (breadcrumb-separator))])))))
+          (when (seq breadcrumb)
+            [:div.breadcrumb.block-parents
+             {:class (when (seq breadcrumb)
+                       (str (when-not (:search? config)
+                              " my-2")
+                            (when indent?
+                              " ml-4")))}
+             (when (and (false? (:top-level? config))
+                        (seq parents))
+               (breadcrumb-separator))
+             breadcrumb
+             (when end-separator? (breadcrumb-separator))]))))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2746,7 +2752,7 @@
                   (first tree))
                 block)
         block (if ref?
-                (merge block (db/pull-block (:db/id block)))
+                (merge block (db/sub-block (:db/id block)))
                 block)
         {:block/keys [uuid children pre-block? top? refs level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
@@ -2784,7 +2790,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (when-not slide? (state/sub-block-selected? uuid))]
+        selected? (when-not slide?
+                    (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2794,7 +2801,8 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect"))
+                    (when selected? " selected noselect")
+                    (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
 
@@ -3055,320 +3063,6 @@
   [config col]
   (map #(inline config %) col))
 
-(declare ->hiccup)
-
-(defn built-in-custom-query?
-  [title]
-  (let [queries (get-in (state/sub-config) [:default-queries :journals])]
-    (when (seq queries)
-      (boolean (some #(= % title) (map :title queries))))))
-
-;; TODO: move query related fns/components to components.query
-(defn- trigger-custom-query!
-  [state *query-error *query-triggered?]
-  (let [[config query _query-result] (:rum/args state)
-        repo (state/get-current-repo)
-        result-atom (or (:query-atom state) (atom nil))
-        current-block-uuid (or (:block/uuid (:block config))
-                               (:block/uuid config))
-        _ (reset! *query-error nil)
-        query-atom (try
-                     (cond
-                       (:dsl-query? config)
-                       (let [q (:query query)
-                             form (safe-read-string q false)]
-                         (cond
-                           ;; Searches like 'foo' or 'foo bar' come back as symbols
-                           ;; and are meant to go directly to full text search
-                           (and (util/electron?) (symbol? form)) ; full-text search
-                           (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result))))
-
-                           (symbol? form)
-                           (atom nil)
-
-                           :else
-                           (query-dsl/query (state/get-current-repo) q)))
-
-                       :else
-                       (db/custom-query query {:current-block-uuid current-block-uuid}))
-                     (catch :default e
-                       (reset! *query-error e)
-                       (atom nil)))]
-    (when *query-triggered?
-      (reset! *query-triggered? true))
-    (if (instance? Atom query-atom)
-      query-atom
-      result-atom)))
-
-(rum/defc query-refresh-button
-  [query-time {:keys [on-mouse-down full-text-search?]}]
-  (ui/tippy
-   {:html  [:div
-            [:p
-             (if full-text-search?
-               [:span "Full-text search results will not be refreshed automatically."]
-               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
-            [:p
-             "Click the refresh button instead if you want to see the latest result."]]
-    :interactive     true
-    :popperOptions   {:modifiers {:preventOverflow
-                                  {:enabled           true
-                                   :boundariesElement "viewport"}}}
-    :arrow true}
-   [:a.fade-link.flex
-    {:on-mouse-down on-mouse-down}
-    (ui/icon "refresh" {:style {:font-size 20}})]))
-
-(defn- get-query-result
-  [state config *query-error *query-triggered? current-block-uuid q not-grouped-by-page? query-result-atom]
-  (or (when-let [*result (:query-result config)] @*result)
-      (let [query-atom (trigger-custom-query! state *query-error *query-triggered?)
-            query-result (and query-atom (rum/react query-atom))
-            ;; exclude the current one, otherwise it'll loop forever
-            remove-blocks (if current-block-uuid [current-block-uuid] nil)
-            transformed-query-result (when query-result
-                                       (db/custom-query-result-transform query-result remove-blocks q))
-            result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                     (let [result (db-utils/group-by-page transformed-query-result)]
-                       (if (map? result)
-                         (dissoc result nil)
-                         result))
-                     transformed-query-result)]
-        (when query-result-atom
-          (reset! query-result-atom (util/safe-with-meta result (meta @query-atom))))
-        (when-let [query-result (:query-result config)]
-          (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-            (reset! query-result result)))
-        result)))
-
-(rum/defcs custom-query-inner < rum/reactive db-mixins/query
-  [state config {:keys [query children? breadcrumb-show?] :as q}
-   {:keys [query-result-atom
-           query-error-atom
-           query-triggered-atom
-           current-block
-           current-block-uuid
-           table?
-           dsl-query?
-           page-list?
-           view-f]}]
-  (let [*query-error query-error-atom
-        *query-triggered? query-triggered-atom
-        not-grouped-by-page? (or table?
-                                 (boolean (:result-transform q))
-                                 (and (string? query) (string/includes? query "(by-page false)")))
-        result (get-query-result state config *query-error *query-triggered? current-block-uuid q not-grouped-by-page? query-result-atom)
-        only-blocks? (:block/uuid (first result))
-        blocks-grouped-by-page? (and (seq result)
-                                     (not not-grouped-by-page?)
-                                     (coll? (first result))
-                                     (:block/name (ffirst result))
-                                     (:block/uuid (first (second (first result))))
-                                     true)]
-    (if @*query-error
-      (do
-        (log/error :exception @*query-error)
-        [:div.warning.my-1 "Query failed: "
-         [:p (.-message @*query-error)]])
-      [:div.custom-query-results
-       (cond
-         (and (seq result) view-f)
-         (let [result (try
-                        (sci/call-fn view-f result)
-                        (catch :default error
-                          (log/error :custom-view-failed {:error error
-                                                          :result result})
-                          [:div "Custom view failed: "
-                           (str error)]))]
-           (util/hiccup-keywordize result))
-
-         page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
-
-         table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
-
-         (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-         (->hiccup result (cond-> (assoc config
-                                         :custom-query? true
-                                         :dsl-query? dsl-query?
-                                         :query query
-                                         :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                             breadcrumb-show?
-                                                             true)
-                                         :group-by-page? blocks-grouped-by-page?
-                                         :ref? true)
-                            children?
-                            (assoc :ref? true))
-                   {:style {:margin-top "0.25rem"
-                            :margin-left "0.25rem"}})
-
-         (seq result)
-         (let [result (->>
-                       (for [record result]
-                         (if (map? record)
-                           (str (util/pp-str record) "\n")
-                           record))
-                       (remove nil?))]
-           (when (seq result)
-             [:ul
-              (for [item result]
-                [:li (str item)])]))
-
-         (or (string/blank? query)
-             (= query "(and)"))
-         nil
-
-         :else
-         [:div.text-sm.mt-2.opacity-90 "No matched result"])])))
-
-(rum/defc query-title
-  [config title {:keys [result-count]}]
-  [:div.custom-query-title.flex.justify-between.w-full
-   [:span.title-text (cond
-                       (vector? title) title
-                       (string? title) (inline-text config
-                                                    (get-in config [:block :block/format] :markdown)
-                                                    title)
-                       :else title)]
-   (when result-count
-     [:span.opacity-60.text-sm.ml-2.results-count
-      (str result-count (if (> result-count 1) " results" " result"))])])
-
-(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
-  (rum/local nil ::query-result)
-  (rum/local false ::query-triggered?)
-  {:init (fn [state] (assoc state :query-error (atom nil)))}
-  [state config {:keys [title query view collapsed? table-view?] :as q}]
-  (let [*query-error (:query-error state)
-        *query-triggered? (::query-triggered? state)
-        built-in? (built-in-custom-query? title)
-        *query-result (::query-result state)
-        result (rum/react *query-result)
-        dsl-query? (:dsl-query? config)
-        current-block-uuid (or (:block/uuid (:block config))
-                               (:block/uuid config))
-        current-block (db/entity [:block/uuid current-block-uuid])
-        temp-collapsed? (state/sub-collapsed current-block-uuid)
-        collapsed?' (if (some? temp-collapsed?)
-                      temp-collapsed?
-                      (or
-                       collapsed?
-                       (:block/collapsed? current-block)))
-        table? (or table-view?
-                   (get-in current-block [:block/properties :query-table])
-                   (and (string? query) (string/ends-with? (string/trim query) "table")))
-        query-time (:query-time (meta @*query-result))
-        view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
-        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
-        page-list? (and (seq result)
-                        (some? (:block/name (first result))))
-        dsl-page-query? (and dsl-query?
-                             (false? (:blocks? (query-dsl/parse-query query))))
-        full-text-search? (and dsl-query?
-                               (util/electron?)
-                               (symbol? (safe-read-string query false)))
-        opts {:query-result-atom *query-result
-              :query-error-atom *query-error
-              :query-triggered-atom *query-triggered?
-              :current-block current-block
-              :dsl-query? dsl-query?
-              :current-block-uuid current-block-uuid
-              :table? table?
-              :view-f view-f
-              :page-list? page-list?}]
-    (if (:custom-query? config)
-      [:code (if dsl-query?
-               (util/format "{{query %s}}" query)
-               "{{query hidden}}")]
-      (if-not @*query-triggered?
-        ;; trigger custom query
-        (custom-query-inner config q opts)
-        (when-not (and built-in? (empty? @*query-result))
-          [:div.custom-query (get config :attr {})
-           (when-not built-in?
-             [:div.th
-              [:div.flex.flex-1.flex-row
-               (ui/icon "search" {:size 14})
-               [:div.ml-1 (str "Live query" (when dsl-page-query? " for pages"))]]
-              (when (or (not dsl-query?) (not collapsed?'))
-                [:div.flex.flex-row.items-center.fade-in
-                 (when (> (count result) 0)
-                   [:span.results-count
-                    (let [result-count (if (and (not table?) (map? result))
-                                         (apply + (map (comp count val) result))
-                                         (count result))]
-                      (str result-count (if (> result-count 1) " results" " result")))])
-
-                 (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
-                   (if table?
-                     [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                              :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                                   "query-table"
-                                                                                                   false))}
-                      (ui/icon "list" {:style {:font-size 20}})]
-                     [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                              :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
-                                                                                                   "query-table"
-                                                                                                   true))}
-                      (ui/icon "table" {:style {:font-size 20}})]))
-
-                 [:a.flex.ml-1.fade-link
-                  {:title "Setting properties"
-                   :on-click (fn []
-                               (let [all-keys (query-table/get-keys result page-list?)]
-                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-                  (ui/icon "settings" {:style {:font-size 20}})]
-
-                 [:div.ml-1
-                  (when (or full-text-search?
-                            (and query-time (> query-time 50)))
-                    (query-refresh-button query-time {:full-text-search? full-text-search?
-                                                      :on-mouse-down (fn [e]
-                                                                       (util/stop e)
-                                                                       (trigger-custom-query! state *query-error *query-triggered?))}))]])])
-           (if (or built-in? (not dsl-query?))
-             [:div {:style {:margin-left 2}}
-              (ui/foldable
-               (query-title config title (when built-in? {:result-count (count result)}))
-               (fn []
-                 (custom-query-inner config q opts))
-               {:default-collapsed? collapsed?
-                :title-trigger? true})]
-             [:div.bd
-              (query-title config title {})
-              (when-not collapsed?'
-                (custom-query-inner config q opts))])])))))
-
-(rum/defc custom-query
-  [config q]
-  (ui/catch-error
-   (ui/block-error "Query Error:" {:content (:query q)})
-   (ui/lazy-visible
-    (fn [] (custom-query* config q))
-    {:debug-id q
-     :trigger-once? false})))
-
-;; TODO: move to mldoc
-;; (defn- convert-md-src-to-custom-block
-;;   [item]
-;;   (let [{:keys [language options lines] :as options} (second item)
-;;         lang (string/lower-case (or language ""))]
-;;     (cond
-;;       (= lang "quote")
-;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Quote" (first (mldoc/->edn content (gp-mldoc/default-config :markdown)))])
-
-;;       (contains? #{"query" "note" "tip" "important" "caution" "warning" "pinned"} lang)
-;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Custom" lang nil (first (mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
-
-;;       :else
-;;       ["Src" options])))
-
 (rum/defc src-cp < rum/static
   [config options html-export?]
   (when options
@@ -3497,7 +3191,7 @@
       ["Custom" "query" _options _result content]
       (try
         (let [query (reader/read-string content)]
-          (custom-query config query))
+          (query/custom-query (wrap-query-components config) query))
         (catch :default e
           (log/error :read-string-error e)
           (ui/block-error "Invalid query:" {:content content})))
@@ -3582,7 +3276,7 @@
                      :block/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
-      (str (:block/uuid item)))))
+      (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
 (defn- block-list
   [config blocks]

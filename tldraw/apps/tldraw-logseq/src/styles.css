@@ -79,8 +79,19 @@ html[data-theme='light'] {
   }
 }
 
+.color-input-wrapper {
+  overflow: hidden;
+  width: 24px;
+  height: 24px;
+
+  .color-input {
+    transform: translate(-50%, -50%) scale(4);
+  }
+}
+
 .tl-container {
   overflow: hidden;
+  background-color: transparent !important;
 }
 
 .tl-menu-item {
@@ -163,13 +174,17 @@ html[data-theme='light'] {
   pointer-events: all;
   position: relative;
   background-color: var(--ls-secondary-background-color);
-  color: #a4b5b6;
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
+
+  label {
+    font-family: var(--ls-font-family);
+    font-size: 10px;
+  }
 }
 
 .tl-context-bar {
@@ -190,10 +205,6 @@ html[data-theme='light'] {
     width: 44px;
     height: 24px;
     padding: 2px;
-  }
-
-  .color-input {
-    transform: translate(-50%, -50%) scale(4);
   }
 
   .switch-input-root {
@@ -289,8 +300,6 @@ html[data-theme='light'] {
 }
 
 .tl-tools-floating-panel {
-  max-height: 90vh;
-  overflow-y: auto;
   flex-flow: column;
 }
 
@@ -716,10 +725,6 @@ button.tl-select-input-trigger {
   opacity: 1;
   user-select: text;
   transform-origin: top left;
-
-  &[data-collapsed='true'][data-editing='false'] {
-    @apply overflow-hidden;
-  }
 
   &[data-portal-selected='true'] {
     filter: brightness(0.9) contrast(0.5);

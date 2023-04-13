@@ -921,4 +921,9 @@ html.is-mobile {
         @apply grid grid-flow-col auto-cols-max;
         place-items: center;
     }
+
+  /* fixes an html2canvas issue */
+  img {
+    @apply inline-block;
+  }
 }

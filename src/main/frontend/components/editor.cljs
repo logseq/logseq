@@ -42,23 +42,26 @@
         :item-render
         (fn [item]
           (let [command-name (first item)
-                command-doc (get item 2)
-                doc (when (state/show-command-doc?) command-doc)]
+                command-doc  (get item 2)
+                plugin-id    (get-in item [1 1 1 :pid])
+                doc          (when (state/show-command-doc?) command-doc)]
             (cond
+              (or plugin-id (vector? doc))
+              [:div.has-help
+               command-name
+               (when doc (ui/tippy
+                          {:html            doc
+                           :interactive     true
+                           :fixed-position? true
+                           :position        "right"}
+
+                          [:small (svg/help-circle)]))
+               (when plugin-id
+                 [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
+
               (string? doc)
               [:div {:title doc}
                command-name]
-
-              (vector? doc)
-              [:div.has-help
-               command-name
-               (ui/tippy
-                {:html doc
-                 :interactive true
-                 :fixed-position? true
-                 :position "right"}
-
-                [:small (svg/help-circle)])]
 
               :else
               [:div command-name])))
@@ -67,7 +70,7 @@
         (fn [chosen-item]
           (let [command (first chosen-item)]
             (reset! commands/*current-command command)
-            (let [command-steps (get (into {} matched) command)
+            (let [command-steps  (get (into {} matched) command)
                   restore-slash? (or
                                   (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
@@ -77,7 +80,7 @@
               (editor-handler/insert-command! id command-steps
                                               format
                                               {:restore? restore-slash?
-                                               :command command}))))
+                                               :command  command}))))
         :class
         "black"}))))
 
