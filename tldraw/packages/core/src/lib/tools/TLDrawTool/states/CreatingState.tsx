@@ -77,6 +77,7 @@ export class CreatingState<
         fill: this.app.settings.color,
         stroke: this.app.settings.color,
       })
+      this.shape.setScaleLevel(this.app.settings.scaleLevel)
       this.app.currentPage.addShapes(this.shape)
     }
   }
