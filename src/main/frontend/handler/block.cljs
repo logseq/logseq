@@ -291,3 +291,16 @@
                               (recur parent (conj result parent))
                               result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))
+
+(defn get-idx-of-order-list-block
+  [block order-list-type]
+  (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
+        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
+        prev-block      (prev-block-fn block)]
+    (if prev-block
+      (letfn [(sibling-list [b]
+                (lazy-seq
+                  (when (order-block-fn? b)
+                    (cons b (sibling-list (prev-block-fn b))))))]
+        (count (sibling-list block)))
+      1)))

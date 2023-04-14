@@ -1742,7 +1742,8 @@
         child-typed-list?  (string? (:as-list-of config))
         child-number-list? (= as-list-of "number-list")
         own-number-list?   (:own-order-number-list? config)
-        number-list?       (or child-number-list? own-number-list?)]
+        number-list?       (or child-number-list? own-number-list?)
+        number-list-idx    (if child-number-list? (inc as-index-of) (:own-order-list-index config))]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
@@ -1776,7 +1777,7 @@
 
                     [:span.bullet {:blockid (str uuid)}
                      (when number-list?
-                       [:label (str (inc as-index-of) ".")])]]]]
+                       [:label (str number-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
@@ -2799,6 +2800,7 @@
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         as-list-of (:as-list-of config)
         own-order-list-type (some-> properties :logseq.order-list-type str string/lower-case)
+        own-order-list-index (and own-order-list-type (block-handler/get-idx-of-order-list-block block own-order-list-type))
         own-order-number-list? (= own-order-list-type "number")
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
@@ -2811,6 +2813,7 @@
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))
         config (assoc config :own-order-list-type own-order-list-type
+                             :own-order-list-index own-order-list-index
                              :own-order-number-list? own-order-number-list?)]
     [:div.ls-block
      (cond->
