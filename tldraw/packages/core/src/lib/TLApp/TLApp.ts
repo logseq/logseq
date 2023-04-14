@@ -336,9 +336,13 @@ export class TLApp<
   }
 
   @action updateShapes = <T extends S>(shapes: ({ id: string } & Partial<T['props']>)[]): this => {
-    if (this.readOnly) return this
+    if (this.readOnly ) return this
 
-    shapes.forEach(shape => this.getShapeById(shape.id)?.update(shape))
+    const shapesToUpdate = shapes.map(shape => this.getShapeById(shape.id)).filter(shape => shape?.props.isLocked)
+
+    if (shapesToUpdate.length === 0) return this
+
+    shapesToUpdate.forEach(shape => shape?.update(shape))
     this.persist()
     return this
   }
@@ -348,6 +352,7 @@ export class TLApp<
     const normalizedShapes: S[] = shapes
       .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
       .filter(isNonNullable)
+      .filter(s => !s.props.isLocked)
 
     // delete a group shape should also delete its children
     const shapesInGroups = this.shapesInGroups(normalizedShapes)
@@ -381,6 +386,7 @@ export class TLApp<
     }
 
     this.currentPage.shapes
+      .filter(s => !s.props.isLocked)
       .flatMap(s => Object.values(s.props.handles ?? {}))
       .flatMap(h => h.bindingId)
       .filter(isNonNullable)
@@ -513,6 +519,17 @@ export class TLApp<
 
     shapes.forEach(shape => {
       if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
+  setLock = (isLocked: boolean): this => {
+    if (this.selectedShapesArray.length === 0 || this.readOnly) return this
+
+    this.selectedShapesArray.forEach(shape => {
+      shape.update({ isLocked })
     })
 
     this.persist()

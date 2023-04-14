@@ -26,7 +26,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
   const borderRadius = app.editingShape?.props['borderRadius'] ?? 0
 
   return (
-    <SVGContainer>
+    <>
+    {shapes.length > 0 && <SVGContainer>
       {!app.editingShape && (<rect
         className="tl-bounds-fg"
         width={Math.max(width, 1)}
@@ -139,6 +140,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
           />
         </>
       )}
-    </SVGContainer>
+    </SVGContainer>}
+    </>
   )
 })

@@ -124,7 +124,7 @@ export class IdleState<
     if (info.order || this.app.selectedShapesArray.length !== 1 || this.app.readOnly) return
 
     const selectedShape = this.app.selectedShapesArray[0]
-    if (!selectedShape.canEdit) return
+    if (!selectedShape.canEdit || selectedShape.props.isLocked) return
 
     switch (info.type) {
       case TLTargetType.Shape: {
