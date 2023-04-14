@@ -25,7 +25,7 @@
  ;; Default value:  "MMM do, yyyy".
  :journal/page-title-format "MMM do, yyyy"
 
- ;; Specify the format of the filename for journal files.
+ ;; Specify the journal filename format.
  ;; !Warning:
  ;;   - Changing this setting may cause issues if not configured correctly.
  ;;     This configuration option is not retroactive and
@@ -34,11 +34,11 @@
  ;; Default value:  "yyyy-MM-dd"
  ;; :journal/file-name-format "yyyy_MM_dd"
 
- ;; Enable the hover tooltip preview feature
+ ;; Enable tooltip preview on hover.
  ;; Default value:  true
  :ui/enable-tooltip? true
 
- ;; Display brackets around [[page references]]
+ ;; Display brackets around [[page]] references.
  ;; Default value:  true
  :ui/show-brackets? true
 
@@ -50,36 +50,42 @@
  ;; Default value:  true
  :ui/auto-expand-block-refs? true
 
- ;; Enable Block timestamp
+ ;; Enable Block timestamps.
  ;; Default value:  false
  :feature/enable-block-timestamps? false
 
- ;; Enable accent removal in search.
+ ;; Disable accent marks when searching.
  ;; After changing this setting, rebuild the search index by pressing (^C ^S).
+ ;; Default value:  true
  :feature/enable-search-remove-accents? true
 
- ;; Enable journals
+ ;; Enable journals.
+ ;; Default value:  true
  :feature/enable-journals? true
 
- ;; Enable flashcards
+ ;; Enable flashcards.
+ ;; Default value:  true
  :feature/enable-flashcards? true
 
- ;; Enable Whiteboards
+ ;; Enable Whiteboards.
+ ;; Default value:  true
  :feature/enable-whiteboards? true
 
  ;; Disable the built-in Scheduled tasks and deadlines query in the journal.
- ;; To do this, uncomment the following line:
+ ;; Default value:  false
  ;; :feature/disable-scheduled-and-deadline-query? true
 
- ;; Specify the number of days to display in the future for the
- ;; scheduled tasks and deadlines query. The default value is 7, which
- ;; display tasks for the next 7 days.
+ ;; Specify the number of days displayed in the future for
+ ;; the 'scheduled tasks and deadlines' query.
+ ;; Default value:  7 (days)
  ;; Example usage:
- ;; Display all scheduled and deadline blocks for the next 14 days
+ ;; Display all scheduled tasks and deadlines for the next 14 days.
  ;; :scheduled/future-days 14
 
- ;; Specify the date on which the week starts.
- ;; Goes from 0 to 6 (Monday to Sunday), default to 6
+ ;; Specify the first day of the week.
+ ;; Default value:  6 (Sunday)
+ ;; Available Options:
+ ;;  - integer from 0 to 6 (Monday to Sunday)
  :start-of-week 6
 
  ;; Specify a custom CSS import
@@ -229,13 +235,13 @@
     :group-by-page? false
     :collapsed? false}]}
 
- ;; Add your commands to the slash menu.
- ;; E.g.
+ ;; Add custom commands to the command palette
+ ;; Example usage:
  ;; :commands
  ;; [
- ;; ["js" "Javascript"]
- ;; ["md" "Markdown"]
- ;; ]
+ ;;  ["js" "Javascript"]
+ ;;  ["md" "Markdown"]
+ ;  ]
  :commands
  []
 
