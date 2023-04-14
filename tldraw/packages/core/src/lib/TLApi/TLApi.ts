@@ -11,8 +11,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app = app
   }
 
-  editShape = (shape: string | S | undefined): this => {
-    this.app.transition('select').selectedTool.transition('editingShape', { shape })
+  editShape = (shape: S | undefined): this => {
+    if (!shape?.props.isLocked)
+      this.app.transition('select').selectedTool.transition('editingShape', { shape })
+
     return this
   }
 

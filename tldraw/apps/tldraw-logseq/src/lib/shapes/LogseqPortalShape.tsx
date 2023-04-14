@@ -536,7 +536,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
-    return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8} />
+    return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8}  strokeDasharray={this.props.isLocked ? "8 2" : "undefined"}/>
   })
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {

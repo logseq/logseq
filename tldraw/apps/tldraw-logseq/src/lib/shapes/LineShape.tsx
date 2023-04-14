@@ -146,6 +146,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       fontSize,
       fontWeight,
       handles: { start, end },
+      isLocked,
     } = this.props
     const bounds = this.getBounds()
     const labelSize =
@@ -176,6 +177,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             decorations?.start,
             decorations?.end
           )}
+          strokeDasharray={isLocked ? "8 2" : "undefined"}
         />
         {label && !isEditing && (
           <rect

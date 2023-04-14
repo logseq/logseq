@@ -56,7 +56,7 @@ export const ContextMenu = observer(function ContextMenu({
         tabIndex={-1}
       >
         <div>
-          {app.selectedShapes?.size > 1 && !app.readOnly && (
+          {app.selectedShapes?.size > 1 && !app.readOnly && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <>
               <ReactContextMenu.Item>
                 <div className="tl-menu-button-row pb-0">
@@ -145,6 +145,7 @@ export const ContextMenu = observer(function ContextMenu({
           )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) &&
+            app.selectedShapesArray?.some(s => !s.props.isLocked) &&
             !app.readOnly && (
               <>
                 {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
@@ -161,7 +162,7 @@ export const ContextMenu = observer(function ContextMenu({
                     </div>
                   </ReactContextMenu.Item>
                 )}
-                {app.selectedShapesArray.length > 1 && (
+                {app.selectedShapesArray.length > 1 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
                   <ReactContextMenu.Item
                     className="tl-menu-item"
                     onClick={() => runAndTransition(app.api.doGroup)}
@@ -178,7 +179,7 @@ export const ContextMenu = observer(function ContextMenu({
                 <ReactContextMenu.Separator className="menu-separator" />
               </>
             )}
-          {app.selectedShapes?.size > 0 && (
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <>
               {!app.readOnly && (
                 <ReactContextMenu.Item
@@ -276,7 +277,25 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size > 0 && !app.readOnly && (
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.setLock(true))}
+            >
+              <TablerIcon className="tl-menu-icon" name="lock" />
+              Lock
+            </ReactContextMenu.Item>
+          )}
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.setLock(false))}
+            >
+              <TablerIcon className="tl-menu-icon" name="lock-open" />
+              Unlock
+            </ReactContextMenu.Item>
+          )}
+          {app.selectedShapes?.size > 0 && !app.readOnly && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <>
               <ReactContextMenu.Item
                 className="tl-menu-item"

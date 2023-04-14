@@ -103,9 +103,10 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
+    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} strokeDasharray={isLocked ? "8 2" : "undefined"}/>
   })
 
   useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
