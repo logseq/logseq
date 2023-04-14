@@ -71,7 +71,7 @@
  ;; Default value:  true
  :feature/enable-whiteboards? true
 
- ;; Disable the built-in Scheduled tasks and deadlines query in the journal.
+ ;; Disable the built-in 'Scheduled tasks and deadlines' query in the journal.
  ;; Default value:  false
  ;; :feature/disable-scheduled-and-deadline-query? true
 
@@ -88,15 +88,12 @@
  ;;  - integer from 0 to 6 (Monday to Sunday)
  :start-of-week 6
 
- ;; Specify a custom CSS import
- ;; This option takes precedence over your local `logseq/custom.css` file
- ;; You may find a list of awesome Logseq themes here:
- ;; https://github.com/logseq/awesome-logseq#css-themes
- ;; Example:
- ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
+ ;; Import a custom CSS file.
+ ;; This option takes precedence over the local `logseq/custom.css` file.
+ ;; :custom-css-url "@import url('');"
 
- ;; Specify a custom js import
- ;; This option takes precedence over your local `logseq/custom.js` file
+ ;; Import a custom JS file.
+ ;; This option takes precedence over the local `logseq/custom.js` file.
  ;; :custom-js-url ""
 
  ;; Set a custom Arweave gateway
@@ -130,22 +127,19 @@
  ;; 2. Setup page "Jun 3rd, 2021" as home page without sidebar
  ;; :default-home {:page "Jun 3rd, 2021"}
  ;; 3. Setup page "home" as home page with multiple pages in sidebar
- ;; :default-home  {:page "home" :sidebar ["page a" "page b"]}
+ ;; :default-home {:page "home" :sidebar ["page a" "page b"]}
 
- ;; Instruct Logseq to utilize a designated folder within the graph folder as
- ;;  the default location for notes.
- ;; If not specified, notes will be stored in the pages directory
- ;; :pages-directory "your-directory"
+ ;; Specify the default location to store notes
+ ;; If not specified, pages will be stored in the 'pages' subdirectory.
+ ;; :pages-directory "./pages"
 
- ;; Instruct Logseq to utilize a designated folder within the graph folder as
- ;; the default storage for journals.
- ;; If not specified, journals will be stored in the journals directory
- ;; :journals-directory "your-directory"
+ ;; Specify the default location to store journals.
+ ;; If not specified, journals will be stored in the 'journals' subdirectory.
+ ;; :journals-directory "./journals"
 
- ;; Instruct Logseq to utilize a designated folder within the graph folder as
- ;; the default location for whiteboards.
- ;; If not specified, whiteboards will be stored in the whiteboards directory
- ;; :whiteboards-directory "your-directory"
+ ;; Specify the default location to store whiteboards.
+ ;; If not specified, whiteboards will be stored in the 'whiteboards' subdirectory.
+ ;; :whiteboards-directory "./whiteboards"
 
  ;; Set this to true will convert
  ;; `[[Grant Ideas]]` to `[[file:./grant_ideas.org][Grant Ideas]]` for org-mode
