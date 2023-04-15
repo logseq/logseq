@@ -526,7 +526,8 @@
   }
 
   &.as-number-list {
-    min-width: 24px;
+    min-width: 16px;
+    width: auto;
     white-space: nowrap;
     justify-content: end;
   }
