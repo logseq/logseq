@@ -9,9 +9,13 @@
 
 (defn- variable-rules
   []
-  {"today" (page-ref/->page-ref (date/today))
+  {"random-uuid" (str (random-uuid))
+   "today" (page-ref/->page-ref (date/today))
+   "today-string" (date/today)
    "yesterday" (page-ref/->page-ref (date/yesterday))
+   "yesterday-string" (date/yesterday)
    "tomorrow" (page-ref/->page-ref (date/tomorrow))
+   "tomorrow-string" (date/tomorrow)
    "time" (date/get-current-time)
    "current page" (when-let [current-page (or
                                            (state/get-current-page)
