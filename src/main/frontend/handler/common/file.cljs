@@ -11,7 +11,8 @@
             [frontend.context.i18n :refer [t]]
             [promesa.core :as p]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [lambdaisland.glogi :as log]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
@@ -54,15 +55,18 @@
   (validate-existing-file repo-url file-page file-path)
   (graph-parser/get-blocks-to-delete db file-page file-path retain-uuid-blocks))
 
-(defn- diff-merge-uuids
+(defn- diff-merge-uuids-2ways
   "Infer new uuids from existing DB data and diff with the new AST
    Return a list of uuids for the new blocks"
   [format ast content {:keys [page-name] :as options}]
-  (let [base-diffblocks (diff-merge/db->diff-blocks page-name)
-        income-diffblocks (diff-merge/ast->diff-blocks ast content format options)
-        diff-ops (diff-merge/diff base-diffblocks income-diffblocks)
-        new-uuids (diff-merge/attachUUID diff-ops (map :uuid base-diffblocks))]
-    (bean/->clj new-uuids)))
+  (try
+    (let [base-diffblocks (diff-merge/db->diff-blocks page-name)
+          income-diffblocks (diff-merge/ast->diff-blocks ast content format options)
+          diff-ops (diff-merge/diff base-diffblocks income-diffblocks)
+          new-uuids (diff-merge/attachUUID diff-ops (map :uuid base-diffblocks))]
+      (bean/->clj new-uuids))
+    (catch js/Error e
+      (log/error :diff-merge/diff-merge-2way-calling-failed e))))
 
 (defn- reset-file!*
   "Parse file considering diff-merge with local or remote file
@@ -77,7 +81,7 @@
       ;; the file is already in db, so we can use the existing file's blocks
       ;; to do the diff-merge
       :fs/local-file-change
-      (graph-parser/parse-file db-conn file content (assoc-in options [:extract-options :resolve-uuid-fn] diff-merge-uuids))
+      (graph-parser/parse-file db-conn file content (assoc-in options [:extract-options :resolve-uuid-fn] diff-merge-uuids-2ways))
 
       ;; TODO Junyi: 3 ways to handle remote file change
       ;; The file is on remote, so we should have 

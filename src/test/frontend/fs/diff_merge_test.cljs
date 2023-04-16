@@ -286,7 +286,7 @@
     (graph-parser/parse-file conn "bar.md" bar-content {})
     (are [ast content page-name uuids]
          (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids :markdown ast content {:page-name page-name
+              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
                                                                              :block-pattern "-"}))
             uuids)
 
@@ -313,12 +313,12 @@
                          "\t- jkl\n")
         foo-new-content (str foo-content "- newline\n")
         new-bar-content (str  "- newline\n" bar-content)]
-    (graph-parser/parse-file conn "foo.md" foo-content {})
-    (graph-parser/parse-file conn "bar.md" bar-content {})
+    (graph-parser/parse-file conn "foo-persist.md" foo-content {})
+    (graph-parser/parse-file conn "bar-persist.md" bar-content {})
     ;; Compare if the uuids are the same as those inside DB when the modified content (adding new line) is parsed
     (are [ast content page-name DB-uuids->new-uuids-fn]
          (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids :markdown ast content {:page-name page-name
+              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
                                                                              :block-pattern "-"}))
             ;; Get all uuids under the page
             (->> page-name
@@ -330,11 +330,31 @@
       ;; Append a new line to foo
       (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
       foo-new-content
-      "foo"
+      "foo-persist"
       (fn [db-uuids] (conj db-uuids nil))
       
       ;; Prepend a new line to bar
       (gp-mldoc/->edn new-bar-content (gp-mldoc/default-config :markdown))
       new-bar-content
-      "bar"
+      "bar-persist"
       (fn [db-uuids] (cons nil db-uuids)))))
+
+(deftest diff-merge-error-capture-test
+  ;; Any exception thrown in diff-merge-uuids-2ways should be captured and returned a nil
+  (let [conn (ldb/start-conn)
+        foo-content (str "- abc\n"
+                         "- def\n")
+        foo-new-content (str foo-content "- newline\n")]
+    (graph-parser/parse-file conn "foo-error-cap.md" foo-content {})
+    (are [ast content page-name]
+         (= (with-redefs [conn/get-db (constantly @conn)
+                                ;; Hijack the function to throw an exception
+                          fs-diff/db->diff-blocks #(throw (js/Error. "intentional exception for testing diff-merge-uuids-2ways error capture"))]
+              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
+                                                                                   :block-pattern "-"}))
+            nil)
+
+            ;; Append a new line to foo
+      (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
+      foo-new-content
+      "foo-error-cap")))
