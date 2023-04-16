@@ -287,23 +287,24 @@
  ;; :srs/initial-interval 4
 
  ;; Hide specific block properties.
- ;; E.g. :block-hidden-properties #{:created-at :updated-at}
- ;; :block-hidden-properties #{}
+ ;; Example usage:
+ ;; :block-hidden-properties #{:public :icon}
 
  ;; Create a page for all properties.
  ;; default value: true
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
- ;; E.g.:property-pages/excludelist #{:duration :author}
- ;; :property-pages/excludelist
+ ;; Example usage:
+ ;; :property-pages/excludelist #{:duration :author}
 
  ;; By default, property value separated by commas will not be treated as
  ;; page references. You can add properties to enable it.
- ;; E.g. :property/separated-by-commas #{:alias :tags}
- ;; :property/separated-by-commas #{}
+ ;; Example usage:
+ ;; :property/separated-by-commas #{:alias :tags}
 
  ;; Properties that are ignored when parsing property values for references
+ ;; Example usage:
  ;; :ignored-page-references-keywords #{:author :startup}
 
  ;; logbook configuration.
@@ -355,28 +356,28 @@
  ;; Ignore these files when syncing, regexp is supported.
  :file-sync/ignore-files []
 
- ;; dwim (do what I mean) for Enter key when editing.
- ;; Context-awareness of Enter key makes editing more easily
- ; :dwim/settings {
- ;   :admonition&src?  true
- ;   :markup?          false
- ;   :block-ref?       true
- ;   :page-ref?        true
- ;   :properties?      true
- ;   :list?            true
- ; }
+ ;; Configure the Enter key behavior for
+ ;; context-aware editing with DWIM (Do What I Mean).
+ ;; :dwim/settings {
+ ;;   :admonition&src?  true
+ ;;   :markup?          false
+ ;;   :block-ref?       true
+ ;;   :page-ref?        true
+ ;;   :properties?      true
+ ;;   :list?            true
+ ;; }
 
- ;; Decide how to escape the special characters in the page title.
+ ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
- ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions.
- ;;   Or you have to rename all the affected files manually and then re-index on all
- ;;   clients after the files are synced. Wrong handling may cause page titles
- ;;   containing special characters to be messy.
- ;; Available values:
+ ;;   This is a dangerous operation. To modify the setting,
+ ;;   access the 'Filename format' setting and follow the instructions.
+ ;;   Othwerwise, You may need to manually rename all affected files and
+ ;;   re-index them on all clients after synchronization.
+ ;;   Incorrect handling may result in messy page titles.
+ ;; Available Options:
  ;;   :file/name-format :triple-lowbar
- ;;     ;use triple underscore `___` for slash `/` in page title
- ;;     ;use Percent-encoding for other invalid characters
+ ;;     ;use triple underscore `___` for slash `/` in page title.
+ ;;     ;use Percent-encoding for other invalid characters.
  :file/name-format :triple-lowbar
 
 }
