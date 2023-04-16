@@ -1,4 +1,5 @@
 (ns frontend.fs.diff-merge
+  "Implementation of text (file) based content diff & merge for conflict resolution"
   (:require ["@logseq/diff-merge" :refer [Differ attach_uuids]]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
@@ -19,11 +20,12 @@
 
 (defn diff 
   "2-ways diff
-   Accept: blocks
-   https://github.com/logseq/diff-merge/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22"
-  [base income]
+   Accept: blocks in the struct with the required info
+   Please refer to the `Block` struct in the link below
+   https://github.com/logseq/diff-merge/blob/master/lib/mldoc.ts"
+  [base incoming]
   (let [differ (Differ.)]
-    (.diff_logseqMode differ (bean/->js base) (bean/->js income))))
+    (.diff_logseqMode differ (bean/->js base) (bean/->js incoming))))
 
 ;; (defonce getHTML visualizeAsHTML)
 

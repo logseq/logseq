@@ -64,7 +64,7 @@
         new-uuids (diff-merge/attachUUID diff-ops (map :uuid base-diffblocks))]
     (bean/->clj new-uuids)))
 
-(defn- reset-file!-impl
+(defn- reset-file!*
   "Parse file considering diff-merge with local or remote file
    Decide how to treat the parsed file based on the file's triggering event
    options - 
@@ -108,4 +108,4 @@
                                            ;; To avoid skipping the `:or` bounds for keyword destructuring
                                            (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
                                            (when (some? verbose) {:verbose verbose}))})]
-     (:tx (reset-file!-impl repo-url file-path content options)))))
+     (:tx (reset-file!* repo-url file-path content options)))))
