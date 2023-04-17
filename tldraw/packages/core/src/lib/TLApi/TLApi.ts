@@ -181,6 +181,19 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  setScaleLevel = (scaleLevel: string): this => {
+    const { settings } = this.app
+
+    settings.update({ scaleLevel })
+
+    this.app.selectedShapes.forEach(shape => {
+      shape.setScaleLevel(scaleLevel)
+    })
+    this.app.persist()
+
+    return this
+  }
+
   save = () => {
     this.app.save()
     return this
