@@ -1,10 +1,10 @@
 {:meta/version 1
 
  ;; Set the preferred format.
- ;; Available Options:
+ ;; Available options:
  ;; - "Markdown" (default)
  ;; - "Org"
- ;; :preferred-format "Markdown"
+ :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
  ;; Available options:
@@ -35,57 +35,57 @@
  ;; :journal/file-name-format "yyyy_MM_dd"
 
  ;; Enable tooltip preview on hover.
- ;; Default value:  true
+ ;; Default value: true
  :ui/enable-tooltip? true
 
  ;; Display brackets around [[page]] references.
- ;; Default value:  true
+ ;; Default value: true
  :ui/show-brackets? true
 
  ;; Display the complete block content when referencing.
- ;; Default value:  false
+ ;; Default value: false
  :ui/show-full-blocks? false
 
  ;; Automatically expand block references when zooming in.
- ;; Default value:  true
+ ;; Default value: true
  :ui/auto-expand-block-refs? true
 
  ;; Enable Block timestamps.
- ;; Default value:  false
+ ;; Default value: false
  :feature/enable-block-timestamps? false
 
  ;; Disable accent marks when searching.
  ;; After changing this setting, rebuild the search index by pressing (^C ^S).
- ;; Default value:  true
+ ;; Default value: true
  :feature/enable-search-remove-accents? true
 
  ;; Enable journals.
- ;; Default value:  true
+ ;; Default value: true
  :feature/enable-journals? true
 
  ;; Enable flashcards.
- ;; Default value:  true
+ ;; Default value: true
  :feature/enable-flashcards? true
 
  ;; Enable Whiteboards.
- ;; Default value:  true
+ ;; Default value: true
  :feature/enable-whiteboards? true
 
  ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
- ;; Default value:  false
+ ;; Default value: false
  :feature/disable-scheduled-and-deadline-query? false
 
  ;; Specify the number of days displayed in the future for
  ;; the 'scheduled tasks and deadlines' query.
- ;; Default value:  7
+ ;; Default value: 7
  ;; Example usage:
  ;; Display all scheduled tasks and deadlines for the next 14 days:
  ;; :scheduled/future-days 14
  :scheduled/future-days 7
 
  ;; Specify the first day of the week.
- ;; Default value:  6 (Sunday)
- ;; Available Options:
+ ;; Default value: 6 (Sunday)
+ ;; Available options:
  ;;  - integer from 0 to 6 (Monday to Sunday)
  :start-of-week 6
 
@@ -111,7 +111,7 @@
 
  ;; Publish all pages within the Graph
  ;; regardless of whether individual pages have been marked as public.
- ;; Default value:  false
+ ;; Default value: false
  :publishing/all-pages-public? false
 
  ;; Set the default home page and sidebar status.
@@ -171,15 +171,15 @@
 
  ;; Configure the behavior of pressing Enter in document mode.
  ;; if set to true, pressing Enter will create a new block.
- ;; Default value:  true
+ ;; Default value: true
  :shortcut/doc-mode-enter-for-new-block? true
 
  ;; Limit the searchable and editable block content length for performance
- ;; Default value:  10000
+ ;; Default value: 10000
  :block/content-max-length 10000
 
  ;; Display command documentation on hover.
- ;; Default value:  true
+ ;; Default value: true
  :ui/show-command-doc? true
 
  ;; Display empty bullet points.
