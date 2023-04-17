@@ -58,51 +58,31 @@ To see what translations are missing for your language use:
 
 ```shell
 $ bb lang:missing LOCALE
-
-|                       :translation-key |                                  :string-to-translate |
-|----------------------------------------+-------------------------------------------------------|
-|                            :cards-view |                                            View cards |
-|                                :delete |                                                Delete |
-|                          :export-graph |                                          Export graph |
-|                           :export-page |                                           Export page |
-|                          :graph-search |                                          Search graph |
-|                       :open-new-window |                                            New window |
+|                            :translation-key |                        :string-to-translate |               :file |
+|---------------------------------------------+---------------------------------------------+---------------------|
+|                     :content/copy-block-url |                              Copy block URL | frontend/dicts.cljs |
+|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts.cljs |
+|                           :content/copy-ref |                         Copy this reference | frontend/dicts.cljs |
+|                         :content/delete-ref |                       Delete this reference | frontend/dicts.cljs |
+...
 ```
 
-Now, manually, add keys for your language to the translation files, save and rerun the above command. 
-Over time you're hoping to have this list drop to zero.
+Now, manually, add keys for your language to the translation files, save and rerun the above command.
+Over time you're aiming to have this list drop to zero. Since this process can be tedious, there is an option to print the untranslated strings to copy and paste them to the files:
+
+```sh
+# When pasting this content, be sure to update the indentation to match the file
+$ bb lang:missing LOCALE --copy
+
+;; For frontend/dicts.cljs
+:content/copy-block-url "Copy block URL"
+:content/copy-export-as "Copy / Export as.."
+:content/copy-ref "Copy this reference"
+:content/delete-ref "Delete this reference"
+...
+```
 
 Almost all translations are pretty quick. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
-
-### \*nix-like command
-
-For \*nix translators, since this process is a LITTLE tedious to do it manually, here is a small **command** to process the output of `bb lang:missing` command and leave it almost ready to paste it on the dict files.
-
-```shell
-bb lang:missing LOCALE | awk -F '|' '{print $2 "\"" $3 "\""}' | sed 's/  //g' | sed 's/ :/:/g' > untranslated_strings.txt
-```
-transforms the output from:
-```
-|                       :settings-page/tab-features |                                              Features | frontend/dicts.cljs |
-|              :whiteboard/link-whiteboard-or-block |                            Link whiteboard/page/block | frontend/dicts.cljs |
-|                   :command.auto-complete/complete |                   Auto-complete: Choose selected item | shortcut/dicts.cljs |
-|                       :command.auto-complete/next |                       Auto-complete: Select next item | shortcut/dicts.cljs |
-
-```
-to:
-```
-:settings-page/tab-features "Features "
-:whiteboard/link-whiteboard-or-block "Link whiteboard/page/block "
-:command.auto-complete/complete " Auto-complete: Choose selected item "
-:command.auto-complete/next " Auto-complete: Select next item "
-```
-
-The translator just need to:
-
-0. Ignore garbage at the beggining and end of the `untranslated_strings.txt` file.
-1. In the `untranslated_strings.txt` file check which strings go to which file and since the `bb` output is ordered it is only need to split the strings in *half*.
-2. After splitting the strings, copy a bunch of strings to their corresponding file and translate them. Repeat until finish.
-3. Make the proper indentation.
 
 ## Fix Untranslated
 
