@@ -3167,7 +3167,7 @@
     (cut-selection-blocks)
     (clear-selection!)))
 
-(defn- copy-blocks-and-clear-selections!
+(defn copy-blocks-and-clear-selections!
   []
   (when-not (get-in @state/state [:ui/find-in-page :active?])
     (copy-selection-blocks true :op :cut)

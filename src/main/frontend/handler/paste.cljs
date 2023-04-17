@@ -9,7 +9,6 @@
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
-            [frontend.modules.outliner.core :as outliner-core]
             [frontend.extensions.html-parser :as html-parser]
             [goog.object :as gobj]
             [frontend.mobile.util :as mobile-util]

@@ -132,7 +132,7 @@
       [state/get-input (constantly #js {:value "block"})
        ;; paste-copied-blocks-or-text mocks below
        util/stop (constantly nil)
-       paste-handler/get-copied-blocks (constantly (p/resolved expected-blocks))
+       paste-handler/get-internal-copy-data (constantly (p/resolved {:blocks expected-blocks}))
        editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                       #js {:clipboardData #js {:getData (constantly clipboard)}})]
