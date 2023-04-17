@@ -684,6 +684,8 @@
                 (:db/id target-block))
              sibling?)))
 
+;; TODO: support replace-empty-target?
+;; Which is useful for cutting and pasting blocks
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
   [blocks target-block {:keys [sibling? outliner-op]}]

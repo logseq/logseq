@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
+            [frontend.modules.outliner.core :as outliner-core]
             [frontend.extensions.html-parser :as html-parser]
             [goog.object :as gobj]
             [frontend.mobile.util :as mobile-util]
@@ -84,41 +85,50 @@
 
 ;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
 ;; for a similar example
-(defn get-copied-blocks []
+(defn get-internal-copy-data []
   (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
                             (js/navigator.clipboard.read))
-          blocks-blob ^js (when clipboard-items
-                            (let [types (.-types ^js (first clipboard-items))]
-                              (when (contains? (set types) "web application/logseq")
-                                (.getType ^js (first clipboard-items)
-                                          "web application/logseq"))))
-          blocks-str (when blocks-blob (.text blocks-blob))]
-         (when blocks-str
-           (gp-util/safe-read-string blocks-str))))
+          blob ^js (when clipboard-items
+                     (let [types (.-types ^js (first clipboard-items))]
+                       (when (contains? (set types) "web application/logseq")
+                         (.getType ^js (first clipboard-items)
+                                   "web application/logseq"))))
+          blob-str (when blob (.text blob))]
+    (when blob-str
+      (gp-util/safe-read-string blob-str))))
 
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
   (->
-   (p/let [copied-blocks (get-copied-blocks)]
-     (let [input (state/get-input)
-           input-id (state/get-edit-input-id)
-           text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-           replace-text-f (fn [text]
-                            (let [input-id (state/get-edit-input-id)]
-                              (commands/delete-selection! input-id)
-                              (commands/simple-insert! input-id text nil)))
-           internal-paste? (seq copied-blocks)]
-       (if internal-paste?
+   (p/let [internal-data (get-internal-copy-data)]
+     (let [{:keys [op blocks]} internal-data
+           copied-blocks blocks
+           internal-paste? (seq copied-blocks)
+           editing-block (state/get-edit-block)]
+       (cond
+         (and internal-paste? (= op :cut) editing-block)
+         (editor-handler/paste-cutted-blocks blocks)
+
+         internal-paste?
          (editor-handler/paste-blocks copied-blocks {})
-         (let [shape-refs-text (when (and (not (string/blank? html))
+
+         :else
+         (let [input (state/get-input)
+               input-id (state/get-edit-input-id)
+               text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
+               shape-refs-text (when (and (not (string/blank? html))
                                           (get-whiteboard-tldr-from-text html))
                                  ;; text should always be prepared block-ref generated in tldr
                                  text)
                {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
                text-url? (gp-util/url? text)
-               selection-url? (gp-util/url? selection)]
+               selection-url? (gp-util/url? selection)
+               replace-text-f (fn [text]
+                                (let [input-id (state/get-edit-input-id)]
+                                  (commands/delete-selection! input-id)
+                                  (commands/simple-insert! input-id text nil)))]
            (cond
              (not (string/blank? shape-refs-text))
              (commands/simple-insert! input-id shape-refs-text nil)

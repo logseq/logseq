@@ -71,6 +71,7 @@
    :editor/copy                    "Copy (copies either selection, or block reference)"
    :editor/copy-text               "Copy selections as text"
    :editor/cut                     "Cut"
+   :editor/clear-cut               "Clear cut"
    :editor/undo                    "Undo"
    :editor/redo                    "Redo"
    :editor/insert-link             "HTML Link"

@@ -370,6 +370,11 @@
       border-bottom-color: transparent;
     }
   }
+
+  &.cutted {
+    border-left: 1px solid;
+    border-left-color: #7f2323;
+  }
 }
 
 .ls-block,

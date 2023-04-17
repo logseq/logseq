@@ -11,10 +11,10 @@
             ["ignore" :as Ignore]))
 
 (defn copy-to-clipboard-without-id-property!
-  [format raw-text html blocks]
+  [format raw-text html data]
   (util/copy-to-clipboard! (property/remove-id-property format raw-text)
                            :html html
-                           :blocks blocks))
+                           :data data))
 
 (defn config-with-document-mode
   [config]

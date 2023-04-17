@@ -54,7 +54,7 @@
        [:div.action-bar-commands
         (action-command "infinity" "Card" #(srs/make-block-a-card! (:block/uuid block)))
         (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks false))
-        (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
+        (action-command "cut" "Cut" editor-handler/copy-blocks-and-clear-selections!)
         (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))
         (action-command "registered" "Copy ref"
                         (fn [_event] (editor-handler/copy-block-ref! uuid block-ref/->block-ref)))

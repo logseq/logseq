@@ -42,7 +42,7 @@
 
    (ui/menu-link
     {:key "cut"
-     :on-click #(editor-handler/cut-selection-blocks true)}
+     :on-click editor-handler/copy-blocks-and-clear-selections!}
     (t :editor/cut)
     (ui/keyboard-shortcut-from-config :editor/cut))
    (ui/menu-link

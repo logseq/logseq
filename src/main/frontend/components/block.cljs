@@ -2792,6 +2792,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
+        cutted? (:block/cutted? block)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2803,6 +2804,7 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
+                    (when cutted? " cutted")
                     (when selected? " selected noselect")
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
@@ -2886,7 +2888,8 @@
                     ::navigating-block (atom (:block/uuid block)))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                                        :block/properties :block/left :block/children :block/_refs
+                                        :block/bottom? :block/top? :block/cutted?]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -3280,10 +3283,15 @@
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
-(defn- block-list
+(rum/defc block-list < rum/reactive
   [config blocks]
-  (for [[idx item] (medley/indexed blocks)]
-    (block-item config blocks idx item)))
+  (let [cutted-blocks (db/sub-key-value :logseq/cutted-blocks)
+        blocks' (map (fn [b] (if (contains? cutted-blocks (:block/uuid b))
+                               (assoc b :block/cutted? true)
+                               b))
+                  blocks)]
+    (for [[idx item] (medley/indexed blocks')]
+      (block-item config blocks idx item))))
 
 (defn- custom-query-or-ref?
   [config]

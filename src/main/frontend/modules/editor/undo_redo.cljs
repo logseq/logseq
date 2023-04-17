@@ -14,6 +14,11 @@
 (def ^:private undo-redo-states (atom {}))
 (def *pause-listener (atom false))
 
+(def app-state-keys [:route-match
+                     :ui/sidebar-open?
+                     :ui/sidebar-collapsed-blocks
+                     :sidebar/blocks])
+
 (defn get-state
   []
   (let [repo (state/get-current-repo)]
@@ -79,7 +84,6 @@
 
 (defn page-pop-redo
   [page-id]
-  (prn "[debug] redo: " (:block/original-name (db/pull page-id)))
   (when-let [redo-stack (get-redo-stack)]
     (when-let [stack @redo-stack]
       (when (seq stack)
@@ -93,7 +97,6 @@
                   after (subvec stack (inc idx'))
                   others (vec (concat before after))]
               (reset! redo-stack others)
-              (prn "[debug] redo remove: " (nth stack idx'))
               (nth stack idx'))))))))
 
 (defn- smart-pop-redo
@@ -143,7 +146,6 @@
                   after (subvec stack (inc idx'))
                   others (vec (concat before after))]
               (reset! undo-stack others)
-              (prn "[debug] undo remove: " (nth stack idx'))
               [(nth stack idx') others])))))))
 
 (defn- smart-pop-undo
@@ -195,8 +197,9 @@
 
 (defn redo
   []
-  (when-let [{:keys [txs tx-meta] :as e} (smart-pop-redo)]
-    (let [new-txs (get-txs true txs)]
+  (when-let [e (smart-pop-redo)]
+    (let [{:keys [txs tx-meta]} e
+          new-txs (get-txs true txs)]
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
                                 tx-meta
@@ -240,9 +243,5 @@
                     :tx-meta tx-meta
                     :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)
-                    :app-state (select-keys @state/state
-                                            [:route-match
-                                             :ui/sidebar-open?
-                                             :ui/sidebar-collapsed-blocks
-                                             :sidebar/blocks])}]
+                    :app-state (select-keys @state/state app-state-keys)}]
         (push-undo entity)))))

@@ -1052,7 +1052,7 @@
       result)))
 
 (defn copy-selection-blocks
-  [html?]
+  [html? & {:keys [op] :as opts}]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
@@ -1062,7 +1062,16 @@
       (when block
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
               copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
-          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
+          (when (= op :cut)
+            (outliner-tx/transact!
+              {:outliner-op :move-blocks
+               :real-outliner-op :cut-blocks
+               :additional-tx [(db/kv :logseq/cutted-blocks (set top-level-block-uuids))]}))
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)
+                                                                 (merge
+                                                                  {:op :copy
+                                                                   :blocks copied-blocks}
+                                                                  opts)))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1129,8 +1138,7 @@
            (map :block/uuid)))))
 
 (defn cut-selection-blocks
-  [copy?]
-  (when copy? (copy-selection-blocks true))
+  []
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -1276,10 +1284,13 @@
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
-          html (export-html/export-blocks-as-html repo [block-id] nil)
-          sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
-      (delete-block-aux! block true))))
+          html (export-html/export-blocks-as-html repo [block-id] nil)]
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html
+                                                             {:op :cut
+                                                              :blocks [block]})
+      (outliner-tx/transact!
+        {:outliner-op :cut-block
+         :additional-tx [(db/kv :logseq/cutted-blocks #{block-id})]}))))
 
 (defn clear-last-selected-block!
   []
@@ -2273,7 +2284,24 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
+        (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
+
+(defn paste-cutted-blocks
+  [blocks]
+  (when-let [editing-block (state/get-edit-block)]
+    (state/clear-edit!)
+    (outliner-tx/transact!
+      {:outliner-op :move-blocks
+       :real-outliner-op :paste-cut-blocks
+       :additional-tx [(db/kv :logseq/cutted-blocks #{})]}
+      (save-current-block!)
+      (outliner-core/move-blocks! blocks editing-block true))))
+
+(defn clear-cutted-blocks
+  []
+  (outliner-tx/transact!
+    {:outliner-op :clear-cutted-blocks
+     :additional-tx [(db/kv :logseq/cutted-blocks #{})]}))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2729,7 +2757,7 @@
               custom-query? (get-in editor-state [:config :custom-query?])]
           (when-not custom-query?
             (delete-concat current-block input current-pos value)))
-            
+
         :else
         (delete-and-update input current-pos (inc current-pos))))))
 
@@ -3122,10 +3150,16 @@
         (edit-box-on-change! e block id)
         (util/scroll-editor-cursor input)))))
 
-(defn- cut-blocks-and-clear-selections!
-  [copy?]
+(defn cut-blocks-and-clear-selections!
+  []
   (when-not (get-in @state/state [:ui/find-in-page :active?])
-    (cut-selection-blocks copy?)
+    (cut-selection-blocks)
+    (clear-selection!)))
+
+(defn- copy-blocks-and-clear-selections!
+  []
+  (when-not (get-in @state/state [:ui/find-in-page :active?])
+    (copy-selection-blocks true :op :cut)
     (clear-selection!)))
 
 (defn shortcut-copy-selection
@@ -3135,12 +3169,12 @@
 (defn shortcut-cut-selection
   [e]
   (util/stop e)
-  (cut-blocks-and-clear-selections! true))
+  (copy-blocks-and-clear-selections!))
 
 (defn shortcut-delete-selection
   [e]
   (util/stop e)
-  (cut-blocks-and-clear-selections! false))
+  (cut-blocks-and-clear-selections!))
 
 (defn- copy-current-block-ref
   [format]

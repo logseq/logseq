@@ -37,15 +37,19 @@
        (route-handler/redirect! prev-route-data))
      (swap! state/state merge state))))
 
+(defn restore-app-state-and-cursor!
+  [{:keys [editor-cursor app-state]}]
+  (restore-cursor! editor-cursor)
+  (restore-app-state! app-state))
+
 (defn undo!
   [e]
   (util/stop e)
   (state/set-editor-op! :undo)
   (state/clear-editor-action!)
   (editor/save-current-block!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
+  (let [e (undo-redo/undo)]
+    (restore-app-state-and-cursor! e))
   (state/set-editor-op! nil))
 
 (defn redo!
@@ -53,7 +57,6 @@
   (util/stop e)
   (state/set-editor-op! :redo)
   (state/clear-editor-action!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
+  (let [e (undo-redo/redo)]
+    (restore-app-state-and-cursor! e))
   (state/set-editor-op! nil))

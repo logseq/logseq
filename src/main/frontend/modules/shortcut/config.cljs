@@ -237,6 +237,9 @@
    :editor/cut                     {:binding "mod+x"
                                     :fn      editor-handler/shortcut-cut}
 
+   :editor/clear-cut               {:binding "mod+shift+x"
+                                    :fn      editor-handler/clear-cutted-blocks}
+
    :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}
 
@@ -580,6 +583,7 @@
                           :editor/copy
                           :editor/copy-text
                           :editor/cut
+                          :editor/clear-cut
                           :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
@@ -671,7 +675,8 @@
     :editor/redo
     :editor/copy
     :editor/copy-text
-    :editor/cut]
+    :editor/cut
+    :editor/clear-cut]
 
    :shortcut.category/formatting
    [:editor/bold
