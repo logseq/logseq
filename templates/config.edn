@@ -77,7 +77,7 @@
 
  ;; Specify the number of days displayed in the future for
  ;; the 'scheduled tasks and deadlines' query.
- ;; Default value:  7 (days)
+ ;; Default value:  7
  ;; Example usage:
  ;; Display all scheduled tasks and deadlines for the next 14 days:
  ;; :scheduled/future-days 14
@@ -102,8 +102,8 @@
  ;; :arweave/gateway ""
 
  ;; Set Bullet indentation when exporting
- ;; default option: tab
- ;; Available Options:
+ ;; Default value: tab
+ ;; Available options:
  ;;  - `:eight-spaces` as eight spaces
  ;;  - `:four-spaces` as four spaces
  ;;  - `:two-spaces` as two spaces
@@ -266,7 +266,7 @@
  ;;       - d    (level 4)
  ;;
  ;; With the default value of level 2, block b will be collapsed.
- ;;  If the level's value is set to 3, block c will be collapsed.
+ ;; If the level's value is set to 3, block c will be collapsed.
  :ref/default-open-blocks-level 2
 
  ;; Configure the threshold for linked references before collapsing.
@@ -332,7 +332,7 @@
  ;; default value: false
  :editor/logical-outdenting? false
 
- ;; Paste the file when both text and a file are present in the clipboard
+ ;; Prefer pasting the file when text and a file are in the clipboard.
  ;; default value: false
  :editor/preferred-pasting-file? false
 
@@ -374,10 +374,10 @@
  ;;   Othwerwise, You may need to manually rename all affected files and
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
- ;; Available Options:
+ ;; Available options:
  ;;   :file/name-format :triple-lowbar
- ;;     ;use triple underscore `___` for slash `/` in page title.
- ;;     ;use Percent-encoding for other invalid characters.
+ ;;     ;use triple underscore `___` for slash `/` in page title
+ ;;     ;use Percent-encoding for other invalid characters
  :file/name-format :triple-lowbar
 
 }
