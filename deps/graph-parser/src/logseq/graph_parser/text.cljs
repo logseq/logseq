@@ -175,7 +175,7 @@
       v'
 
       (string/blank? v')
-      nil
+      ""
 
       (gp-util/wrapped-by-quotes? v')
       v'
