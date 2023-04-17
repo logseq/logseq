@@ -238,7 +238,7 @@
                                     :fn      editor-handler/shortcut-cut}
 
    :editor/clear-cut               {:binding "mod+shift+x"
-                                    :fn      editor-handler/clear-cutted-blocks}
+                                    :fn      editor-handler/clear-cut-blocks}
 
    :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}

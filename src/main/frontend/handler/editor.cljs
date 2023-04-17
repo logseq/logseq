@@ -1051,11 +1051,11 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
-(defn- cutted-blocks-tx
+(defn- cut-blocks-tx
   [ids]
   (for [id ids]
     {:block/uuid id
-     :block/cutted? true}))
+     :block/cut? true}))
 
 (defn copy-selection-blocks
   [html? & {:keys [op] :as opts}]
@@ -1072,7 +1072,7 @@
             (outliner-tx/transact!
               {:outliner-op :move-blocks
                :real-outliner-op :cut-blocks
-               :additional-tx (cutted-blocks-tx top-level-block-uuids)}))
+               :additional-tx (cut-blocks-tx top-level-block-uuids)}))
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)
                                                                  (merge
                                                                   {:op :copy
@@ -1296,7 +1296,7 @@
                                                               :blocks [block]})
       (outliner-tx/transact!
         {:outliner-op :cut-block
-         :additional-tx (cutted-blocks-tx [block-id])}))))
+         :additional-tx (cut-blocks-tx [block-id])}))))
 
 (defn clear-last-selected-block!
   []
@@ -2292,27 +2292,27 @@
         :real-outliner-op :indent-outdent}
         (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
-(defn- clear-cutted-blocks-tx
+(defn- clear-cut-blocks-tx
   []
-  (let [ids (db-model/get-all-cutted-blocks)]
-    (map (fn [id] [:db/retract id :block/cutted?]) ids)))
+  (let [ids (db-model/get-all-cut-blocks)]
+    (map (fn [id] [:db/retract id :block/cut?]) ids)))
 
-(defn paste-cutted-blocks
+(defn paste-cut-blocks
   [blocks]
   (when-let [editing-block (state/get-edit-block)]
     (state/clear-edit!)
     (outliner-tx/transact!
       {:outliner-op :move-blocks
        :real-outliner-op :paste-cut-blocks
-       :additional-tx (clear-cutted-blocks-tx)}
+       :additional-tx (clear-cut-blocks-tx)}
       (save-current-block!)
       (outliner-core/move-blocks! blocks editing-block true))))
 
-(defn clear-cutted-blocks
+(defn clear-cut-blocks
   []
   (outliner-tx/transact!
-    {:outliner-op :clear-cutted-blocks
-     :additional-tx (clear-cutted-blocks-tx)}))
+    {:outliner-op :clear-cut-blocks
+     :additional-tx (clear-cut-blocks-tx)}))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]

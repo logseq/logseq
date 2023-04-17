@@ -54,7 +54,7 @@
     :block/scheduled
     :block/deadline
     :block/repeated?
-    :block/cutted?
+    :block/cut?
     :block/created-at
     :block/updated-at
     ;; TODO: remove this in later releases
@@ -1404,12 +1404,12 @@ independent of format as format specific heading characters are stripped"
                 [(get m :template) e]))
          (into {}))))
 
-(defn get-all-cutted-blocks
+(defn get-all-cut-blocks
   []
   (d/q
     '[:find [?b ...]
       :where
-      [?b :block/cutted? true]]
+      [?b :block/cut? true]]
     (conn/get-db)))
 
 (defn get-all-properties

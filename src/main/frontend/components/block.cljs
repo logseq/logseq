@@ -2887,7 +2887,7 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs
-                                        :block/bottom? :block/top? :block/cutted?]
+                                        :block/bottom? :block/top? :block/cut?]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2905,7 +2905,7 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (when-not (:block/cutted? block)
+  (when-not (:block/cut? block)
     (let [repo (state/get-current-repo)
           ref? (:ref? config)
           custom-query? (boolean (:custom-query? config))]

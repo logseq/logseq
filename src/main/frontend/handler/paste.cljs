@@ -109,7 +109,7 @@
            editing-block (state/get-edit-block)]
        (cond
          (and internal-paste? (= op :cut) editing-block)
-         (editor-handler/paste-cutted-blocks blocks)
+         (editor-handler/paste-cut-blocks blocks)
 
          internal-paste?
          (editor-handler/paste-blocks copied-blocks {})
