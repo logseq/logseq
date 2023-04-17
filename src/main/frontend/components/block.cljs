@@ -2334,7 +2334,7 @@
        (when-not plugin-slotted?
          [:div.flex-1.w-full
           (cond
-            (seq title)
+            (or (seq title) (:block/marker block))
             (build-block-title config block)
 
             :else
