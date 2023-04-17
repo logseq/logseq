@@ -48,7 +48,7 @@ ios/App/App/capacitor.config.json
 startup.png
 
 /src/main/frontend/tldraw-logseq.js
-/src/test/docs
+/src/test/docs*
 ~*~
 
 ios/App/App/capacitor.config.json

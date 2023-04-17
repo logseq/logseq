@@ -191,6 +191,16 @@
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive rum/static db-mixins/query
+  {:init (fn [state]
+           (let [[config {:keys [title collapsed?]}] (:rum/args state)
+                 built-in? (built-in-custom-query? title)
+                 dsl-query? (:dsl-query? config)
+                 current-block-uuid (or (:block/uuid (:block config))
+                                        (:block/uuid config))]
+             (when-not (or built-in? dsl-query?)
+               (when collapsed?
+                 (editor-handler/collapse-block! current-block-uuid))))
+           state)}
   (rum/local nil ::query-result)
   {:init (fn [state] (assoc state :query-error (atom nil)))}
   [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]

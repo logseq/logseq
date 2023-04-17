@@ -115,7 +115,7 @@ const handleCreatingShapes = async (
       size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
     }
     return asset
-}
+  }
 
   async function createAssetsFromFiles(files: File[]) {
     const tasks = files
@@ -251,10 +251,7 @@ const handleCreatingShapes = async (
     const rawText = await getDataFromType(item, 'text/plain')
     if (rawText) {
       const text = rawText.trim()
-      return tryCreateShapeHelper(
-        tryCreateShapeFromURL,
-        tryCreateShapeFromIframeString
-      )(text)
+      return tryCreateShapeHelper(tryCreateShapeFromURL, tryCreateShapeFromIframeString)(text)
     }
 
     return null
@@ -330,6 +327,7 @@ const handleCreatingShapes = async (
             pageId: blockRef,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
           },
         ]
@@ -346,6 +344,7 @@ const handleCreatingShapes = async (
           pageId: pageName,
           fill: app.settings.color,
           stroke: app.settings.color,
+          scaleLevel: app.settings.scaleLevel,
           blockType: 'P' as 'P',
         },
       ]
@@ -370,6 +369,7 @@ const handleCreatingShapes = async (
             pageId: uuid,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
             compact: true,
           },

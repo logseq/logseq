@@ -301,6 +301,17 @@ html[data-theme='light'] {
 
 .tl-tools-floating-panel {
   flex-flow: column;
+
+  .tl-select-input-trigger {
+    @apply p-0 text-xs;
+
+    height: 32px;
+    min-width: 32px;
+  }
+
+  .tl-select-input-trigger-value {
+    @apply font-semibold justify-center;
+  }
 }
 
 button.tl-select-input-trigger {
@@ -314,7 +325,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-select-input-trigger-value {
-  @apply flex items-center justify-start flex-1 mr-1 md:mr-3;
+  @apply flex items-center justify-start flex-1;
 }
 
 .tl-select-input-viewport {

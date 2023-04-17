@@ -6,9 +6,8 @@
 
 ;; Integration test that test parsing a large graph like docs
 (deftest ^:integration parse-graph
-  (let [graph-dir "test/docs"
-        ;; TODO update docs filename rules to the latest version when the namespace PR is released
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
+  (let [graph-dir "test/docs-0.9.2"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
         {:keys [conn files asts]} (gp-cli/parse-graph graph-dir {:verbose false})] ;; legacy parsing
 
     (docs-graph-helper/docs-graph-assertions @conn files)
@@ -19,6 +18,8 @@
           "There's an ast returned for every file processed")
       (is (empty? (remove #(or
                             (seq (:ast %))
+                            ;; edn files don't have ast
+                            (string/ends-with? (:file %) ".edn")
                             ;; logseq files don't have ast
                             ;; could also used gp-config but API isn't public yet
                             (string/includes? (:file %) (str graph-dir "/logseq/")))

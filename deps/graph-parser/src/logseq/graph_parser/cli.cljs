@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.db :as ldb]))
 
 (defn slurp
@@ -46,13 +47,20 @@ TODO: Fail fast when process exits 1"
 (defn- parse-files
   [conn files {:keys [config] :as options}]
   (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)
-                                :user-config config}
+                                :user-config config
+                                :supported-formats (gp-config/supported-formats)
+                                :filename-format (or (:file/name-format config) :legacy)
+                                :extracted-block-ids (atom #{})}
                                (select-keys options [:verbose]))]
     (mapv
      (fn [{:file/keys [path content]}]
        (let [{:keys [ast]}
-             (graph-parser/parse-file conn path content (merge {:extract-options extract-options}
-                                                               (:parse-file-options options)))]
+             (let [parse-file-options
+                   (merge {:extract-options
+                           (assoc extract-options
+                                  :block-pattern (gp-config/get-block-pattern (gp-util/get-format path)))}
+                          (:parse-file-options options))]
+               (graph-parser/parse-file conn path content parse-file-options))]
          {:file path :ast ast}))
      files)))
 

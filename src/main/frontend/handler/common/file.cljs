@@ -54,6 +54,7 @@
          options (merge (dissoc options :verbose)
                         {:new? new?
                          :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
+                         ;; Options here should also be present in gp-cli/parse-graph
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)

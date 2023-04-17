@@ -4,6 +4,7 @@ import * as React from 'react'
 import { ToolButton } from '../ToolButton'
 import { GeometryTools } from '../GeometryTools'
 import { ColorInput } from '../inputs/ColorInput'
+import { ScaleInput } from '../inputs/ScaleInput'
 import * as Separator from '@radix-ui/react-separator'
 
 export const PrimaryTools = observer(function PrimaryTools() {
@@ -36,6 +37,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           style={{ margin: '0 -4px' }}
         />
         <ColorInput popoverSide="left" color={app.settings.color} setColor={handleSetColor} />
+        <ScaleInput scaleLevel={app.settings.scaleLevel} popoverSide="left" compact={true} />
       </div>
     </div>
   )
