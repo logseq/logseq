@@ -87,6 +87,10 @@
   [block]
   (= (get-block-own-order-list-type block) "number"))
 
+(defn make-block-as-own-order-list!
+  [block]
+  (some-> block (set-block-own-order-list-type! "number")))
+
 (defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -2537,7 +2541,9 @@
               "properties-drawer" (dwim-in-properties state))
 
             (and (string/blank? content)
-                 (own-order-number-list? block))
+                 (own-order-number-list? block)
+                 (not (some-> (db-model/get-block-parent (:block/uuid block))
+                              (own-order-number-list?))))
             (remove-block-own-order-list-type! block)
 
             (and

@@ -252,6 +252,12 @@
      ["Toggle Number list" [[:editor/clear-current-slash]
                      [:editor/toggle-children-number-list]] "Make children as number list"]]
 
+    ;; order list
+    [["Number list" [[:editor/clear-current-slash]
+                     [:editor/toggle-own-number-list]] "Number list"]
+     ["Bullet list" [[:editor/clear-current-slash]
+                     [:editor/remove-own-number-list]] "Bullet list"]]
+
     ;; task management
     (get-preferred-workflow)
 
@@ -659,6 +665,10 @@
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
   (when-let [block (state/get-edit-block)]
     (state/pub-event! [:editor/toggle-children-number-list block])))
+
+(defmethod handle-step :editor/toggle-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
