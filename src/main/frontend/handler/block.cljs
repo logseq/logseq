@@ -301,6 +301,12 @@
               (lazy-seq
                 (when (order-block-fn? b)
                   (cons b (order-sibling-list (prev-block-fn b))))))
-            (order-parent-list [b])]
-      (if prev-block
-        (count (order-sibling-list block)) 1))))
+            (order-parent-list [b]
+              (lazy-seq
+                (when (order-block-fn? b)
+                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
+      (let [idx           (if prev-block
+                            (count (order-sibling-list block)) 1)
+            order-parents-count (count (order-parent-list block))]
+        (if (odd? order-parents-count)
+          idx (nth (seq "abcdefghijklmnopqrstuvwxyz") (mod (dec idx) 26)))))))
