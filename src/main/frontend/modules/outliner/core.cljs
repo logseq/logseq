@@ -443,6 +443,11 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly random-uuid)))
+        replace-empty-target? (if (and move? replace-empty-target?
+                                       (contains? (set (map :db/id blocks))
+                                                  (:db/id (:block/left target-block))))
+                                false
+                                replace-empty-target?)
         uuids (if (and replace-empty-target? (not move?))
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
