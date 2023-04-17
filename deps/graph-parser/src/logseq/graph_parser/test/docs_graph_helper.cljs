@@ -100,8 +100,7 @@
     (is (= {:markdown 5499 :org 457} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:description 81, :updated-at 46, :
-    5, :logseq.macro-arguments 104
+    (is (= {:description 81, :updated-at 46, :tags 5, :logseq.macro-arguments 104
             :logseq.tldraw.shape 79, :card-last-score 6, :card-repeats 6,
             :card-next-schedule 6, :ls-type 79, :card-last-interval 6, :type 107,
             :template 5, :title 114, :alias 41, :supports 5, :id 145, :url 5,
