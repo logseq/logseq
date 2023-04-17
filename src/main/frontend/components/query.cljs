@@ -216,6 +216,7 @@
                       (or
                        collapsed?
                        (:block/collapsed? current-block)))
+        built-in-collapsed? (and collapsed? built-in?)
         table? (or table-view?
                    (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
@@ -228,7 +229,7 @@
                                (symbol? (gp-util/safe-read-string query)))
         not-grouped-by-page? (or table?
                                  (and (string? query) (string/includes? query "(by-page false)")))
-        result (when-not collapsed?'
+        result (when (or built-in-collapsed? (not collapsed?'))
                  (get-query-result state config *query-error *query-triggered? current-block-uuid q not-grouped-by-page?))
         query-time (:query-time (meta result))
         page-list? (and (seq result)
