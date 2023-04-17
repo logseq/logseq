@@ -49,7 +49,7 @@
       "** hello"
 
       (property/remove-properties :markdown "** hello\nx:: y\na::b\n")
-      "** hello\na::b"))
+      "** hello"))
 
   (testing "properties with blank lines"
     (are [x y] (= x y)
