@@ -82,7 +82,7 @@
  ;; Display all scheduled tasks and deadlines for the next 14 days:
  ;; :scheduled/future-days 14
  :scheduled/future-days 7
- 
+
  ;; Specify the first day of the week.
  ;; Default value:  6 (Sunday)
  ;; Available Options:
@@ -186,11 +186,14 @@
  :ui/show-empty-bullets? false
 
  ;; Advanced queries view function.
+ ;; Format the query result with `pprint`. 
+ ;; 
  :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
 
  ;; Advanced queries `:result-transform` function.
+ ;; Transform the query result before displaying it.
  :query/result-transforms
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
@@ -378,6 +381,4 @@
  ;;   :file/name-format :triple-lowbar
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar
-
-}
+ :file/name-format :triple-lowbar}
