@@ -136,7 +136,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
       {:graph test-db}
-      (outliner-core/move-blocks! [(get-block 3)] (get-block 14) true))
+      (outliner-core/move-blocks! [(get-block 3)] (get-block 14) {:sibling? true}))
     (is (= [6 9] (get-children 2)))
     (is (= [13 14 3 15] (get-children 12))))
 
@@ -157,7 +157,7 @@
       (transact-tree! tree)
       (outliner-tx/transact!
         {:graph test-db}
-        (outliner-core/move-blocks! [(get-block 3)] (get-block 12) false))
+        (outliner-core/move-blocks! [(get-block 3)] (get-block 12) {:sibling? false}))
       (is (= [6 9] (get-children 2)))
       (is (= [3 13 14 15] (get-children 12))))))
 
@@ -551,7 +551,7 @@
           (when (seq blocks)
             (let [target (get-random-block)]
               (outliner-tx/transact! {:graph test-db}
-                (outliner-core/move-blocks! blocks target (gen/generate gen/boolean)))
+                (outliner-core/move-blocks! blocks target {:sibling? (gen/generate gen/boolean)}))
               (let [total (get-blocks-count)]
                 (is (= total (count @*random-blocks)))))))))))
 
@@ -619,7 +619,7 @@
                  (let [blocks (get-random-successive-blocks)]
                    (when (seq blocks)
                      (outliner-tx/transact! {:graph test-db}
-                       (outliner-core/move-blocks! blocks (get-random-block) (gen/generate gen/boolean))))))
+                       (outliner-core/move-blocks! blocks (get-random-block) {:sibling? (gen/generate gen/boolean)})))))
 
                ;; move up down
                (fn []

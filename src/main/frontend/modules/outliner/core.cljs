@@ -443,9 +443,11 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly random-uuid)))
-        uuids (if replace-empty-target?
+        uuids (if (and replace-empty-target? (not move?))
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
+        delete-target (when (and move? replace-empty-target?)
+                        [[:db/retractEntity [:block/uuid (:block/uuid target-block)]]])
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
                                              [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
@@ -465,27 +467,29 @@
 
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
-        indent-outdent? (= outliner-op :indent-outdent-blocks)]
-    (map-indexed (fn [idx {:block/keys [parent left] :as block}]
-                   (when-let [uuid (get uuids (:block/uuid block))]
-                     (let [top-level? (= (:block/level block) 1)
-                           outdented-block? (and indent-outdent?
-                                                 top-level?
-                                                 (not= (:block/parent block) (:block/parent target-block)))
-                           prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
-                           left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
-                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
-                           left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
-                       (cond->
-                         (merge block {:block/uuid uuid
-                                       :block/page target-page
-                                       :block/parent parent
-                                       :block/left left})
-                         ;; We'll keep the original `:db/id` if it's a move operation,
-                         ;; e.g. drag and drop shouldn't change the ids.
-                         (not move?)
-                         (dissoc :db/id)))))
-                 blocks)))
+        indent-outdent? (= outliner-op :indent-outdent-blocks)
+        tx (map-indexed (fn [idx {:block/keys [parent left] :as block}]
+                          (when-let [uuid (get uuids (:block/uuid block))]
+                            (let [top-level? (= (:block/level block) 1)
+                                  outdented-block? (and indent-outdent?
+                                                        top-level?
+                                                        (not= (:block/parent block) (:block/parent target-block)))
+                                  prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
+                                  left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
+                                  parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
+                                  left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
+                              (cond->
+                                (merge block {:block/uuid uuid
+                                              :block/page target-page
+                                              :block/parent parent
+                                              :block/left left})
+                                ;; We'll keep the original `:db/id` if it's a move operation,
+                                ;; e.g. drag and drop shouldn't change the ids.
+                                (not move?)
+                                (dissoc :db/id)))))
+                        blocks)]
+    {:tx tx
+     :delete-target delete-target}))
 
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -527,7 +531,7 @@
                      :keep-uuid? keep-uuid?
                      :move? move?
                      :outliner-op outliner-op}
-        tx (insert-blocks-aux blocks' target-block' insert-opts)]
+        {:keys [tx delete-target]} (insert-blocks-aux blocks' target-block' insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
         (state/pub-event! [:capture-error {:error "Outliner invalid structure"
@@ -556,7 +560,7 @@
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                         [{:block/uuid (tree/-get-id next)
                           :block/left (:db/id left)}]))
-            full-tx (util/concat-without-nil uuids-tx tx next-tx)]
+            full-tx (util/concat-without-nil delete-target uuids-tx tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
         {:tx-data full-tx
@@ -688,7 +692,7 @@
 ;; Which is useful for cutting and pasting blocks
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
-  [blocks target-block {:keys [sibling? outliner-op]}]
+  [blocks target-block {:keys [sibling? outliner-op replace-empty-target?]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
   (let [non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
@@ -703,7 +707,8 @@
           (let [blocks (get-top-level-blocks blocks)
                 first-block (first blocks)
                 {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
-                                                                      :outliner-op (or outliner-op :move-blocks)})]
+                                                                      :outliner-op (or outliner-op :move-blocks)
+                                                                      :replace-empty-target? replace-empty-target?})]
             (when (seq tx-data)
               (let [first-block-page (:db/id (:block/page first-block))
                     target-page (or (:db/id (:block/page target-block))
@@ -850,8 +855,8 @@
   (op-transact! #'delete-blocks blocks opts))
 
 (defn move-blocks!
-  [blocks target-block sibling?]
-  (op-transact! #'move-blocks blocks target-block {:sibling? sibling?}))
+  [blocks target-block opts]
+  (op-transact! #'move-blocks blocks target-block opts))
 
 (defn move-blocks-up-down!
   [blocks up?]

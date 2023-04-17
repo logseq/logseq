@@ -2290,7 +2290,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-        (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
+        (outliner-core/move-blocks! [(:data node)] (:data parent-node) {:sibling? true})))))
 
 (defn- clear-cut-blocks-tx
   []
@@ -2306,7 +2306,10 @@
        :real-outliner-op :paste-cut-blocks
        :additional-tx (clear-cut-blocks-tx)}
       (save-current-block!)
-      (outliner-core/move-blocks! blocks editing-block true))))
+      (outliner-core/move-blocks! blocks editing-block {:sibling? true
+                                                        :outliner-op :move-blocks
+                                                        :keep-uuid? true
+                                                        :replace-empty-target? true}))))
 
 (defn clear-cut-blocks
   []

@@ -48,10 +48,10 @@
                      (tree/-get-left-id target-node))]
               (if first-child?
                 (let [parent (tree/-get-parent target-node)]
-                  (outliner-core/move-blocks! blocks (:data parent) false))
+                  (outliner-core/move-blocks! blocks (:data parent) {:sibling? false}))
                 (let [before-node (tree/-get-left target-node)]
-                  (outliner-core/move-blocks! blocks (:data before-node) true))))
-            (outliner-core/move-blocks! blocks target-block (not nested?)))))
+                  (outliner-core/move-blocks! blocks (:data before-node) {:sibling? true}))))
+            (outliner-core/move-blocks! blocks target-block {:sibling? (not nested?)}))))
 
       :else
       nil)))
