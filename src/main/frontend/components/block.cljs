@@ -2792,7 +2792,6 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        cutted? (:block/cutted? block)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2804,7 +2803,6 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
-                    (when cutted? " cutted")
                     (when selected? " selected noselect")
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
@@ -2907,13 +2905,14 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo (state/get-current-repo)
-        ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))]
-    (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
-      (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block)))
-      (block-container-inner state repo config block))))
+  (when-not (:block/cutted? block)
+    (let [repo (state/get-current-repo)
+          ref? (:ref? config)
+          custom-query? (boolean (:custom-query? config))]
+      (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
+        (ui/lazy-visible
+         (fn [] (block-container-inner state repo config block)))
+        (block-container-inner state repo config block)))))
 
 (defn divide-lists
   [[f & l]]
@@ -3283,15 +3282,10 @@
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
-(rum/defc block-list < rum/reactive
+(defn- block-list
   [config blocks]
-  (let [cutted-blocks (db/sub-key-value :logseq/cutted-blocks)
-        blocks' (map (fn [b] (if (contains? cutted-blocks (:block/uuid b))
-                               (assoc b :block/cutted? true)
-                               b))
-                  blocks)]
-    (for [[idx item] (medley/indexed blocks')]
-      (block-item config blocks idx item))))
+  (for [[idx item] (medley/indexed blocks)]
+    (block-item config blocks idx item)))
 
 (defn- custom-query-or-ref?
   [config]

@@ -1051,6 +1051,12 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn- cutted-blocks-tx
+  [ids]
+  (for [id ids]
+    {:block/uuid id
+     :block/cutted? true}))
+
 (defn copy-selection-blocks
   [html? & {:keys [op] :as opts}]
   (when-let [blocks (seq (state/get-selection-blocks))]
@@ -1066,7 +1072,7 @@
             (outliner-tx/transact!
               {:outliner-op :move-blocks
                :real-outliner-op :cut-blocks
-               :additional-tx [(db/kv :logseq/cutted-blocks (set top-level-block-uuids))]}))
+               :additional-tx (cutted-blocks-tx top-level-block-uuids)}))
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)
                                                                  (merge
                                                                   {:op :copy
@@ -1290,7 +1296,7 @@
                                                               :blocks [block]})
       (outliner-tx/transact!
         {:outliner-op :cut-block
-         :additional-tx [(db/kv :logseq/cutted-blocks #{block-id})]}))))
+         :additional-tx (cutted-blocks-tx [block-id])}))))
 
 (defn clear-last-selected-block!
   []
@@ -2286,6 +2292,11 @@
         :real-outliner-op :indent-outdent}
         (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
+(defn- clear-cutted-blocks-tx
+  []
+  (let [ids (db-model/get-all-cutted-blocks)]
+    (map (fn [id] [:db/retract id :block/cutted?]) ids)))
+
 (defn paste-cutted-blocks
   [blocks]
   (when-let [editing-block (state/get-edit-block)]
@@ -2293,7 +2304,7 @@
     (outliner-tx/transact!
       {:outliner-op :move-blocks
        :real-outliner-op :paste-cut-blocks
-       :additional-tx [(db/kv :logseq/cutted-blocks #{})]}
+       :additional-tx (clear-cutted-blocks-tx)}
       (save-current-block!)
       (outliner-core/move-blocks! blocks editing-block true))))
 
@@ -2301,7 +2312,7 @@
   []
   (outliner-tx/transact!
     {:outliner-op :clear-cutted-blocks
-     :additional-tx [(db/kv :logseq/cutted-blocks #{})]}))
+     :additional-tx (clear-cutted-blocks-tx)}))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]

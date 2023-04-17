@@ -22,6 +22,7 @@
    :block/left   {:db/valueType :db.type/ref
                   :db/index true}
    :block/collapsed? {:db/index true}
+   :block/cutted?    {:db/index true}
 
    ;; :markdown, :org
    :block/format {}
