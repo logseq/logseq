@@ -37,7 +37,6 @@
             [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -89,10 +88,7 @@
 (defn- enable-beta-features!
   []
   (when-not (false? (state/enable-sync?)) ; user turns it off
-    (file-sync-handler/set-sync-enabled! true))
-
-  (when-not (false? (state/enable-whiteboards?))
-    (config-handler/set-config! :feature/enable-whiteboards? true)))
+    (file-sync-handler/set-sync-enabled! true)))
 
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)

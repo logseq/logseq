@@ -45,13 +45,13 @@
   [line]
   (boolean
    (and (string? line)
-        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons " ")) line))))
+        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons)) line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+:" line))))
 
 (defn get-property-key
   [line format]

@@ -8,7 +8,9 @@
             [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            [goog.crypt.Md5]
+            [goog.crypt :as crypt]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -338,6 +340,9 @@
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
 (def config-default-content (rc/inline "config.edn"))
+(def config-default-content-md5 (let [md5 (new crypt/Md5)]
+                                  (.update md5 (crypt/stringToUtf8ByteArray config-default-content))
+                                  (crypt/byteArrayToHex (.digest md5))))
 
 ;; NOTE: repo-url is the unique identifier of a repo.
 ;; - `local` => in-memory demo graph
