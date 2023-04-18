@@ -3338,7 +3338,7 @@
                    "More"
 
                    @*loading?
-                   (ui/lazy-loading-placeholder)
+                   (ui/lazy-loading-placeholder 88)
 
                    :else
                    "")})]))))
