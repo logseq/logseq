@@ -14,65 +14,83 @@ In order to run the commands in this doc, you will need to install
 ## Where to Contribute
 
 Language translations are in two files,
-[frontend/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljc)
+[src/main/frontend/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljc)
 and
-[shortcut/dict.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljc).
+[src/main/frontend/modules/shortcut/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljc).
 
 ## Language Overview
 
 First, let's get an overview of Logseq's languages and how many translations your
 language has compared to others:
 
-```sh
+```shell
 $ bb lang:list
-
 
 |  :locale | :percent-translated | :translation-count |              :language |
 |----------+---------------------+--------------------+------------------------|
-|      :en |                 100 |                494 |                English |
-|   :nb-NO |                  90 |                445 |         Norsk (bokmål) |
-|   :zh-CN |                  87 |                432 |                   简体中文 |
-|      :ru |                  85 |                422 |                Русский |
-|   :pt-BR |                  77 |                382 | Português (Brasileiro) |
-|   :pt-PT |                  76 |                373 |    Português (Europeu) |
-|      :es |                  71 |                349 |                Español |
-| :zh-Hant |                  55 |                272 |                   繁體中文 |
-|      :af |                  51 |                253 |              Afrikaans |
-|      :de |                  48 |                238 |                Deutsch |
-|      :fr |                  39 |                195 |               Français |
-Total: 11
+|      :es |                 100 |                492 |                Español |
+|      :tr |                 100 |                492 |                 Türkçe |
+|      :en |                 100 |                492 |                English |
+|      :uk |                  95 |                466 |             Українська |
+|      :ru |                  95 |                466 |                Русский |
+|      :ko |                  93 |                459 |                    한국어 |
+|      :de |                  93 |                459 |                Deutsch |
+|      :fr |                  92 |                453 |               Français |
+|   :pt-PT |                  92 |                453 |    Português (Europeu) |
+|   :pt-BR |                  92 |                451 | Português (Brasileiro) |
+|      :sk |                  90 |                445 |             Slovenčina |
+|   :zh-CN |                  90 |                441 |                   简体中文 |
+|   :nb-NO |                  75 |                370 |         Norsk (bokmål) |
+|      :ja |                  75 |                368 |                    日本語 |
+|      :pl |                  72 |                353 |                 Polski |
+|      :nl |                  72 |                353 |     Dutch (Nederlands) |
+| :zh-Hant |                  71 |                349 |                   繁體中文 |
+|      :it |                  71 |                349 |               Italiano |
+|      :af |                  22 |                106 |              Afrikaans |
+Total: 19
 ```
 
 Let's try to get your language translated as close to 100% as you can!
 
 ## Edit a Language
 
-To see what translations are missing:
+To see what translations are missing for your language use:
 
-```
-$ bb lang:missing
-|                       :translation-key |                                  :string-to-translate |
-|----------------------------------------+-------------------------------------------------------|
-|                            :cards-view |                                            View cards |
-|                                :delete |                                                Delete |
-|                          :export-graph |                                          Export graph |
-|                           :export-page |                                           Export page |
-|                          :graph-search |                                          Search graph |
-|                       :open-new-window |                                            New window |
+```shell
+$ bb lang:missing LOCALE
+|                            :translation-key |                        :string-to-translate |               :file |
+|---------------------------------------------+---------------------------------------------+---------------------|
+|                     :content/copy-block-url |                              Copy block URL | frontend/dicts.cljs |
+|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts.cljs |
+|                           :content/copy-ref |                         Copy this reference | frontend/dicts.cljs |
+|                         :content/delete-ref |                       Delete this reference | frontend/dicts.cljs |
 ...
 ```
 
-Now, add keys for your language to the translation files, save and rerun the above command. Over time
-you're hoping to have this list drop to zero.
+Now, manually, add keys for your language to the translation files, save and rerun the above command.
+Over time you're aiming to have this list drop to zero. Since this process can be tedious, there is an option to print the untranslated strings to copy and paste them to the files:
+
+```sh
+# When pasting this content, be sure to update the indentation to match the file
+$ bb lang:missing LOCALE --copy
+
+;; For frontend/dicts.cljs
+:content/copy-block-url "Copy block URL"
+:content/copy-export-as "Copy / Export as.."
+:content/copy-ref "Copy this reference"
+:content/delete-ref "Delete this reference"
+...
+```
 
 Almost all translations are pretty quick. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
 
 ## Fix Untranslated
 
-There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left in English:
+There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left for your language use :
 
-```
-$ bb lang:duplicates
+```shell
+$ bb lang:duplicates LOCALE
+
 Keys with duplicate values found:
 
 |                  :translation-key | :duplicate-value |

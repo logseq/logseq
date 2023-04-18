@@ -225,6 +225,7 @@
         db-utils/seq-flatten)))
 
 (defn set-file-last-modified-at!
+  "Refresh file timestamps to DB"
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
     (when-let [conn (conn/get-db repo false)]
@@ -458,6 +459,34 @@ independent of format as format specific heading characters are stripped"
         sorted-ids (get-sorted-page-block-ids page-id)
         blocks-map (zipmap (map :db/id blocks) blocks)]
     (keep blocks-map sorted-ids)))
+
+;; Diverged of get-sorted-page-block-ids
+(defn get-sorted-page-block-ids-and-levels
+  "page-name: the page name, original name
+   return: a list with elements in:
+       :id    - a list of block ids, sorted by :block/left
+       :level - the level of the block, 1 for root, 2 for children of root, etc."
+  [page-name]
+  {:pre [(string? page-name)]}
+  (let [sanitized-page (gp-util/page-name-sanity-lc page-name)
+        page-id (:db/id (db-utils/entity [:block/name sanitized-page]))
+        root (db-utils/entity page-id)]
+    (loop [result []
+           children (sort-by-left (:block/_parent root) root)
+           ;; BFS log of walking depth
+           levels (repeat (count children) 1)]
+      (if (seq children)
+        (let [child (first children)
+              cur-level (first levels)
+              next-children (sort-by-left (:block/_parent child) child)]
+          (recur (conj result {:id (:db/id child) :level cur-level})
+                 (concat
+                  next-children
+                  (rest children))
+                 (concat
+                  (repeat (count next-children) (inc cur-level))
+                  (rest levels))))
+        result))))
 
 (defn has-children?
   ([block-id]

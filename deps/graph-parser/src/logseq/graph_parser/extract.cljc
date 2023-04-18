@@ -127,14 +127,44 @@
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
 
+(defn- attach-block-ids-if-match
+  "If block-ids are provided and match the number of blocks, attach them to blocks
+   If block-ids are provided but don't match the number of blocks, WARN and ignore
+   If block-ids are not provided (nil), just ignore"
+  [block-ids blocks]
+  (or (when block-ids
+        (if (= (count block-ids) (count blocks))
+          (mapv (fn [block-id block]
+                  (if (some? block-id)
+                    (assoc block :block/uuid (uuid block-id))
+                    block))
+                block-ids blocks)
+          (log/error :gp-extract/attach-block-ids-not-match "attach-block-ids-if-match: block-ids provided, but doesn't match the number of blocks, ignoring")))
+      blocks))
+
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [format ast properties file content {:keys [date-formatter db filename-format] :as options}]
+  "uri-encoded? - if is true, apply URL decode on the file path
+   options - 
+     :extracted-block-ids - An atom that contains all block ids that have been extracted in the current page (not yet saved to db)
+     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge 
+       (2 ways diff) based uuid resolution upon external editing.
+       returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
+       Implemented in file-common-handler/diff-merge-uuids for IoC
+       Called in gp-extract/extract as AST is being parsed and properties are extracted there"
+  [format ast properties file content {:keys [date-formatter db filename-format extracted-block-ids resolve-uuid-fn]
+                                       :or {extracted-block-ids (atom #{})
+                                            resolve-uuid-fn (constantly nil)}
+                                       :as options}]
   (try
     (let [page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (assoc options :page-name page-name)
+          ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
+          override-uuids (resolve-uuid-fn format ast content options')
           blocks (->> (gp-block/extract-blocks ast content false format options')
+                      (attach-block-ids-if-match override-uuids)
+                      (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
           ref-pages (atom #{})
