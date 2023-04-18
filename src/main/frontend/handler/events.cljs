@@ -962,9 +962,8 @@
       (editor-handler/make-block-as-own-order-list! block))))
 
 (defmethod handle :editor/remove-own-number-list [[_ block]]
-  (when block
-    (if (editor-handler/own-order-number-list? block)
-      (editor-handler/remove-block-own-order-list-type! block))))
+  (when (some-> block (editor-handler/own-order-number-list?))
+    (editor-handler/remove-block-own-order-list-type! block)))
 
 (defn run!
   []
