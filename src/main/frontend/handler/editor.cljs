@@ -2803,7 +2803,9 @@
                    (not root-block?)
                    (not single-block?)
                    (not custom-query?))
-          (delete-block! repo false)))
+          (if (own-order-number-list? block)
+            (remove-block-own-order-list-type! block)
+            (delete-block! repo false))))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
