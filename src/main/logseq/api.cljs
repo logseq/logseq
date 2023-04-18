@@ -686,11 +686,11 @@
                 block (if includeChildren
                         ;; nested children results
                         (first (outliner-tree/blocks->vec-tree
-                                 (db-model/get-block-and-children repo uuid) uuid))
+                                (db-model/get-block-and-children repo uuid) uuid))
                         ;; attached shallow children
                         (assoc block :block/children
-                                     (map #(list :uuid (get-in % [:data :block/uuid]))
-                                          (db/get-block-immediate-children repo uuid))))]
+                               (map #(list :uuid (:block/uuid %))
+                                 (db/get-block-immediate-children repo uuid))))]
             (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_current_block
