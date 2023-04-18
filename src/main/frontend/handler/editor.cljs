@@ -2696,7 +2696,7 @@
 
       (and next-block (block-has-no-ref? (:db/id current-block)))
       (let [edit-block (state/get-edit-block)
-            new-content (str value "" (:block/content next-block))
+            new-content (str value (:block/content next-block))
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}
