@@ -838,13 +838,13 @@
                                          (not (string/blank? value))) ; it doesn't make sense to preserve the block ref for totally different block
                        {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value (not delete_prev?))
                        concat-prev-block? (boolean (and prev-block new-content))
-                       save-page? (= (:db/id (:block/page prev-block)) page-id)
+                       same-page? (= (:db/id (:block/page prev-block)) page-id)
                        transact-opts (cond->
                                        {:outliner-op :delete-block}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
-                   (if (and delete_prev? save-page?)
+                   (if (and delete_prev? same-page?)
                      (let [input (gdom/getElement id)
                            right (when-not (= (:block/parent block)
                                               (:block/parent prev-block))
