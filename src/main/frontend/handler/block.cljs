@@ -6,7 +6,6 @@
    [frontend.db :as db]
    [frontend.db.model :as db-model]
    [frontend.db.react :as react]
-   [frontend.db.utils :as db-utils]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
@@ -70,7 +69,7 @@
                                    (util/distinct-by :db/id))))))
 
 (defn indentable?
-  [{:block/keys [parent left] :as block}]
+  [{:block/keys [parent left]}]
   (when parent
     (not= parent left)))
 
