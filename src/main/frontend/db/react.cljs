@@ -166,8 +166,8 @@
       (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
-        (when-let [component *reactive-queries*]
-          (swap! *reactive-queries* conj origin-key))
+        (when-let [queries *reactive-queries*]
+          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
           (let [{:keys [result time]} (util/with-time
