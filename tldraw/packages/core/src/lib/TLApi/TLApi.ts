@@ -189,7 +189,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     settings.update({ scaleLevel })
 
     this.app.selectedShapes.forEach(shape => {
-      shape.setScaleLevel(scaleLevel)
+      if (!shape.props.isLocked) shape.setScaleLevel(scaleLevel)
     })
     this.app.persist()
 
