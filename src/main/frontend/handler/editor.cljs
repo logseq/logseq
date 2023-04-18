@@ -2673,15 +2673,15 @@
 (defn- delete-concat
   [current-block input current-pos value]
   (let [input-id (state/get-edit-input-id)
-        right (outliner-core/get-right-node (outliner-core/block current-block))
+        right (outliner-core/get-right-sibling (:db/id current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
-                     (:data right)
+                     (when right (db/pull (:db/id right)))
                      first-child)]
     (cond
-      (and collapsed? right (db/has-children? (tree/-get-id right)))
+      (and collapsed? right (db/has-children? (:block/uuid right)))
       nil
 
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))

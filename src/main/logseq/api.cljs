@@ -713,8 +713,9 @@
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
-        (bean/->js (sdk-utils/normalize-keyword-for-json (:data (first right-siblings))))))))
+      (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
+        (let [block (db/pull (:id right-sibling))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
