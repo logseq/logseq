@@ -147,6 +147,7 @@
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
+   "Number list" "LIST TYPE"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -248,9 +249,7 @@
      ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
      ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
      ["Current time" #(date/get-current-time) "Insert current time"]
-     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]
-     ["Toggle Number list" [[:editor/clear-current-slash]
-                     [:editor/toggle-children-number-list]] "Make children as number list"]]
+     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
     ;; order list
     [["Number list" [[:editor/clear-current-slash]
