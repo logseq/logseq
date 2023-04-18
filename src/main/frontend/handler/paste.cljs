@@ -30,7 +30,7 @@
                   text format
                   {:page-name (:block/name (db/entity page-id))})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (editor-handler/paste-blocks blocks' {}))))
+      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text
   [format text]
@@ -221,6 +221,8 @@
     (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")]
+      (prn {:html html
+            :text text})
       (cond
         (and (string/blank? text) (string/blank? html))
         (paste-file-if-exists id e)
