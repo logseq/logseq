@@ -860,8 +860,8 @@
                          transact-opts
                          (delete-block-aux! prev-block false)
                          (save-block! repo block new-content))
-                       (state/set-edit-content! id new-content)
-                       (cursor/move-cursor-to input pos))
+                       (edit-block! block pos id {:custom-content new-content
+                                                  :move-cursor? true}))
                      (outliner-tx/transact!
                        transact-opts
                        (when concat-prev-block?
