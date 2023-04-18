@@ -845,8 +845,7 @@
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (if (and delete_prev? same-page?)
-                     (let [input (gdom/getElement id)
-                           right (when-not (= (:block/parent block)
+                     (let [right (when-not (= (:block/parent block)
                                               (:block/parent prev-block))
                                    (when-let [right-id (some-> (tree/-get-right (outliner-core/block block))
                                                          tree/-get-id)]
