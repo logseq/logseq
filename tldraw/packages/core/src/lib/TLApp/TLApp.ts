@@ -197,6 +197,18 @@ export class TLApp<
           this.api.toggleGrid()
         },
       },
+      {
+        keys: 'mod+l',
+        fn: () => {
+          this.setLocked(true)
+        },
+      },
+      {
+        keys: 'mod+shift+l',
+        fn: () => {
+          this.setLocked(false)
+        },
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore

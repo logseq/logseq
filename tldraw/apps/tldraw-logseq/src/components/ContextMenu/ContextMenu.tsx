@@ -289,6 +289,11 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock" />
               Lock
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                <code>{MOD_KEY}</code> <code>L</code>
+                </span>
+              </div>
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
@@ -298,6 +303,11 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock-open" />
               Unlock
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                <code>{MOD_KEY}</code> <code>⇧</code> <code>L</code>
+                </span>
+              </div>
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 &&
