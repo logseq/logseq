@@ -122,7 +122,16 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} strokeDasharray={isLocked ? "8 2" : "undefined"} />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<YouTubeShapeProps>) => {

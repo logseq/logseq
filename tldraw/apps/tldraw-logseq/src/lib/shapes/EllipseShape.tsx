@@ -159,7 +159,15 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
 
     return (
       <g>
-        <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} strokeWidth={2} fill="transparent" strokeDasharray={isLocked ? "8 2" : "undefined"}/>
+        <ellipse
+          cx={w / 2}
+          cy={h / 2}
+          rx={w / 2}
+          ry={h / 2}
+          strokeWidth={2}
+          fill="transparent"
+          strokeDasharray={isLocked ? '8 2' : 'undefined'}
+        />
       </g>
     )
   })
