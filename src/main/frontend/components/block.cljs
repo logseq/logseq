@@ -2804,8 +2804,10 @@
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         as-list-of (:as-list-of config)
-        own-order-list-type (some-> properties :logseq.order-list-type str string/lower-case)
-        own-order-list-index (and own-order-list-type (block-handler/get-idx-of-order-list-block block own-order-list-type))
+        own-order-list-type (:own-order-list-type config)
+        own-order-list-index (and own-order-list-type
+                                  (or (:own-order-list-index config)
+                                      (block-handler/get-idx-of-order-list-block block own-order-list-type)))
         own-order-number-list? (= own-order-list-type "number")
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
@@ -2893,6 +2895,12 @@
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
+(defn- attach-order-list-state!
+  [cp-state]
+  (let [args (:rum/args cp-state)]
+    (assoc cp-state
+      :rum/args (assoc (vec args) 0 (block-handler/attach-order-list-state (first args) (second args))))))
+
 (rum/defcs block-container < rum/reactive
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
@@ -2909,20 +2917,26 @@
 
                :else
                nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
+             (-> (assoc state
+                   ::control-show? (atom false)
+                   ::navigating-block (atom (:block/uuid block)))
+                 (attach-order-list-state!))))
+
+   :will-remount (fn [_old-state new-state]
+                   (-> new-state
+                       (attach-order-list-state!)))
+
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                    (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
+                                               :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
                           config-compare-keys [:show-cloze? :as-list-of :as-index-of :own-order-list-type :own-order-list-index]
-                          b1 (second (:rum/args old-state))
-                          b2 (second (:rum/args new-state))
-                          result (or
-                                  (not= (select-keys b1 compare-keys)
-                                        (select-keys b2 compare-keys))
-                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                          b1                  (second (:rum/args old-state))
+                          b2                  (second (:rum/args new-state))
+                          result              (or
+                                                (not= (select-keys b1 compare-keys)
+                                                      (select-keys b2 compare-keys))
+                                                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
@@ -2932,21 +2946,21 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo (state/get-current-repo)
-        ref? (:ref? config)
+  (let [repo          (state/get-current-repo)
+        ref?          (:ref? config)
         custom-query? (boolean (:custom-query? config))]
     (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block)))
+        (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
 
 (defn divide-lists
   [[f & l]]
-  (loop [l l
+  (loop [l        l
          ordered? (:ordered f)
-         result [[f]]]
+         result   [[f]]]
     (if (seq l)
-      (let [cur (first l)
+      (let [cur          (first l)
             cur-ordered? (:ordered cur)]
         (if (= ordered? cur-ordered?)
           (recur

@@ -310,3 +310,11 @@
             order-parents-count (count (order-parent-list block))]
         (if (odd? order-parents-count)
           idx (nth (seq "abcdefghijklmnopqrstuvwxyz") (mod (dec idx) 26)))))))
+
+(defn attach-order-list-state
+  [config block]
+  (let [own-order-list-type (some-> block :block/properties :logseq.order-list-type str string/lower-case)]
+    (let [own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
+      (assoc config :own-order-list-type own-order-list-type
+                    :own-order-list-index own-order-list-index
+                   :own-order-number-list? (= own-order-list-type "number")))))
