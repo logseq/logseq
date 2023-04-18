@@ -102,7 +102,7 @@
  ;; :arweave/gateway ""
 
  ;; Set Bullet indentation when exporting
- ;; Default value: tab
+ ;; Default value: :tab
  ;; Available options:
  ;;  - `:eight-spaces` as eight spaces
  ;;  - `:four-spaces` as four spaces
@@ -115,13 +115,15 @@
  :publishing/all-pages-public? false
 
  ;; Set the default home page and sidebar status.
- ;; If not specified, Logseq opens the journal page on startup by default.
- ;; The `:page` value is the name of the page.
- ;; Possible options for :sidebar include:
- ;; 1. "Contents" to display Contents in the right sidebar by default.
- ;; 2. page name to display a specific page in the right sidebar.
- ;; 3. An array of multiple pages, e.g., ["Contents" "Page A" "Page B"].
- ;; If `:sidebar` is not set, the right sidebar will be hidden.
+ ;; Define the default home page and sidebar status. 
+ ;; If unspecified, Logseq will load the journal page by default on startup. 
+ ;; The `:page` value represents the name of the page displayed at startup. 
+ ;; Available options for `:sidebar` are: 
+ ;; 1. "Contents" to display the Contents page in the right sidebar. 
+ ;; 2. A specific page name to display in the right sidebar. 
+ ;; 3. An array of multiple pages, e.g., ["Contents" "Page A" "Page B"]. 
+ ;; If `:sidebar` remains unset, the right sidebar will stay hidden.
+ ;;
  ;; Examples:
  ;; 1. Set "Changelog" as the home page and display "Contents" in the right sidebar:
  ;; :default-home {:page "Changelog", :sidebar "Contents"}
@@ -145,7 +147,7 @@
  ;; Enabling this option converts
  ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
  ;; For more information, visit https://github.com/logseq/logseq/issues/672
- ;; :org-mode/insert-file-link? true
+ :org-mode/insert-file-link? false
 
  ;; Configure custom shortcuts.
  ;; Syntax:
@@ -249,7 +251,8 @@
  ;; Setting `:outliner/block-title-collapse-enabled?` to true allows collapsing
  ;; blocks with titles (multiple lines) and content. For example:
  ;; - block title
- ;; block content
+ ;;   block content
+ ;; Default value: false
  :outliner/block-title-collapse-enabled? false
 
  ;; Macros replace texts and will make you more productive.
@@ -270,9 +273,11 @@
  ;;
  ;; With the default value of level 2, block b will be collapsed.
  ;; If the level's value is set to 3, block c will be collapsed.
+ ;; Default value: 2
  :ref/default-open-blocks-level 2
 
  ;; Configure the threshold for linked references before collapsing.
+ ;; Default value: 50
  :ref/linked-references-collapsed-threshold 50
 
  ;; Favorites to list on the left sidebar
@@ -350,7 +355,7 @@
  ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
- ;;  :media "[[quick capture]] **{time}**: {url}"}
+ ;; :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
  ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
@@ -361,14 +366,18 @@
 
  ;; Configure the Enter key behavior for
  ;; context-aware editing with DWIM (Do What I Mean).
- ;; :dwim/settings {
- ;;   :admonition&src?  true
- ;;   :markup?          false
- ;;   :block-ref?       true
- ;;   :page-ref?        true
- ;;   :properties?      true
- ;;   :list?            true
- ;; }
+;; context-aware Enter key behavior implies that pressing Enter will
+;; have different outcomes based on the context.
+;; For instance, pressing Enter within a list generates a new list item,
+;; whereas pressing Enter in a block reference opens the referenced block.
+ :dwim/settings
+{:admonition&src?  true  ;; default: true
+ :markup?          false ;; default: false
+ :block-ref?       true  ;; default: true
+ :page-ref?        true  ;; default: true
+ :properties?      true  ;; default: true
+ :list?            true  ;; default: true
+ }
 
  ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
@@ -381,4 +390,5 @@
  ;;   :file/name-format :triple-lowbar
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar}
+ :file/name-format :triple-lowbar
+ }
