@@ -46,8 +46,8 @@ export class TranslatingState<
     }
 
     transaction(() => {
-      this.app.allSelectedShapesArray.filter(s => !s.props.isLocked).forEach(shape => {
-        shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
+      this.app.allSelectedShapesArray.forEach(shape => {
+        if (!shape.props.isLocked) shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
       })
     })
   }
@@ -65,6 +65,7 @@ export class TranslatingState<
           type: shape.type,
           point: this.initialPoints[shape.id],
           rotation: shape.props.rotation,
+          isLocked: false,
         })
         return clone
       })
