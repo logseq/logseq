@@ -125,8 +125,6 @@
 (defn rename!
   "Rename files, use full path"
   [repo old-path new-path]
-  (when (string/starts-with? old-path repo)
-    (js/console.error "BUG: rename! accepts relative path only"))
   (let [new-path (gp-util/path-normalize new-path)]
     (cond
                                         ; See https://github.com/isomorphic-git/lightning-fs/issues/41
