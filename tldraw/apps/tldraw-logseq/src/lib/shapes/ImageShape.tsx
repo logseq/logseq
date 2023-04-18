@@ -77,7 +77,14 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
         isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" strokeDasharray={isLocked ? "8 2" : "undefined"}/>
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   getShapeSVGJsx({ assets }: { assets: TLAsset[] }) {

@@ -172,7 +172,14 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
 
     return (
       <g>
-        <rect width={w} height={h} rx={borderRadius} ry={borderRadius} fill="transparent" strokeDasharray={isLocked ? '8 2' : undefined} />
+        <rect
+          width={w}
+          height={h}
+          rx={borderRadius}
+          ry={borderRadius}
+          fill="transparent"
+          strokeDasharray={isLocked ? '8 2' : undefined}
+        />
       </g>
     )
   })

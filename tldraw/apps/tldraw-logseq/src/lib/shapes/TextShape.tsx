@@ -250,7 +250,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
         rx={borderRadius}
         ry={borderRadius}
         fill="transparent"
-        strokeDasharray={isLocked ? "8 2" : "undefined"}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
       />
     )
   })

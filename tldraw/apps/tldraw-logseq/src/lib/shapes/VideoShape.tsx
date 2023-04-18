@@ -93,6 +93,13 @@ export class VideoShape extends TLBoxShape<VideoShapeProps> {
         isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" strokeDasharray={isLocked ? "8 2" : "undefined"}/>
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 }

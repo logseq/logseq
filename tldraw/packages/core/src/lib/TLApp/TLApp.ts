@@ -336,9 +336,11 @@ export class TLApp<
   }
 
   @action updateShapes = <T extends S>(shapes: ({ id: string } & Partial<T['props']>)[]): this => {
-    if (this.readOnly ) return this
+    if (this.readOnly) return this
 
-    const shapesToUpdate = shapes.map(shape => this.getShapeById(shape.id)).filter(shape => shape?.props.isLocked)
+    const shapesToUpdate = shapes
+      .map(shape => this.getShapeById(shape.id))
+      .filter(shape => shape?.props.isLocked)
 
     if (shapesToUpdate.length === 0) return this
 

@@ -40,7 +40,11 @@ export const Indicator = observer(function Shape({
       zIndex={isEditing ? 1000 : 10000}
     >
       <SVGContainer>
-        <g className={`tl-indicator-container ${isSelected ? 'tl-selected' : 'tl-hovered'} ${isLocked ? 'tl-locked' : ''}`}>
+        <g
+          className={`tl-indicator-container ${isSelected ? 'tl-selected' : 'tl-hovered'} ${
+            isLocked ? 'tl-locked' : ''
+          }`}
+        >
           <ReactIndicator
             isEditing={isEditing}
             isBinding={isBinding}
