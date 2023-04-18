@@ -30,7 +30,6 @@ export class TranslatingState<
 
   private moveSelectedShapesToPointer() {
     const {
-      selectedShapes,
       inputs: { shiftKey, originPoint, currentPoint },
     } = this.app
 
@@ -47,7 +46,7 @@ export class TranslatingState<
     }
 
     transaction(() => {
-      this.app.allSelectedShapes.forEach(shape => {
+      this.app.allSelectedShapesArray.filter(s => !s.props.isLocked).forEach(shape => {
         shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
       })
     })
