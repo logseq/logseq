@@ -904,7 +904,8 @@
                                      distinct
                                      vec)
                     content (property/remove-properties format content)
-                    kvs (for [key property-ks] [key (get properties key)])
+                    kvs (for [key property-ks] [key (or (get properties-text-values key)
+                                                        (get properties key))])
                     content (property/insert-properties format content kvs)
                     content (property/remove-empty-properties content)
                     block {:block/uuid block-id
