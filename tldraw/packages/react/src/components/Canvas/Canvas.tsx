@@ -252,7 +252,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
             {selectedShapes && components.ContextBar && (
               <ContextBarContainer
                 key={'context' + selectedShapes.map(shape => shape.id).join('')}
-                shapes={selectedShapes}
+                shapes={selectedShapes.filter(s => !s.props.isLocked)}
                 hidden={!showContextBar}
                 bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
                 rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}
