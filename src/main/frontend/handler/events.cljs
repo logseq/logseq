@@ -37,7 +37,6 @@
             [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.file-sync :as file-sync-handler]

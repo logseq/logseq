@@ -10,7 +10,6 @@
             [frontend.db.model :as model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
