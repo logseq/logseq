@@ -116,6 +116,7 @@
       position: relative;
       top: 4px;
     }
+
     a {
       color: var(--ls-primary-text-color);
 
@@ -536,17 +537,26 @@
     justify-content: end;
   }
 
-  &:not(.typed-list) {
-    .bullet {
-      border-radius: 50%;
-      width: 6px;
-      height: 6px;
-      background-color: var(--ls-block-bullet-color, #394b59);
-      transition: transform 0.2s;
-    }
+  .bullet {
+    border-radius: 50%;
+    width: 6px;
+    height: 6px;
+    background-color: var(--ls-block-bullet-color, #394b59);
+    transition: transform 0.2s;
+  }
 
+  &:not(.typed-list) {
     &.bullet-closed {
       background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    }
+  }
+
+  &.typed-list:not(:focus-within) {
+    .bullet {
+      background-color: unset;
+      height: unset;
+      width: unset;
+      box-shadow: none;
     }
   }
 }
