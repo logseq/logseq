@@ -1093,8 +1093,8 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? true}}]
+  ([content-fn {:keys [trigger-once? debug-id]
+                :or {trigger-once? false}}]
    (let [[visible? set-visible!] (rum/use-state false)
          inViewState (useInView #js {:rootMargin "100px"
                                      :triggerOnce trigger-once?

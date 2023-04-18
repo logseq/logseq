@@ -38,5 +38,4 @@
   [page-name]
   (ui/lazy-visible
    (fn [] (scheduled-and-deadlines-inner page-name))
-   {:trigger-once? false
-    :debug-id "scheduled-and-deadlines"}))
+   {:debug-id "scheduled-and-deadlines"}))

@@ -3430,8 +3430,7 @@
                        (rum/with-key
                          (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
                          (:db/id parent)))))
-                 {:debug-id page
-                  :trigger-once? false})])))))]
+                 {:debug-id page})])))))]
 
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
