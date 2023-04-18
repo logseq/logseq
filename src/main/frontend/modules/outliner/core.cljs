@@ -455,7 +455,7 @@
                         (:db/id target-block))
         get-new-id (fn [block lookup]
                      (cond
-                       (or (map? lookup) (vector? lookup))
+                       (or (map? lookup) (vector? lookup) (de/entity? lookup))
                        (when-let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
                                          (get uuids (last lookup))
                                          (get id->new-uuid (:db/id lookup)))]
