@@ -159,6 +159,18 @@ test('undo the delete action', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
 })
 
+test('locked elements should not be removed', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.keyboard.press(`${modKey}+l`)
+  await page.keyboard.press('Delete')
+  await page.keyboard.press(`${modKey}+Shift+l`)
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+
+})
+
 test('move arrow to back', async ({ page }) => {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(1000)
