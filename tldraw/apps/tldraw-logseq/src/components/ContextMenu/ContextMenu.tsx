@@ -280,7 +280,7 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <ReactContextMenu.Item
               className="tl-menu-item"
-              onClick={() => runAndTransition(() => app.setLock(true))}
+              onClick={() => runAndTransition(() => app.setLocked(true))}
             >
               <TablerIcon className="tl-menu-icon" name="lock" />
               Lock
@@ -289,7 +289,7 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
             <ReactContextMenu.Item
               className="tl-menu-item"
-              onClick={() => runAndTransition(() => app.setLock(false))}
+              onClick={() => runAndTransition(() => app.setLocked(false))}
             >
               <TablerIcon className="tl-menu-icon" name="lock-open" />
               Unlock

@@ -525,7 +525,7 @@ export class TLApp<
     return this
   }
 
-  setLock = (isLocked: boolean): this => {
+  setLocked = (isLocked: boolean): this => {
     if (this.selectedShapesArray.length === 0 || this.readOnly) return this
 
     this.selectedShapesArray.forEach(shape => {
