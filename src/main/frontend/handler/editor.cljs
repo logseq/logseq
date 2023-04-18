@@ -2681,6 +2681,9 @@
                      (when right (db/pull (:db/id right)))
                      first-child)]
     (cond
+      (nil? next-block)
+      nil
+
       (and collapsed? right (db/has-children? (:block/uuid right)))
       nil
 
