@@ -2697,15 +2697,17 @@
 
       (and next-block (block-has-no-ref? (:db/id current-block)))
       (let [edit-block (state/get-edit-block)
+            new-content (str value "" (:block/content next-block))
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
-                                         :end? true}}
-            new-content (str value "" (:block/content next-block))
-            next-block (assoc next-block :block/left (:block/left current-block))
+                                         :end? true}
+                           :additional-tx [{:db/id (:db/id next-block)
+                                            :block/left (:block/left current-block)
+                                            :block/parent (:block/parent current-block)}]}
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
-                               (delete-block-aux! edit-block false)
-                               (save-block! repo next-block new-content))
+          (delete-block-aux! edit-block false)
+          (save-block! repo next-block new-content))
         (edit-block! next-block current-pos (:block/uuid next-block)))
 
       :else
