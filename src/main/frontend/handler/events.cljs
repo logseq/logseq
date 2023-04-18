@@ -89,10 +89,7 @@
 (defn- enable-beta-features!
   []
   (when-not (false? (state/enable-sync?)) ; user turns it off
-    (file-sync-handler/set-sync-enabled! true))
-
-  (when-not (false? (state/enable-whiteboards?))
-    (config-handler/set-config! :feature/enable-whiteboards? true)))
+    (file-sync-handler/set-sync-enabled! true)))
 
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)

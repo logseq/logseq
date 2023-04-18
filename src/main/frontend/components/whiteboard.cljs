@@ -311,7 +311,6 @@
     (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
-                           (config-handler/set-config! :feature/enable-whiteboards? true)
                            (quick-tour/ready
                             (fn []
                               (quick-tour/start-whiteboard)
