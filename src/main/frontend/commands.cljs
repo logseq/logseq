@@ -260,7 +260,6 @@
 
     ;; task management
     (get-preferred-workflow)
-
     [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
@@ -669,6 +668,10 @@
 (defmethod handle-step :editor/toggle-own-number-list [[_]]
   (when-let [block (state/get-edit-block)]
     (state/pub-event! [:editor/toggle-own-number-list block])))
+
+(defmethod handle-step :editor/remove-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/remove-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and

@@ -202,6 +202,10 @@
 .block-control-wrap {
   height: 24px;
   margin-top: 0;
+
+  &.is-order-list {
+    @apply relative right-0;
+  }
 }
 
 .block-control, .block-control:hover {
@@ -525,7 +529,7 @@
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
-  &.as-number-list {
+  &.as-order-list {
     min-width: 16px;
     width: auto;
     white-space: nowrap;
@@ -540,10 +544,10 @@
       background-color: var(--ls-block-bullet-color, #394b59);
       transition: transform 0.2s;
     }
-  }
 
-  &.bullet-closed {
-    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    &.bullet-closed {
+      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    }
   }
 }
 

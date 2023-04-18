@@ -1742,9 +1742,11 @@
         child-typed-list?  (string? (:as-list-of config))
         child-number-list? (= as-list-of "number-list")
         own-number-list?   (:own-order-number-list? config)
-        number-list?       (or child-number-list? own-number-list?)
-        number-list-idx    (if child-number-list? (inc as-index-of) (:own-order-list-index config))]
+        order-list?        (or child-number-list? own-number-list?)
+        order-list-idx     (if child-number-list? (inc as-index-of) (:own-order-list-index config))]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
+     {:class (util/classnames [{:is-order-list order-list?
+                                :bullet-closed collapsed?}])}
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
         {:id       (str "control-" uuid)
@@ -1756,9 +1758,12 @@
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid))))}
-        [:span {:class (if (and control-show?
-                                (or collapsed?
-                                    (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
+        [:span {:class (if (or (and control-show?
+                                    (or collapsed?
+                                        (editor-handler/collapsable? uuid {:semantic? true})))
+                               (and collapsed? order-list?))
+                         "control-show cursor-pointer"
+                         "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
      (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid)}
@@ -1772,12 +1777,12 @@
                                  (when (and (:document/mode? config)
                                             (not collapsed?))
                                    " hide-inner-bullet")
-                                 (when number-list? " as-number-list")
+                                 (when order-list? " as-order-list")
                                  (when (or own-number-list? child-typed-list?) " typed-list"))}
 
                     [:span.bullet {:blockid (str uuid)}
-                     (when number-list?
-                       [:label (str number-list-idx ".")])]]]]
+                     (when order-list?
+                       [:label (str order-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
@@ -2910,7 +2915,7 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
-                          config-compare-keys [:show-cloze? :as-list-of :as-index-of]
+                          config-compare-keys [:show-cloze? :as-list-of :as-index-of :own-order-list-type :own-order-list-index]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
                           result (or
