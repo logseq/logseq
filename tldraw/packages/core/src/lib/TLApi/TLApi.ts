@@ -176,7 +176,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     settings.update({ color: color })
 
     this.app.selectedShapesArray.forEach(s => {
-      s.update({ fill: color, stroke: color })
+      if (!s.props.isLocked) s.update({ fill: color, stroke: color })
     })
     this.app.persist()
 
