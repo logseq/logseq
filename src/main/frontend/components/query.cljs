@@ -3,63 +3,22 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.search :as search]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [clojure.string :as string]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.components.query-table :as query-table]
-            [frontend.db.utils :as db-utils]
+            [frontend.components.query.result :as query-result]
             [lambdaisland.glogi :as log]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
-            [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn built-in-custom-query?
   [title]
   (let [queries (get-in (state/sub-config) [:default-queries :journals])]
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
-
-(defn- trigger-custom-query!
-  [state *query-error *query-triggered?]
-  (let [[config query] (:rum/args state)
-        repo (state/get-current-repo)
-        result-atom (atom nil)
-        current-block-uuid (or (:block/uuid (:block config))
-                               (:block/uuid config))
-        _ (reset! *query-error nil)
-        query-atom (try
-                     (cond
-                       (:dsl-query? config)
-                       (let [q (:query query)
-                             form (gp-util/safe-read-string q)]
-                         (cond
-                           ;; Searches like 'foo' or 'foo bar' come back as symbols
-                           ;; and are meant to go directly to full text search
-                           (and (util/electron?) (symbol? form)) ; full-text search
-                           (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result))))
-
-                           (symbol? form)
-                           (atom nil)
-
-                           :else
-                           (query-dsl/query (state/get-current-repo) q)))
-
-                       :else
-                       (db/custom-query query {:current-block-uuid current-block-uuid}))
-                     (catch :default e
-                       (reset! *query-error e)
-                       (atom nil)))]
-    (when *query-triggered?
-      (reset! *query-triggered? true))
-    (if (instance? Atom query-atom)
-      query-atom
-      result-atom)))
 
 (rum/defc query-refresh-button
   [query-time {:keys [on-mouse-down full-text-search?]}]
@@ -79,24 +38,6 @@
    [:a.fade-link.flex
     {:on-mouse-down on-mouse-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
-
-(defn- get-query-result
-  [state config *query-error *query-triggered? current-block-uuid q group-by-page?]
-  (or (when-let [*result (:query-result config)] @*result)
-      (let [query-atom (trigger-custom-query! state *query-error *query-triggered?)
-            query-result (and query-atom (rum/react query-atom))
-            ;; exclude the current one, otherwise it'll loop forever
-            remove-blocks (if current-block-uuid [current-block-uuid] nil)
-            transformed-query-result (when query-result
-                                       (db/custom-query-result-transform query-result remove-blocks q))
-            result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
-                     (let [result (db-utils/group-by-page transformed-query-result)]
-                       (if (map? result)
-                         (dissoc result nil)
-                         result))
-                     transformed-query-result)]
-        (when query-atom
-          (util/safe-with-meta result (meta @query-atom))))))
 
 (rum/defcs custom-query-inner < rum/reactive
   [state config {:keys [query children? breadcrumb-show?]}
@@ -202,8 +143,7 @@
            state)}
   (rum/local nil ::query-result)
   {:init (fn [state] (assoc state :query-error (atom nil)))}
-  [state config {:keys [title builder query view collapsed? table-view?
-                        result-transform group-by-page?] :as q} *query-triggered?]
+  [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]
   (let [*query-error (:query-error state)
         built-in? (built-in-custom-query? title)
         dsl-query? (:dsl-query? config)
@@ -227,12 +167,8 @@
         full-text-search? (and dsl-query?
                                (util/electron?)
                                (symbol? (gp-util/safe-read-string query)))
-        group-by-page? (or group-by-page?
-                           (and (not table?)
-                                (not result-transform)
-                                (not (and (string? query) (string/includes? query "(by-page false)")))))
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (get-query-result state config *query-error *query-triggered? current-block-uuid q group-by-page?))
+                 (query-result/get-query-result state config *query-error *query-triggered? current-block-uuid q {:table? table?}))
         query-time (:query-time (meta result))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
@@ -243,7 +179,7 @@
               :view-f view-f
               :page-list? page-list?
               :result result
-              :group-by-page? group-by-page?}]
+              :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
     (if (:custom-query? config)
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
@@ -293,7 +229,7 @@
                   (query-refresh-button query-time {:full-text-search? full-text-search?
                                                     :on-mouse-down (fn [e]
                                                                      (util/stop e)
-                                                                     (trigger-custom-query! state *query-error *query-triggered?))}))]])])
+                                                                     (query-result/trigger-custom-query! state *query-error *query-triggered?))}))]])])
 
          (when dsl-query? builder)
 
