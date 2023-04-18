@@ -347,7 +347,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   })
 
   ReactComponent = observer((componentProps: TLComponentProps) => {
-    const { events, isErasing, isEditing, isBinding } = componentProps
+    const { events, isErasing, isEditing, isBinding, isLocked } = componentProps
     const {
       props: { opacity, pageId, fill, scaleLevel, strokeWidth, size },
     } = this
@@ -518,7 +518,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
                 {showingPortal && <PortalComponent {...componentProps} />}
               </div>
-              {!app.readOnly && (
+              {!app.readOnly && isLocked && (
                 <CircleButton
                   active={!!this.collapsed}
                   style={{ opacity: isSelected ? 1 : 0 }}
