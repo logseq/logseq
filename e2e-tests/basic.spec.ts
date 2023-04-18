@@ -193,6 +193,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Backspace', { delay: 50 })
   await page.waitForTimeout(100)
   await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await page.inputValue('textarea >> nth=0')).toBe('1.1ref')
   expect(await block.selectionStart()).toBe('1.1'.length)
   // after backspace, the current block unindent
   await page.keyboard.press(modKey + '+z')
@@ -203,6 +204,7 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Backspace', { delay: 50 })
   await page.waitForTimeout(100)
   await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await page.inputValue('textarea >> nth=0')).toBe('1.1ref')
   expect(await block.selectionStart()).toBe('1.1'.length)
 
   // delete across blocks special case
