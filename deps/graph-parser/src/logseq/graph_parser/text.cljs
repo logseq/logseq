@@ -174,9 +174,6 @@
                  (name k))
       v'
 
-      (string/blank? v')
-      ""
-
       (gp-util/wrapped-by-quotes? v')
       v'
 
