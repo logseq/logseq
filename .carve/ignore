@@ -60,6 +60,8 @@ frontend.storage/get-transit
 frontend.state/remove-watch-state
 ;; Future use?
 frontend.state/get-visual-viewport-state
+;; Used on macro
+frontend.state/get-current-edit-block-and-position
 ;; Future use?
 frontend.ui/reset-ios-whole-page-offset!
 ;; For debugging
