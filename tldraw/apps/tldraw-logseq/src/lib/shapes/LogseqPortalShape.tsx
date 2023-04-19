@@ -191,28 +191,30 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
     React.useEffect(() => {
-      if (ref?.current) {
-        const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
-        if (el) {
-          const updateSize = () => {
-            const { width, height } = el.getBoundingClientRect()
-            const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
-            setSize(bound)
-            return bound
-          }
-          updateSize()
-          // Hacky, I know 🤨
-          this.getInnerHeight = () => updateSize()[1]
-          const resizeObserver = new ResizeObserver(() => {
+      setTimeout(() => {
+        if (ref?.current) {
+          const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
+          if (el) {
+            const updateSize = () => {
+              const { width, height } = el.getBoundingClientRect()
+              const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
+              setSize(bound)
+              return bound
+            }
             updateSize()
-          })
-          resizeObserver.observe(el)
-          return () => {
-            resizeObserver.disconnect()
+            // Hacky, I know 🤨
+            this.getInnerHeight = () => updateSize()[1]
+            const resizeObserver = new ResizeObserver(() => {
+              updateSize()
+            })
+            resizeObserver.observe(el)
+            return () => {
+              resizeObserver.disconnect()
+            }
           }
         }
-      }
-      return () => {}
+        return () => {}
+      }, 10);
     }, [ref, selector])
     return size
   }
