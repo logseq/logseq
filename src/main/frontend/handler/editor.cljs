@@ -831,7 +831,7 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       ;; it's possible to find a block not belong to the same page of current editing block
+                       ;; it's possible to find a block not belong to the same page as the current editing block
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
                        delete_prev? (and (not (block-has-no-ref? (:db/id block)))
                                          (block-has-no-ref? [:block/uuid (uuid (dom/attr sibling-block "blockid"))])
@@ -2697,12 +2697,16 @@
       (and next-block (block-has-no-ref? (:db/id current-block)))
       (let [edit-block (state/get-edit-block)
             new-content (str value (:block/content next-block))
+            additional-tx (conj [{:db/id (:db/id next-block)
+                                  :block/left (:block/left current-block)
+                                  :block/parent (:block/parent current-block)}]
+                                (when (not= next-block (:data right))
+                                  {:db/id (:db/id (:data right))
+                                   :block/left (:db/id next-block)}))
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}
-                           :additional-tx [{:db/id (:db/id next-block)
-                                            :block/left (:block/left current-block)
-                                            :block/parent (:block/parent current-block)}]}
+                           :additional-tx additional-tx}
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
           (delete-block-aux! edit-block false)
