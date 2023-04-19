@@ -395,5 +395,7 @@ export const prettifyXml = function(sourceXml)
     xsltProcessor.importStylesheet(xsltDoc);
     var resultDoc = xsltProcessor.transformToDocument(xmlDoc);
     var resultXml = new XMLSerializer().serializeToString(resultDoc);
-    return resultXml;
+    // if it has parsererror, then return the original text
+    return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml;
+
 };
