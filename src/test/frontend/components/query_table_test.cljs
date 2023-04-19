@@ -30,6 +30,20 @@
          {:sort-desc? false :sort-by-column :block}
          ["abc" "cde"] ["abc" "cde"]))
 
+  (testing "sort by page property"
+    (are [sort-options result sorted-result]
+         (= sorted-result
+            (#'query-table/sort-result result sort-options))
+         ;; on page queries
+         {:sort-desc? true :sort-by-column :page :page? true}
+         (map #(hash-map :block/name %) ["abc" "cde"])
+         (map #(hash-map :block/name %) ["cde" "abc"])
+
+         ;; on block queries
+         {:sort-desc? true :sort-by-column :page :page? false}
+         (map #(hash-map :block/page {:block/name %}) ["abc" "cde"])
+         (map #(hash-map :block/page {:block/name %}) ["cde" "abc"])))
+
   (testing "sort by integer block property"
     (are [sort-state result sorted-result]
          (= (mapv #(hash-map :block/properties %) sorted-result)
