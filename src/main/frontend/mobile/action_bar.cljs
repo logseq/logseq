@@ -40,7 +40,7 @@
     (let [{:block/keys [uuid children]} block
           last-child-block-id (when-not (empty? children)
                                 (->> (db/get-block-children (state/get-current-repo) uuid)
-                                     (filter #(not (db/parents-collapsed? (state/get-current-repo) (:block/uuid %1)))) ;; DOM nodes of blocks of collapsed parents have no bounding client rect
+                                     (filter #(not (db/parents-collapsed? (state/get-current-repo) (:block/uuid %1)))) ;; DOM nodes of blocks the have collapsed parents have no bounding client rect
                                      last
                                      :block/uuid))]
 
