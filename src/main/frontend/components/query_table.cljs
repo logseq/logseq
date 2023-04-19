@@ -12,6 +12,7 @@
             [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]
+            [logseq.graph-parser.text :as text]
             [frontend.modules.outliner.tree :as tree]))
 
 ;; Util fns
@@ -115,7 +116,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [row column {:keys [page? ->elem map-inline config]}]
+  [row column {:keys [page? ->elem map-inline config comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
@@ -143,9 +144,13 @@
     [:string (when-let [updated-at (:block/updated-at row)]
                (date/int->local-time-2 updated-at))]
 
-    [:string (or (get-in row [:block/properties-text-values column])
-                 ;; Fallback to property relationships for page blocks
-                 (get-in row [:block/properties column]))]))
+    [:string (if comma-separated-property?
+               ;; Return original properties since comma properties need to
+               ;; return collections for display purposes
+               (get-in row [:block/properties column])
+               (or (get-in row [:block/properties-text-values column])
+                   ;; Fallback to original properties for page blocks
+                   (get-in row [:block/properties column])))]))
 
 (rum/defcs result-table < rum/reactive
   (rum/local false ::select?)
@@ -165,7 +170,8 @@
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block)
-          result' (sort-result result sort-state)]
+          result' (sort-result result sort-state)
+          property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}
                              :class (when-not page? "query-table")}
@@ -188,7 +194,8 @@
                                                 {:page? page?
                                                  :->elem ->elem
                                                  :map-inline map-inline
-                                                 :config config})]
+                                                 :config config
+                                                 :comma-separated-property? (property-separated-by-commas? column)})]
                   [:td.whitespace-nowrap {:on-mouse-down (fn []
                                                            (reset! *mouse-down? true)
                                                            (reset! select? false))
