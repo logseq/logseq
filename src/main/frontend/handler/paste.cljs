@@ -97,11 +97,11 @@
 
 (defn- markdown-blocks?
   [text]
-  (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+  (boolean (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
 
 (defn- org-blocks?
   [text]
-  (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+  (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
 
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
@@ -218,8 +218,6 @@
     (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")]
-      (prn {:html html
-            :text text})
       (cond
         (and (string/blank? text) (string/blank? html))
         (paste-file-if-exists id e)
