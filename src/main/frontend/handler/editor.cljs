@@ -779,30 +779,26 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  ([repo sibling-block format id value]
-   (move-to-prev-block repo sibling-block format id value true))
-  ([repo sibling-block format id value edit?]
-   (when (and repo sibling-block)
-     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-         (let [original-content (util/trim-safe (:block/content block))
-               value' (-> (property/remove-built-in-properties format original-content)
-                          (drawer/remove-logbook))
-               new-value (str value' value)
-               tail-len (count value)
-               pos (max
-                    (if original-content
-                      (gobj/get (utf8/encode original-content) "length")
-                      0)
-                    0)]
-           (when edit?
-             (edit-block! block pos id
-                          {:custom-content new-value
-                           :tail-len tail-len
-                           :move-cursor? false}))
-           {:prev-block block
-            :new-content new-value
-            :pos pos}))))))
+  [repo sibling-block format id value]
+  (when (and repo sibling-block)
+    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+        (let [original-content (util/trim-safe (:block/content block))
+              value' (-> (property/remove-built-in-properties format original-content)
+                         (drawer/remove-logbook))
+              new-value (str value' value)
+              tail-len (count value)
+              pos (max
+                   (if original-content
+                     (gobj/get (utf8/encode original-content) "length")
+                     0)
+                   0)]
+          (edit-block! block pos id
+                       {:custom-content new-value
+                        :tail-len tail-len
+                        :move-cursor? false})
+          {:prev-block block
+           :new-content new-value})))))
 
 (declare save-block!)
 
@@ -828,10 +824,12 @@
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       before-editor-cursor (state/get-current-edit-block-and-position)
                        {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-block}
+                                       {:outliner-op :delete-block
+                                        :before-editor-cursor before-editor-cursor}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]

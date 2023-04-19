@@ -52,7 +52,7 @@
 
 #?(:cljs
    (defn transact!
-     [txs opts]
+     [txs opts before-editor-cursor]
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
@@ -70,7 +70,6 @@
          (try
            (let [repo (get opts :repo (state/get-current-repo))
                  conn (conn/get-db repo false)
-                 before-editor-cursor (state/get-current-edit-block-and-position)
                  rs (d/transact! conn txs (assoc opts :outliner/transact? true))
                  tx-id (get-tx-id rs)
                  after-editor-cursor (state/get-current-edit-block-and-position)]
