@@ -293,7 +293,7 @@
 
   &-popup {
     @apply fixed rounded-lg overflow-hidden
-    z-[9] shadow-lg flex justify-center flex-col;
+    z-[19] shadow-lg flex justify-center flex-col;
 
     background-color: var(--ls-tertiary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
