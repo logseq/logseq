@@ -28,7 +28,7 @@
       (map #(medley/dissoc-in % ks) result)
       result)))
 
-(defn- sort-by-fn [sort-by-column item]
+(defn- sort-by-fn [sort-by-column item {:keys [page?]}]
   (case sort-by-column
     :created-at
     (:block/created-at item)
@@ -37,7 +37,7 @@
     :block
     (:block/content item)
     :page
-    (:block/name item)
+    (if page? (:block/name item) (get-in item [:block/page :block/name]))
     (get-in item [:block/properties sort-by-column])))
 
 (defn- locale-compare
@@ -47,11 +47,12 @@
       (< x y)
       (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
-(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date?]}]
+(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date? page?]}]
   (if (some? sort-by-column)
     (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)]
       (sort-by (fn [item]
-                 (block/normalize-block (sort-by-fn sort-by-column item) sort-nlp-date?))
+                 (block/normalize-block (sort-by-fn sort-by-column item {:page? page?})
+                                        sort-nlp-date?))
                comp-fn
                result))
     result))
@@ -170,7 +171,7 @@
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block)
-          result' (sort-result result sort-state)
+          result' (sort-result result (assoc sort-state :page? page?))
           property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}
