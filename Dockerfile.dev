@@ -1,0 +1,21 @@
+FROM clojure:temurin-11-tools-deps-1.11.1.1208-bullseye-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install reqs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    apt-transport-https \
+    gpg
+
+# install NodeJS & yarn
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
+
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
+    tee /etc/apt/trusted.gpg.d/yarn.gpg && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
+    tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && apt-get install -y nodejs yarn
+
+WORKDIR /app

@@ -1,0 +1,14 @@
+# See docs/develop-logseq.md#development-using-docker
+version: '3'
+
+services:
+
+  logseq:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - 3001:3001
+    command: sh -c "yarn && yarn watch"
+    volumes:
+      - ./:/app

@@ -1,4 +1,19 @@
 # Develop Logseq
+
+- [Requirements](#requirements)
+- [Clone project](#clone-project)
+- [Browser development](#browser-development)
+  - [Development](#development)
+  - [Development using Docker](#development-using-docker)
+    - [Requrments for development using Docker](#requrments-for-development-using-docker)
+    - [Runing docker-compose for development](#runing-docker-compose-for-development)
+  - [REPL setup](#repl-setup)
+    - [VSCode + Calva](#vscode--calva)
+  - [Production Build](#production-build)
+- [Desktop app development](#desktop-app-development)
+  - [Development](#development-1)
+  - [Production Build](#production-build-1)
+
 ## Requirements
 
 - [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
@@ -24,9 +39,37 @@ yarn watch
 
 Then open the browser <http://localhost:3001>.
 
+### Development using Docker
+
+No need to install [dependencies](#requirements) locally.\
+Docker will handle all requirments for you.
+
+#### Requrments for development using Docker
+
+Make sure [docker](https://docs.docker.com/engine/install/) and [docker-compose](https://docs.docker.com/compose/install/) installed.
+
+#### Runing docker-compose for development
+
+To build base image `Dockerfile.dev` will be used.\
+Start docker-compose with command:
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d && docker-compose -f docker-compose.dev.yml logs -f
+```
+
+You will see logs of application, you free to use `Ctrl+c` to exit from application logs, application itself will continue running.\
+You can open applicaiton using <http://localhost:3001>
+
+To stop application use
+
+```bash
+docker-compose -f docker-compose.dev.yml down
+```
+
 ### REPL setup
 
 #### VSCode + Calva
+
 With ```yarn watch``` running, it should prints ``shadow-cljs - nREPL server started on port 8701``
 
 You may connect to the nREPL server with:
