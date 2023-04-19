@@ -927,8 +927,7 @@
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (block-ref/->block-ref id)]))
   [:span.warning.mr-1 {:title "Block ref invalid"}
-    (block-ref/->block-ref id)]
-))
+    (block-ref/->block-ref id)]))
 
 (defn inline-text
   ([format v]

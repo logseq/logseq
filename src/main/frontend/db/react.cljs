@@ -16,7 +16,7 @@
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
 ;; pull-block react-query
-(s/def ::block (s/tuple #(= ::block %) uuid?))
+(s/def ::block (s/tuple #(= ::block %) int?))
 ;; ::page-blocks
 ;; get page-blocks react-query
 (s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))

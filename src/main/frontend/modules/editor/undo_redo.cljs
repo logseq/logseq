@@ -158,26 +158,30 @@
   []
   (let [[e prev-e] (smart-pop-undo)]
     (when e
-      (let [{:keys [txs tx-meta]} e
+      (let [{:keys [txs tx-meta tx-id]} e
+            _ (prn {:tx-id tx-id})
             new-txs (get-txs false txs)
             undo-delete-concat-block? (and (= :delete-block (:outliner-op tx-meta))
                                            (seq (:concat-data tx-meta)))
-            editor-cursor (cond
-                            undo-delete-concat-block?
-                            (let [data (:concat-data tx-meta)]
-                              (assoc (:editor-cursor e)
-                                     :last-edit-block {:block/uuid (:last-edit-block data)}
-                                     :pos (if (:end? data) :max 0)))
+            editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id :before])
+            ;; editor-cursor (cond
+            ;;                 undo-delete-concat-block?
+            ;;                 (let [data (:concat-data tx-meta)]
+            ;;                   (assoc (:editor-cursor e)
+            ;;                          :last-edit-block {:block/uuid (:last-edit-block data)}
+            ;;                          :pos (if (:end? data) :max 0)))
 
-                            ;; same block
-                            (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
-                               (get-in prev-e [:editor-cursor :last-edit-block :block/uuid]))
-                            (:editor-cursor prev-e)
+            ;;                 ;; same block
+            ;;                 (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
+            ;;                    (get-in prev-e [:editor-cursor :last-edit-block :block/uuid]))
+            ;;                 (:editor-cursor prev-e)
 
-                            :else
-                            (:editor-cursor e))]
+            ;;                 :else
+            ;;                 (:editor-cursor e))
+            ]
 
         (push-redo e)
+        _ (prn {:new-txs new-txs})
         (transact! new-txs (merge {:undo? true}
                                   tx-meta
                                   (select-keys e [:pagination-blocks-range])))
@@ -203,7 +207,10 @@
                                 (select-keys e [:pagination-blocks-range])))
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/redo e]))
-      (assoc e :txs-op new-txs))))
+      (let [editor-cursor (get-in @state/state [:history/tx->editor-cursor (:tx-id e) :before])]
+        (assoc e
+               :txs-op new-txs
+               :editor-cursor editor-cursor)))))
 
 (defn toggle-undo-redo-mode!
   []
@@ -235,10 +242,10 @@
             entity (update removed-e :txs concat tx-data)]
         (push-undo entity))
       (let [updated-blocks (db-report/get-blocks tx-report)
-            entity {:blocks updated-blocks
+            entity {:tx-id (get-in tx-report [:tempids :db/current-tx])
+                    :blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
-                    :editor-cursor (:editor-cursor tx-meta)
                     :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)
                     :app-state (select-keys @state/state
                                             [:route-match

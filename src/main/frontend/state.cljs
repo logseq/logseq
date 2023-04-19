@@ -277,7 +277,9 @@
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
      :whiteboard/last-persisted-at          {}
      :whiteboard/pending-tx-data            {}
-     :history/page-only-mode?               false})))
+     :history/page-only-mode?               false
+     ;; db tx-id -> before/after editor cursor
+     :history/tx->editor-cursor             {}})))
 
 ;; Block ast state
 ;; ===============
