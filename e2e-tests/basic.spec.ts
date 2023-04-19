@@ -229,6 +229,23 @@ test('delete and backspace', async ({ page, block }) => {
   await expect(page.locator('.warning')).toHaveCount(0)
   expect(await page.inputValue('textarea >> nth=0')).toBe('11.1ref')
   expect(await block.selectionStart()).toBe('1'.length)
+  // the current block is collapsed and has right block
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  await page.keyboard.press(modKey + '+ArrowUp')
+  await page.waitForTimeout(100)
+  await block.activeEditing(-2)
+  await page.keyboard.press('Enter')
+  await block.mustFill('2')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Delete')
+  await page.waitForTimeout(100)
+  await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await page.inputValue('textarea >> nth=0')).toBe('12')
+  expect(await block.selectionStart()).toBe('1'.length)
 })
 
 

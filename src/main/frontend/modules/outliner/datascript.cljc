@@ -59,8 +59,8 @@
                   (not (contains? (:file/unlinked-dirs @state/state)
                                   (config/get-repo-dir (state/get-current-repo)))))
 
-         ;; (prn "[DEBUG] Outliner transact:")
-         ;; (frontend.util/pprint txs)
+        ;;  (prn "[DEBUG] Outliner transact:" opts)
+        ;;  (frontend.util/pprint txs)
 
          (try
            (let [repo (get opts :repo (state/get-current-repo))

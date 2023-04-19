@@ -2697,12 +2697,17 @@
       (and next-block (block-has-no-ref? (:db/id current-block)))
       (let [edit-block (state/get-edit-block)
             new-content (str value (:block/content next-block))
-            additional-tx (conj [{:db/id (:db/id next-block)
-                                  :block/left (:block/left current-block)
-                                  :block/parent (:block/parent current-block)}]
-                                (when (not= next-block (:data right))
-                                  {:db/id (:db/id (:data right))
-                                   :block/left (:db/id next-block)}))
+            additional-tx (filter some?
+                                  (conj [{:db/id (:db/id next-block)
+                                                :block/left (:block/left current-block)
+                                                :block/parent (:block/parent current-block)}]
+                                              (when (some-> right :data (not= next-block))
+                                                {:db/id (:db/id (:data right))
+                                                 :block/left (:db/id next-block)})
+                                              (when collapsed?
+                                                {:db/id (:db/id first-child)
+                                                 :block/left (:db/id next-block)
+                                                 :block/parent (:db/id next-block)})))
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}
