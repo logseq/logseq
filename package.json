@@ -91,6 +91,7 @@
         "@excalidraw/excalidraw": "0.12.0",
         "@hugotomazi/capacitor-navigation-bar": "^2.0.0",
         "@logseq/capacitor-file-sync": "0.0.22",
+        "@logseq/diff-merge": "^0.0.2",
         "@logseq/react-tweet-embed": "1.3.1-1",
         "@sentry/react": "^6.18.2",
         "@sentry/tracing": "^6.18.2",

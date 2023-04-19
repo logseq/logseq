@@ -34,6 +34,7 @@ export class CreatingState<
       point: originPoint,
       fill: this.app.settings.color,
       stroke: this.app.settings.color,
+      scaleLevel: this.app.settings.scaleLevel,
     })
     this.initialShape = toJS(shape.props)
     this.currentShape = shape

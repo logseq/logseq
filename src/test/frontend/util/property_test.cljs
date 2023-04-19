@@ -49,7 +49,7 @@
       "** hello"
 
       (property/remove-properties :markdown "** hello\nx:: y\na::b\n")
-      "** hello\na::b"))
+      "** hello"))
 
   (testing "properties with blank lines"
     (are [x y] (= x y)
@@ -152,7 +152,19 @@ SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
     "a\nfoo:: [[bar]], [[baz]]\nb"
 
     (property/insert-properties :markdown "" {:foo "\"bar, baz\""})
-    "foo:: \"bar, baz\""))
+    "foo:: \"bar, baz\""
+
+    (property/insert-properties :markdown "abcd\nempty::" {:id "123" :foo "bar"})
+    "abcd\nempty::\nid:: 123\nfoo:: bar"
+
+    (property/insert-properties :markdown "abcd\nempty:: " {:id "123" :foo "bar"})
+    "abcd\nempty:: \nid:: 123\nfoo:: bar"
+
+    (property/insert-properties :markdown "abcd\nempty::" {:id "123"})
+    "abcd\nempty::\nid:: 123"
+
+    (property/insert-properties :markdown "abcd\nempty::\nanother-empty::" {:id "123"})
+    "abcd\nempty::\nanother-empty::\nid:: 123"))
 
 (deftest test-build-properties-str
   (are [x y] (= (property/build-properties-str :mardown x) y)

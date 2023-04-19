@@ -59,12 +59,23 @@
        (map (fn [[k v]] [k (count v)]))
        (into {})))
 
+(defn- get-journal-page-count [db]
+  (->> (d/q '[:find (count ?b)
+              :where
+              [?b :block/journal? true]
+              [?b :block/name]
+              [?b :block/file]]
+            db)
+       ffirst))
+
 (defn- query-assertions
   [db files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
                 (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                ;; edn files being listed in docs by parse-graph aren't graph files
+                (remove #(and (not (gp-config/whiteboard? %)) (string/ends-with? % ".edn")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -74,16 +85,10 @@
         "Files on disk should equal ones in db")
 
     (is (= (count (filter #(re-find #"journals/" %) files))
-           (->> (d/q '[:find (count ?b)
-                       :where
-                       [?b :block/journal? true]
-                       [?b :block/name]
-                       [?b :block/file]]
-                     db)
-                ffirst))
+           (get-journal-page-count db))
         "Journal page count on disk equals count in db")
 
-    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5}
+    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5 "TODO" 22}
            (->> (d/q '[:find (pull ?b [*]) :where [?b :block/marker]]
                      db)
                 (map first)
@@ -92,29 +97,29 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3143 :org 460} ;; 2 pages for namespaces are not parsed
-           (get-block-format-counts db))
+    (is (= {:markdown 5499 :org 457} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:title 98 :id 98
-            :updated-at 47 :created-at 47
-            :card-last-score 6 :card-repeats 6 :card-next-schedule 6
-            :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
-            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94 :heading 64}
+    (is (= {:description 81, :updated-at 46, :tags 5, :logseq.macro-arguments 104
+            :logseq.tldraw.shape 79, :card-last-score 6, :card-repeats 6,
+            :card-next-schedule 6, :ls-type 79, :card-last-interval 6, :type 107,
+            :template 5, :title 114, :alias 41, :supports 5, :id 145, :url 5,
+            :card-ease-factor 6, :logseq.macro-name 104, :created-at 46,
+            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226}
            (get-top-block-properties db))
         "Counts for top block properties")
 
-    (is (= {:title 98
-            :alias 6
-            :tags 2 :permalink 2
-            :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
+    (is (= {:description 77, :tags 5, :permalink 1, :ls-type 1, :type 104,
+            :related 1, :source 1, :title 113, :author 1, :sample 1, :alias 41,
+            :logseq.tldraw.page 1, :supports 5, :url 5, :platforms 50,
+            :initial-version 7, :full-title 1}
            (get-all-page-properties db))
         "Counts for all page properties")
 
     (is (= {:block/scheduled 2
             :block/priority 4
             :block/deadline 1
-            :block/collapsed? 22
+            :block/collapsed? 80
             :block/repeated? 1}
            (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
                  :block/repeated?]
@@ -125,13 +130,19 @@
                 (into {})))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "templates" "Query" "Query/table" "page"}
+    (is (= #{"term" "setting" "book" "templates" "Query table" "page"
+             "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
+             "Whiteboard/Property" "Community" "Tweet"}
            (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                 (map (comp :block/original-name first))
                 set))
-        "Has correct namespaces")))
+        "Has correct namespaces")
 
-;; TODO update me to the number of the latest version of doc when namespace is updated
+    (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
+                     (map first)
+                     (filter #(string/includes? % "___"))))
+        "Block names don't have the slash/triple-lowbar delimiter")))
+
 (defn docs-graph-assertions
   "These are common assertions that should pass in both graph-parser and main
   logseq app. It is important to run these in both contexts to ensure that the
@@ -141,15 +152,15 @@
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
-    (is (= 211 (count files)) "Correct file count")
-    (is (= 42110 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 306 (count files)) "Correct file count")
+    (is (= 69508 (count (d/datoms db :eavt))) "Correct datoms count")
 
-    (is (= 3600
+    (is (= 5866
            (ffirst
             (d/q '[:find (count ?b)
                    :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
         "Correct referenced blocks count")
-    (is (= 21
+    (is (= 23
            (ffirst
             (d/q '[:find (count ?b)
                    :where [?b :block/content ?content]

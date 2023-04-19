@@ -23,6 +23,7 @@
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
 (defn- set-missing-block-ids!
+  "For every referred block in the content, fix their block ids in files if missing."
   [content]
   (when (string? content)
     (doseq [block-id (block-ref/get-all-block-ref-ids content)]
@@ -43,7 +44,8 @@
                   (p/catch #(js/console.error "❌ Bak Error: " path %))))
 
           _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                        :from-disk? true})]
+                                                        :from-disk? true
+                                                        :fs/event :fs/local-file-change})]
     (set-missing-block-ids! content)
     (db/set-file-last-modified-at! repo path mtime)))
 

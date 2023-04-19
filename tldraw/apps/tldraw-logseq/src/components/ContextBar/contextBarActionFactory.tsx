@@ -19,7 +19,7 @@ import type {
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
-import { SelectInput, type SelectOption } from '../inputs/SelectInput'
+import { ScaleInput } from '../inputs/ScaleInput'
 import { ShapeLinksInput } from '../inputs/ShapeLinksInput'
 import { TextInput } from '../inputs/TextInput'
 import {
@@ -48,7 +48,13 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'TwitterLink', 'IFrameSource', 'Links']
+const singleShapeActions: ContextBarActionType[] = [
+  'Edit',
+  'YoutubeLink',
+  'TwitterLink',
+  'IFrameSource',
+  'Links',
+]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -122,7 +128,8 @@ const EditAction = observer(() => {
               pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
             }
 
-            const firstNonePropertyBlock = pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
+            const firstNonePropertyBlock =
+              pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
 
             uuid = firstNonePropertyBlock?.uuid
           }
@@ -211,45 +218,8 @@ const ScaleLevelAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
-  const sizeOptions: SelectOption[] = [
-    {
-      label: isMobile() ? 'XS' : 'Extra Small',
-      value: 'xs',
-    },
-    {
-      label: isMobile() ? 'SM' : 'Small',
-      value: 'sm',
-    },
-    {
-      label: isMobile() ? 'MD' : 'Medium',
-      value: 'md',
-    },
-    {
-      label: isMobile() ? 'LG' : 'Large',
-      value: 'lg',
-    },
-    {
-      label: isMobile() ? 'XL' : 'Extra Large',
-      value: 'xl',
-    },
-    {
-      label: isMobile() ? 'XXL' : 'Huge',
-      value: 'xxl',
-    },
-  ]
-  return (
-    <SelectInput
-      tooltip="Scale level"
-      options={sizeOptions}
-      value={scaleLevel}
-      onValueChange={v => {
-        shapes.forEach(shape => {
-          shape.setScaleLevel(v as LogseqPortalShape['props']['scaleLevel'])
-        })
-        app.persist()
-      }}
-    />
-  )
+
+  return <ScaleInput scaleLevel={scaleLevel} compact={isMobile()} />
 })
 
 const IFrameSourceAction = observer(() => {

@@ -19,11 +19,11 @@
 
 (deftest test-fix-duplicate-id
   (are [x y]
-      (let [result (gp-block/fix-duplicate-id x)]
-        (and (:uuid result)
-             (not= (:uuid x) (:uuid result))
+      (let [result (gp-block/fix-duplicate-id (gp-block/block-keywordize x))]
+        (and (:block/uuid result)
+             (not= (:uuid x) (:block/uuid result))
              (= (select-keys result
-                             [:properties :content :properties-text-values :properties-order]) y)))
+                             [:block/properties :block/content :block/properties-text-values :block/properties-order]) (gp-block/block-keywordize y))))
     {:properties {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :tags [], :format :markdown, :meta {:start_pos 51, :end_pos 101}, :macros [], :unordered true, :content "bar\nid:: 63f199bc-c737-459f-983d-84acfcda14fe", :properties-text-values {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :level 1, :uuid #uuid "63f199bc-c737-459f-983d-84acfcda14fe", :properties-order [:id]}
     {:properties {},
      :content "bar",
