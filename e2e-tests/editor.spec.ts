@@ -495,7 +495,7 @@ test('press escape when link/image dialog is open, should restore focus to input
 
     // Press enter to open the link dialog
     await page.keyboard.press('Enter')
-    await expect(page.locaitor(`[data-modal-name="input"]`)).toBeVisible()
+    await expect(page.locator(`[data-modal-name="input"]`)).toBeVisible()
 
     // Press escape; should close link dialog and restore focus to the block textarea
     await page.keyboard.press('Escape')
