@@ -806,10 +806,6 @@
 
 (declare save-block!)
 
-(defn- block-has-no-ref?
-  [eid]
-  (empty? (:block/_refs (db/entity eid))))
-
 (defn delete-block!
   ([repo]
    (delete-block! repo true))
@@ -817,11 +813,11 @@
    (state/set-editor-op! :delete)
    (let [{:keys [id block-id block-parent-id value format]} (get-state)]
      (when block-id
-       (let [block (db/entity [:block/uuid block-id])
-             page-id (:db/id (:block/page block))
+       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
          (when (> page-blocks-count 1)
-           (let [has-children? (seq (:block/_parent block))
+           (let [block (db/entity [:block/uuid block-id])
+                 has-children? (seq (:block/_parent block))
                  block (db/pull (:db/id block))
                  left (tree/-get-left (outliner-core/block block))
                  left-has-children? (and left
@@ -831,41 +827,18 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       ;; it's possible to find a block not belong to the same page of current editing block
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       delete_prev? (and (not (block-has-no-ref? (:db/id block)))
-                                         (block-has-no-ref? [:block/uuid (uuid (dom/attr sibling-block "blockid"))])
-                                         (not (string/blank? value))) ; it doesn't make sense to preserve the block ref for totally different block
-                       {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value (not delete_prev?))
+                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
                        concat-prev-block? (boolean (and prev-block new-content))
-                       same-page? (= (:db/id (:block/page prev-block)) page-id)
                        transact-opts (cond->
                                        {:outliner-op :delete-block}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
-                   (if (and delete_prev? same-page?)
-                     (let [right (when-not (= (:block/parent block)
-                                              (:block/parent prev-block))
-                                   (when-let [right-id (some-> (tree/-get-right (outliner-core/block block))
-                                                         tree/-get-id)]
-                                     {:block/uuid right-id
-                                      :block/left (:block/left block)}))
-                           additional-tx (conj [{:db/id (:db/id block)
-                                                 :block/left (:block/left prev-block)
-                                                 :block/parent (:block/parent prev-block)}] right)
-                           transact-opts (assoc transact-opts :additional-tx additional-tx)]
-                       (outliner-tx/transact!
-                         transact-opts
-                         (delete-block-aux! prev-block false)
-                         (save-block! repo block new-content))
-                       (edit-block! block pos id {:custom-content new-content
-                                                  :move-cursor? true}))
-                     (outliner-tx/transact!
-                       transact-opts
-                       (when concat-prev-block?
-                         (save-block! repo prev-block new-content))
-                       (delete-block-aux! block delete-children?)))))))))))
+                   (outliner-tx/transact! transact-opts
+                     (when concat-prev-block?
+                       (save-block! repo prev-block new-content))
+                     (delete-block-aux! block delete-children?))))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -2677,9 +2650,11 @@
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
-(defn- delete-concat
-  [current-block input current-pos value]
+(defn- delete-concat [current-block]
   (let [input-id (state/get-edit-input-id)
+        ^js input (state/get-input)
+        current-pos (cursor/pos input)
+        value (gobj/get input "value")
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
@@ -2694,21 +2669,6 @@
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
-      (and next-block (block-has-no-ref? (:db/id current-block)))
-      (let [edit-block (state/get-edit-block)
-            new-content (str value (:block/content next-block))
-            transact-opts {:outliner-op :delete-block
-                           :concat-data {:last-edit-block (:block/uuid edit-block)
-                                         :end? true}
-                           :additional-tx [{:db/id (:db/id next-block)
-                                            :block/left (:block/left current-block)
-                                            :block/parent (:block/parent current-block)}]}
-            repo (state/get-current-repo)]
-        (outliner-tx/transact! transact-opts
-          (delete-block-aux! edit-block false)
-          (save-block! repo next-block new-content))
-        (edit-block! next-block current-pos (:block/uuid next-block)))
-
       :else
       (let [edit-block (state/get-edit-block)
             transact-opts {:outliner-op :delete-block
@@ -2717,8 +2677,9 @@
             new-content (str value "" (:block/content next-block))
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
-                               (save-block! repo edit-block new-content)
-                               (delete-block-aux! next-block false))
+          (save-block! repo edit-block new-content)
+          (delete-block-aux! next-block false))
+
         (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))
 
@@ -2740,7 +2701,7 @@
         (let [editor-state (get-state)
               custom-query? (get-in editor-state [:config :custom-query?])]
           (when-not custom-query?
-            (delete-concat current-block input current-pos value)))
+            (delete-concat current-block)))
 
         :else
         (delete-and-update input current-pos (inc current-pos))))))
