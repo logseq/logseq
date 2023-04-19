@@ -806,15 +806,12 @@
 
 (declare save-block!)
 
-(defn- block-has-no-ref?
-  [eid]
-  (empty? (:block/_refs (db/entity eid))))
-
 (defn delete-block!
   ([repo]
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
+<<<<<<< HEAD
    (util/profile
     "Delete block:"
     (let [{:keys [id block-id block-parent-id value format]} (get-state)]
@@ -858,6 +855,36 @@
                           (save-block! repo prev-block new-content))
                         (delete-block-aux! block delete-children?)))
                     )))))))))
+=======
+   (let [{:keys [id block-id block-parent-id value format]} (get-state)]
+     (when block-id
+       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
+             page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
+         (when (> page-blocks-count 1)
+           (let [block (db/entity [:block/uuid block-id])
+                 has-children? (seq (:block/_parent block))
+                 block (db/pull (:db/id block))
+                 left (tree/-get-left (outliner-core/block block))
+                 left-has-children? (and left
+                                         (when-let [block-id (:block/uuid (:data left))]
+                                           (let [block (db/entity [:block/uuid block-id])]
+                                             (seq (:block/_parent block)))))]
+             (when-not (and has-children? left-has-children?)
+               (when block-parent-id
+                 (let [block-parent (gdom/getElement block-parent-id)
+                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                       concat-prev-block? (boolean (and prev-block new-content))
+                       transact-opts (cond->
+                                       {:outliner-op :delete-block}
+                                       concat-prev-block?
+                                       (assoc :concat-data
+                                              {:last-edit-block (:block/uuid block)}))]
+                   (outliner-tx/transact! transact-opts
+                     (when concat-prev-block?
+                       (save-block! repo prev-block new-content))
+                     (delete-block-aux! block delete-children?))))))))))
+>>>>>>> master
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -923,7 +950,8 @@
                                      distinct
                                      vec)
                     content (property/remove-properties format content)
-                    kvs (for [key property-ks] [key (get properties key)])
+                    kvs (for [key property-ks] [key (or (get properties-text-values key)
+                                                        (get properties key))])
                     content (property/insert-properties format content kvs)
                     content (property/remove-empty-properties content)
                     block {:block/uuid block-id
@@ -2670,9 +2698,11 @@
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
-(defn- delete-concat
-  [current-block input current-pos value]
+(defn- delete-concat [current-block]
   (let [input-id (state/get-edit-input-id)
+        ^js input (state/get-input)
+        current-pos (cursor/pos input)
+        value (gobj/get input "value")
         right (outliner-core/get-right-sibling (:db/id current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
@@ -2690,19 +2720,6 @@
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
-      (and next-block (block-has-no-ref? (:db/id current-block)))
-      (let [edit-block (state/get-edit-block)
-            transact-opts {:outliner-op :delete-block
-                           :concat-data {:last-edit-block (:block/uuid edit-block)
-                                         :end? true}}
-            new-content (str value "" (:block/content next-block))
-            next-block (assoc next-block :block/left (:block/left current-block))
-            repo (state/get-current-repo)]
-        (outliner-tx/transact! transact-opts
-                               (delete-block-aux! edit-block false)
-                               (save-block! repo next-block new-content))
-        (edit-block! next-block current-pos (:block/uuid next-block)))
-
       :else
       (let [edit-block (state/get-edit-block)
             transact-opts {:outliner-op :delete-block
@@ -2711,8 +2728,9 @@
             new-content (str value "" (:block/content next-block))
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
-                               (save-block! repo edit-block new-content)
-                               (delete-block-aux! next-block false))
+          (save-block! repo edit-block new-content)
+          (delete-block-aux! next-block false))
+
         (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))
 
@@ -2734,7 +2752,11 @@
         (let [editor-state (get-state)
               custom-query? (get-in editor-state [:config :custom-query?])]
           (when-not custom-query?
+<<<<<<< HEAD
             (delete-concat current-block input current-pos value)))
+=======
+            (delete-concat current-block)))
+>>>>>>> master
 
         :else
         (delete-and-update input current-pos (inc current-pos))))))
