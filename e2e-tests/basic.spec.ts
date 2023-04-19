@@ -169,6 +169,56 @@ test('delete and backspace', async ({ page, block }) => {
   await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe('tetestno refno refhas a ref')
   await expect(page.locator('.warning')).toHaveCount(1)
+
+  // backspace across blocks special case
+  // the current block has refs and the prev block has no refs, and the current block and the prev block has different parent block
+  // after backspace, the current block indent
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+  await block.clickNext()
+  await block.mustFill('1')
+  await page.keyboard.press('Enter')
+  await block.indent()
+  await block.mustFill('1.1')
+  await block.clickNext()
+  await block.mustFill('ref')
+  await page.keyboard.press(modKey + '+c')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Enter')
+  await page.keyboard.press(modKey + '+v')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowUp', { delay: 50 })
+  await page.keyboard.press('Home')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Backspace', { delay: 50 })
+  await page.waitForTimeout(100)
+  await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await page.inputValue('textarea >> nth=0')).toBe('1.1ref')
+  expect(await block.selectionStart()).toBe('1.1'.length)
+  // after backspace, the current block unindent
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+  await block.indent()
+  await block.indent()
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Backspace', { delay: 50 })
+  await page.waitForTimeout(100)
+  await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await page.inputValue('textarea >> nth=0')).toBe('1.1ref')
+  expect(await block.selectionStart()).toBe('1.1'.length)
+
+  // delete across blocks special case
+  // the current block has no refs, and the current block and the next block has different parent block
+  // after delete, the next block unindent
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowUp', { delay: 50 })
+  await page.keyboard.press('End')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Delete')
+  await page.waitForTimeout(100)
+  await expect(page.locator('.warning')).toHaveCount(0)
+  expect(await block.selectionStart()).toBe('1.1'.length)
 })
 
 
