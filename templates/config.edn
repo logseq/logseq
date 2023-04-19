@@ -366,10 +366,10 @@
 
  ;; Configure the Enter key behavior for
  ;; context-aware editing with DWIM (Do What I Mean).
-;; context-aware Enter key behavior implies that pressing Enter will
-;; have different outcomes based on the context.
-;; For instance, pressing Enter within a list generates a new list item,
-;; whereas pressing Enter in a block reference opens the referenced block.
+ ;; context-aware Enter key behavior implies that pressing Enter will
+ ;; have different outcomes based on the context.
+ ;; For instance, pressing Enter within a list generates a new list item,
+ ;; whereas pressing Enter in a block reference opens the referenced block.
  :dwim/settings
 {:admonition&src?  true  ;; default: true
  :markup?          false ;; default: false
