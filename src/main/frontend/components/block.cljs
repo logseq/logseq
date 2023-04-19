@@ -2804,11 +2804,6 @@
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         as-list-of (:as-list-of config)
-        own-order-list-type (:own-order-list-type config)
-        own-order-list-index (and own-order-list-type
-                                  (or (:own-order-list-index config)
-                                      (block-handler/get-idx-of-order-list-block block own-order-list-type)))
-        own-order-number-list? (= own-order-list-type "number")
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2818,10 +2813,7 @@
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
         selected? (when-not slide?
-                    (state/sub-block-selected? blocks-container-id uuid))
-        config (assoc config :own-order-list-type own-order-list-type
-                             :own-order-list-index own-order-list-index
-                             :own-order-number-list? own-order-number-list?)]
+                    (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
