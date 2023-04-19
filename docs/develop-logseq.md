@@ -6,7 +6,7 @@
   - [Development](#development)
   - [Development using Docker](#development-using-docker)
     - [Requrments for development using Docker](#requrments-for-development-using-docker)
-    - [Runing docker-compose for development](#runing-docker-compose-for-development)
+    - [Running docker-compose for development](#running-docker-compose-for-development)
   - [REPL setup](#repl-setup)
     - [VSCode + Calva](#vscode--calva)
   - [Production Build](#production-build)
@@ -42,13 +42,13 @@ Then open the browser <http://localhost:3001>.
 ### Development using Docker
 
 No need to install [dependencies](#requirements) locally.\
-Docker will handle all requirments for you.
+Docker will handle all requirements for you.
 
 #### Requrments for development using Docker
 
 Make sure [docker](https://docs.docker.com/engine/install/) and [docker-compose](https://docs.docker.com/compose/install/) installed.
 
-#### Runing docker-compose for development
+#### Running docker-compose for development
 
 To build base image `Dockerfile.dev` will be used.\
 Start docker-compose with command:
@@ -58,7 +58,7 @@ docker-compose -f docker-compose.dev.yml up -d && docker-compose -f docker-compo
 ```
 
 You will see logs of application, you free to use `Ctrl+c` to exit from application logs, application itself will continue running.\
-You can open applicaiton using <http://localhost:3001>
+You can open application using <http://localhost:3001>
 
 To stop application use
 
