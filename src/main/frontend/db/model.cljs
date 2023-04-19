@@ -906,14 +906,14 @@ independent of format as format specific heading characters are stripped"
             (= "" (:block/content (db-utils/pull (:e (first datoms))))))))))
 
 (defn parents-collapsed?
-  [repo block-id]
-  (when-let [block (:block/parent (get-block-parents-v2 repo block-id))]
+  [repo block-uuid]
+  (when-let [block (:block/parent (get-block-parents-v2 repo block-uuid))]
     (->> (tree-seq map? (fn [x] [(:block/parent x)]) block)
          (some util/collapsed?))))
 
 (defn get-block-page
-  [repo block-id]
-  (when-let [block (db-utils/entity repo [:block/uuid block-id])]
+  [repo block-uuid]
+  (when-let [block (db-utils/entity repo [:block/uuid block-uuid])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
 (defn get-pages-by-name-partition
