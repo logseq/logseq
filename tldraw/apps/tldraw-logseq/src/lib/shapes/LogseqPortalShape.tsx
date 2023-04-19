@@ -15,6 +15,7 @@ import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { Shape, SizeLevel } from '.'
+import { CircleButton } from '../../components/Button'
 import { LogseqQuickSearch } from '../../components/QuickSearch'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext } from '../logseq-context'
@@ -209,9 +210,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           return () => {
             resizeObserver.disconnect()
           }
-        } else {
-          // element is in an invalid state and we need to reset its height
-          this.initialHeightCalculated = false
         }
       }
       return () => {}
@@ -495,30 +493,41 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               placeholder="Create or search your graph..."
             />
           ) : (
-            <div
-              className="tl-logseq-portal-container"
-              data-collapsed={this.collapsed}
-              data-page-id={pageId}
-              data-portal-selected={portalSelected}
-              data-editing={isEditing}
-              style={portalStyle}
-            >
-              {!this.props.compact && !targetNotFound && (
-                <LogseqPortalShapeHeader
-                  type={this.props.blockType ?? 'P'}
-                  fill={fill}
-                  opacity={opacity}
-                >
-                  {this.props.blockType === 'P' ? (
-                    <PageName pageName={pageId} />
-                  ) : (
-                    <Breadcrumb blockId={pageId} />
-                  )}
-                </LogseqPortalShapeHeader>
+            <>
+              <div
+                className="tl-logseq-portal-container"
+                data-collapsed={this.collapsed}
+                data-page-id={pageId}
+                data-portal-selected={portalSelected}
+                data-editing={isEditing}
+                style={portalStyle}
+              >
+                {!this.props.compact && !targetNotFound && (
+                  <LogseqPortalShapeHeader
+                    type={this.props.blockType ?? 'P'}
+                    fill={fill}
+                    opacity={opacity}
+                  >
+                    {this.props.blockType === 'P' ? (
+                      <PageName pageName={pageId} />
+                    ) : (
+                      <Breadcrumb blockId={pageId} />
+                    )}
+                  </LogseqPortalShapeHeader>
+                )}
+                {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
+                {showingPortal && <PortalComponent {...componentProps} />}
+              </div>
+              {!app.readOnly && (
+                <CircleButton
+                  active={!!this.collapsed}
+                  style={{ opacity: isSelected ? 1 : 0 }}
+                  icon={this.props.blockType === 'B' ? 'block' : 'page'}
+                  onClick={this.toggleCollapsed}
+                  otherIcon={'whiteboard-element'}
+                />
               )}
-              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
-              {showingPortal && <PortalComponent {...componentProps} />}
-            </div>
+            </>
           )}
         </div>
       </HTMLContainer>
