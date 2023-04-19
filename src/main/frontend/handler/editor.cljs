@@ -811,51 +811,6 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
-<<<<<<< HEAD
-   (util/profile
-    "Delete block:"
-    (let [{:keys [id block-id block-parent-id value format]} (get-state)]
-      (when block-id
-        (let [block (db/entity [:block/uuid block-id])
-              page-id (:db/id (:block/page block))
-              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
-          (when (> page-blocks-count 1)
-            (let [has-children? (seq (:block/_parent block))
-                  block (db/pull (:db/id block))
-                  left (tree/-get-left (outliner-core/block block))
-                  left-has-children? (and left
-                                          (when-let [block-id (:block/uuid (:data left))]
-                                            (let [block (db/entity [:block/uuid block-id])]
-                                              (seq (:block/_parent block)))))]
-              (when-not (and has-children? left-has-children?)
-                (when block-parent-id
-                  (let [block-parent (gdom/getElement block-parent-id)
-                        ;; it's possible to find a block not belong to the same page of current editing block
-                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                        delete_prev? (and (not (block-has-no-ref? (:db/id block)))
-                                          (block-has-no-ref? [:block/uuid (uuid (dom/attr sibling-block "blockid"))]))
-                        {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value (not delete_prev?))
-                        concat-prev-block? (boolean (and prev-block new-content))
-                        save-page? (= (:db/id (:block/page prev-block)) page-id)
-                        transact-opts (cond->
-                                        {:outliner-op :delete-block}
-                                        concat-prev-block?
-                                        (assoc :concat-data
-                                               {:last-edit-block (:block/uuid block)}))]
-                    (if (and delete_prev? save-page?)
-                      (let [block (assoc block :block/left (:block/left prev-block))
-                            input (gdom/getElement id)]
-                        (outliner-tx/transact! transact-opts
-                          (delete-block-aux! prev-block false)
-                          (save-block! repo block new-content))
-                        (state/set-edit-content! id new-content)
-                        (cursor/move-cursor-to input pos))
-                      (outliner-tx/transact! transact-opts
-                        (when concat-prev-block?
-                          (save-block! repo prev-block new-content))
-                        (delete-block-aux! block delete-children?)))
-                    )))))))))
-=======
    (let [{:keys [id block-id block-parent-id value format]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
@@ -884,7 +839,6 @@
                      (when concat-prev-block?
                        (save-block! repo prev-block new-content))
                      (delete-block-aux! block delete-children?))))))))))
->>>>>>> master
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -2752,11 +2706,7 @@
         (let [editor-state (get-state)
               custom-query? (get-in editor-state [:config :custom-query?])]
           (when-not custom-query?
-<<<<<<< HEAD
-            (delete-concat current-block input current-pos value)))
-=======
             (delete-concat current-block)))
->>>>>>> master
 
         :else
         (delete-and-update input current-pos (inc current-pos))))))
