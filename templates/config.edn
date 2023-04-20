@@ -25,13 +25,11 @@
  ;; Default value: "MMM do, yyyy"
  :journal/page-title-format "MMM do, yyyy"
 
- ;; Specify the journal filename format.
+ ;; Specify the journal filename format using a valid date format string.
  ;; !Warning:
- ;;   - Changing this setting may cause issues if not configured correctly.
- ;;     This configuration option is not retroactive and
- ;;     will only affect newly created journals.
- ;; You may use any valid date format string.
- ;; Default value: "yyyy-MM-dd"
+ ;;   This configuration is not retroactive and affects only new journals.
+ ;;   To show old journal files in the app, manually rename them to the new pattern.
+ ;; De@fault value: "yyyy-MM-dd"
  ;; :journal/file-name-format "yyyy_MM_dd"
 
  ;; Enable tooltip preview on hover.
@@ -371,13 +369,13 @@
  ;; For instance, pressing Enter within a list generates a new list item,
  ;; whereas pressing Enter in a block reference opens the referenced block.
  :dwim/settings
-{:admonition&src?  true  ;; default: true
- :markup?          false ;; default: false
- :block-ref?       true  ;; default: true
- :page-ref?        true  ;; default: true
- :properties?      true  ;; default: true
- :list?            true  ;; default: true
- }
+ {:admonition&src?  true  ;; default: true
+  :markup?          false ;; default: false
+  :block-ref?       true  ;; default: true
+  :page-ref?        true  ;; default: true
+  :properties?      true  ;; default: true
+  :list?            true  ;; default: true
+  }
 
  ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
@@ -390,5 +388,4 @@
  ;;   :file/name-format :triple-lowbar
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar
- }
+ :file/name-format :triple-lowbar}
