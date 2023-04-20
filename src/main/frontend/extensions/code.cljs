@@ -140,8 +140,7 @@
             [frontend.schema.handler.common-config :refer [Config-edn]]
             [malli.util :as mu]
             [malli.core :as m]
-            [rum.core :as rum]
-            [frontend.modules.editor.undo-redo :as undo-redo]))
+            [rum.core :as rum]))
 
 ;; codemirror
 
