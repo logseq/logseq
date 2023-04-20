@@ -28,11 +28,13 @@ import {
   type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { GeometryTools } from '../GeometryTools'
 import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
   'Edit',
+  'Geometry',
   'AutoResizing',
   'Swatch',
   'NoFill',
@@ -72,9 +74,9 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   youtube: ['YoutubeLink', 'Links'],
   tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  box: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links', 'ScaleLevel'],
   highlighter: ['Swatch', 'Links', 'ScaleLevel'],
@@ -365,6 +367,29 @@ const SwatchAction = observer(() => {
   )
 })
 
+const GeometryAction = observer(() => {
+  const app = useApp<Shape>()
+
+  const shapes = filterShapeByAction<
+  BoxShape | PolygonShape | EllipseShape
+>(app.selectedShapesArray, 'Geometry')
+
+  const handleSetGeometry = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const tool = e.currentTarget.dataset.tool
+    shapes.forEach(s => {
+      s.setType(tool)
+    })
+    app.persist()
+  }, [])
+
+  return (
+    <GeometryTools
+      popoverSide="top"
+      chevron={false}
+      setGeometry={handleSetGeometry}/>
+  )
+})
+
 const StrokeTypeAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<
@@ -518,6 +543,7 @@ const LinksAction = observer(() => {
 })
 
 contextBarActionMapping.set('Edit', EditAction)
+contextBarActionMapping.set('Geometry', GeometryAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)

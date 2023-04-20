@@ -316,6 +316,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this
   }
 
+  @action setType = (type: string) => {}
+
   clone = (): this => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore

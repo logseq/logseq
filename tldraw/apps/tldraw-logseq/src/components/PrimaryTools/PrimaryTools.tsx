@@ -1,4 +1,5 @@
 import { useApp } from '@tldraw/react'
+import { Geometry } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ToolButton } from '../ToolButton'
@@ -13,6 +14,17 @@ export const PrimaryTools = observer(function PrimaryTools() {
   const handleSetColor = React.useCallback((color: string) => {
     app.api.setColor(color)
   }, [])
+
+  const [activeGeomId, setActiveGeomId] = React.useState(
+    () => (Object.values(Geometry).find((geo: string) => geo === app.selectedTool.id) ?? Object.values(Geometry)[0])
+  )
+
+  React.useEffect(() => {
+    setActiveGeomId((prevId: Geometry) => {
+      return Object.values(Geometry).find((geo: string) => geo === app.selectedTool.id) ?? prevId
+    })
+  }, [app.selectedTool.id])
+
 
   return (
     <div className="tl-primary-tools" data-html2canvas-ignore="true">
@@ -30,7 +42,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
         <ToolButton tooltip="Eraser" id="erase" icon="eraser" />
         <ToolButton tooltip="Connector" id="line" icon="connector" />
         <ToolButton tooltip="Text" id="text" icon="text" />
-        <GeometryTools />
+        <GeometryTools activeGeometry={activeGeomId}/>
         <Separator.Root
           className="tl-toolbar-separator"
           orientation="horizontal"

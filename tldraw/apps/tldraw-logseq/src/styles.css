@@ -246,6 +246,10 @@ html[data-theme='light'] {
       outline: none;
     }
   }
+
+  .tl-geometry-tools-pane-anchor > .tl-button {
+    border: 1px solid var(--ls-secondary-border-color);
+  }
 }
 
 .tl-statusbar {
@@ -957,7 +961,6 @@ html[data-theme='dark'] {
 
 .tl-geometry-toolbar {
   box-shadow: none;
-  flex-flow: column;
 }
 
 .tl-popover-arrow {
