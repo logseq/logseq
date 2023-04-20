@@ -745,40 +745,208 @@
    {:left-label (t :settings-page/enable-whiteboards)
     :action (whiteboards-enabled-switcher enabled?)}))
 
+(rum/defc settings-account-usage-description [pro-account? graph-usage]
+  (let [count-usage (count graph-usage)
+        count-limit (if pro-account? 10 1)
+        count-percent (js/Math.round (/ count-usage count-limit 0.01))
+        storage-usage (->> (map :used-gbs graph-usage)
+                           (reduce + 0)) 
+        storage-usage-formatted (cond 
+                                  (zero? storage-usage) "0.0"
+                                  (< storage-usage 0.01) "Less than 0.01"
+                                  :else (-> storage-usage (* 1000) js/Math.round (* 0.1) str))
+        ;; TODO: check logic on this. What are the rules around storage limits?  
+        ;; do we, and should we be able to, give individual users more storage?
+        ;; should that be on a per graph or per user basis?
+        default-storage-limit (if pro-account? 100 0.05)
+        storage-limit (->> (range 0 count-limit)
+                           (map #(get-in graph-usage [% :limit-gbs] default-storage-limit))
+                           (reduce + 0)
+                           (* 1000) 
+                           (js/Math.round) 
+                           (* 0.001))
+        storage-percent (/ storage-usage storage-limit 0.01)
+        storage-percent-formatted (-> storage-percent (* 1000) js/Math.round (* 0.1) str)]
+    [:div.text-sm
+     (when pro-account?
+       [:<>
+        (str count-usage " out of " count-limit " synced graphs ")
+        [:strong.text-white " (" count-percent "%)"]
+        ", "]) 
+     storage-usage-formatted "GB of " storage-limit "GB total storage"
+     [:strong.text-white " (" storage-percent-formatted "%)"]]))
+  
+
 (rum/defc settings-account < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
+        current-graph-uuid (state/sub-current-file-sync-graph-uuid)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
+        graph-usage (state/get-remote-graph-usage)
+        current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
+        ; remote-graphs (state/get-remote-graphs)
         logged-in? (user-handler/logged-in?)
-        pro-account? false]
+        user-info (state/get-user-info)
+        pro-account? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
+        expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
+        renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
+        has-subscribed? (some? (:LemonStatus user-info))
+        graph-count (count graph-usage) 
+        graph-limit (if pro-account? 10 1)
+        graph-percent (/ graph-count graph-limit 0.01)
+        graph-storage-usage (reduce + 0 (map :used-gbs graph-usage))
+        graph-storage-limit (reduce + 0 (map :limit-gbs graph-usage))
+        graph-storage-percent (/ graph-storage-usage graph-storage-limit 0.01)]
     [:div.panel-wrap.is-features.mb-8
-     (when-not web-platform?
-       [:div.mt-1.sm:mt-0.sm:col-span-2
-        (cond
-          (and logged-in? pro-account?)
-          [:div 
-           (user-handler/email)]
+     [:div.mt-1.sm:mt-0.sm:col-span-2
+      (cond
+        logged-in?
+        [:div.grid.grid-cols-3.gap-8.pt-2
+         [:div "Current plan"]
+         [:div.col-span-2 
+          [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
+           [:div.flex.gap-4.items-center
+            (if pro-account?
+              [:div.flex-1 "Pro"]
+              [:div.flex-1 "Free"])
+            (if pro-account?
+              (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
+                                        :disabled true
+                                        :icon "upload"})
+                                         ; :on-click user-handler/upgrade})
+              (ui/button "Upgrade plan" {:class "p-1 h-8 justify-center"
+                                         :icon "upload"
+                                         :on-click user-handler/upgrade}))]
+           (when (< 0 (count graph-usage))
+            [:div.grid.gap-3 {:class (str "grid-cols-" (count graph-usage))}
+             (for [{:keys [uuid used-percent]} graph-usage]
+              [:div.rounded-full.w-full.h-2 {:class "bg-black/50"}
+               [:div.rounded-full.h-2 {:class "bg-blue-500"  
+                                       :style {:width used-percent 
+                                               :min-width "0.5rem" 
+                                               :max-width "100%"}}]])])
+           (settings-account-usage-description pro-account? graph-usage)
+           (if current-graph-is-remote?
+             (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
+                                              :disabled true
+                                              :background "gray"
+                                              :icon "cloud-off"})
+             (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
+                                            :disabled true
+                                            :background "gray"
+                                            :icon "cloud"}))]]
+         (when has-subscribed?
+          [:<>
+           [:div "Billing"]
+           [:div.col-span-2.flex.flex-col.gap-4
+            (cond 
+              ;; If there is no expiration date, print the renewal date
+              (nil? expiration-date) 
+              [:div 
+               [:strong.font-semibold "Next billing date: " 
+                (date/get-locale-string renewal-date)]]
+              ;; If the expiration date is in the future, word it as such
+              (< (js/Date.) expiration-date) 
+              [:div
+               [:strong.font-semibold "Pro plan expires on: " 
+                (date/get-locale-string expiration-date)]]
+              ;; Otherwise, ind
+              :else 
+              [:div 
+               [:strong.font-semibold "Pro plan expired on: " 
+                (date/get-locale-string expiration-date)]])
+                               
+            [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center" 
+                                              :disabled true 
+                                              :background "gray" 
+                                              :icon "receipt"})]]])
+            
 
-          logged-in?
-          [:div
-           (user-handler/email)
-           [:p (ui/button (t :logout) {:class "p-1"
-                                       :icon "logout"
-                                       :on-click user-handler/logout})]
-           [:p (ui/button "Upgrade" {:class "p-1"
-                                     :icon "businessplan"
-                                     :on-click user-handler/upgrade})]]
-          (not logged-in?)
-          [:div
-           (ui/button (t :login) {:class "p-1"
-                                  :icon "login"
-                                  :on-click (fn []
-                                              (state/close-settings!)
-                                              (js/window.open config/LOGIN-URL))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])]))
+         [:div "Profile"]
+         [:div.col-span-2.grid.grid-cols-2.gap-4
+          [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
+           [:label.text-sm.font-semibold "First name"]
+           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
+          [:div.flex.flex-col.gap-2 {:class "basis-1/2"}
+           [:label.text-sm.font-semibold "Last name"]
+           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
+          [:div.flex-1.flex.flex-col.gap-2.col-span-2
+           [:label.text-sm.font-semibold "Username"]
+           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25" 
+                                                        :value (user-handler/email)}]]]
+         [:div "Authentication"]
+         [:div.col-span-2
+          [:div.grid.grid-cols-2.gap-4
+           [:div (ui/button (t :logout) {:class "p-1 h-8 justify-center w-full"
+                                         :background "gray"
+                                         :icon "logout"
+                                         :on-click user-handler/logout})]
+           [:div (ui/button "Reset password" {:class "p-1 h-8 justify-center w-full"
+                                              :disabled true
+                                              :background "gray"
+                                              :icon "key"
+                                              :on-click user-handler/logout})]
+           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full" 
+                                                         :disabled true
+                                                         :background "red"})]]]] 
+                                            
+        (not logged-in?)
+        [:div.grid.grid-cols-3.gap-8.pt-2
+         [:div "Authentication"]
+         [:div.col-span-2.flex.flex-wrap.gap-4
+          [:div.w-full.text-white "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."]
+          [:div.flex-1 (ui/button "Sign up" {:class "h-8 w-full text-center justify-center"
+                                             :on-click (fn []
+                                                         (state/close-settings!)
+                                                         (state/pub-event! [:user/login]))})]
+          [:div.flex-1 (ui/button (t :login) {:icon "login" 
+                                              :class "h-8 w-full text-center justify-center" 
+                                              :background "gray"
+                                              :on-click (fn []
+                                                          (state/close-settings!)
+                                                          (state/pub-event! [:user/login]))})]]
+         [:div.col-span-3.flex.flex-col.gap-4 {:class "bg-black/20 p-4 rounded-lg"}
+          [:div.flex.w-full.items-center
+           [:div {:class "w-1/2 text-lg"} 
+            "Discover the power of " 
+            [:strong {:class "text-white/80"} "Logseq Sync"]]
+           [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"} 
+            [:div.w-3.h-3.rounded-full.bg-green-500]
+            "Synced"]]
+          [:div.flex.w-full.gap-4
+           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
+            [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Free"]
+            [:div
+             [:strong.text-white.text-xl.font-normal "$0"]] 
+            [:div.text-white.font-bold {:class "h-[2.5rem] "} "Get started with basic syncing"]
+            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
+             [:li "Unlimited unsynced graphs"]
+             [:li "1 synced graph (up to 50MB, notes only)"]
+             [:li "No asset syncing"]
+             [:li "Access to core Logseq features"]]]
+           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
+            [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Pro"]
+            [:div
+             [:strong.text-white.text-xl.font-normal "$10"] 
+             [:span.text-xs.font-base {:class "ml-0.5"} "/ month"]]
+            [:div.text-white.font-bold {:class "h-[2.5rem]"} "Unlock advanced syncing and more"]
+            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
+             [:li "Unlimited unsynced graphs"]
+             [:li "10 synced graphs (up to 5GB each)"]
+             [:li "Sync assets up to 100MB per file"]
+             [:li "Early access to alpha/beta features"]
+             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
+          
+           
+         ; (ui/button (t :login) {:class "p-1"
+           ;                      :icon "login"
+           ;                      :on-click (fn []
+           ;                                  (state/close-settings!)
+           ;                                  (js/window.open config/LOGIN-URL))})
+         ; [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -839,7 +1007,7 @@
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
            "here"]
-          "for instructions on how to set up and use Sync."]]])
+          "for instructions on how to set up and use Sync."]]])]))
 
      ;; (when-not web-platform?
      ;;   [:<>
@@ -853,7 +1021,7 @@
      
 
 (rum/defcs settings
-  < (rum/local [:general :general] ::active)
+  < (rum/local [:account :account] ::active)
     {:will-mount
      (fn [state]
        (state/load-app-user-cfgs)
