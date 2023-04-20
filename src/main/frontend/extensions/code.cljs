@@ -140,7 +140,8 @@
             [frontend.schema.handler.common-config :refer [Config-edn]]
             [malli.util :as mu]
             [malli.core :as m]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.editor.undo-redo :as undo-redo]))
 
 ;; codemirror
 
@@ -439,15 +440,22 @@
 
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
-                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
-                                                 (when meta-or-ctrl-pressed?
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
+                                                     shift-pressed? (.-shiftKey e)]
+                                                 (when (and meta-or-ctrl-pressed? (not shift-pressed?))
                                                    ;; prevent default behavior of browser
                                                    ;; Cmd + [ => Go back in browser, outdent in CodeMirror
                                                    ;; Cmd + ] => Go forward in browser, indent in CodeMirror
                                                    (case key-code
                                                      "BracketLeft" (util/stop e)
                                                      "BracketRight" (util/stop e)
-                                                     nil)))))
+                                                     ;; handle Cmd + Z in codemirror itself
+                                                     "KeyZ" (util/stop e)
+                                                     nil))
+                                                 (when (and meta-or-ctrl-pressed? shift-pressed?)
+                                                   (case key-code
+                                                     ;; handle Cmd + Shift + Z in codemirror itself
+                                                     "KeyZ" (util/stop e))))))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (util/stop e)
