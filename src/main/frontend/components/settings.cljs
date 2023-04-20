@@ -1,37 +1,39 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
-            [frontend.components.svg :as svg]
-            [frontend.components.plugins :as plugins]
+            [electron.ipc :as ipc]
             [frontend.components.assets :as assets]
+            [frontend.components.conversion :as conversion-component]
+            [frontend.components.file-sync :as fs]
+            [frontend.components.plugins :as plugins]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.storage :as storage]
-            [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.handler.global-config :as global-config-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
             [frontend.util :refer [classnames web-platform?] :as util]
             [frontend.version :refer [version]]
             [goog.object :as gobj]
+            [goog.string :as gstring]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]
-            [frontend.components.conversion :as conversion-component]))
+            [rum.core :as rum]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -759,52 +761,53 @@
         storage-usage-formatted (cond 
                                   (zero? storage-usage) "0.0"
                                   (< storage-usage 0.01) "Less than 0.01"
-                                  :else (-> storage-usage (* 1000) js/Math.round (* 0.1) str))
+                                  :else (gstring/format "%.2f" storage-usage))
         ;; TODO: check logic on this. What are the rules around storage limits?  
         ;; do we, and should we be able to, give individual users more storage?
         ;; should that be on a per graph or per user basis?
-        default-storage-limit (if pro-account? 100 0.05)
+        default-storage-limit (if pro-account? 10 0.05)
         storage-limit (->> (range 0 count-limit)
                            (map #(get-in graph-usage [% :limit-gbs] default-storage-limit))
-                           (reduce + 0)
-                           (* 1000) 
-                           (js/Math.round) 
-                           (* 0.001))
+                           (reduce + 0))
         storage-percent (/ storage-usage storage-limit 0.01)
-        storage-percent-formatted (-> storage-percent (* 1000) js/Math.round (* 0.1) str)]
+        storage-percent-formatted (gstring/format "%.1f" storage-percent)]
     [:div.text-sm
      (when pro-account?
        [:<>
-        (str count-usage " out of " count-limit " synced graphs ")
-        [:strong.text-white " (" count-percent "%)"]
+        (gstring/format "%s of %s synced graphs " count-usage count-limit)
+        [:strong.text-white (gstring/format "(%s%%)" count-percent)]
         ", "]) 
-     storage-usage-formatted "GB of " storage-limit "GB total storage"
-     [:strong.text-white " (" storage-percent-formatted "%)"]]))
-  
+     (gstring/format "%sGB of %sGB total storage " storage-usage-formatted storage-limit)
+     [:strong.text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
+     ; storage-usage-formatted "GB of " storage-limit "GB total storage"
+     ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
 
+
+(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
+  (when (< 0 (count graph-usage))
+   [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
+    (for [{:keys [name used-percent]} graph-usage
+          :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
+     [:div.rounded-full.w-full.h-2 {:class "bg-black/50" 
+                                    :tooltip name}
+      [:div.rounded-full.h-2 {:class color
+                              :style {:width (str used-percent "%") 
+                                      :min-width "0.5rem" 
+                                      :max-width "100%"}}]])]))
+  
 (rum/defc settings-account < rum/reactive
   []
-  (let [current-repo (state/get-current-repo)
-        current-graph-uuid (state/sub-current-file-sync-graph-uuid)
-        enable-journals? (state/enable-journals? current-repo)
-        enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)
+  (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
         graph-usage (state/get-remote-graph-usage)
         current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
-        ; remote-graphs (state/get-remote-graphs)
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
-        pro-account? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
+        paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
+        gift-user? (some #{"pro"} (:UserGroups user-info))
+        pro-account? (or paid-user? gift-user?)
         expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
         renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
-        has-subscribed? (some? (:LemonStatus user-info))
-        graph-count (count graph-usage) 
-        graph-limit (if pro-account? 10 1)
-        graph-percent (/ graph-count graph-limit 0.01)
-        graph-storage-usage (reduce + 0 (map :used-gbs graph-usage))
-        graph-storage-limit (reduce + 0 (map :limit-gbs graph-usage))
-        graph-storage-percent (/ graph-storage-usage graph-storage-limit 0.01)]
+        has-subscribed? (some? (:LemonStatus user-info))]
     [:div.panel-wrap.is-features.mb-8
      [:div.mt-1.sm:mt-0.sm:col-span-2
       (cond
@@ -817,22 +820,18 @@
             (if pro-account?
               [:div.flex-1 "Pro"]
               [:div.flex-1 "Free"])
-            (if pro-account?
+            (cond 
+              has-subscribed?
               (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
                                         :disabled true
                                         :icon "upload"})
                                          ; :on-click user-handler/upgrade})
+              (not pro-account?)
               (ui/button "Upgrade plan" {:class "p-1 h-8 justify-center"
                                          :icon "upload"
-                                         :on-click user-handler/upgrade}))]
-           (when (< 0 (count graph-usage))
-            [:div.grid.gap-3 {:class (str "grid-cols-" (count graph-usage))}
-             (for [{:keys [uuid used-percent]} graph-usage]
-              [:div.rounded-full.w-full.h-2 {:class "bg-black/50"}
-               [:div.rounded-full.h-2 {:class "bg-blue-500"  
-                                       :style {:width used-percent 
-                                               :min-width "0.5rem" 
-                                               :max-width "100%"}}]])])
+                                         :on-click user-handler/upgrade})
+              :else nil)]
+           (settings-account-usage-graphs pro-account? graph-usage)
            (settings-account-usage-description pro-account? graph-usage)
            (if current-graph-is-remote?
              (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
@@ -840,16 +839,16 @@
                                               :background "gray"
                                               :icon "cloud-off"})
              (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
-                                            :disabled true
-                                            :background "gray"
-                                            :icon "cloud"}))]]
+                                            :background "blue"
+                                            :icon "cloud"
+                                            :on-click #(fs/maybe-onboarding-show :sync-initiate)}))]]
          (when has-subscribed?
           [:<>
            [:div "Billing"]
            [:div.col-span-2.flex.flex-col.gap-4
             (cond 
               ;; If there is no expiration date, print the renewal date
-              (nil? expiration-date) 
+              (and renewal-date (nil? expiration-date)) 
               [:div 
                [:strong.font-semibold "Next billing date: " 
                 (date/get-locale-string renewal-date)]]
@@ -868,8 +867,6 @@
                                               :disabled true 
                                               :background "gray" 
                                               :icon "receipt"})]]])
-            
-
          [:div "Profile"]
          [:div.col-span-2.grid.grid-cols-2.gap-4
           [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
@@ -944,14 +941,6 @@
              [:li "Sync assets up to 100MB per file"]
              [:li "Early access to alpha/beta features"]
              [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
-          
-           
-         ; (ui/button (t :login) {:class "p-1"
-           ;                      :icon "login"
-           ;                      :on-click (fn []
-           ;                                  (state/close-settings!)
-           ;                                  (js/window.open config/LOGIN-URL))})
-         ; [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -1025,8 +1014,10 @@
      ;;     ]])
      
 
+(def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
+
 (rum/defcs settings
-  < (rum/local [:account :account] ::active)
+  < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
     {:will-mount
      (fn [state]
        (state/load-app-user-cfgs)
@@ -1053,7 +1044,8 @@
         [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
+              [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
+                [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
