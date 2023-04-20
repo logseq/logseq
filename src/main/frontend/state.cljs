@@ -765,6 +765,7 @@ Similar to re-frame subscriptions"
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (->> graphs
          (map #(hash-map :uuid (:GraphUUID %)
+                         :name (:GraphName %)
                          :used-gbs (/ (:GraphStorageUsage %) 1024 1024 1024)
                          :limit-gbs (/ (:GraphStorageLimit %) 1024 1024 1024)
                          :used-percent (/ (:GraphStorageUsage %) (:GraphStorageLimit %) 0.01)))
