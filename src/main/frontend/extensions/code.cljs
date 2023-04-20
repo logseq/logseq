@@ -454,7 +454,8 @@
                                                  (when (and meta-or-ctrl-pressed? shift-pressed?)
                                                    (case key-code
                                                      ;; handle Cmd + Shift + Z in codemirror itself
-                                                     "KeyZ" (util/stop e))))))
+                                                     "KeyZ" (util/stop e)
+                                                     nil)))))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (util/stop e)
