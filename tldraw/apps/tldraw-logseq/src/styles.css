@@ -322,7 +322,7 @@ button.tl-select-input-trigger {
   @apply flex items-center px-3;
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   background-color: var(--ls-secondary-background-color);
-  border-radius: 8px;
+  border-radius: 0.25rem;
   font-size: 16px;
   height: 100%;
   color: var(--ls-secondary-text-color);
