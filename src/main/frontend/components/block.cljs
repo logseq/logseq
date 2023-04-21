@@ -1703,13 +1703,12 @@
         {:on-click (fn [_]
                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
        [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
-        (for [[idx child] (medley/indexed children)]
+        (for [child children]
           (when (map? child)
             (let [child  (dissoc child :block/meta)
                   config (cond->
                            (-> config
                                (assoc :block/uuid (:block/uuid child))
-                               (assoc :as-index-of idx)
                                (dissoc :breadcrumb-show? :embed-parent))
                            (or ref? query?)
                            (assoc :ref-query-child? true))]
@@ -2796,7 +2795,6 @@
         whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
-        as-list-of (:as-list-of config)
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2813,12 +2811,10 @@
         :data-refs data-refs
         :data-refs-self data-refs-self
         :data-collapsed (and collapsed? has-child?)
-        :data-child-idx (:as-index-of config)
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect")
-                    (when as-list-of (str " " as-list-of))
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
