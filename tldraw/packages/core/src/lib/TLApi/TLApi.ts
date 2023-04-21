@@ -425,4 +425,21 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       this.app.setSelectedShapes(shapesInGroups)
     }
   }
+
+  shiftShapes = (type: string, shapes: S[] = this.app.allSelectedShapesArray) => {
+    const ShapeClass = this.app.getShapeClass(type)
+
+    const selectedShapes = this.app.selectedShapesArray
+    this.app.currentPage.removeShapes(...selectedShapes)
+    const clones = selectedShapes.map(s => {
+      return new ShapeClass({
+        ...s.serialized,
+        id: uniqueId(),
+        type: type,
+      })
+    })
+    this.app.currentPage.addShapes(...clones)
+    this.app.persist()
+    this.app.setSelectedShapes(clones)
+  }
 }

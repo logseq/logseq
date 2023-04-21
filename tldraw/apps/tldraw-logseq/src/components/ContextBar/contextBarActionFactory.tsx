@@ -370,16 +370,9 @@ const SwatchAction = observer(() => {
 const GeometryAction = observer(() => {
   const app = useApp<Shape>()
 
-  const shapes = filterShapeByAction<
-  BoxShape | PolygonShape | EllipseShape
->(app.selectedShapesArray, 'Geometry')
-
   const handleSetGeometry = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const tool = e.currentTarget.dataset.tool
-    shapes.forEach(s => {
-      s.setType(tool)
-    })
-    app.persist()
+    const type = e.currentTarget.dataset.tool
+    app.api.shiftShapes(type)
   }, [])
 
   return (

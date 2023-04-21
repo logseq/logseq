@@ -7,7 +7,7 @@ import { TablerIcon } from '../icons'
 interface GeometryToolsProps extends React.HTMLAttributes<HTMLElement> {
   popoverSide?: Side
   activeGeometry?: string
-  setGeometry?: (e: React.MouseEvent<HTMLButtonElement>) => void
+  setGeometry: (e: React.MouseEvent<HTMLButtonElement>) => void
   chevron?: boolean
 }
 
