@@ -227,6 +227,7 @@ export class ResizingState<
       })
     })
     this.updateCursor(scaleX, scaleY)
+    this.app.viewport.panToPointWhenOutOfBounds(currentPoint)
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {

@@ -35,7 +35,7 @@
             [lambdaisland.glogi :as log]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -322,7 +322,7 @@
     (if (and (< 2 (count parts))
              (= 36 (count (parts 0)))
              (= 36 (count (parts 1))))
-      (string/join "/" (drop 2 parts))
+      (util/string-join-path (drop 2 parts))
       path)))
 
 (defprotocol IRelativePath
@@ -342,7 +342,7 @@
       (remove-user-graph-uuid-prefix o)
 
       :else
-      (throw (js/Error. (str "unsupport type " (str o)))))))
+      (throw (js/Error. (str "unsupported type " (str o)))))))
 
 (defprotocol IChecksum
   (-checksum [this]))
@@ -531,7 +531,7 @@
   {:post [(s/valid? ::diff %)]}
   {:TXId (inc index)
    :TXType "update_files"
-   :TXContent [[(string/join "/" [user-uuid graph-uuid relative-path]) nil checksum]]})
+   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
 
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.
@@ -592,9 +592,15 @@
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
   even local-file's last-modified > remote-file's last-modified.
   because these files will be auto created when the graph created, we dont want them to re-write related remote files."
-  #{"logseq/config.edn" "logseq/custom.css"
-    "pages/contents.md" "pages/contents.org"
+  #{"pages/contents.md" "pages/contents.org"
     "logseq/metadata.edn"})
+
+(def ^:private ignore-default-value-files
+  "when create a new local graph, some files will be created (config.edn, custom.css).
+  And related remote files wins if these files have default template value."
+  #{"logseq/config.edn" "logseq/custom.css"})
+
+(def ^:private empty-custom-css-md5 "d41d8cd98f00b204e9800998ecf8427e")
 
 ;; TODO: use fn some to filter FileMetadata here, it cause too much loop
 (defn diff-file-metadata-sets
@@ -605,29 +611,33 @@
   keep this `FileMetadata` in result"
   [s1 s2]
   (reduce
-     (fn [result item]
-       (let [path (:path item)
-             lower-case-path (some-> path string/lower-case)
-             ;; encrypted-path (:encrypted-path item)
-             checksum (:etag item)
-             last-modified (:last-modified item)]
-         (if (some
-              #(cond
-                 (not= lower-case-path (some-> (:path %) string/lower-case))
-                 false
-                 (= checksum (:etag %))
-                 true
-                 (>= last-modified (:last-modified %))
-                 false
-                 ;; these special files have higher priority in s1
-                 (contains? higher-priority-remote-files path)
-                 false
-                 (< last-modified (:last-modified %))
-                 true)
-              s2)
-           result
-           (conj result item))))
-     #{} s1))
+   (fn [result item]
+     (let [path (:path item)
+           lower-case-path (some-> path string/lower-case)
+           ;; encrypted-path (:encrypted-path item)
+           checksum (:etag item)
+           last-modified (:last-modified item)]
+       (if (some
+            #(cond
+               (not= lower-case-path (some-> (:path %) string/lower-case))
+               false
+               (= checksum (:etag %))
+               true
+               (>= last-modified (:last-modified %))
+               false
+               ;; these special files have higher priority in s1
+               (contains? higher-priority-remote-files path)
+               false
+               ;; higher priority in s1 when config.edn=default value or empty custom.css
+               (and (contains? ignore-default-value-files path)
+                    (#{config/config-default-content-md5 empty-custom-css-md5} (:etag %)))
+               false
+               (< last-modified (:last-modified %))
+               true)
+            s2)
+         result
+         (conj result item))))
+   #{} s1))
 
 (comment
  (defn map->FileMetadata [m]
@@ -662,7 +672,7 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal-dir (path/join (config/get-journals-directory) path/sep)
+            journal-dir (node-path/join (config/get-journals-directory) node-path/sep)
             journal? (string/starts-with? path journal-dir)
             journal-day
             (when journal?
@@ -694,9 +704,8 @@
           (- (.-size item)))))))
 ;;; ### path-normalize
 (def path-normalize
-  (if (util/electron?)
-    gp-util/path-normalize
-    (partial capacitor-fs/normalize-file-protocol-path nil)))
+
+  gp-util/path-normalize)
 
 
 ;;; ### APIs
@@ -724,6 +733,7 @@
   (<get-remote-all-files-meta [this graph-uuid] "get all remote files' metadata")
   (<get-remote-files-meta [this graph-uuid filepaths] "get remote files' metadata")
   (<get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
+  (<get-remote-txid [this graph-uuid] "get remote graph's txid")
   (<get-remote-file-versions [this graph-uuid filepath] "get file's version list")
   (<list-remote-graphs [this] "list all remote graphs")
   (<get-deletion-logs [this graph-uuid from-txid] "get deletion logs from FROM-TXID")
@@ -774,6 +784,8 @@
 (defn- <retry-rsapi [f]
   (go-loop [n 3]
     (let [r (<! (f))]
+      (when (instance? ExceptionInfo r)
+        (js/console.error "rsapi error:" (str (ex-cause r))))
       (if (and (instance? ExceptionInfo r)
                (string/index-of (str (ex-cause r)) "operation timed out")
                (> n 0))
@@ -1267,6 +1279,10 @@
                                        (seq graph-uuid-opt)
                                        (assoc :GraphUUID graph-uuid-opt))))))
 
+  (<get-remote-txid [this graph-uuid]
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "get_txid" {:GraphUUID graph-uuid}))))
+
   (<get-remote-file-versions [this graph-uuid filepath]
     (user/<wrap-ensure-id&access-token
      (let [encrypted-path (first (<! (<encrypt-fnames rsapi graph-uuid [filepath])))]
@@ -1377,7 +1393,7 @@
      (let [partitioned-files (partition-all 20 (<! (<encrypt-fnames rsapi graph-uuid filepaths)))]
        (loop [[files & others] partitioned-files]
          (when files
-           (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))]
+           (let [current-txid (:TXId (<! (<get-remote-txid this graph-uuid)))]
              (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))
              (recur others))))))))
 
@@ -1425,8 +1441,8 @@
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
-    (or (string/starts-with? rel-path (path/join (config/get-journals-directory) path/sep))
-        (string/starts-with? rel-path (path/join (config/get-pages-directory) path/sep)))))
+    (or (string/starts-with? rel-path (node-path/join (config/get-journals-directory) node-path/sep))
+        (string/starts-with? rel-path (node-path/join (config/get-pages-directory) node-path/sep)))))
 
 (defn- need-add-version-file?
   "when we need to create a new version file:
@@ -1442,10 +1458,10 @@
       (.-deleted? filetxn)
       false
       (.-updated? filetxn)
-      (let [path (relative-path filetxn)
+      (let [rpath (relative-path filetxn)
             repo (state/get-current-repo)
-            file-path (config/get-file-path repo path)
-            content (<! (p->c (fs/read-file "" file-path)))]
+            repo-dir (config/get-repo-dir repo)
+            content (<! (p->c (fs/read-file repo-dir rpath)))]
         (and (seq origin-db-content)
              (or (nil? content)
                  (some :removed (diff/diff origin-db-content content))))))))
@@ -1468,7 +1484,7 @@
 (defn- assert-local-txid<=remote-txid
   []
   (when-let [local-txid (last @graphs-txid)]
-    (go (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil (second @graphs-txid))))]
+    (go (let [remote-txid (:TXId (<! (<get-remote-txid remoteapi (second @graphs-txid))))]
           (assert (<= local-txid remote-txid)
                   [@graphs-txid local-txid remote-txid])))))
 
@@ -1541,7 +1557,7 @@
             txn->db-content-vec (->> filetxns
                                      (mapv
                                       #(when (is-journals-or-pages? %)
-                                         [% (db/get-file repo (config/get-file-path repo (relative-path %)))]))
+                                         [% (db/get-file repo (relative-path %))]))
                                      (remove nil?))]
 
         (doseq [relative-p (map relative-path filetxns)]
@@ -2323,12 +2339,12 @@
                 sorted-diff-remote-files
                                         (sort-by
                                          (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-                remote-graph-info-or-ex (<! (<get-remote-graph remoteapi nil graph-uuid))
-                latest-txid             (:TXId remote-graph-info-or-ex)]
-            (if (or (instance? ExceptionInfo remote-graph-info-or-ex) (nil? latest-txid))
+                remote-txid-or-ex       (<! (<get-remote-txid remoteapi graph-uuid))
+                latest-txid             (:TXId remote-txid-or-ex)]
+            (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? latest-txid))
               (do (put-sync-event! {:event :get-remote-graph-failed
                                     :data {:graph-uuid graph-uuid
-                                           :exp remote-graph-info-or-ex
+                                           :exp remote-txid-or-ex
                                            :epoch (tc/to-epoch (t/now))}})
                   {:stop true})
               (do (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
@@ -2562,12 +2578,12 @@
 
               (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
               ;; but some potential bugs cause local-txid > remote-txid
-              (let [remote-graph-info-or-ex (<! (<get-remote-graph remoteapi nil graph-uuid))
-                    remote-txid             (:TXId remote-graph-info-or-ex)]
-                (if (or (instance? ExceptionInfo remote-graph-info-or-ex) (nil? remote-txid))
+              (let [remote-txid-or-ex (<! (<get-remote-txid remoteapi graph-uuid))
+                    remote-txid             (:TXId remote-txid-or-ex)]
+                (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? remote-txid))
                   (do (put-sync-event! {:event :get-remote-graph-failed
                                         :data  {:graph-uuid graph-uuid
-                                                :exp        remote-graph-info-or-ex
+                                                :exp        remote-txid-or-ex
                                                 :epoch      (tc/to-epoch (t/now))}})
                       {:stop true})
                   (do (<! (<update-graphs-txid! remote-txid graph-uuid user-uuid repo))
@@ -2701,7 +2717,7 @@
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
-    (println "[SyncManager" graph-uuid "]"
+    (println (str "[SyncManager " graph-uuid "]")
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
@@ -2766,7 +2782,7 @@
           remote->local
           (let [txid
                 (if (true? remote->local)
-                  {:txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))}
+                  {:txid (:TXId (<! (<get-remote-txid remoteapi graph-uuid)))}
                   remote->local)]
             (when (some? txid)
               (>! ops-chan {:remote->local txid}))
@@ -3091,7 +3107,7 @@
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
 
@@ -3099,7 +3115,7 @@
 
       (reset! *sync-entered? false)
 
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
+      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 
@@ -3258,7 +3274,7 @@
 
 ;;; ### some add-watches
 
-;; TOOD: replace this logic by pause/resume state
+;; TODO: replace this logic by pause/resume state
 (defonce network-online-cursor (rum/cursor state/state :network/online?))
 (add-watch network-online-cursor "sync-manage"
            (fn [_k _r o n]

@@ -1,0 +1,104 @@
+name: logseq/publishing CI
+
+on:
+  # Path filters ensure jobs only kick off if a change is made to publishing or
+  # its local dependencies
+  push:
+    branches: [master]
+    paths:
+      - 'deps/publishing/**'
+      # db is a local dep that could break functionality in this lib and should trigger this
+      - 'deps/db/**'
+      - '.github/workflows/publishing.yml'
+      - '!deps/publishing/**.md'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'deps/publishing/**'
+      - 'deps/db/**'
+      - '.github/workflows/publishing.yml'
+      - '!deps/publishing/**.md'
+
+defaults:
+  run:
+    working-directory: deps/publishing
+
+env:
+  CLOJURE_VERSION: '1.10.1.763'
+  # This is the same as 1.8.
+  JAVA_VERSION: '11'
+  # This is the latest node version we can run.
+  NODE_VERSION: '18'
+  BABASHKA_VERSION: '1.0.168'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: deps/publishing/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # Clojure needed for bb step
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Fetch yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Run nbb-logseq tests
+        run: yarn test
+
+      # In this job because it depends on an npm package
+      - name: Load namespaces into nbb-logseq
+        run: bb test:load-all-namespaces-with-nbb .
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Run clj-kondo lint
+        run: clojure -M:clj-kondo --lint src test
+
+      - name: Carve lint for unused vars
+        run: bb lint:carve
+
+      - name: Lint for vars that are too large
+        run: bb lint:large-vars
+
+      - name: Lint for namespaces that aren't documented
+        run: bb lint:ns-docstrings
+
+      - name: Lint for public vars that are private based on usage
+        run: bb lint:minimize-public-vars

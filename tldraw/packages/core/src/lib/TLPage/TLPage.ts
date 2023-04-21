@@ -91,10 +91,6 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @observable nonce = 0
 
-  @action bump = () => {
-    this.nonce++
-  }
-
   @action update(props: Partial<TLPageProps<S>>) {
     Object.assign(this, props)
     return this
@@ -102,6 +98,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @action updateBindings(bindings: Record<string, TLBinding>) {
     Object.assign(this.bindings, bindings)
+    return this
+  }
+
+  @action updateShapesIndex(shapesIndex: string[]) {
+    this.shapes.sort((a,b) => shapesIndex.indexOf(a.id) - shapesIndex.indexOf(b.id))
     return this
   }
 
@@ -115,16 +116,14 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
             return new ShapeClass(shape)
           })
     this.shapes.push(...shapeInstances)
-    this.bump()
     return shapeInstances
   }
 
   private parseShapesArg<S>(shapes: S[] | string[]) {
     if (typeof shapes[0] === 'string') {
       return this.shapes.filter(shape => (shapes as string[]).includes(shape.id))
-    } else {
-      return shapes as S[]
     }
+    return shapes as S[]
   }
 
   @action removeShapes(...shapes: S[] | string[]) {

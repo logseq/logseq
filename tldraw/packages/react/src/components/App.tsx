@@ -26,6 +26,7 @@ export interface TLAppPropsWithoutApp<
   Shapes?: TLReactShapeConstructor<S>[]
   Tools?: TLToolConstructor<S, TLReactEventMap, TLReactApp<S>>[]
   children?: React.ReactNode
+  readOnly?: boolean
 }
 
 export interface TLAppPropsWithApp<

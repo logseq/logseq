@@ -7,7 +7,6 @@
    [frontend.handler.editor :as editor-handler]
    [frontend.handler.notification :as notification]
    [frontend.handler.route :as route-handler]
-   [frontend.handler.user :as user-handler]
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
    [frontend.util.text :as text-util]))
@@ -30,10 +29,6 @@
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond
-      (= hostname "auth-callback")
-      (when-let [code (.get search-params "code")]
-        (user-handler/login-callback code))
-
       (= hostname "graph")
       (let [graph-name (some-> pathname
                                (string/replace "/" "")

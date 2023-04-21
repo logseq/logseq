@@ -1,0 +1,12 @@
+{
+  "name": "nbb-dev-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "^1.2.173"
+  },
+  "dependencies": {
+    "fs-extra": "9.1.0",
+    "mldoc": "^1.5.1"
+  }
+}

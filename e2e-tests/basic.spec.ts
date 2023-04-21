@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import fs from 'fs/promises'
 import path from 'path'
 import { test } from './fixtures'
-import { randomString, createRandomPage } from './utils'
+import { randomString, createRandomPage, modKey } from './utils'
 
 
 test('create page and blocks, save to disk', async ({ page, block, graphDir }) => {
@@ -82,7 +82,6 @@ test('delete and backspace', async ({ page, block }) => {
   await page.keyboard.press('Delete', { delay: 50 })
   expect(await page.inputValue('textarea >> nth=0')).toBe('te')
 
-  // TODO: test delete & backspace across blocks
 })
 
 
@@ -143,6 +142,7 @@ test('template', async ({ page, block }) => {
   await block.waitForBlocks(5)
 
   // NOTE: use delay to type slower, to trigger auto-completion UI.
+  await block.clickNext()
   await block.mustType('/template')
 
   await page.click('[title="Insert a created template here"]')
@@ -153,13 +153,13 @@ test('template', async ({ page, block }) => {
   await popupMenuItem.waitFor({ timeout: 2000 }) // wait for template search
   await popupMenuItem.click()
 
-  await block.waitForBlocks(8)
+  await block.waitForBlocks(9)
 })
 
 test('auto completion square brackets', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // In this test, `type` is unsed instead of `fill`, to allow for auto-completion.
+  // In this test, `type` is unused instead of `fill`, to allow for auto-completion.
 
   // [[]]
   await block.mustType('This is a [', { toBe: 'This is a []' })

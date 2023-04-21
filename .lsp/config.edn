@@ -1,0 +1,2 @@
+{:source-aliases #{:cljs}
+ :clean {:ns-inner-blocks-indentation :same-line}}

@@ -5,6 +5,8 @@
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
+            [babashka.fs :as fs]
             [clojure.pprint :as pprint]
             [clojure.edn :as edn]))
 
@@ -43,3 +45,28 @@
   "Validate a global config.edn"
   [file]
   (validate-file-with-schema file repo-config-schema/Config-edn))
+
+(defn validate-ast
+  "Validate mldoc ast(s) in a file or as an EDN arg"
+  [file-or-edn]
+  (let [edn (edn/read-string
+             (if (fs/exists? file-or-edn) (slurp file-or-edn) file-or-edn))]
+    (if (and (sequential? edn) (:ast (first edn)))
+      ;; Validate multiple asts in the format [{:file "" :ast []} ...]
+      ;; Produced by https://github.com/logseq/nbb-logseq/tree/main/examples/from-js#graph_astmjs
+      (do
+        (println "Validating" (count edn) "files...")
+        (if-let [errors-by-file (seq (keep
+                                      #(when-let [errors (m/explain mldoc-schema/block-ast-with-pos-coll-schema (:ast %))]
+                                         {:file (:file %)
+                                          :errors errors})
+                                      edn))]
+          (do
+            (println "Found errors:")
+            (pprint/pprint errors-by-file))
+          (println "All files valid!")))
+      (if-let [errors (m/explain mldoc-schema/block-ast-with-pos-coll-schema edn)]
+        (do
+          (println "Found errors:")
+          (pprint/pprint errors))
+        (println "Valid!")))))

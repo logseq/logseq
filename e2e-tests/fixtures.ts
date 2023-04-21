@@ -9,14 +9,15 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 
-let repoName = randomString(10)
+// For testing special characters in graph name / path
+let repoName = "@" + randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
   fs.rmSync(testTmpDir, { recursive: true })
 }
 
-export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
+export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 
 // NOTE: This following is a console log watcher for error logs.
 // Save and print all logs when error happens.
@@ -25,6 +26,7 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
   const text = msg.text()
   logs += text + '\n'
+
   expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
@@ -119,12 +121,6 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
-    /*
-    const locator = page.locator('.notification-close-button').first()
-    while (await locator.isVisible()) {
-      locator.click() // ignore error
-    }
-    */
     await expect(page.locator('.notification-close-button')).not.toBeVisible()
 
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
@@ -209,7 +205,7 @@ export const test = base.extend<LogseqFixtures>({
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
-        // scroll, for isVisble test
+        // scroll, for isVisible test
         await page.$eval(`.ls-block >> nth=${nth}`, (element) => {
           element.scrollIntoView();
         });
@@ -295,7 +291,7 @@ export let traceAll = function(){
   test.beforeAll(async () => {
     await context.tracing.startChunk();
   })
-  
+
   test.afterAll(async () => {
     await context.tracing.stopChunk({ path: getTracingFilePath() });
   })

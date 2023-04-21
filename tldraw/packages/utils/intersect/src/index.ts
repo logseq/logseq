@@ -1271,7 +1271,7 @@ export function intersectPolylineBounds(points: number[][], bounds: TLBounds): T
 /* -------------------------------------------------- */
 
 /**
- * Find the intersections between a polygon nd a line segment.
+ * Find the intersections between a polygon and a line segment.
  *
  * @param points
  * @param a1

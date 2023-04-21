@@ -9,7 +9,7 @@
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
-            ["path" :as path]
+            ["path" :as node-path]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.core.async :as async]
@@ -51,7 +51,7 @@
                  (remove #(string/starts-with? (.-name ^js %) "."))
                  (map #(do
                          [(.isDirectory %)
-                          (.join path dir (.-name %))])))))
+                          (.join node-path dir (.-name %))])))))
         [true root-dir])
        (filter (complement first))
        (map second)
@@ -94,10 +94,10 @@
              (string? new-content)
              (string-some-deleted? db-content new-content))
     (logger/info ::backup "backup db file" path)
-    (backup-file/backup-file repo :backup-dir path (path/extname path) db-content)))
+    (backup-file/backup-file repo :backup-dir path (node-path/extname path) db-content)))
 
 (defmethod handle :addVersionFile [_window [_ repo path content]]
-  (backup-file/backup-file repo :version-file-dir path (path/extname path) content))
+  (backup-file/backup-file repo :version-file-dir path (node-path/extname path) content))
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
@@ -128,7 +128,7 @@
       (catch :default e
         (logger/warn ::write-file path e)
         (let [backup-path (try
-                            (backup-file/backup-file repo :backup-dir path (path/extname path) content)
+                            (backup-file/backup-file repo :backup-dir path (node-path/extname path) content)
                             (catch :default e
                               (logger/error ::write-file "backup file failed:" e)))]
           (utils/send-to-renderer window "notification" {:type "error"
@@ -152,24 +152,24 @@
 
 (defn get-ext
   [p]
-  (-> (.extname path p)
+  (-> (.extname node-path p)
       (subs 1)
       keyword))
 
 (defn- get-files
+  "Returns vec of file-objs"
   [path]
-  (let [result (->>
-                (readdir path)
-                (remove (partial utils/ignored-path? path))
-                (filter #(contains? allowed-formats (get-ext %)))
-                (map (fn [path]
-                       (let [stat (fs/statSync path)]
-                         (when-not (.isDirectory stat)
-                           {:path    (utils/fix-win-path! path)
-                            :content (utils/read-file path)
-                            :stat    stat}))))
-                (remove nil?))]
-    (vec (cons {:path (utils/fix-win-path! path)} result))))
+  (->> (readdir path)
+       (remove (partial utils/ignored-path? path))
+       (filter #(contains? allowed-formats (get-ext %)))
+       (map (fn [path]
+              (let [stat (fs/statSync path)]
+                (when-not (.isDirectory stat)
+                  {:path    (utils/fix-win-path! path)
+                   :content (utils/read-file path)
+                   :stat    stat}))))
+       (remove nil?)
+       vec))
 
 (defn open-dir-dialog []
   (p/let [result (.showOpenDialog dialog (bean/->js
@@ -193,12 +193,14 @@
 
 (defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
-  (p/let [path (open-dir-dialog)]
+  (p/let [path (open-dir-dialog)
+          path (utils/fix-win-path! path)]
     (logger/debug ::open-dir {:path path})
     (if path
       (try
-        (p/resolved (bean/->js (get-files path)))
-        (catch js/Error e 
+        (p/resolved (bean/->js {:path path
+                                :files (get-files path)}))
+        (catch js/Error e
           (do
             (utils/send-to-renderer window "notification" {:type "error"
                                                            :payload (str "Opening the specified directory failed.\n"
@@ -209,7 +211,9 @@
 
 (defmethod handle :getFiles [_window [_ path]]
   (logger/debug ::get-files {:path path})
-  (get-files path))
+  (p/let [files (get-files path)]
+    (bean/->js {:path path
+                :files files})))
 
 (defn- sanitize-graph-name
   [graph-name]
@@ -228,8 +232,8 @@
 (defn- get-graphs-dir
   []
   (let [dir (if utils/ci?
-              (.resolve path js/__dirname "../tmp/graphs")
-              (.join path (.homedir os) ".logseq" "graphs"))]
+              (.resolve node-path js/__dirname "../tmp/graphs")
+              (.join node-path (.homedir os) ".logseq" "graphs"))]
     (fs-extra/ensureDirSync dir)
     dir))
 
@@ -239,7 +243,7 @@
   (let [dir (get-graphs-dir)]
     (->> (readdir dir)
          (remove #{dir})
-         (map #(path/basename % ".transit"))
+         (map #(node-path/basename % ".transit"))
          (map graph-name->path))))
 
 ;; TODO support alias mechanism
@@ -259,7 +263,7 @@
 (defn- read-txid-info!
   [root]
   (try
-    (let [txid-path (.join path root "logseq/graphs-txid.edn")]
+    (let [txid-path (.join node-path root "logseq/graphs-txid.edn")]
       (when (fs/existsSync txid-path)
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
@@ -285,7 +289,7 @@
   (when graph-name
     (let [graph-name (sanitize-graph-name graph-name)
           dir (get-graphs-dir)]
-      (.join path dir (str graph-name ".transit")))))
+      (.join node-path dir (str graph-name ".transit")))))
 
 (defn- get-serialized-graph
   [graph-name]
@@ -362,7 +366,7 @@
 
   (let [path (.getPath ^object app "userData")]
     (doseq [dir ["search" "IndexedDB"]]
-      (let [path (path/join path dir)]
+      (let [path (node-path/join path dir)]
         (try
           (fs-extra/removeSync path)
           (catch :default e
@@ -426,7 +430,7 @@
   (zipmap urls (for [url urls]
                  (try
                    (and (fs-extra/pathExistsSync url)
-                        (fs-extra/pathExistsSync (path/join url "package.json")))
+                        (fs-extra/pathExistsSync (node-path/join url "package.json")))
                    (catch :default _e false)))))
 
 (defmethod handle :relaunchApp []
@@ -442,7 +446,7 @@
         (do (cfgs/set-item! k v)
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
-     config)))
+      config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -452,7 +456,7 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (when-let [assets-path (.join path graph-path "assets")]
+    (when-let [assets-path (.join node-path graph-path "assets")]
       (when (fs-extra/pathExistsSync assets-path)
         (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
           files)))))
@@ -505,6 +509,9 @@
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
+
+(defmethod handle :gitStatus [_ [_]]
+  (git/short-status!))
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
@@ -602,7 +609,7 @@
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
   []
-  (let [win (win/create-main-window)]
+  (let [win (win/create-main-window!)]
     (win/on-close-actions! win close-watcher-when-orphaned!)
     (win/setup-window-listeners! win)
     win))

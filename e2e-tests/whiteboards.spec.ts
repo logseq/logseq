@@ -1,20 +1,31 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac } from './utils'
+import { modKey } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
-  await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
-  await page.click('#head .toolbar-dots-btn')
-  await page.click('#head .dropdown-wrapper >> text=Settings')
-  await page.click('.settings-modal a[data-id=features]')
-  await page.click('text=Whiteboards >> .. >> .ui__toggle')
-  await page.waitForTimeout(1000)
-  await page.keyboard.press('Escape')
+  if (await page.$('.nav-header .whiteboard') === null) {
+    await page.click('#head .toolbar-dots-btn')
+    await page.click('#head .dropdown-wrapper >> text=Settings')
+    await page.click('.settings-modal a[data-id=features]')
+    await page.click('text=Whiteboards >> .. >> .ui__toggle')
+    await page.waitForTimeout(1000)
+    await page.keyboard.press('Escape')
+  }
+
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
 
-test('create new whiteboard', async ({ page }) => {
+test('should display onboarding tour', async ({ page }) => {
+  // ensure onboarding tour is going to be triggered locally
+  await page.evaluate(`window.localStorage.removeItem('whiteboard-onboarding-tour?')`)
   await page.click('.nav-header .whiteboard')
+
+  await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
+  await page.click('.cp__whiteboard-welcome button.bg-gray-600')
+  await expect(page.locator('.cp__whiteboard-welcome')).toBeHidden()
+})
+
+test('create new whiteboard', async ({ page }) => {
   await page.click('#tl-create-whiteboard')
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
@@ -77,39 +88,212 @@ test('draw a rectangle', async ({ page }) => {
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
 
-  await page.mouse.move(
-    bounds.x + bounds.width / 2,
-    bounds.y + bounds.height / 2
-  )
+  await page.mouse.move(bounds.x + 50, bounds.y + 50 )
   await page.mouse.up()
+  await page.keyboard.press('Escape')
 
-  await expect(
-    page.locator('.logseq-tldraw .tl-positioned-svg rect')
-  ).not.toHaveCount(0)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
 })
 
+test('undo the rectangle action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
+})
+
+test('redo the rectangle action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+Shift+z')
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+})
+
+test('clone the rectangle', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.mouse.move(bounds.x + 20, bounds.y + 20, {steps: 5})
+
+  await page.keyboard.down('Alt')
+  await page.mouse.down()
+
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5})
+  await page.mouse.up()
+  await page.keyboard.up('Alt')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+})
+
+test('connect rectangles with an arrow', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('c')
+
+  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.down()
+
+  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5}) // will fail without steps
+  await page.mouse.up()
+  await page.keyboard.press('Escape')
+
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('delete the first rectangle', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.keyboard.press('Delete')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
+})
+
+test('undo the delete action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+  await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('move arrow to back', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-line-container')
+  await page.keyboard.press('Shift+[')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).toHaveClass('tl-line-container')
+})
+
+test('move arrow to front', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-line-container')
+  await page.keyboard.press('Shift+]')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).not.toHaveClass('tl-line-container')
+})
+
+test('undo the move action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).toHaveClass('tl-line-container')
+})
 
 test('cleanup the shapes', async ({ page }) => {
-  if (IsMac) {
-    await page.keyboard.press('Meta+a')
-  } else {
-    await page.keyboard.press('Control+a')
-  }
+  await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press('Delete')
   await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
+})
+
+test('create a block', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('s')
+  await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
+  await page.waitForTimeout(100)
+
+  await page.keyboard.type('a')
+  await page.keyboard.press('Enter')
+
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(1)
+})
+
+test('expand the block', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.click('.logseq-tldraw .tl-context-bar .tie-object-expanded ')
+  await page.waitForTimeout(100)
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(1)
+})
+
+test('undo the expand action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(0)
+})
+
+test('undo the block action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(0)
+})
+
+test('copy/paste url to create an iFrame shape', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('t')
+  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.down()
+  await page.waitForTimeout(100)
+
+  await page.keyboard.type('https://logseq.com')
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press(modKey + '+v')
+
+  await expect( page.locator('.logseq-tldraw .tl-iframe-container')).toHaveCount(1)
+})
+
+test('copy/paste twitter status url to create a Tweet shape', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('t')
+  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.down()
+  await page.waitForTimeout(100)
+
+  await page.keyboard.type('https://twitter.com/logseq/status/1605224589046386689')
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press(modKey + '+v')
+
+  await expect( page.locator('.logseq-tldraw .tl-tweet-container')).toHaveCount(1)
+})
+
+test('copy/paste youtube video url to create a Youtube shape', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.keyboard.press('t')
+  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.down()
+  await page.waitForTimeout(100)
+
+  await page.keyboard.type('https://www.youtube.com/watch?v=hz2BacySDXE')
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press(modKey + '+v')
+
+  await expect(page.locator('.logseq-tldraw .tl-youtube-container')).toHaveCount(1)
 })
 
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.click('#tl-zoom-in')
+  await page.keyboard.press(`${modKey}++`)
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1500)
-  await page.click('#tl-zoom-out')
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
+  await page.keyboard.press(`${modKey}+-`)
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 

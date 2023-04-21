@@ -45,6 +45,30 @@
 ;; Tests
 ;; =====
 
+(deftest pre-transform-test
+  (testing "page references should be quoted and tags should be handled"
+    (are [x y] (= (query-dsl/pre-transform x) y)
+     "#foo"
+     "#tag foo"
+
+     "(and #foo)"
+     "(and #tag foo)"
+
+     "[[test #foo]]"
+     "\"[[test #foo]]\""
+
+     "(and [[test #foo]] (or #foo))"
+     "(and \"[[test #foo]]\" (or #tag foo))"
+
+     "\"for #clojure\""
+     "\"for #clojure\""
+
+     "(and \"for #clojure\")"
+     "(and \"for #clojure\")"
+
+     "(and \"for #clojure\" #foo)"
+     "(and \"for #clojure\" #tag foo)")))
+
 (defn- block-property-queries-test
   []
   (load-test-files [{:file/path "journals/2022_02_28.md"
@@ -528,6 +552,26 @@ created-at:: 1608968448116
     (is (= [10 8]
            (->> (dsl-query "(and (page-property rating) (sort-by rating))")
                 (map #(get-in % [:block/properties :rating])))))))
+
+(deftest simplify-query
+  (are [x y] (= (query-dsl/simplify-query x) y)
+    '(and [[foo]])
+    '[[foo]]
+
+    '(and (and [[foo]]))
+    '[[foo]]
+
+    '(and (or [[foo]]))
+    '[[foo]]
+
+    '(and (not [[foo]]))
+    '(not [[foo]])
+
+    '(and (or (and [[foo]])))
+    '[[foo]]
+
+    '(not (or [[foo]]))
+    '(not [[foo]])))
 
 (comment
  (require '[clojure.pprint :as pprint])

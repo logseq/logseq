@@ -165,7 +165,7 @@ input.tl-text-input {
     width: calc(100% - 20px);
 
     > .title {
-      @apply whitespace-nowrap min-w-[80px];
+      @apply whitespace-nowrap min-w-[100px];
     }
   }
 

@@ -16,7 +16,9 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
+            [frontend.util :as util]            
+            [frontend.config :as config]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.object :as gobj]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
@@ -66,6 +68,47 @@
      [:div.ml-2
       (block-cp repo idx block)]]))
 
+(rum/defc history-action-info
+  [[k v]]
+  (when v [:.ml-4 (ui/foldable
+                   [:div (str k)]
+                   [:.ml-4 (case k
+                             :blocks
+                             (map (fn [block]
+                                    [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
+
+                             :txs
+                             (map (fn [[_ key val]]
+                                    (when val
+                                      [:pre.code.pre-wrap-white-space.bg-base-4
+                                       [:span.font-bold (str key) " "] (str val)])) v)
+
+                             (map (fn [[key val]]
+                                    (when val
+                                      [:pre.code.pre-wrap-white-space.bg-base-4
+                                       [:span.font-bold (str key) " "] (str val)])) v))]
+                   {:default-collapsed? true})]))
+
+(rum/defc history-stack
+  [label stack]
+  [:.ml-4 (ui/foldable
+           [:div label " (" (count stack) ")"]
+           (map-indexed (fn [index item]
+                          [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
+                                               (map history-action-info item)
+                                               {:default-collapsed? true})]) stack)
+           {:default-collapsed? true})])
+
+(rum/defc history < rum/reactive
+  []
+  (let [state (undo-redo/get-state)
+        page-only-mode? (state/sub :history/page-only-mode?)]
+    [:div.ml-4
+     [:div.ml-3.font-bold (if page-only-mode? "page only" "global")]
+     [:div.p-4 [:.ml-4.mb-2
+                (history-stack "Undos" (rum/react (:undo-stack state)))
+                (history-stack "Redos" (rum/react (:redo-stack state)))]]]))
+
 (defn build-sidebar-item
   [repo idx db-id block-type]
   (case block-type
@@ -79,6 +122,10 @@
     :page-graph
     [(str (t :right-side-bar/page-graph))
      (page/page-graph)]
+
+    :history
+    [(str (t :right-side-bar/history))
+     (history)]
 
     :block-ref
     #_:clj-kondo/ignore
@@ -142,8 +189,8 @@
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
              [:div.flex.flex-row.justify-center
-              {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
               [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
+               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
                (ui/rotating-arrow collapse?)]
               [:div.ml-1.font-medium
                title]]
@@ -177,7 +224,9 @@
         max-ratio 0.7
         keyboard-step 5
         add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
-        remove-resizing-class #(.. js/document.documentElement -classList (remove "is-resizing-buf"))
+        remove-resizing-class (fn []
+                                (.. js/document.documentElement -classList (remove "is-resizing-buf"))
+                                (reset! ui-handler/*right-sidebar-resized-at (js/Date.now)))
         set-width! (fn [ratio element]
                      (when (and el-ref element)
                        (let [width (str (* ratio 100) "%")]
@@ -233,6 +282,14 @@
              (.on "keyup" remove-resizing-class)))
        #())
      [])
+
+    (rum/use-effect!
+      (fn []
+        ;; sidebar animation duration
+        (js/setTimeout
+          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+      [sidebar-open?])
+
     [:.resizer {:ref el-ref
                 :role "separator"
                 :aria-orientation "vertical"
@@ -271,7 +328,12 @@
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "help" :help))}
-          (t :right-side-bar/help)]]]
+          (t :right-side-bar/help)]]
+
+        (when config/dev? [:div.text-sm
+                           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                                       (state/sidebar-add-block! repo "history" :history))}
+                            (t :right-side-bar/history)]])]
 
        (toggle)]
 

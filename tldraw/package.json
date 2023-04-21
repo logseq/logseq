@@ -24,7 +24,7 @@
     "pretty-quick": "pretty-quick --pattern 'tldraw/**/*.{js,jsx,ts,tsx,css,html}'"
   },
   "devDependencies": {
-    "@types/node": "^17.0.42",
+    "@types/node": "^18.13.0",
     "@types/react": "^17.0.0",
     "@types/react-dom": "^17.0.0",
     "@typescript-eslint/eslint-plugin": "^5.36.1",

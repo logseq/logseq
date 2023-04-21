@@ -7,7 +7,8 @@
             [frontend.config :as config]
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defonce conns (atom {}))
 
@@ -16,28 +17,33 @@
   (when url
     (if (util/starts-with? url "http")
       (->> (take-last 2 (string/split url #"/"))
-           (string/join "/"))
+           util/string-join-path)
       url)))
 
 (defn get-repo-name
-  [repo]
+  [repo-url]
   (cond
     (mobile-util/native-platform?)
-    (text-util/get-graph-name-from-path repo)
+    (text-util/get-graph-name-from-path repo-url)
 
-    (config/local-db? repo)
-    (config/get-local-dir repo)
+    (config/local-db? repo-url)
+    (config/get-local-dir repo-url)
 
     :else
-    (get-repo-path repo)))
+    (get-repo-path repo-url)))
 
 (defn get-short-repo-name
-  "repo-path: output of `get-repo-name`"
-  [repo-path]
-  (if (or (util/electron?)
-          (mobile-util/native-platform?))
-    (text/get-file-basename repo-path)
-    repo-path))
+  "repo-name: from get-repo-name. Dir/Name => Name"
+  [repo-name]
+  (cond
+    (util/electron?)
+    (text/get-file-basename repo-name)
+
+    (mobile-util/native-platform?)
+    (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
+
+    :else
+    repo-name))
 
 (defn datascript-db
   [repo]

@@ -6,7 +6,8 @@
             [frontend.util :as util]
             [frontend.handler.plugin :refer [hook-extensions-enhancer-by-type] :as plugin-handler]
             [promesa.core :as p]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.context.i18n :refer [t]]))
 
 ;; TODO: extracted to a rum mixin
 (defn loaded? []
@@ -61,7 +62,7 @@
   [id s block? _display?]
   (let [loading? (rum/react *loading?)]
     (if loading?
-      (ui/loading "Loading")
+      (ui/loading (t :loading))
       (let [element (if block?
                       :div.latex
                       :span.latex-inline)]

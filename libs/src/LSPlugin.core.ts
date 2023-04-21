@@ -19,9 +19,11 @@ import {
   cleanInjectedScripts,
   safeSnakeCase,
   injectTheme,
-  cleanInjectedUI, PluginLogger,
+  cleanInjectedUI,
+  PluginLogger,
 } from './helpers'
 import * as pluginHelpers from './helpers'
+import DOMPurify from 'dompurify'
 import Debug from 'debug'
 import {
   LSPluginCaller,
@@ -910,27 +912,27 @@ class PluginLocal extends EventEmitter<'loaded'
     }
 
     try {
-      this._status = PluginLocalLoadStatus.UNLOADING
-
       const eventBeforeUnload = { unregister }
 
-      // sync call
-      try {
-        await this._caller?.callUserModel(
-          AWAIT_LSPMSGFn(LSPMSG_BEFORE_UNLOAD),
-          eventBeforeUnload
-        )
-        this.emit('beforeunload', eventBeforeUnload)
-      } catch (e) {
-        console.error('[beforeunload Error]', e)
-      }
+      if (this.loaded) {
+        this._status = PluginLocalLoadStatus.UNLOADING
 
-      await this.dispose()
+        try {
+          await this._caller?.callUserModel(
+            AWAIT_LSPMSGFn(LSPMSG_BEFORE_UNLOAD),
+            eventBeforeUnload
+          )
+          this.emit('beforeunload', eventBeforeUnload)
+        } catch (e) {
+          this.logger.error('[beforeunload Error]', e)
+        }
+
+        await this.dispose()
+      }
 
       this.emit('unloaded')
     } catch (e) {
-      debug('[plugin unload Error]', e)
-      return false
+      this.logger.error('[unload Error]', e)
     } finally {
       this._status = PluginLocalLoadStatus.UNLOADED
     }
@@ -1084,7 +1086,8 @@ class PluginLocal extends EventEmitter<'loaded'
  * Host plugin core
  */
 class LSPluginCore
-  extends EventEmitter<'beforeenable'
+  extends EventEmitter<
+    | 'beforeenable'
     | 'enabled'
     | 'beforedisable'
     | 'disabled'
@@ -1098,7 +1101,8 @@ class LSPluginCore
     | 'settings-changed'
     | 'unlink-plugin'
     | 'beforereload'
-    | 'reloaded'>
+    | 'reloaded'
+  >
   implements ILSPluginThemeManager {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
@@ -1603,6 +1607,7 @@ function setupPluginCore(options: any) {
   debug('=== 🔗 Setup Logseq Plugin System 🔗 ===')
 
   window.LSPluginCore = pluginCore
+  window.DOMPurify = DOMPurify
 }
 
 export { PluginLocal, pluginHelpers, setupPluginCore }

@@ -1,15 +1,17 @@
 (ns electron.server
   (:require ["fastify" :as Fastify]
+            ["@fastify/cors" :as FastifyCORS]
             ["electron" :refer [ipcMain]]
             ["fs-extra" :as fs-extra]
-            ["path" :as path]
+            ["path" :as node-path]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
             [electron.logger :as logger]
-            [electron.configs :as cfgs]))
+            [electron.configs :as cfgs]
+            [electron.window :as window]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
@@ -36,7 +38,9 @@
 
 (defn load-state-to-renderer!
   ([] (load-state-to-renderer! @*state))
-  ([s] (utils/send-to-renderer @*win :syncAPIServerState s)))
+  ([s]
+   (doseq [^js w (window/get-all-windows)]
+     (utils/send-to-renderer w :syncAPIServerState s))))
 
 (defn set-config!
   [config]
@@ -113,7 +117,7 @@
 
 (defn close!
   []
-  (when (and @*server (= :running (:status @*state)))
+  (when (and @*server (contains? #{:running :error} (:status @*state)))
     (logger/debug "[server] closing ...")
     (set-status! :closing)
     (-> (.close @*server)
@@ -127,15 +131,17 @@
   []
   (-> (p/let [_     (close!)
               _     (set-status! :starting)
-              ^js s (Fastify. #js {:logger                true
+              ^js s (Fastify. #js {:logger                (not utils/win32?)
                                    :requestTimeout        (* 1000 42)
                                    :forceCloseConnections true})
+              ;; middlewares
+              _     (.register s FastifyCORS #js {:origin "*"})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
                       (.post "/api" api-handler!)
                       (.get "/" (fn [_ ^js rep]
-                                  (let [html (fs-extra/readFileSync (.join path js/__dirname "./docs/api_server.html"))
+                                  (let [html (fs-extra/readFileSync (.join node-path js/__dirname "./docs/api_server.html"))
                                         HOST (get-host)
                                         PORT (get-port)
                                         html (-> (str html)

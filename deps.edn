@@ -27,8 +27,11 @@
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.2"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
+  logseq/common                         {:local/root "deps/common"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
-  metosin/malli                         {:mvn/version "0.10.0"}}
+  logseq/publishing                     {:local/root "deps/publishing"}
+  metosin/malli                         {:mvn/version "0.10.0"}
+  fipp/fipp                             {:mvn/version "0.6.26"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}

@@ -1,16 +1,8 @@
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, makeObservable, observable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
-import { deepCopy, deepEqual, omit } from '../utils'
 import type { TLShape, TLShapeModel } from './shapes'
-import type { TLGroupShape } from './shapes/TLGroupShape'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
-
-const shouldPersist = (a: TLDocumentModel, b: TLDocumentModel) => {
-  const page0 = omit(a.pages[0], 'nonce')
-  const page1 = omit(b.pages[0], 'nonce')
-  return !deepEqual(page0, page1)
-}
 
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {
@@ -20,21 +12,10 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   app: TLApp<S, K>
   @observable stack: TLDocumentModel[] = []
-  @observable pointer = 0
   isPaused = true
 
   get creating() {
     return this.app.selectedTool.currentState.id === 'creating'
-  }
-
-  @computed
-  get canUndo() {
-    return this.pointer > 0
-  }
-
-  @computed
-  get canRedo() {
-    return this.pointer < this.stack.length - 1
   }
 
   pause = () => {
@@ -47,58 +28,25 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     this.isPaused = false
   }
 
-  @action reset = () => {
-    this.stack = [this.app.serialized]
-    this.pointer = 0
-    this.resume()
-
-    this.app.notify('persist', null)
-  }
-
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
-
-    const { serialized } = this.app
-
-    // Do not persist if the serialized state is the same as the last one
-    if (this.stack.length > 0 && !shouldPersist(this.stack[this.pointer], serialized)) {
-      return
-    }
-
-    if (replace) {
-      this.stack[this.pointer] = serialized
-    } else {
-      if (this.pointer < this.stack.length) {
-        this.stack = this.stack.slice(0, this.pointer + 1)
-      }
-      this.stack.push(serialized)
-      this.pointer = this.stack.length - 1
-    }
-
-    this.app.pages.forEach(page => page.bump()) // Is it ok here?
-    this.app.notify('persist', null)
-  }
-
-  @action setPointer = (pointer: number) => {
-    this.pointer = pointer
-    const snapshot = this.stack[this.pointer]
-    this.deserialize(snapshot)
-    this.app.notify('persist', null)
+    this.app.notify('persist', { replace })
   }
 
   @action undo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
-    if (this.canUndo) {
-      this.setPointer(this.pointer - 1)
+
+    if (this.app.appUndo) {
+      this.app.appUndo()
     }
   }
 
   @action redo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
-    if (this.canRedo) {
-      this.setPointer(this.pointer + 1)
+    if (this.app.appRedo) {
+      this.app.appRedo()
     }
   }
 

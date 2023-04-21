@@ -3,11 +3,12 @@
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.components.sidebar :as sidebar]
+            [frontend.components.container :as container]
             [frontend.handler.search :as search-handler]
             [frontend.handler.notification :as notification]
             [frontend.components.onboarding.quick-tour :as quick-tour]
-            [frontend.handler.plugin :as plugin-handler]))
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc route-view
   [view route-match]
@@ -28,7 +29,7 @@
   component is purposefully stupid simple as it needs to render under any number
   of broken conditions"
   []
-  ;; This layout emulates most of sidebar/sidebar
+  ;; This layout emulates most of container/sidebar
   [:div#main-container.cp__sidebar-main-layout.flex-1.flex
    [:div.#app-container
     [:div#left-container
@@ -38,39 +39,38 @@
         [:div.ls-center
          [:div.icon-box.p-1.rounded.mb-3 (ui/icon "bug" {:style {:font-size ui/icon-size}})]
          [:div.text-xl.font-bold
-          "Sorry. Something went wrong!"]
-         [:div.mt-2.mb-2 "Logseq is having a problem. To try to get it back to a
-         working state, please try the following safe steps in order:"]
+          (t :page/something-went-wrong)]
+         [:div.mt-2.mb-2 (t :page/logseq-is-having-a-problem)]
          [:div
           ;; TODO: Enable once multi-window case doesn't result in possible data loss
           #_[:div.flex.flex-row.justify-between.align-items.mb-2
              [:div.flex.flex-col.items-start
-              [:div.text-2xs.uppercase "STEP 1"]
+              [:div.text-2xs.uppercase (t :page/step "1")]
               [:div [:span.font-bold "Reload"] " the app"]]
              [:div (ui/icon "command") (ui/icon "letter-r")]]
           [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 1"]
+            [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "1")]
             [:div [:span.highlighted.font-bold "Rebuild"] [:span.toned-down " search index"]]]
              [:div
-              (ui/button "Try"
+              (ui/button (t :page/try)
                          :small? true
                          :on-click (fn []
                                      (search-handler/rebuild-indices! true)))]]
           [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.separator-top.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 2"]
+            [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
             [:div [:span.highlighted.font-bold "Relaunch"][:span.toned-down " the app"]]
             [:div.text-xs.toned-down "Quit the app and then reopen it."]]
            [:div (ui/icon "command" {:class "rounded-md p-1 mr-2 bg-quaternary"})
             (ui/icon "letter-q" {:class "rounded-md p-1 bg-quaternary"})]]
           [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 3"]
+            [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
             [:div [:span.highlighted.font-bold "Clear"] [:span.toned-down " local storage"]]
             [:div.text-xs.toned-down "This does delete minor preferences like dark/light theme preference."]]
            [:div
-            (ui/button "Try"
+            (ui/button (t :page/try)
                        :small? true
                        :on-click (fn []
                                    (.clear js/localStorage)
@@ -104,7 +104,7 @@
          (helpful-default-error-screen)
          (if (= :draw route-name)
            (view route-match)
-           (sidebar/sidebar
+           (container/sidebar
             route-match
             (view route-match))))))))
 
@@ -113,7 +113,7 @@
         ;;       no-animate? (contains? #{:repos :repo-add :file}
         ;;                              route-name)]
         ;;   (when-let [view (:view (:data route-match))]
-        ;;     (sidebar/sidebar
+        ;;     (container/sidebar
         ;;      route-match
         ;;      (if no-animate?
         ;;        (route-view view route-match)

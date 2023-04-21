@@ -194,7 +194,7 @@
     \"dir\": \"/Users/me/Documents/untitled folder 31\"}
   ```
 
-  * you alse need to open logseq-app(or yarn electron-watch),
+  * you also need to open logseq-app(or yarn electron-watch),
     and open <dir> and start file-sync"
   [& _args]
   (setup-vars)

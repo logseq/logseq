@@ -139,6 +139,7 @@ dummy.DOCUMENT = function() {};
 dummy.DOCUMENT_TYPE = function() {};
 dummy.ELEMENT = function() {};
 dummy.TEXT = function() {};
+dummy.isAbsolute = function() {};
 
 /**
  * @typedef {{

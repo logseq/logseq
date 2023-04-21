@@ -1,9 +1,10 @@
 (ns frontend.extensions.code
   (:require [clojure.string :as string]
-            ["codemirror" :as cm]
+            ["codemirror" :as CodeMirror]
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/selection/active-line"]
+            ["codemirror/addon/hint/show-hint"]
             ["codemirror/mode/apl/apl"]
             ["codemirror/mode/asciiarmor/asciiarmor"]
             ["codemirror/mode/asn.1/asn.1"]
@@ -136,17 +137,220 @@
             [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [frontend.schema.handler.common-config :refer [Config-edn]]
+            [malli.util :as mu]
+            [malli.core :as m]
             [rum.core :as rum]))
 
 ;; codemirror
 
-(def from-textarea (gobj/get cm "fromTextArea"))
+(def from-textarea (gobj/get CodeMirror "fromTextArea"))
+(def Pos (gobj/get CodeMirror "Pos"))
 
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
 ;; export CodeMirror to global scope
-(set! js/window -CodeMirror cm)
+(set! js/window -CodeMirror CodeMirror)
+
+
+(defn- all-tokens-by-cursur
+  "All tokens from the beginning of the document to the cursur(inclusive)."
+  [cm]
+  (let [cur (.getCursor cm)
+        line (.-line cur)
+        pos (.-ch cur)]
+    (concat (mapcat #(.getLineTokens cm %) (range line))
+            (filter #(<= (.-end %) pos) (.getLineTokens cm line)))))
+
+
+(defn- tokens->doc-state
+  "Parse tokens into document state of the last token."
+  [tokens]
+  (let [init-state {:current-config-path []
+                    :state-stack (list :ok)}]
+    (loop [state init-state
+           tokens tokens]
+      (if (empty? tokens)
+        state
+        (let [token (first tokens)
+              token-type (.-type token)
+              token-string (.-string token)
+              current-state (first (:state-stack state))
+              next-state (cond
+                           (or (nil? token-type)
+                               (= token-type "comment")
+                               (= token-type "meta") ;; TODO: handle meta prefix
+                               (= current-state :error))
+                           state
+
+                           (= token-type "bracket")
+                           (cond
+                             ;; ignore map if it is inside a list or vector (query or function)
+                             (and (= "{" token-string)
+                                  (some #(contains? #{:list :vector} %)
+                                        (:state-stack state)))
+                             (assoc state :state-stack (conj (:state-stack state) :ignore-map))
+                             (= "{" token-string)
+                             (assoc state :state-stack (conj (:state-stack state) :map))
+                             (= "(" token-string)
+                             (assoc state :state-stack (conj (:state-stack state) :list))
+                             (= "[" token-string)
+                             (assoc state :state-stack (conj (:state-stack state) :vector))
+
+                             (and (= :ignore-map current-state)
+                                  (contains? #{"}" ")" "]"} token-string))
+                             (assoc state :state-stack (pop (:state-stack state)))
+
+                             (or (and (= "}" token-string) (= :map current-state))
+                                 (and (= ")" token-string) (= :list current-state))
+                                 (and (= "]" token-string) (= :vector current-state)))
+                             (let [new-state-stack (pop (:state-stack state))]
+                               (if (= (first new-state-stack) :key)
+                                 (assoc state
+                                        :state-stack (pop new-state-stack)
+                                        :current-config-path (pop (:current-config-path state)))
+                                 (assoc state :state-stack (pop (:state-stack state)))))
+
+                             :else
+                             (assoc state :state-stack (conj (:state-stack state) :error)))
+
+                           (and (= current-state :map) (= token-type "atom"))
+                           (assoc state
+                                  :state-stack (conj (:state-stack state) :key)
+                                  :current-config-path (conj (:current-config-path state) token-string))
+
+                           (= current-state :key)
+                           (assoc state
+                                  :state-stack (pop (:state-stack state))
+                                  :current-config-path (pop (:current-config-path state)))
+
+                           (or (= current-state :list) (= current-state :vector) (= current-state :ignore-map))
+                           state
+
+                           :else
+                           (assoc state :state-stack (conj (:state-stack state) :error)))]
+          (recur next-state (rest tokens)))))))
+
+(defn- doc-state-at-cursor
+  "Parse tokens into document state of last token."
+  [cm]
+  (let [tokens (all-tokens-by-cursur cm)
+        {:keys [current-config-path state-stack]} (tokens->doc-state tokens)
+        doc-state (first state-stack)]
+    [current-config-path doc-state]))
+
+(defn- malli-type->completion-postfix
+  [type]
+  (case type
+    :string "\"\""
+    :map-of "{}"
+    :map "{}"
+    :set "#{}"
+    :vector "[]"
+    nil))
+
+(.registerHelper CodeMirror "hint" "clojure"
+                 (fn [cm _options]
+                   (let [cur (.getCursor cm)
+                         token (.getTokenAt cm cur)
+                         token-type (.-type token)
+                         token-string (.-string token)
+                         result (atom {})
+                         [config-path doc-state] (doc-state-at-cursor cm)]
+                     (cond
+
+                       ;; completion of config keys, triggered by `:` or shortcut
+                       (and (= token-type "atom")
+                            (string/starts-with? token-string ":")
+                            (= doc-state :key))
+                       (do
+                         (m/walk Config-edn
+                                 (fn [schema properties _children _opts]
+                                   (let [schema-path (mapv str properties)]
+                                     (cond
+                                       (empty? schema-path)
+                                       nil
+
+                                       (empty? config-path)
+                                       (swap! result assoc (first schema-path) (m/type schema))
+
+                                       (= (count config-path) 1)
+                                       (when (string/starts-with? (first schema-path) (first config-path))
+                                         (swap! result assoc (first schema-path) (m/type schema)))
+
+                                       (= (count config-path) 2)
+                                       (when (and (= (count schema-path) 2)
+                                                  (= (first schema-path) (first config-path))
+                                                  (string/starts-with? (second schema-path) (second config-path)))
+                                         (swap! result assoc (second schema-path) (m/type schema)))))
+                                   nil))
+                         (when (not-empty @result)
+                           (let [from (Pos. (.-line cur) (.-start token))
+                                 ;; `(.-ch cur)` is the cursor position, not the end of token. When completion is at the middle of a token, this is wrong
+                                 to (Pos. (.-line cur) (.-end token))
+                                 add-postfix-after? (<= (.-end token) (.-ch cur))
+                                 doc (.getValue cm)
+                                 list (->> (keys @result)
+                                           (remove (fn [text]
+                                                     (re-find (re-pattern (str "[^;]*" text "\\s")) doc)))
+                                           sort
+                                           (map (fn [text]
+                                                  (let [type (get @result text)]
+                                                    {:text (str text (when add-postfix-after?
+                                                                       (str " " (malli-type->completion-postfix type))))
+                                                     :displayText (str text "   " type)}))))
+
+                                 completion (clj->js {:list list
+                                                      :from from
+                                                      :to to})]
+                             completion)))
+
+                       ;; completion of :boolean, :enum, :keyword[TODO]
+                       (and (nil? token-type)
+                            (string/blank? (string/trim token-string))
+                            (not-empty config-path)
+                            (= doc-state :key))
+                       (do
+                         (m/walk Config-edn
+                                 (fn [schema properties _children _opts]
+                                   (let [schema-path (mapv str properties)]
+                                     (when (= config-path schema-path)
+                                       (case (m/type schema)
+                                         :boolean
+                                         (swap! result assoc
+                                                "true" nil
+                                                "false" nil)
+
+                                         :enum
+                                         (let [{:keys [children]} (mu/to-map-syntax schema)]
+                                           (doseq [child children]
+                                             (swap! result assoc (str child) nil)))
+
+                                         nil))
+                                     nil)))
+                         (when (not-empty @result)
+                           (let [from (Pos. (.-line cur) (.-ch cur))
+                                 to (Pos. (.-line cur) (.-ch cur))
+                                 list (->> (keys @result)
+                                           sort
+                                           (map (fn [text]
+                                                  {:text text
+                                                   :displayText text})))
+                                 completion (clj->js {:list list
+                                                      :from from
+                                                      :to to})]
+                             completion)))))))
+
+(defn- complete-after
+  [cm pred]
+  (when (or (not pred) (pred))
+    (js/setTimeout
+     (fn []
+       (when (not (.-completionActive (.-state cm)))
+         (.showHint cm #js {:completeSingle false})))
+     100))
+  (.-Pass CodeMirror))
 
 (defn- extra-codemirror-options []
   (get (state/get-config)
@@ -163,7 +367,7 @@
                           :ext "findModeByExtension"
                           :file-name "findModeByFileName"
                           "findModeByName")
-           find-fn (gobj/get cm find-fn-name)
+           find-fn (gobj/get CodeMirror find-fn-name)
            cm-mode (find-fn mode)]
        (if cm-mode
          (.-mime cm-mode)
@@ -181,6 +385,7 @@
                (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
                (text->cm-mode original-mode :name))
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
+        config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
         textarea (gdom/getElement id)
         default-cm-options {:theme (str "solarized " theme)
                             :autoCloseBrackets true
@@ -191,16 +396,21 @@
                           (extra-codemirror-options)
                           {:mode mode
                            :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
-                           :extraKeys #js {"Esc" (fn [cm]
+                           :extraKeys (merge {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
-                                                   (gobj/set cm "escPressed" true)
-                                                   (code-handler/save-code-editor!)
-                                                   (when-let [block-id (:block/uuid config)]
-                                                     (let [block (db/pull [:block/uuid block-id])]
-                                                       (editor-handler/edit-block! block :max block-id))))}}
+                                                      (gobj/set cm "escPressed" true)
+                                                      (code-handler/save-code-editor!)
+                                                      (when-let [block-id (:block/uuid config)]
+                                                        (let [block (db/pull [:block/uuid block-id])]
+                                                          (editor-handler/edit-block! block :max block-id))))}
+                                             (when config-edit?
+                                               {"':'" complete-after
+                                                "Ctrl-Space" "autocomplete"}))}
                           (when config/publishing?
                             {:readOnly true
                              :cursorBlinkRate -1})
+                          (when config-edit?
+                            {:hintOptions {}})
                           user-options)
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]

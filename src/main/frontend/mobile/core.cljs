@@ -11,7 +11,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -20,18 +21,27 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
+(defn mobile-preinit
+  "preinit logic of mobile platforms: setup document folder permission"
+  []
+  (when (mobile-util/native-ios?)
+    ;; Caution: This must be called before any file accessing
+    (capacitor-fs/ios-ensure-documents!)))
+
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
-    (when-let [path' (bean/->clj path)]
-      (state/set-state! :mobile/container-urls
-                        (update-vals path' #(cond-> %
-                                              string?
-                                              (js/decodeURIComponent))))
-      (println "iOS container path: " path')))
+  (p/let [^js paths (capacitor-fs/ios-ensure-documents!)]
+    (when paths
+      (let [paths (-> paths
+                      bean/->clj
+                      (update-vals capacitor-fs/ios-force-include-private))]
+        (state/set-state! :mobile/container-urls paths)
+        (println "iOS container path: " paths))))
 
-  (state/pub-event! [:validate-appId])
+  ;; Fix iOS App directory change across installation
+  (when (not (config/demo-graph?))
+    (state/pub-event! [:validate-appId]))
 
   (.addEventListener js/window
                      "load"

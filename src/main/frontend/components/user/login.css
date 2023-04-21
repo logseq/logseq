@@ -1,0 +1,141 @@
+.cp__user-login {
+  [data-amplify-authenticator] [data-amplify-router] {
+    --amplify-components-authenticator-router-background-color: var(--ls-primary-background-color);
+    --amplify-components-field-label-color: var(--ls-primary-text-color);
+    --amplify-components-authenticator-router-border-color: var(--ls-border-color);
+    --amplify-components-tabs-item-color: var(--ls-primary-text-color);
+    --amplify-components-tabs-item-active-color: var(--ls-primary-text-color);
+    --amplify-components-tabs-item-hover-color: var(--ls-primary-text-color);
+    --amplify-components-tabs-item-active-border-color: var(--ls-tertiary-background-color);
+    --amplify-components-tabs-border-width: 0;
+    --amplify-components-authenticator-state-inactive-background-color: var(--ls-tertiary-background-color);
+    --amplify-components-tabs-item-active-background-color: var(--ls-primary-background-color);
+    --amplify-components-button-border-color: var(--ls-border-color);
+    --amplify-components-textfield-border-color: var(--ls-border-color);
+    --amplify-components-button-primary-background-color: var(--color-indigo-600);
+    --amplify-components-text-color: var(--ls-primary-text-color);
+    --amplify-components-button-hover-background-color: var(--ls-primary-background-color);
+    --amplify-components-button-border-width: 0;
+    --amplify-internal-button-loading-background-color: var(--ls-header-button-background);
+    --amplify-components-authenticator-router-border-width: 1px;
+    --amplify-components-button-color: var(--ls-primary-text-color);
+    --amplify-components-divider-label-background-color: var(--ls-primary-background-color);
+    --amplify-components-divider-label-color: var(--ls-primary-text-color);
+    --amplify-components-heading-color: var(--ls-primary-text-color);
+    --amplify-components-button-link-hover-background-color: transparent;
+    --amplify-components-button-link-active-background-color: transparent;
+    --amplify-components-textfield-color: var(--ls-primary-text-color);
+    --amplify-components-checkbox-icon-background-color: var(--color-indigo-600);
+  }
+
+  [data-amplify-authenticator] [data-amplify-router] {
+    @apply overflow-hidden rounded-[6px] shadow-2xl;
+  }
+
+  [data-amplify-authenticator] [data-amplify-container] {
+    place-self: unset;
+  }
+
+  [data-amplify-authenticator] [data-amplify-form] {
+    @apply px-4 py-2;
+
+    @screen sm {
+      @apply px-6 py-4;
+    }
+  }
+}
+
+@media (min-width: 30rem) {
+  [data-amplify-authenticator] [data-amplify-container] {
+    width: 100%;
+  }
+}
+
+.ui__modal[label=user-login] {
+  @apply flex items-center top-0;
+
+  .ui__modal-panel {
+    transition: transform .3s;
+    transform: translateY(-50px);
+  }
+
+  .panel-content {
+    @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] sm:w-[500px];
+  }
+
+  .ui__modal-close-wrap {
+    @apply z-10 top-[4px];
+  }
+}
+
+.cp__user {
+  &-login {
+    ::placeholder {
+      color: var(--ls-primary-text-color);
+      opacity: .3;
+    }
+
+    [data-indicator-position=top] > .amplify-tabs-item {
+      margin-top: 0;
+    }
+
+    .amplify-tabs-item {
+      transition: none;
+
+      &:focus {
+        color: var(--ls-primary-text-color);
+      }
+
+      &:hover {
+        opacity: .9;
+      }
+    }
+
+    .amplify-field-group {
+      @apply relative;
+
+      .amplify-button {
+        color: var(--ls-primary-text-color);
+
+        &:active, &:hover, &:focus {
+          background-color: transparent;
+        }
+      }
+    }
+
+    .amplify-field-group__outer-end {
+      @apply absolute right-0 top-0 bottom-0;
+    }
+
+    .amplify-input {
+      border-radius: 4px !important;
+    }
+
+    .amplify-checkboxfield {
+      @apply text-sm;
+
+      .amplify-field__error-message {
+        color: var(--ls-primary-text-color);
+        opacity: .4;
+      }
+    }
+
+    .amplify-text--error {
+      color: var(--ls-error-text-color);
+    }
+  }
+}
+
+html {
+  &.is-mobile .ui__modal[label=user-login] .panel-content {
+    @apply pt-0;
+  }
+
+  &.has-mobile-keyboard .ui__modal[label=user-login] {
+    transform: translateY(calc(-50px - 6%));
+  }
+}
+
+.federated-sign-in-container {
+  display: none;
+}

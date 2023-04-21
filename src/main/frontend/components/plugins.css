@@ -494,8 +494,15 @@
 
       .heading-item {
         margin: 12px 12px 6px;
-        font-weight: bold;
         border-bottom: 1px solid var(--ls-border-color, #738694);
+
+        h2 {
+          font-weight: bold;
+        }
+
+        small:empty {
+          display: none;
+        }
       }
 
       .desc-item {
@@ -620,6 +627,13 @@
       min-width: 600px;
       width: 100%;
       max-width: 760px;
+    }
+
+    .html-content {
+      > p {
+        padding-bottom: 2px;
+        margin: 0;
+      }
     }
   }
 }
@@ -806,6 +820,10 @@
 .ui-items-container {
   &[data-type=toolbar] {
     @apply flex items-center;
+
+    > .list-wrap {
+      @apply flex items-center flex-nowrap overflow-x-hidden transition-[max-width];
+    }
 
     > .injected-ui-item-toolbar {
       @apply hover:opacity-100 transition-opacity;

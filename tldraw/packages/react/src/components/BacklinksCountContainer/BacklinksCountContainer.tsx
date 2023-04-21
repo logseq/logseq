@@ -44,6 +44,7 @@ export const BacklinksCountContainer = observer(function BacklinksCountContainer
           }}
           onPointerDown={stop}
           onWheelCapture={stop}
+          onKeyDown={stop}
           title="Shape Backlinks"
         >
           <BacklinksCount

@@ -10,7 +10,9 @@
                          {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
 
  :linters
- {:aliased-namespace-symbol {:level :warning}
+ {:path-invalid-construct/string-join {:level :info}
+  :regex-checks/double-escaped-regex {:level :warning}
+  :aliased-namespace-symbol {:level :warning}
   ;; Disable until it doesn't trigger false positives on rum/defcontext
   :earmuffed-var-not-dynamic {:level :off}
   :unresolved-symbol {:exclude [goog.DEBUG
@@ -37,6 +39,8 @@
              electron.utils utils
              "/electron/utils" js-utils
              frontend.commands commands
+             frontend.components.query query
+             frontend.components.query.result query-result
              frontend.config config
              frontend.date date
              frontend.db db
@@ -51,7 +55,7 @@
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.fs fs
-             frontend.fs.bfs bfs
+             frontend.fs.memory-fs memory-fs
              frontend.fs.capacitor-fs capacitor-fs
              frontend.fs.nfs nfs
              frontend.handler.extract extract
@@ -67,6 +71,7 @@
              frontend.handler.page page-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
+             frontend.handler.query.builder query-builder
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
              frontend.handler.route route-handler
@@ -90,6 +95,7 @@
              frontend.util.url url-util
              frontend.util.thingatpt thingatpt
              lambdaisland.glogi log
+             logseq.common.path path
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
@@ -102,13 +108,16 @@
              logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
              medley.core medley
+             "path" node-path
              promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                         rum.core/defcs hooks.rum/defcs}}
+                        rum.core/defcs hooks.rum/defcs
+                        clojure.string/join hooks.path-invalid-construct/string-join
+                        clojure.string/replace hooks.regex-checks/double-escaped-regex}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur

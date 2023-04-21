@@ -63,7 +63,7 @@
 
     (is (= {:title 98
             :alias 6
-            :tags 2 :permalink 2
+            :tags 3 :permalink 2
             :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
            (docs-graph-helper/get-all-page-properties db))
         "Counts for all page properties")
@@ -123,7 +123,7 @@
     (if rename-target
       #_:clj-kondo/ignore
       (do #_(prn "conversion triple-lowbar: " original-body " -> " rename-target)
-        (#'page-handler/compute-new-file-path path rename-target))
+       (#'page-handler/compute-new-file-path path rename-target))
       path)))
 
 (defn- convert-graph-files-path
@@ -134,7 +134,7 @@
 
 ;; Integration test that test parsing a large graph like docs
 ;; Check if file name conversion from old version of docs is working
-(deftest ^:integration convert-v067-filesnames-parse-and-load-files-to-db
+(deftest ^:integration convert-v067-filenames-parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)

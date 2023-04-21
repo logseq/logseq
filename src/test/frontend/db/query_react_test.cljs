@@ -1,7 +1,6 @@
 (ns frontend.db.query-react-test
   (:require [cljs.test :refer [deftest is use-fixtures]]
             [cljs-time.core :as t]
-            [clojure.pprint]
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.date :as date]
@@ -9,7 +8,6 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react :as react]
             [goog.string :as gstring]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -19,21 +17,20 @@
   "Use custom-query over react-query for testing since it tests react-query and
 adds rules that users often use"
   [query & [opts]]
-  (react/clear-query-state!)
   (when-let [result (query-custom/custom-query test-helper/test-db query opts)]
     (map first (deref result))))
 
 (defn- blocks-created-between-inputs [a b]
-   (sort
-     (map #(-> % :block/content string/split-lines first)
-          (custom-query {:inputs [a b]
-                         :query '[:find (pull ?b [*])
-                                  :in $ ?start ?end
-                                  :where
-                                  [?b :block/content]
-                                  [?b :block/created-at ?timestamp]
-                                  [(>= ?timestamp ?start)]
-                                  [(<= ?timestamp ?end)]]}))))
+  (sort
+   (map #(-> % :block/content string/split-lines first)
+        (custom-query {:inputs [a b]
+                       :query '[:find (pull ?b [*])
+                                :in $ ?start ?end
+                                :where
+                                [?b :block/content]
+                                [?b :block/created-at ?timestamp]
+                                [(>= ?timestamp ?start)]
+                                [(<= ?timestamp ?end)]]}))))
 
 (defn- blocks-journaled-between-inputs [a b]
   (map :block/content (custom-query {:inputs [a b]
@@ -56,6 +53,17 @@ adds rules that users often use"
                                                      [?e :block/name ?page]]}
                                     {:current-block-uuid (get (block-with-content block-content) :block/uuid)})))
 
+(defn- blocks-with-tag-on-specified-current-page [& {:keys [current-page tag]}]
+  (map :block/content (custom-query {:title "Query title"
+                                     :inputs [:current-page tag] 
+                                     :query '[:find (pull ?b [*]) 
+                                              :in $ ?current-page ?tag-name
+                                              :where [?b :block/page ?bp] 
+                                                     [?bp :block/name ?current-page] 
+                                                     [?b :block/ref-pages ?t] 
+                                                     [?t :block/name ?tag-name]]}
+                                    {:current-page-fn (constantly current-page)})))
+
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content
@@ -70,7 +78,7 @@ adds rules that users often use"
                                :query '[:find (pull ?b [*])
                                         :in $ ?current-page
                                         :where [?b :block/page ?bp]
-                                        [?bp :block/name ?current-page]]}))))
+                                               [?bp :block/name ?current-page]]}))))
       ":current-page input resolves to current page name")
 
   (is (= []
@@ -303,3 +311,12 @@ created-at:: %s"
 
     (is (= ["+1d"] (blocks-on-journal-page-from-block-with-content :query-page "+1d"))
         ":query-page resolves to the parent page when called from another page")))
+
+(deftest cache-input-for-page-inputs
+  (load-test-files [{:file/path "pages/a.md" :file/content "- a #shared-tag"}
+                    {:file/path "pages/b.md" :file/content "- b #shared-tag"}])
+
+  (is (not= (blocks-with-tag-on-specified-current-page :current-page "a" :tag "shared-tag")
+            (blocks-with-tag-on-specified-current-page :current-page "b" :tag "shared-tag")
+            [])
+      "Querying for blocks with tag on current page from page returns not-empty but differing results"))

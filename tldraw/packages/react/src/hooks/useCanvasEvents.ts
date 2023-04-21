@@ -59,8 +59,10 @@ export function useCanvasEvents() {
     const onDrop = async (e: React.DragEvent<Element>) => {
       e.preventDefault()
 
-      const point = [e.clientX, e.clientY]
-      app.drop(e.dataTransfer, point)
+      if ('clientX' in e) {
+        const point = [e.clientX, e.clientY]
+        app.drop(e.dataTransfer, point)
+      }
     }
 
     const onDragOver = (e: React.DragEvent<Element>) => {
@@ -77,7 +79,10 @@ export function useCanvasEvents() {
       onDragOver,
       // fix touch callout in iOS
       onTouchEnd: (e: TouchEvent) => {
-        e.preventDefault()
+        let tool = app.selectedTool.id
+        if (tool === 'pencil' || tool === 'highlighter') {
+          e.preventDefault()
+        }
       }
     }
   }, [callbacks])

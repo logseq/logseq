@@ -43,8 +43,8 @@
                  (if (zero? seconds) "" (str seconds "s")))))
 
 (def support-seconds?
-  (get (state/get-config)
-       [:logbook/settings :with-second-support?] true))
+  (get-in (state/get-config)
+          [:logbook/settings :with-second-support?] true))
 
 (defn- now []
   (if support-seconds?

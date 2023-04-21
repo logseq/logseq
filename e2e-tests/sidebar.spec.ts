@@ -17,7 +17,9 @@ test('favorite item and recent item test', async ({ page }) => {
   // click from another page
   const another_page_name = await createRandomPage(page)
   expect(await page.innerText(':nth-match(.favorite-item a, 1)')).toBe(fav_page_name)
+  await page.waitForTimeout(500);
   await page.click(":nth-match(.favorite-item, 1)")
+  await page.waitForTimeout(500);
   expect(await page.innerText('.page-title .title')).toBe(fav_page_name)
 
   expect(await page.innerText(':nth-match(.recent-item a, 1)')).toBe(fav_page_name)

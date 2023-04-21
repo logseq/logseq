@@ -1,4 +1,4 @@
-(ns frontend.components.sidebar
+(ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.components.find-in-page :as find-in-page]
@@ -37,10 +37,10 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.path :as path]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
@@ -368,11 +368,12 @@
 
          (when enable-whiteboards?
            (sidebar-item
-            {:class           "whiteboard"
-             :title           (t :right-side-bar/whiteboards)
-             :href            (rfe/href :whiteboards)
-             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon            "whiteboard"
+            {:class            "whiteboard"
+             :title            (t :right-side-bar/whiteboards)
+             :href             (rfe/href :whiteboards)
+             :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+             :active           (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon             "whiteboard"
              :icon-extension? true}))
 
          (when (state/enable-flashcards? (state/get-current-repo))
@@ -505,7 +506,7 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
@@ -560,11 +561,9 @@
   (let [finished (or (:finished state) 0)
         total (:total state)
         width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-        file-basename (util/node-path.basename
-                       (:current-parsing-file state))
-        display-filename (if (mobile-util/native-platform?)
-                           (gp-util/safe-decode-uri-component file-basename)
-                           file-basename)
+        display-filename (some-> (:current-parsing-file state)
+                                 not-empty
+                                 path/filename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
                     [:div.hidden.md:flex.flex-row

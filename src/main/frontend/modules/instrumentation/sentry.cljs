@@ -2,6 +2,7 @@
   (:require [frontend.version :refer [version]]
             [frontend.util :as util]
             [frontend.config :as config]
+            [medley.core :as medley]
             ["@sentry/react" :as Sentry]
             [frontend.mobile.util :as mobile-util]))
 
@@ -17,8 +18,8 @@
    :environment (if config/dev? "development" "production")
    :initialScope {:tags
                   (merge
-                   (when (not-empty config/revison)
-                     {:revision config/revison})
+                   (when (not-empty config/revision)
+                     {:revision config/revision})
                    {:platform (cond
                                 (util/electron?) "electron"
                                 (mobile-util/native-platform?) "mobile"
@@ -33,14 +34,26 @@
                    (when-let [[_ _ query-and-fragment]
                               (re-matches #"file://.*?/(app/electron|static/index)\.html(.*)" (.. event -request -url))]
                      (set! (.. event -request -url) (str "http://localhost/electron.html" query-and-fragment)))
-                   (doseq [value (.. event -exception -values)]
-                     (doseq [frame (.. value -stacktrace -frames)]
-                       (when (not-empty (.. frame -filename))
-                         (when-let [[_ filename]
-                                    (re-matches #"file://.*?/app/(js/.*\.js)" (.. frame -filename))]
-                           (set! (.. frame -filename) (str "/static/" filename))
-                           ;; NOTE: No idea of why there's a 2-line offset.
-                           (set! (.. frame -lineno) (- (.. frame -lineno) 2))))))
+
+                   (let [*filtered (volatile! [])
+                         ^js values (.. event -exception -values)]
+                     (doseq [[idx value] (medley/indexed values)]
+                       (let [mf (some-> value (.. -mechanism -data -function))]
+                         (when (contains? #{"setInterval"} mf)
+                           (vswap! *filtered conj idx))
+
+                         (doseq [frame (.. value -stacktrace -frames)]
+                           (when (not-empty (.. frame -filename))
+                             (when-let [[_ filename]
+                                        (re-matches #"file://.*?/app/(js/.*\.js)" (.. frame -filename))]
+                               (set! (.. frame -filename) (str "/static/" filename))
+                               ;; NOTE: No idea of why there's a 2-line offset.
+                               (set! (.. frame -lineno) (- (.. frame -lineno) 2)))))))
+
+                     ;; remove filtered events
+                     (when-let [filtered (seq @*filtered)]
+                       (doseq [k filtered]
+                         (js-delete values k))))
                    (catch :default e
                      (js/console.error e)))
                  event)})

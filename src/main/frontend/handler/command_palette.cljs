@@ -80,13 +80,18 @@
   [{:keys [id] :as command}]
   (if (:command/shortcut command)
     (log/error :shortcut/missing (str "Shortcut is missing for " (:id command)))
-    (do
+    (try
       (spec/validate :command/command command)
       (let [cmds (get-commands)]
         (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
           (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
                                         :id  id})
-          (state/set-state! :command-palette/commands (conj cmds command)))))))
+          (state/set-state! :command-palette/commands (conj cmds command))))
+      ;; Catch unexpected errors so that subsequent register calls pass
+      (catch :default e
+        (log/error :command/register {:msg "Unexpectedly failed to register command"
+                                      :id id
+                                      :error (str e)})))))
 
 (defn unregister
   [id]

@@ -20,13 +20,13 @@ export function useSetup<
     onDeleteShapes,
     onDrop,
     onPaste,
+    onCopy,
     onCanvasDBClick,
   } = props
 
   React.useLayoutEffect(() => {
     const unsubs: (() => void)[] = []
     if (!app) return
-    app.history.reset()
     if (typeof window !== undefined) {
       window['tlapps'] = window['tlapps'] || {}
       window['tlapps'][app.uuid] = app
@@ -52,6 +52,7 @@ export function useSetup<
     if (onDeleteAssets) unsubs.push(app.subscribe('delete-assets', onDeleteAssets))
     if (onDrop) unsubs.push(app.subscribe('drop', onDrop))
     if (onPaste) unsubs.push(app.subscribe('paste', onPaste))
+    if (onCopy) unsubs.push(app.subscribe('copy', onCopy))
     if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?
     return () => unsubs.forEach(unsub => unsub())

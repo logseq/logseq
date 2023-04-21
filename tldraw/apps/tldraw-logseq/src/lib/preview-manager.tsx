@@ -24,7 +24,7 @@ export class PreviewManager {
   }
 
   load(snapshot: TLDocumentModel) {
-    const page = snapshot.pages[0]
+    const page = snapshot?.pages?.[0]
     this.pageId = page?.id
     this.assets = snapshot.assets
     this.shapes = page?.shapes

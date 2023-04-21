@@ -42,23 +42,26 @@
         :item-render
         (fn [item]
           (let [command-name (first item)
-                command-doc (get item 2)
-                doc (when (state/show-command-doc?) command-doc)]
+                command-doc  (get item 2)
+                plugin-id    (get-in item [1 1 1 :pid])
+                doc          (when (state/show-command-doc?) command-doc)]
             (cond
+              (or plugin-id (vector? doc))
+              [:div.has-help
+               command-name
+               (when doc (ui/tippy
+                          {:html            doc
+                           :interactive     true
+                           :fixed-position? true
+                           :position        "right"}
+
+                          [:small (svg/help-circle)]))
+               (when plugin-id
+                 [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
+
               (string? doc)
               [:div {:title doc}
                command-name]
-
-              (vector? doc)
-              [:div.has-help
-               command-name
-               (ui/tippy
-                {:html doc
-                 :interactive true
-                 :fixed-position? true
-                 :position "right"}
-
-                [:small (svg/help-circle)])]
 
               :else
               [:div command-name])))
@@ -67,7 +70,7 @@
         (fn [chosen-item]
           (let [command (first chosen-item)]
             (reset! commands/*current-command command)
-            (let [command-steps (get (into {} matched) command)
+            (let [command-steps  (get (into {} matched) command)
                   restore-slash? (or
                                   (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
@@ -77,7 +80,7 @@
               (editor-handler/insert-command! id command-steps
                                               format
                                               {:restore? restore-slash?
-                                               :command command}))))
+                                               :command  command}))))
         :class
         "black"}))))
 
@@ -340,20 +343,30 @@
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
-  (let [vw-width js/window.innerWidth
+  (let [MAX-HEIGHT 700
+        MAX-HEIGHT' 600
+        MAX-WIDTH 600
+        SM-MAX-WIDTH 300
+        Y-BOUNDARY-HEIGHT 150
+        vw-width js/window.innerWidth
         vw-height js/window.innerHeight
         vw-max-width (- vw-width (:left rect))
         vw-max-height (- vw-height (:top rect))
+        vw-max-height' (:top rect)
         sm? (< vw-width 415)
-        max-height (min (- vw-max-height 20) 800)
-        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        max-height (min (- vw-max-height 20) MAX-HEIGHT)
+        max-height' (min (- vw-max-height' 70) MAX-HEIGHT')
+        max-width (if sm? SM-MAX-WIDTH (min (max 400 (/ vw-max-width 2)) MAX-WIDTH))
         offset-top 24
-        to-max-height (if (and (seq rect) (> vw-height max-height))
-                        (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
-                          (if (< delta-height max-height)
-                            (- (max (* 2 offset-top) delta-height) 16)
-                            max-height))
-                        max-height)
+        to-max-height (cond-> (if (and (seq rect) (> vw-height max-height))
+                                (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
+                                  (if (< delta-height max-height)
+                                    (- (max (* 2 offset-top) delta-height) 16)
+                                    max-height))
+                                max-height)
+
+                              (= modal-name "commands")
+                              (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
         editing-key    (first (keys (:editor/editing? @state/state)))
         *el (rum/use-ref nil)
@@ -367,8 +380,9 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        y-overflow-vh? (< to-max-height 130)
-        to-max-height (if y-overflow-vh? max-height to-max-height)
+        y-overflow-vh? (or (< to-max-height Y-BOUNDARY-HEIGHT)
+                           (> (- max-height' to-max-height) Y-BOUNDARY-HEIGHT))
+        to-max-height (if y-overflow-vh? max-height' to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))
@@ -381,11 +395,9 @@
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (when-let [^js/HTMLElement editor
-                          (js/document.querySelector ".editor-wrapper")]
-                 (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
-                   {:right 0}
-                   {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
+               (if (<= vw-max-width (+ left (if set-default-width? max-width 500)))
+                 {:right 0}
+                 {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)}))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :data-modal-name modal-name
@@ -450,8 +462,12 @@
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
-  [content format]
-  (let [content (if content (str content) "")]
+  [block content format]
+  (let [content (if content (str content) "")
+        heading (-> block :block/properties :heading)
+        heading (if (true? heading)
+                  (min (inc (:block/level block)) 6)
+                  heading)]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
      (if (or (> (.-length content) 1000)
@@ -462,6 +478,7 @@
      (case format
        :markdown
        (cond
+         heading (str "h" heading)
          (string/starts-with? content "# ") "h1"
          (string/starts-with? content "## ") "h2"
          (string/starts-with? content "### ") "h3"
@@ -472,6 +489,7 @@
          :else "normal-block")
        ;; other formats
        (cond
+         heading (str "h" heading)
          (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
@@ -585,7 +603,7 @@
   lifecycle/lifecycle
   [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content id)
-        heading-class (get-editor-style-class content format)]
+        heading-class (get-editor-style-class block content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea

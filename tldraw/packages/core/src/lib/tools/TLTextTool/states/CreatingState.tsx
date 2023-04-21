@@ -40,6 +40,7 @@ export class CreatingState<
       stroke: this.app.settings.color,
     })
     this.creatingShape = shape
+    this.creatingShape.setScaleLevel(this.app.settings.scaleLevel)
     transaction(() => {
       this.app.currentPage.addShapes(shape as unknown as S)
       const { bounds } = shape

@@ -1,7 +1,10 @@
 (ns electron.file-sync-rsapi
   (:require ["@logseq/rsapi" :as rsapi]
             [electron.window :as window]
+            [electron.logger :as logger]
             [cljs-bean.core :as bean]))
+
+(defn- init-logger [log-fn] (rsapi/initLogger log-fn))
 
 (defn key-gen [] (rsapi/keygen))
 
@@ -57,3 +60,12 @@
                              (when-not (.isDestroyed win)
                                (.. win -webContents
                                    (send progress-notify-chan (bean/->js progress-info))))))))
+
+(init-logger (fn [_error record]
+               (let [[level message] record]
+                 (case level
+                   "ERROR" (logger/error message)
+                   "WARN" (logger/warn message)
+                   "INFO" (logger/info message)
+                   "DEBUG" (logger/debug message)
+                   (logger/debug message)))))

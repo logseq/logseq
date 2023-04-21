@@ -29,8 +29,8 @@ import { LogseqContext, LogseqContextValue } from '../lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
-    new URL(url)
-    return true
+    const parsedUrl = new URL(url)
+    return parsedUrl.host && ['http:', 'https:'].includes(parsedUrl.protocol)
   } catch {
     return false
   }
@@ -105,16 +105,16 @@ const handleCreatingShapes = async (
     const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
     if (existingAsset) {
       return existingAsset as VideoImageAsset
-    } else {
-      // Create a new asset for this image
-      const asset: VideoImageAsset = {
-        id: uniqueId(),
-        type: isVideo ? 'video' : 'image',
-        src: url,
-        size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
-      }
-      return asset
     }
+
+    // Create a new asset for this image
+    const asset: VideoImageAsset = {
+      id: uniqueId(),
+      type: isVideo ? 'video' : 'image',
+      src: url,
+      size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
+    }
+    return asset
   }
 
   async function createAssetsFromFiles(files: File[]) {
@@ -251,11 +251,7 @@ const handleCreatingShapes = async (
     const rawText = await getDataFromType(item, 'text/plain')
     if (rawText) {
       const text = rawText.trim()
-      return tryCreateShapeHelper(
-        tryCreateShapeFromURL,
-        tryCreateShapeFromIframeString,
-        tryCreateLogseqPortalShapesFromUUID
-      )(text)
+      return tryCreateShapeHelper(tryCreateShapeFromURL, tryCreateShapeFromIframeString)(text)
     }
 
     return null
@@ -273,7 +269,7 @@ const handleCreatingShapes = async (
   }
 
   async function tryCreateShapeFromURL(rawText: string) {
-    if (isValidURL(rawText) && !(shiftKey || fromDrop)) {
+    if (isValidURL(rawText) && !shiftKey) {
       if (YOUTUBE_REGEX.test(rawText)) {
         return [
           {
@@ -331,6 +327,7 @@ const handleCreatingShapes = async (
             pageId: blockRef,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
           },
         ]
@@ -347,6 +344,7 @@ const handleCreatingShapes = async (
           pageId: pageName,
           fill: app.settings.color,
           stroke: app.settings.color,
+          scaleLevel: app.settings.scaleLevel,
           blockType: 'P' as 'P',
         },
       ]
@@ -371,6 +369,7 @@ const handleCreatingShapes = async (
             pageId: uuid,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
             compact: true,
           },
@@ -416,7 +415,7 @@ const handleCreatingShapes = async (
     }
     app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
-    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
+    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && fromDrop) {
       const source = app.selectedShapesArray[0]
       const target = app.getShapeById(allShapesToAdd[0].id!)!
       app.createNewLineBinding(source, target)

@@ -5,17 +5,23 @@
             [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.object :as gobj]
+            [goog.string :as gstring]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [goog.object :as gobj]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.path :as path]))
 
 (defn- get-path
   [state]
@@ -25,7 +31,8 @@
 (rum/defc files-all < rum/reactive
   []
   (when-let [current-repo (state/sub :git/current-repo)]
-    (let [files (db/get-files current-repo)
+    (let [files (db/get-files current-repo) ; [[string]]
+          files (sort-by first gstring/intAwareCompare files)
           mobile? (util/mobile?)]
       [:table.table-auto
        [:thead
@@ -66,22 +73,45 @@
    (files-all)
    ])
 
-(rum/defcs file < rum/reactive
-  {:did-mount (fn [state]
+;; FIXME: misuse of rpath and fpath
+(rum/defcs file-inner < rum/reactive
+  {:will-mount (fn [state]
+                 (let [*content (atom nil)
+                       [path format] (:rum/args state)
+                       repo-dir (config/get-repo-dir (state/get-current-repo))
+                       [dir path] (cond
+                                    ;; assume local file, relative path
+                                    (not (string/starts-with? path "/"))
+                                    [repo-dir path]
+
+                                    :else ;; global file on native platform
+                                    [nil path])]
+                   (when (and format (contains? (gp-config/text-formats) format))
+                     (p/let [content (fs/read-file dir path)]
+                       (reset! *content (or content ""))))
+                   (assoc state ::file-content *content)))
+   :did-mount (fn [state]
                 (state/set-file-component! (:rum/react-component state))
                 state)
    :will-unmount (fn [state]
                    (state/clear-file-component!)
                    state)}
-  [state]
-  (let [path (get-path state)
-        format (gp-util/get-format path)
-        original-name (db/get-file-page path)
-        random-id (str (d/squuid))]
+  [state path format]
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+        rel-path (when (string/starts-with? path repo-dir)
+                   (path/trim-dir-prefix repo-dir path))
+        original-name (db/get-file-page (or path rel-path))
+        in-db? (when-not (path/absolute? path)
+                 (boolean (db/get-file (or path rel-path))))
+        file-fpath (if in-db?
+                     (path/path-join repo-dir path)
+                     path)
+        random-id (str (d/squuid))
+        content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi (js/decodeURI path)]]
+      [:bdi (or original-name rel-path path)]]
      (when original-name
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
@@ -105,18 +135,30 @@
      (cond
        ;; image type
        (and format (contains? (gp-config/img-formats) format))
-       [:img {:src (util/node-path.join "file://" path)}]
+       [:img {:src (path/path-join "file://" path)}]
 
-       (and format (contains? (gp-config/text-formats) format))
-       (when-let [file-content (or (db/get-file path) "")]
-         (let [content (string/trim file-content)
-               mode (util/get-file-ext path)]
-            (lazy-editor/editor {:file?     true
-                                 :file-path path}
-                                (str "file-edit-" random-id)
-                                {:data-lang mode}
-                                content
-                               {})))
+       (and format
+            (contains? (gp-config/text-formats) format)
+            content)
+       (let [content' (string/trim content)
+             mode (util/get-file-ext path)]
+         (lazy-editor/editor {:file?     true
+                              :file-path file-fpath}
+                             (str "file-edit-" random-id)
+                             {:data-lang mode}
+                             content'
+                             {}))
+
+       ;; wait for content load
+       (and format
+            (contains? (gp-config/text-formats) format))
+       (ui/loading "Loading ...")
 
        :else
        [:div (t :file/format-not-supported (name format))])]))
+
+(rum/defcs file
+  [state]
+  (let [path (get-path state)
+        format (gp-util/get-format path)]
+    (rum/with-key (file-inner path format) path)))

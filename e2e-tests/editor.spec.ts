@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, systemModifier, IsMac } from './utils'
+import { createRandomPage, enterNextBlock, modKey } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -48,6 +48,16 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await block.mustFill("done")
 })
 
+test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.activeEditing(0)
+
+  await page.type('textarea >> nth=0', '#[[', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+})
+
 test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -78,7 +88,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 
   await block.mustType(`[[${title}]]`)
 
-  await page.keyboard.press(systemModifier('Control+o'))
+  await page.keyboard.press(modKey + '+o')
 
   // Check page title equals to `title`
   await page.waitForTimeout(100)
@@ -91,7 +101,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Delete to previous block, and check cursor postion, with markup
+  // Delete to previous block, and check cursor position, with markup
   await block.mustFill('`012345`')
   await block.enterNext()
   await block.mustType('`abcdef', { toBe: '`abcdef`' }) // "`" auto-completes
@@ -111,7 +121,7 @@ test.skip('backspace and cursor position #4897', async ({ page, block }) => {
 test.skip('next block and cursor position', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Press Enter and check cursor postion, with markup
+  // Press Enter and check cursor position, with markup
   await block.mustType('abcde`12345', { toBe: 'abcde`12345`' }) // "`" auto-completes
   for (let i = 0; i < 7; i++) {
     await page.keyboard.press('ArrowLeft')
@@ -131,7 +141,7 @@ test(
   // cases should trigger [[]] #3251
   async ({ page, block }) => {
     // This test requires dev mode
-    test.skip(process.env.RELEASE === 'true', 'not avaliable for release version')
+    test.skip(process.env.RELEASE === 'true', 'not available for release version')
 
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,
@@ -168,23 +178,14 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   await createRandomPage(page)
 
   await block.mustType('Some random text')
-  // FIXME: https://github.com/logseq/logseq/issues/7541
-  await page.waitForTimeout(1000)
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+c')
-  } else {
-    await page.keyboard.press('Control+c')
-  }
+  await page.keyboard.press(modKey + '+c')
 
   await page.press('textarea >> nth=0', 'Enter')
   await block.waitForBlocks(2)
-
-  if (IsMac) {
-    await page.keyboard.press('Meta+v')
-  } else {
-    await page.keyboard.press('Control+v')
-  }
+  await page.waitForTimeout(100)
+  await page.keyboard.press(modKey + '+v')
+  await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
 
   // Check if the newly created block-ref has the same referenced content
@@ -197,13 +198,16 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
 
-  // Trigger replace-block-reference-with-content-at-point
-  if (IsMac) {
-    await page.keyboard.press('Meta+Shift+r')
-  } else {
-    await page.keyboard.press('Control+Shift+r')
+  // FIXME: Sometimes the cursor is in the end of the editor
+  for (let i = 0; i < 4; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
   }
+
+  // Trigger replace-block-reference-with-content-at-point
+  await page.keyboard.press(modKey + '+Shift+r')
+
   await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+
   await block.escapeEditing()
 
   await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
@@ -218,11 +222,7 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await page.keyboard.press('Escape')
   await expect(page.locator('.ls-block.selected')).toHaveCount(1)
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+c', { delay: 10 })
-  } else {
-    await page.keyboard.press('Control+c', { delay: 10 })
-  }
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
 
   await page.keyboard.press('Enter')
   await expect(page.locator('.ls-block.selected')).toHaveCount(0)
@@ -232,11 +232,7 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
 
   await block.mustType('Typed block')
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+v')
-  } else {
-    await page.keyboard.press('Control+v')
-  }
+  await page.keyboard.press(modKey + '+v')
   await expect(page.locator('text="Typed block"')).toHaveCount(1)
   await block.waitForBlocks(3)
 })
@@ -253,11 +249,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await page.keyboard.type('[[', { delay: 50 })
 
   await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   await page.waitForTimeout(100)
 
   // Should close the action menu when we undo the action prompt
@@ -267,11 +259,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await expect(page.locator('text="text1"')).toHaveCount(1)
 
   // And it should keep what was undone as a redo action
-  if (IsMac) {
-    await page.keyboard.press('Meta+Shift+z')
-  } else {
-    await page.keyboard.press('Control+Shift+z')
-  }
+  await page.keyboard.press(modKey + '+Shift+z')
   await expect(page.locator('text="text2"')).toHaveCount(1)
 })
 
@@ -288,11 +276,7 @@ test('undo after starting an action should close the action menu #6269', async (
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
-    if (IsMac) {
-      await page.keyboard.press('Meta+z')
-    } else {
-      await page.keyboard.press('Control+z')
-    }
+    await page.keyboard.press(modKey + '+z')
     await page.waitForTimeout(100)
     await expect(page.locator('text="/today"')).toHaveCount(0)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
@@ -567,31 +551,19 @@ test('should not erase typed text when expanding block quickly after typing #389
   await page.waitForTimeout(500)
   await page.type('textarea >> nth=0', ' then expand', { delay: 10 })
   // A quick cmd-down must not destroy the typed text
-  if (IsMac) {
-    await page.keyboard.press('Meta+ArrowDown')
-  } else {
-    await page.keyboard.press('Control+ArrowDown')
-  }
+  await page.keyboard.press(modKey + '+ArrowDown')
   await page.waitForTimeout(500)
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text, then expand'
   )
 
   // First undo should delete the last typed information, not undo a no-op expand action
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text,'
   )
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     ''
   )
@@ -601,40 +573,28 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await createRandomPage(page)
 
   await block.mustFill("foo")
-  
+
   await page.keyboard.press("Enter")
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
   await block.indent()
   await block.mustFill("bar")
   await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   // should undo "bar" input
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
-  if (IsMac) {
-    await page.keyboard.press('Shift+Meta+z')
-  } else {
-    await page.keyboard.press('Shift+Control+z')
-  }
+  await page.keyboard.press(modKey + '+Shift+z')
   // should redo "bar" input
   await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
   await page.keyboard.press("Shift+Tab")
-  
+
   await page.keyboard.press("Enter")
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
   // swap input seq
   await block.mustFill("baz")
   await block.indent()
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   // should undo indention
   await expect(page.locator('textarea >> nth=0')).toHaveText("baz")
   await page.keyboard.press("Shift+Tab")
@@ -646,40 +606,16 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await block.indent()
   await page.keyboard.type(" bbb")
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
-  if (IsMac) {
-    await page.keyboard.press('Shift+Meta+z')
-  } else {
-    await page.keyboard.press('Shift+Control+z')
-  }
+  await page.keyboard.press(modKey + '+Shift+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  if (IsMac) {
-    await page.keyboard.press('Shift+Meta+z')
-  } else {
-    await page.keyboard.press('Shift+Control+z')
-  }
+  await page.keyboard.press(modKey + '+Shift+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  if (IsMac) {
-    await page.keyboard.press('Shift+Meta+z')
-  } else {
-    await page.keyboard.press('Shift+Control+z')
-  }
+  await page.keyboard.press(modKey + '+Shift+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
 })

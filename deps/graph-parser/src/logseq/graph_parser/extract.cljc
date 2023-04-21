@@ -36,12 +36,13 @@
    uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
    filename-format - the format used to parse file name
    "
-  [file ast uri-encoded? filename-format]
+  [file-path ast uri-encoded? filename-format]
   ;; headline
   (let [ast  (map first ast)
-        file (if uri-encoded? (js/decodeURI file) file)]
+        file (if uri-encoded? (js/decodeURI file-path) file-path)]
     ;; check backward compatibility?
-    (if (string/includes? file "pages/contents.")
+    ;; FIXME: use pre-config dir
+    (if (string/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
             property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
@@ -126,17 +127,44 @@
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
 
+(defn- attach-block-ids-if-match
+  "If block-ids are provided and match the number of blocks, attach them to blocks
+   If block-ids are provided but don't match the number of blocks, WARN and ignore
+   If block-ids are not provided (nil), just ignore"
+  [block-ids blocks]
+  (or (when block-ids
+        (if (= (count block-ids) (count blocks))
+          (mapv (fn [block-id block]
+                  (if (some? block-id)
+                    (assoc block :block/uuid (uuid block-id))
+                    block))
+                block-ids blocks)
+          (log/error :gp-extract/attach-block-ids-not-match "attach-block-ids-if-match: block-ids provided, but doesn't match the number of blocks, ignoring")))
+      blocks))
+
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  "uri-encoded? - if is true, apply URL decode on the file path"
-  [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
+  "uri-encoded? - if is true, apply URL decode on the file path
+   options - 
+     :extracted-block-ids - An atom that contains all block ids that have been extracted in the current page (not yet saved to db)
+     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge 
+       (2 ways diff) based uuid resolution upon external editing.
+       returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
+       Implemented in file-common-handler/diff-merge-uuids for IoC
+       Called in gp-extract/extract as AST is being parsed and properties are extracted there"
+  [format ast properties file content {:keys [date-formatter db filename-format extracted-block-ids resolve-uuid-fn]
+                                       :or {extracted-block-ids (atom #{})
+                                            resolve-uuid-fn (constantly nil)}
+                                       :as options}]
   (try
-    (let [page (get-page-name file ast uri-encoded? filename-format)
+    (let [page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          options' (-> options
-                       (assoc :page-name page-name
-                              :original-page-name page))
+          options' (assoc options :page-name page-name)
+          ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
+          override-uuids (resolve-uuid-fn format ast content options')
           blocks (->> (gp-block/extract-blocks ast content false format options')
+                      (attach-block-ids-if-match override-uuids)
+                      (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
           ref-pages (atom #{})
@@ -187,15 +215,15 @@
 
 (defn extract
   "Extracts pages, blocks and ast from given file"
-  [file content {:keys [user-config verbose] :or {verbose true} :as options}]
+  [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
   (if (string/blank? content)
     []
-    (let [format (gp-util/get-format file)
-          _ (when verbose (println "Parsing start: " file))
+    (let [format (gp-util/get-format file-path)
+          _ (when verbose (println "Parsing start: " file-path))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        ))]
-      (when verbose (println "Parsing finished: " file))
+                                                               ))]
+      (when verbose (println "Parsing finished: " file-path))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
@@ -212,7 +240,7 @@
                                      (fn [v]
                                        (string/replace (or v "") "\\" "")))
                              properties)))
-            [pages blocks] (extract-pages-and-blocks format ast properties file content options)]
+            [pages blocks] (extract-pages-and-blocks format ast properties file-path content options)]
         {:pages pages
          :blocks blocks
          :ast ast}))))

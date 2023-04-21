@@ -181,16 +181,20 @@
          (let [result (fuzzy-search (keys templates) q :limit limit)]
            (vec (select-keys templates result))))))))
 
+(defn get-all-properties
+  []
+  (->> (db-model/get-all-properties)
+       (remove (property/hidden-properties))
+       ;; Complete full keyword except the ':'
+       (map #(subs (str %) 1))))
+
 (defn property-search
   ([q]
    (property-search q 100))
   ([q limit]
    (when q
      (let [q (clean-str q)
-           properties (->> (db-model/get-all-properties)
-                           (remove (property/hidden-properties))
-                           ;; Complete full keyword except the ':'
-                           (map #(subs (str %) 1)))]
+           properties (get-all-properties)]
        (when (seq properties)
          (if (string/blank? q)
            properties

@@ -11,15 +11,23 @@ on:
       - '*.md'
 
 env:
-  CLOJURE_VERSION: '1.10.1.727'
-  # setup-java@v2 dropped support for legacy Java version syntax.
-  # This is the same as 1.8.
-  JAVA_VERSION: '8'
+  CLOJURE_VERSION: '1.10.1.763'
+  JAVA_VERSION: '11'
   # This is the latest node version we can run.
-  NODE_VERSION: '16'
+  NODE_VERSION: '18'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
+  typos:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions Repository
+        uses: actions/checkout@v3
+      - name: Check spelling with custom config file
+        uses: crate-ci/typos@v1.13.10
+        with:
+          config: ./typos.toml
 
   test:
     strategy:
@@ -106,7 +114,7 @@ jobs:
         run: bb lint:ns-docstrings 2>/dev/null
 
       - name: Lint invalid translation entries
-        run: bb lang:invalid-translations
+        run: bb lang:validate-translations
 
   e2e-test:
     runs-on: ubuntu-latest
@@ -136,7 +144,7 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Clojure cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: clojure-deps
         with:
           path: |

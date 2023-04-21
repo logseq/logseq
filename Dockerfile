@@ -1,6 +1,6 @@
 # NOTE: please keep it in sync with .github pipelines
 # NOTE: during testing make sure to change the branch below
-# NOTE: before runing the build-docker GH action edit
+# NOTE: before running the build-docker GH action edit
 #       build-docker.yml and change the release channel from :latest to :testing
 
 # Builder image
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gpg
 
 # install NodeJS & yarn
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
 
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
     tee /etc/apt/trusted.gpg.d/yarn.gpg && \
@@ -34,7 +34,7 @@ RUN yarn config set network-timeout 240000 -g && yarn install
 RUN  yarn release 
 
 # Web App Runner image
-FROM nginx:stable-alpine
+FROM nginx:1.24.0-alpine3.17
 
 COPY --from=builder /data/static /usr/share/nginx/html
 

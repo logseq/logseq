@@ -125,7 +125,7 @@ export function cubicBezier(tx: number, x1: number, y1: number, x2: number, y2: 
     // The curve's x equation for the current time value
     x = A * t * t * t + B * t * t + C * t + D
 
-    // The slope we want is the inverse of the derivate of x
+    // The slope we want is the inverse of the derivative of x
     slope = 1 / (3 * A * t * t + 2 * B * t + C)
 
     // Get the next estimated time value, which will be more accurate than the one before

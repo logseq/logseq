@@ -93,7 +93,9 @@ export const getFiles = async (dirHandle, recursive, cb, path = dirHandle.name) 
   for await (const entry of dirHandle.values()) {
     const nestedPath = `${path}/${entry.name}`
     if (entry.kind === 'file') {
-      cb(nestedPath, entry)
+      if (cb) {
+        cb(nestedPath, entry)
+      }
       files.push(
         entry.getFile().then((file) => {
           Object.defineProperty(file, 'webkitRelativePath', {
@@ -110,11 +112,11 @@ export const getFiles = async (dirHandle, recursive, cb, path = dirHandle.name) 
         })
       )
     } else if (entry.kind === 'directory' && recursive) {
-      cb(nestedPath, entry)
-      dirs.push(getFiles(entry, recursive, cb, nestedPath))
+      if (cb) { cb(nestedPath, entry) }
+      dirs.push(...(await getFiles(entry, recursive, cb, nestedPath)))
     }
   }
-  return [(await Promise.all(dirs)), (await Promise.all(files))]
+  return [...(await Promise.all(dirs)), ...(await Promise.all(files))]
 }
 
 export const verifyPermission = async (handle, readWrite) => {
@@ -136,13 +138,15 @@ export const verifyPermission = async (handle, readWrite) => {
 
 // NOTE: Need externs to prevent `options.recursive` been munged
 //       When building with release.
+//       browser-fs-access doesn't return directory handles
+//       Ref: https://github.com/GoogleChromeLabs/browser-fs-access/blob/3876499caefe8512bfcf7ce9e16c20fd10199c8b/src/fs-access/directory-open.mjs#L55-L69
 export const openDirectory = async (options = {}, cb) => {
   options.recursive = options.recursive || false;
   const handle = await window.showDirectoryPicker({
     mode: 'readwrite'
   });
   const _ask = await verifyPermission(handle, true);
-  return [handle, getFiles(handle, options.recursive, cb)];
+  return [handle, ...(await getFiles(handle, options.recursive, cb))];
 };
 
 export const writeFile = async (fileHandle, contents) => {
@@ -245,11 +249,14 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html}) => {
+export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
     }
+
+    const navigator = (ownerWindow || window).navigator
+
     navigator.permissions.query({
         name: "clipboard-write"
     }).then((result) => {
@@ -274,6 +281,19 @@ export const writeClipboard = ({text, html}) => {
                     ["text/html"]: richBlob
                 })];
             }
+          if (blocks) {
+            let blocksBlob = new Blob([blocks], {
+              type: ["web application/logseq"]
+            })
+            let richBlob = new Blob([html], {
+              type: ["text/html"]
+            })
+            data = [new ClipboardItem({
+              ["text/plain"]: blob,
+              ["text/html"]: richBlob,
+              ["web application/logseq"]: blocksBlob
+            })];
+          }
             promise_written = navigator.clipboard.write(data)
         } else {
             console.debug("Degraded copy without `ClipboardItem` support:", text)
@@ -289,6 +309,25 @@ export const writeClipboard = ({text, html}) => {
 
 export const toPosixPath = (input) => {
   return input && input.replace(/\\+/g, '/')
+}
+
+export const saveToFile = (data, fileName, format) => {
+  if (!data) return
+  const url = URL.createObjectURL(data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.${format}`
+  link.click()
+}
+
+export const canvasToImage = (canvas, title = 'Untitled', format = 'png') => {
+  canvas.toBlob(
+    (blob) => {
+      console.log(blob)
+      saveToFile(blob, title, format)
+    },
+    `image/.${format}`
+  )
 }
 
 export const nodePath = Object.assign({}, path, {
@@ -333,3 +372,30 @@ export const nodePath = Object.assign({}, path, {
     return (orURI ? (orURI.protocol + '//') : '') + input
   }
 })
+
+// https://stackoverflow.com/questions/376373/pretty-printing-xml-with-javascript
+export const prettifyXml = function(sourceXml)
+{
+    var xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml');
+    var xsltDoc = new DOMParser().parseFromString([
+        // describes how we want to modify the XML - indent everything
+        '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
+        '  <xsl:strip-space elements="*"/>',
+        '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
+        '    <xsl:value-of select="normalize-space(.)"/>',
+        '  </xsl:template>',
+        '  <xsl:template match="node()|@*">',
+        '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
+        '  </xsl:template>',
+        '  <xsl:output indent="yes"/>',
+        '</xsl:stylesheet>',
+    ].join('\n'), 'application/xml');
+
+    var xsltProcessor = new XSLTProcessor();
+    xsltProcessor.importStylesheet(xsltDoc);
+    var resultDoc = xsltProcessor.transformToDocument(xmlDoc);
+    var resultXml = new XMLSerializer().serializeToString(resultDoc);
+    // if it has parsererror, then return the original text
+    return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml;
+
+};

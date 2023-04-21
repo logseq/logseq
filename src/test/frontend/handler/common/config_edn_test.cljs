@@ -4,14 +4,24 @@
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [reitit.frontend.easy :as rfe]))
 
 (defn- validation-config-error-for
   [config-body schema]
   (let [error-message (atom nil)]
-    (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))]
+    (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))
+                  rfe/href (constantly "")]
       (is (= false
              (config-edn-common-handler/validate-config-edn "config.edn" config-body schema)))
+      (str @error-message))))
+
+(defn- deprecation-warnings-for
+  [config-body]
+  (let [error-message (atom nil)]
+    (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))
+                  rfe/href (constantly "")]
+      (config-edn-common-handler/detect-deprecations "config.edn" config-body)
       (str @error-message))))
 
 (deftest validate-config-edn
@@ -42,4 +52,17 @@
       (is (string/includes?
            (validation-config-error-for "{:start-of-week 7}" schema)
            "has the following errors")
-          (str "Invalid map for " file-type)))))
+          (str "Invalid map for " file-type))
+
+      (is (string/includes?
+           (validation-config-error-for "{:start-of-week 7\n:start-of-week 8}" schema)
+           "The key ':start-of-week' is assigned multiple times")))))
+
+(deftest detect-deprecations
+  (is (re-find
+       #":editor/command-trigger.*Will"
+       (deprecation-warnings-for "{:preferred-workflow :todo :editor/command-trigger \",\"}"))
+      "Warning when there is a deprecation")
+
+  (is (= "" (deprecation-warnings-for "{:preferred-workflow :todo}"))
+      "No warning when there is no deprecation"))

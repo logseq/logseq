@@ -9,7 +9,7 @@
             ["semver" :as semver]
             ["os" :as os]
             ["fs" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             ["electron" :refer [ipcMain app autoUpdater]]))
 
 (def *update-ready-to-install (atom nil))
@@ -61,7 +61,7 @@
              artifact (when-let [remote-version (and artifact (re-find #"\d+\.\d+\.\d+" (:url artifact)))]
                         (when (and (. semver valid remote-version)
                                    (. semver lt electron-version remote-version)) artifact))
-             
+
              url (if-not artifact (do (emit "update-not-available" nil) (throw nil)) (:url artifact))
              _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
                ;; start download FIXME: user's preference about auto download
@@ -75,8 +75,8 @@
                                 body (.-body dl-res)
                                 start-at (.now js/Date)
                                 *downloaded (atom 0)
-                                dest-basename (path/basename url)
-                                tmp-dest-file (path/join (os/tmpdir) (str dest-basename ".pending"))
+                                dest-basename (node-path/basename url)
+                                tmp-dest-file (node-path/join (os/tmpdir) (str dest-basename ".pending"))
                                 dest-file (.createWriteStream fs tmp-dest-file)]
                             (doto body
                               (.on "data" (fn [chunk]

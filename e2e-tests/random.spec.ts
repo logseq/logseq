@@ -128,7 +128,7 @@ test.skip('Random editor operations', async ({ page, block }) => {
         await page.keyboard.press('Backspace', { delay: 50 })
       }
     } else if (op === "delete") {
-      // move text-cursor to begining
+      // move text-cursor to beginning
       // then press delete
       // then move text-cursor to the end
       await block.activeEditing(target)

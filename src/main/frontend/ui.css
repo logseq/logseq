@@ -14,11 +14,11 @@
         justify-content: space-between;
 
         small {
-          visibility: hidden;
+          visibility: visible;
           cursor: help;
 
           svg {
-            opacity: .5;
+            opacity: .3;
           }
 
           &:hover svg {
@@ -26,11 +26,16 @@
           }
         }
       }
-
+      
       &:hover, &.chosen {
         .has-help small {
           visibility: visible;
         }
+      }
+
+      &:not(.chosen):hover {
+        background-color: unset !important;
+        color: var(--ls-primary-text-color);
       }
     }
   }
@@ -107,7 +112,7 @@
     .panel-content {
       overflow-y: auto;
       overflow-x: hidden;
-      width: calc(94vw - 2rem);
+      width: calc(96vw - 2rem);
       max-height: 89vh;
       padding: 2rem 1.5rem;
 
@@ -133,7 +138,7 @@
       }
 
       @screen md {
-          min-width: 720px;
+        min-width: 720px;
       }
     }
   }
@@ -141,7 +146,12 @@
   &-close {
     @apply text-gray-400 hover:text-gray-500
     focus:outline-none focus:text-gray-500
-    transition ease-in-out duration-150;
+    transition ease-in-out duration-150 opacity-60
+    hover:opacity-100;
+
+    &-wrap {
+      @apply absolute top-0 right-0 pt-2 pr-2;
+    }
   }
 
   &[label="ls-modal-align-center"] {
@@ -154,78 +164,77 @@
   }
 
   &[label="diff__cp"] {
-      .panel-content {
-          padding: 2rem 1rem;
+    .panel-content {
+      padding: 2rem 1rem;
 
-          @screen sm {
-              padding: 2rem;
-          }
+      @screen sm {
+        padding: 2rem;
       }
+    }
   }
 
   &[label="flashcards__cp"] {
-      .panel-content {
-          padding: 2rem 0;
+    .panel-content {
+      padding: 2rem 0;
 
-          @screen sm {
-              padding: 2rem 2rem;
-          }
+      @screen sm {
+        padding: 2rem 2rem;
       }
+    }
   }
 
   &[label="instruction__cp"] {
 
-      .ui__modal-panel {
-          height: 90%;
-      }
+    .ui__modal-panel {
+      height: 90%;
+    }
 
-      .panel-content {
-          height: 100%;
-      }
+    .panel-content {
+      height: 100%;
+    }
   }
 }
 
 .instruction {
-    height: 40%;
+  height: 40%;
 
-    @screen sm {
-        height: 70%;
-    }
+  @screen sm {
+    height: 70%;
+  }
 }
 
 html.is-native-android,
 html.is-native-iphone,
-html.is-native-iphone-without-notch
-{
-    .references  {
+html.is-native-iphone-without-notch {
+  .references {
+    .blocks-container {
+      transform: translateX(-8px);
+      width: 104%;
+    }
+  }
+
+  .ls-card {
+    min-height: 65vh;
+  }
+
+  .ui__modal {
+    &[label="flashcards__cp"] {
+      .panel-content {
+        padding: 2rem 1rem 1rem;
+        width: 90vw;
+
+        .cards-review {
+          padding-left: 0px;
+          padding-right: 0px;
+        }
+
         .blocks-container {
-            transform: translateX(-8px);
-            width: 104%;
+          transform: translateX(-7px);
+          width: 103%;
         }
+      }
     }
-
-    .ls-card {
-        min-height: 65vh;
-    }
-
-    .ui__modal {
-        &[label="flashcards__cp"] {
-            .panel-content {
-                padding: 2rem 1rem 1rem;
-                width: 90vw;
-
-                .cards-review {
-                    padding-left: 0px;
-                    padding-right: 0px;
-                }
-
-                .blocks-container {
-                    transform: translateX(-7px);
-                    width: 103%;
-                }
-            }
-        }
-    }
+  }
 }
 
 html.is-mobile {
@@ -241,12 +250,6 @@ html.is-mobile {
         padding-bottom: 0;
       }
     }
-  }
-
-  .ui__modal-panel .panel-content {
-    width: calc(98vw - 2rem);
-    max-width: var(--ls-main-content-max-width);
-    padding-top: 24px;
   }
 }
 
@@ -304,7 +307,7 @@ html.is-mobile {
   }
 
   &[intent='border-link'] {
-      border: 1px solid;
+    border: 1px solid;
   }
 
   &.p-1 {
@@ -398,4 +401,8 @@ html.is-mobile {
     background: var(--ls-primary-background-color);
     content: " ";
   }
+}
+
+.ui__radio-list {
+  @apply grid grid-flow-col gap-2;
 }

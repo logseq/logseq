@@ -7,7 +7,7 @@
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             ["os" :as os]))
 
 (def log-error (partial logger/error "[Git]"))
@@ -17,7 +17,7 @@
   (when-let [graph-path (some-> (state/get-graph-path)
                                 (string/replace "/" "_")
                                 (string/replace ":" "comma"))]
-    (let [dir (.join path (.homedir os) ".logseq" "git" graph-path ".git")]
+    (let [dir (.join node-path (.homedir os) ".logseq" "git" graph-path ".git")]
       (. fs ensureDirSync dir)
       dir)))
 
@@ -44,7 +44,7 @@
 (defn git-dir-exists?
   []
   (try
-    (let [p (.join path (state/get-graph-path) ".git")]
+    (let [p (.join node-path (state/get-graph-path) ".git")]
       (.isDirectory (fs/statSync p)))
     (catch :default _e
       nil)))
@@ -56,7 +56,7 @@
           _ (when (string/blank? graph-path)
               (utils/send-to-renderer "getCurrentGraph" {})
               (throw (js/Error. "Empty graph path")))
-          p (.join path graph-path ".git")]
+          p (.join node-path graph-path ".git")]
       (when (and (fs/existsSync p)
                  (.isFile (fs/statSync p)))
         (let [content (string/trim (.toString (fs/readFileSync p)))
@@ -98,7 +98,9 @@
 
 (defn commit!
   [message]
-  (run-git! #js ["commit" "-m" message]))
+  (p/do!
+   (run-git! #js ["config" "core.quotepath" "false"])
+   (run-git! #js ["commit" "-m" message])))
 
 (defn add-all-and-commit!
   ([]
@@ -119,6 +121,10 @@
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
                                                              :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")})))))))))
+
+(defn short-status!
+  []
+  (run-git! #js ["status" "--porcelain"]))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?

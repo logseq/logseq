@@ -1,7 +1,8 @@
 (ns logseq.tasks.dev
   "Tasks for general development. For desktop or mobile development see their
   namespaces"
-  (:require [babashka.tasks :refer [shell]]
+  (:require [babashka.process :refer [shell]]
+            [babashka.fs :as fs]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.edn :as edn]))
@@ -16,7 +17,7 @@
   (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
                "bb lint:carve"
                "bb lint:large-vars"
-               "bb lang:invalid-translations"
+               "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
     (shell cmd)))
@@ -35,3 +36,14 @@
     (let [config (with-out-str
                    (pp/pprint (edn/read-string (:out (shell {:out :string} "node ./static/gen-malli-kondo-config.js")))))]
       (spit config-edn config))))
+
+(defn build-publishing
+  "Builds release publishing asset when files have changed"
+  [& _args]
+  (if-let [_files (and (not (System/getenv "SKIP_ASSET"))
+                       (seq (set (fs/modified-since (fs/file "static/js/publishing/main.js")
+                                                    (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
+    (do
+      (println "Building publishing js asset...")
+      (shell "clojure -M:cljs release publishing"))
+    (println "Publishing js asset is up to date")))

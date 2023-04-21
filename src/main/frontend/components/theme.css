@@ -48,6 +48,7 @@ html {
   border: none;
   position: relative;
   top: -1px;
+  margin-right: 2px;
 }
 
 .form-checkbox:hover {

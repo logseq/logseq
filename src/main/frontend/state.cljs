@@ -92,8 +92,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/custom-query-components            {}
-     :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -199,6 +197,7 @@
      :plugin/marketplace-stats              nil
      :plugin/installing                     nil
      :plugin/active-readme                  nil
+     :plugin/updates-auto-checking?         false
      :plugin/updates-pending                {}
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
@@ -207,6 +206,7 @@
      :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
+     :pdf/system-win?                       false
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
@@ -217,15 +217,12 @@
      ;; graph -> state
      :graph/parsing-state                   {}
 
-     ;; copied blocks
-     :copy/blocks                           {:copy/content nil
-                                             :copy/graph nil
-                                             :copy/blocks nil}
-
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                 #{})
+     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                {})
      :date-picker/date                      nil
 
      :youtube/players                       {}
@@ -277,7 +274,10 @@
      :graph/importing-state                 {}
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)})))
+     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
+     :whiteboard/last-persisted-at          {}
+     :whiteboard/pending-tx-data            {}
+     :history/page-only-mode?               false})))
 
 ;; Block ast state
 ;; ===============
@@ -310,6 +310,7 @@
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
+   :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
    ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
@@ -324,12 +325,13 @@
   "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
-  (apply merge-with
+  (->> configs
+       (filter map?)
+       (apply merge-with
          (fn merge-config [current new]
            (if (and (map? current) (map? new))
              (merge current new)
-             new))
-         configs))
+             new)))))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -495,7 +497,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
+    (or (when (int? days) days) 7)))
 
 (defn get-start-of-week
   []
@@ -572,7 +574,8 @@ Similar to re-frame subscriptions"
 (defn enable-fold-button-right?
   []
   (let [_ (sub :ui/viewport)]
-    (util/md-breakpoint?)))
+    (and (util/mobile?)
+         (util/sm-breakpoint?))))
 
 (defn enable-journals?
   ([]
@@ -594,13 +597,7 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (and
-    ((resolve 'frontend.handler.user/alpha-or-beta-user?)) ;; using resolve to avoid circular dependency
-    (:feature/enable-whiteboards? (sub-config repo)))))
-
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list? (sub-config)))))
+   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
 (defn enable-git-auto-push?
   [repo]
@@ -636,9 +633,9 @@ Similar to re-frame subscriptions"
        (distinct)))
 
 (defn sub-block-selected?
-  [block-uuid]
+  [container-id block-uuid]
   (rum/react
-   (rum/derived-atom [state] [::select-block block-uuid]
+   (rum/derived-atom [state] [::select-block container-id block-uuid]
      (fn [state]
        (contains? (set (get-selected-block-ids (:selection/blocks state)))
                   block-uuid)))))
@@ -672,6 +669,10 @@ Similar to re-frame subscriptions"
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
+
+(defn auto-expand-block-refs?
+  []
+  (:ui/auto-expand-block-refs? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -730,9 +731,13 @@ Similar to re-frame subscriptions"
     (get-in (get-route-match)
             [:path-params :name])))
 
+(defn whiteboard-route?
+  []
+  (= :whiteboard (get-current-route)))
+
 (defn get-current-whiteboard
   []
-  (when (= :whiteboard (get-current-route))
+  (when (whiteboard-route?)
     (get-in (get-route-match)
             [:path-params :name])))
 
@@ -741,10 +746,10 @@ Similar to re-frame subscriptions"
   (get-in (get-route-match) [:query-params :p]))
 
 (defn get-current-repo
+  "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+      "local"))
 
 (defn get-remote-graphs
   []
@@ -1108,7 +1113,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (cursor/pos (gdom/getElement edit-input-id))})))
+       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+                            (count (:block/content edit-block)))})))
 
 (defn clear-edit!
   []
@@ -1241,22 +1247,6 @@ Similar to re-frame subscriptions"
   [value]
   (when value
     (set-state! :journals-length value)))
-
-(defn add-custom-query-component!
-  [query-string component]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (assoc m query-string component))))
-
-(defn remove-custom-query-component!
-  [query-string]
-  (update-state! :ui/custom-query-components
-                 (fn [m]
-                   (dissoc m query-string))))
-
-(defn get-custom-query-components
-  []
-  (vals (get @state :ui/custom-query-components)))
 
 (defn save-scroll-position!
   ([value]
@@ -1631,25 +1621,13 @@ Similar to re-frame subscriptions"
      ;; Is this a good idea to put whiteboard check here?
      (not (get-edit-input-id)))))
 
-(defn whiteboard-page-idle?
-  "Check if whiteboard page is idle.
-   - when current tool is select and idle
-     - and whiteboard page is updated longer than 1000 seconds
-   - when current tool is other tool and idle
-     - and whiteboard page is updated longer than 3000 seconds"
-  [repo whiteboard-page & {:keys [select-idle-ms tool-idle-ms]
-                           :or {select-idle-ms 1000
-                                tool-idle-ms 3000}}]
+(defn whiteboard-idle?
+  "Check if whiteboard is idle."
+  [repo]
   (when repo
-    (if-let [tldraw-app (active-tldraw-app)]
-      (let [last-time (:block/updated-at whiteboard-page)
-            now (util/time-ms)
-            elapsed (- now last-time)
-            select-idle (.. tldraw-app (isIn "select.idle"))
-            tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
-        (or (and select-idle (>= elapsed select-idle-ms))
-            (and (not select-idle) tool-idle (>= elapsed tool-idle-ms))))
-      true)))
+    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
+                              (- (util/time-ms) 10000)))
+        3000)))
 
 (defn set-nfs-refreshing!
   [value]
@@ -1729,16 +1707,6 @@ Similar to re-frame subscriptions"
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
 
-(defn get-copied-blocks
-  []
-  (:copy/blocks @state))
-
-(defn set-copied-blocks!
-  [content blocks]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
-                            :copy/blocks blocks}))
-
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
@@ -1757,6 +1725,13 @@ Similar to re-frame subscriptions"
                    #(f % k))
     (storage/set :copy/export-block-text-remove-options
                  (get-export-block-text-remove-options))))
+
+(defn get-export-block-text-other-options []
+  (:copy/export-block-text-other-options @state))
+
+(defn update-export-block-text-other-options!
+  [k v]
+  (update-state! :copy/export-block-text-other-options #(assoc % k v)))
 
 (defn set-editor-args!
   [args]
@@ -1862,8 +1837,7 @@ Similar to re-frame subscriptions"
 
 (defn feature-http-server-enabled?
   []
-  (and (developer-mode?)
-       (storage/get ::storage-spec/http-server-enabled)))
+  (boolean (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]
@@ -1876,7 +1850,7 @@ Similar to re-frame subscriptions"
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (= (boolean theme?) (:theme %))))
+           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
@@ -1886,17 +1860,18 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
-(defn consume-updates-coming-plugin
+(defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
-    (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
+    (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
+      (println "Updates: consumed pending - " id)
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
           (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
           (swap! state update :plugin/updates-coming dissoc id))
         (swap! state update :plugin/updates-coming assoc id payload))
-      (pub-event! [:plugin/consume-updates id pending? updated?]))))
+      (pub-event! [:plugin/consume-updates id prev-pending? updated?]))))
 
 (defn coming-update-new-version?
   [pkg]
@@ -1908,9 +1883,9 @@ Similar to re-frame subscriptions"
     (coming-update-new-version? pkg)))
 
 (defn all-available-coming-updates
-  []
-  (when-let [updates (vals (:plugin/updates-coming @state))]
-    (filterv #(coming-update-new-version? %) updates)))
+  ([] (all-available-coming-updates (:plugin/updates-coming @state)))
+  ([updates] (when-let [updates (vals updates)]
+               (filterv #(coming-update-new-version? %) updates))))
 
 (defn get-next-selected-coming-update
   []
@@ -1930,6 +1905,7 @@ Similar to re-frame subscriptions"
 (defn reset-all-updates-state
   []
   (swap! state assoc
+         :plugin/updates-auto-checking?         false
          :plugin/updates-pending                {}
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))
@@ -2087,6 +2063,10 @@ Similar to re-frame subscriptions"
   []
   (:pdf/current @state))
 
+(defn nfs-user-granted?
+  [repo]
+  (get-in @state [:nfs/user-granted? repo]))
+
 (defn set-current-pdf!
   [inflated-file]
   (let [settle-file! #(set-state! :pdf/current inflated-file)]
@@ -2112,3 +2092,7 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn clear-user-info!
+  []
+  (storage/remove :user-groups))

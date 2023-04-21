@@ -74,60 +74,62 @@ Options available:
 
 * :new? - Boolean which indicates if this file already exists. Default is true.
 * :delete-blocks-fn - Optional fn which is called with the new page, file and existing block uuids
-  which may be referenced elsewhere.
+  which may be referenced elsewhere. Used to delete the existing blocks before saving the new ones.
+   Implemented in file-common-handler/validate-and-get-blocks-to-delete for IoC
 * :skip-db-transact? - Boolean which skips transacting in order to batch transactions. Default is false
 * :extract-options - Options map to pass to extract/extract"
-  [conn file content {:keys [new? delete-blocks-fn extract-options skip-db-transact?]
-                      :or {new? true
-                           delete-blocks-fn (constantly [])
-                           skip-db-transact? false}
-                      :as options}]
-  (let [format (gp-util/get-format file)
-        file-content [{:file/path file}]
-        {:keys [tx ast]}
-        (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
-                                       :date-formatter "MMM do, yyyy"
-                                       :supported-formats (gp-config/supported-formats)
-                                       :uri-encoded? false
-                                       :filename-format :legacy}
-                                      extract-options
-                                      {:db @conn})
-              {:keys [pages blocks ast]
-               :or   {pages []
-                      blocks []
-                      ast []}}
-              (cond (contains? gp-config/mldoc-support-formats format)
-                (extract/extract file content extract-options')
+  ([conn file content] (parse-file conn file content {}))
+  ([conn file content {:keys [new? delete-blocks-fn extract-options skip-db-transact?]
+                       :or {new? true
+                            delete-blocks-fn (constantly [])
+                            skip-db-transact? false}
+                       :as options}]
+   (let [format (gp-util/get-format file)
+         file-content [{:file/path file}]
+         {:keys [tx ast]}
+         (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+                                        :date-formatter "MMM do, yyyy"
+                                        :supported-formats (gp-config/supported-formats)
+                                        :uri-encoded? false
+                                        :filename-format :legacy}
+                                       extract-options
+                                       {:db @conn})
+               {:keys [pages blocks ast]
+                :or   {pages []
+                       blocks []
+                       ast []}}
+               (cond (contains? gp-config/mldoc-support-formats format)
+                 (extract/extract file content extract-options')
 
-                (gp-config/whiteboard? file)
-                (extract/extract-whiteboard-edn file content extract-options')
+                 (gp-config/whiteboard? file)
+                 (extract/extract-whiteboard-edn file content extract-options')
 
-                :else nil)
-              block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-              delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
-              block-refs-ids (->> (mapcat :block/refs blocks)
-                                  (filter (fn [ref] (and (vector? ref)
-                                                         (= :block/uuid (first ref)))))
-                                  (map (fn [ref] {:block/uuid (second ref)}))
-                                  (seq))
-              ;; To prevent "unique constraint" on datascript
-              block-ids (set/union (set block-ids) (set block-refs-ids))
-              pages (extract/with-ref-pages pages blocks)
-              pages-index (map #(select-keys % [:block/name]) pages)]
-              ;; does order matter?
-          {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
-           :ast ast})
-        tx (concat tx [(cond-> {:file/path file
-                                :file/content content}
-                         new?
-                         ;; TODO: use file system timestamp?
-                         (assoc :file/created-at (date-time-util/time-ms)))])
-        tx' (gp-util/fast-remove-nils tx)
-        result (if skip-db-transact?
-                 tx'
-                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
-    {:tx result
-     :ast ast}))
+                 :else nil)
+               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+               delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
+               block-refs-ids (->> (mapcat :block/refs blocks)
+                                   (filter (fn [ref] (and (vector? ref)
+                                                          (= :block/uuid (first ref)))))
+                                   (map (fn [ref] {:block/uuid (second ref)}))
+                                   (seq))
+               ;; To prevent "unique constraint" on datascript
+               block-ids (set/union (set block-ids) (set block-refs-ids))
+               pages (extract/with-ref-pages pages blocks)
+               pages-index (map #(select-keys % [:block/name]) pages)]
+           ;; does order matter?
+           {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
+            :ast ast})
+         tx (concat tx [(cond-> {:file/path file
+                                 :file/content content}
+                                new?
+                                ;; TODO: use file system timestamp?
+                                (assoc :file/created-at (date-time-util/time-ms)))])
+         tx' (gp-util/fast-remove-nils tx)
+         result (if skip-db-transact?
+                  tx'
+                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+     {:tx result
+      :ast ast})))
 
 (defn filter-files
   "Filters files in preparation for parsing. Only includes files that are

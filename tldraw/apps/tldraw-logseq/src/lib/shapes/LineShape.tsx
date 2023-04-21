@@ -77,7 +77,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     const labelSize =
       label || isEditing
         ? getTextLabelSize(
-            label,
+            label || "Enter text",
             { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
             6
           )
@@ -99,7 +99,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       [label]
     )
     return (
-      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }} className="tl-line-container">
         <TextLabel
           font={font}
           text={label}

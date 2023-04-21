@@ -2,11 +2,14 @@
   "Adapters related to tldraw"
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
+            [frontend.components.export :as export]
             [frontend.components.page :as page]
+            [frontend.config :as config]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.history :as history]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -80,16 +83,20 @@
                        :BacklinksCount references-count
                        :BlockReference block-reference})
 
+(def undo (fn [] (history/undo! nil)))
+(def redo (fn [] (history/redo! nil)))
 (defn get-tldraw-handlers [current-whiteboard-name]
   {:search search-handler
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
+   :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
@@ -117,16 +124,20 @@
   (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
         data (whiteboard-handler/page-name->tldr! page-name)
         [loaded-app set-loaded-app] (rum/use-state nil)
-        on-mount (fn [tln]
-                   (when-let [^js api (gobj/get tln "api")]
-                     (p/then (when populate-onboarding?
-                               (whiteboard-handler/populate-onboarding-whiteboard api))
-                             #(do (state/focus-whiteboard-shape tln block-id)
-                                  (set-loaded-app tln)))))]
-    (rum/use-effect! (fn [] (when (and loaded-app block-id)
-                              (state/focus-whiteboard-shape loaded-app block-id)) #())
+        on-mount (fn [^js tln]
+                   (when tln
+                     (set! (.-appUndo tln) undo)
+                     (set! (.-appRedo tln) redo)
+                     (when-let [^js api (gobj/get tln "api")]
+                      (p/then (when populate-onboarding?
+                                (whiteboard-handler/populate-onboarding-whiteboard api))
+                              #(do (state/focus-whiteboard-shape tln block-id)
+                                   (set-loaded-app tln))))))]
+    (rum/use-effect! (fn []
+                       (when (and loaded-app block-id)
+                         (state/focus-whiteboard-shape loaded-app block-id))
+                       #())
                      [block-id loaded-app])
-
     (when data
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
@@ -144,7 +155,9 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :onPersist (fn [app]
-                             (let [document (gobj/get app "serialized")]
-                               (whiteboard-handler/transact-tldr! page-name document)))
+                :readOnly config/publishing?
+                :onPersist (fn [app info]
+                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                             (util/profile "tldraw persist"
+                                           (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
                 :model data})])))

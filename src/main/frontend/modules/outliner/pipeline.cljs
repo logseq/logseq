@@ -63,7 +63,7 @@
   (let [tx-meta (:tx-meta tx-report)]
     (when (and (not (:from-disk? tx-meta))
                (not (:new-graph? tx-meta))
-               (not (:compute-new-refs? tx-meta)))
+               (not (:replace? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
             refs-tx (util/profile
@@ -73,7 +73,7 @@
             tx (util/concat-without-nil truncate-refs-tx refs-tx)
             tx-report' (if (seq tx)
                          (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
-                                                                              :compute-new-refs? true}))]
+                                                                              :replace? true}))]
                            ;; merge
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)

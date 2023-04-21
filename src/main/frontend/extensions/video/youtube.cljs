@@ -122,16 +122,22 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
   (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"
         reg-number #"^\d+$"
         timestamp (str timestamp)
-        total-seconds (-> (re-matches reg-number timestamp)
-                          util/safe-parse-int)
+        total-seconds (some-> (re-matches reg-number timestamp)
+                              util/safe-parse-int)
         [_ hours minutes seconds] (re-matches reg timestamp)
-        [hours minutes seconds] (map util/safe-parse-int [hours minutes seconds])]
+        [hours minutes seconds] (map util/safe-parse-int (remove nil? [hours minutes seconds]))]
     (cond
       total-seconds
       total-seconds
 
       (and minutes seconds)
       (+ (* 3600 hours) (* 60 minutes) seconds)
+
+      minutes
+      (+ (* 3600 hours) (* 60 minutes))
+
+      hours
+      (* 3600 hours)
 
       :else
       nil)))

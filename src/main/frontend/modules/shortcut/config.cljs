@@ -15,6 +15,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -170,7 +171,7 @@
                        :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
-                                             :fn      (fn [_state e] ((paste-handler/editor-on-paste! nil true) e))}
+                                             :fn      paste-handler/editor-on-paste-raw!}
 
    :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}
@@ -239,7 +240,7 @@
    :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}
 
-   :editor/redo                    {:binding ["shift+mod+z" "mod+y"]
+   :editor/redo                    {:binding ["mod+shift+z" "mod+y"]
                                     :fn      history/redo!}
 
    :editor/insert-link             {:binding "mod+l"
@@ -256,6 +257,8 @@
 
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
+
+   :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
 
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
@@ -313,7 +316,7 @@
                                                 (editor-handler/escape-editing)
                                                 (state/pub-event! [:modal/command-palette]))}
 
-   :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
+   :graph/export-as-html           {:fn #(export-handler/download-repo-as-html!
                                           (state/get-current-repo))
                                     :binding false}
 
@@ -413,6 +416,10 @@
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/copy-current-file}
 
+   :editor/copy-page-url            {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/copy-page-url}
+
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
@@ -437,6 +444,7 @@
                                      :fn      ui-handler/toggle-cards!}
 
    :git/commit                      {:binding "mod+g c"
+                                     :inactive (not (util/electron?))
                                      :fn      commit/show-commit-modal!}
 
    :dev/show-block-data            {:binding false
@@ -572,8 +580,6 @@
                           :editor/copy
                           :editor/copy-text
                           :editor/cut
-                          :editor/undo
-                          :editor/redo
                           :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
@@ -583,6 +589,9 @@
                           :editor/select-all-blocks
                           :editor/zoom-in
                           :editor/zoom-out
+                          :editor/toggle-undo-redo-mode
+                          :editor/undo
+                          :editor/redo
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
@@ -625,6 +634,7 @@
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
+                          :editor/copy-page-url
                           :editor/new-whiteboard
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
@@ -737,6 +747,7 @@
    :shortcut.category/toggle
    [:ui/toggle-help
     :editor/toggle-open-blocks
+    :editor/toggle-undo-redo-mode
     :ui/toggle-wide-mode
     :ui/toggle-cards
     :ui/toggle-document-mode
@@ -768,6 +779,7 @@
     :editor/insert-youtube-timestamp
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
+    :editor/copy-page-url
     :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next

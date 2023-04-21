@@ -7,6 +7,7 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [datascript.core :as d]
             [shadow.resource :as rc]
+            [clojure.set :as set]
             [clojure.edn :as edn]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -161,3 +162,27 @@ foo:: bar"}])
            (try (model/get-block-children-ids-in-db db #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
                 (catch :default e
                   (ex-message e)))))))
+
+(deftest get-property-values
+  (load-test-files [{:file/path "pages/Feature.md"
+                     :file/content "type:: [[Class]]"}
+                    {:file/path "pages/Class.md"
+                     :file/content "type:: https://schema.org/Class\npublic:: true"}
+                    {:file/path "pages/DatePicker.md"
+                     :file/content "type:: #Feature, #Command"}
+                    {:file/path "pages/Whiteboard___Tool___Eraser.md"
+                     :file/content "type:: [[Tool]], [[Whiteboard/Object]]"}])
+
+  (let [type-values (set (model/get-property-values :type))
+        public-values (set (model/get-property-values :public))]
+
+    (is (contains? type-values "[[Class]]")
+        "Property value from single page-ref is wrapped in square brackets")
+    (is (= #{} (set/difference #{"[[Tool]]" "[[Whiteboard/Object]]"} type-values))
+        "Property values from multiple page-refs are wrapped in square brackets")
+    (is (= #{} (set/difference #{"#Feature" "#Command"} type-values))
+        "Property values from multiple tags have hashtags")
+    (is (contains? type-values "https://schema.org/Class")
+        "Property value text is not modified")
+    (is (contains? public-values "true")
+        "Property value that is not text is not modified")))

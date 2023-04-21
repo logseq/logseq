@@ -1,6 +1,6 @@
 (ns electron.search
   "Provides both page level and block level index"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
@@ -113,7 +113,7 @@
 (defn get-search-dir
   []
   (let [path (.getPath ^object app "userData")]
-    (path/join path "search")))
+    (node-path/join path "search")))
 
 (defn ensure-search-dir!
   []
@@ -123,29 +123,29 @@
   [db-name]
   (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
-    [db-name (path/join search-dir db-name)]))
+    [db-name (node-path/join search-dir db-name)]))
 
 (defn get-db-path
   "Search cache paths"
   [db-name]
   (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
-    [db-name (path/join search-dir db-name)]))
+    [db-name (node-path/join search-dir db-name)]))
 
 (defn open-db!
   [db-name]
-    (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)]
-      (try (let [db (sqlite3 db-full-path nil)]
-             (create-blocks-table! db)
-             (create-blocks-fts-table! db)
-             (create-pages-table! db)
-             (create-pages-fts-table! db)
-             (add-blocks-fts-triggers! db)
-             (add-pages-fts-triggers! db)
-             (swap! databases assoc db-sanitized-name db))
-           (catch :default e
-             (logger/error (str e ": " db-name))
-             (fs/unlinkSync db-full-path)))))
+  (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)]
+    (try (let [db (sqlite3 db-full-path nil)]
+           (create-blocks-table! db)
+           (create-blocks-fts-table! db)
+           (create-pages-table! db)
+           (create-pages-fts-table! db)
+           (add-blocks-fts-triggers! db)
+           (add-pages-fts-triggers! db)
+           (swap! databases assoc db-sanitized-name db))
+         (catch :default e
+           (logger/error (str e ": " db-name))
+           (fs/unlinkSync db-full-path)))))
 
 (defn open-dbs!
   []
@@ -246,7 +246,7 @@
   (medley/distinct-by f (seq col)))
 
 (defn search-blocks
-  ":page - the page to specificly search on"
+  ":page - the page to specifically search on"
   [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
@@ -263,9 +263,9 @@
                                " content like ? limit ?")
             matched-result (->>
                             (map
-                              (fn [match-input]
-                                (search-blocks-aux database match-sql match-input page limit))
-                              match-inputs)
+                             (fn [match-input]
+                               (search-blocks-aux database match-sql match-input page limit))
+                             match-inputs)
                             (apply concat))]
         (->>
          (concat matched-result
@@ -328,9 +328,9 @@
                                " content like ? limit ?")
             matched-result (->>
                             (map
-                              (fn [match-input]
-                                (search-pages-aux database match-sql match-input limit))
-                              match-inputs)
+                             (fn [match-input]
+                               (search-pages-aux database match-sql match-input limit))
+                             match-inputs)
                             (apply concat))]
         (->>
          (concat matched-result

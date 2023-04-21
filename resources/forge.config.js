@@ -6,9 +6,9 @@ module.exports = {
     icon: './icons/logseq_big_sur.icns',
     protocols: [
       {
-        "protocol":"logseq",
-        "name":"logseq",
-        "schemes":"logseq"
+        "protocol": "logseq",
+        "name": "logseq",
+        "schemes": "logseq"
       }
     ],
     osxSign: {

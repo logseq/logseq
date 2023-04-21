@@ -1,0 +1,55 @@
+.cp__query-builder {
+    @apply grid auto-rows-max gap-2;
+
+    &-filter {
+        @apply flex flex-row items-center gap-1;
+    }
+
+    .cp__select-main {
+        width: fit-content;
+        margin: 0;
+    }
+
+    .between-date {
+        min-width: 36em;
+        padding: 1em;
+    }
+
+    .cp__select .input-wrap {
+        height: auto;
+        min-width: 14em;
+    }
+
+    .cp__select .input-wrap input {
+        border: none;
+    }
+
+    .cp__select-input {
+        padding: 0.5em 1em;
+    }
+
+    .clauses-group {
+        @apply flex flex-row gap-2 flex-wrap items-center text-sm;
+    }
+
+    a.query-clause, a.add-filter {
+        color: var(--ls-primary-text-color);
+    }
+
+    a.query-clause:hover, a.add-filter {
+        color: var(--ls-secondary-text-color);
+    }
+
+    .filter-item select {
+        border: none;
+    }
+
+    .clause-bracket {
+        @apply text-4xl ml-1 font-thin opacity-30;
+        font-family: "Inter";
+    }
+
+    .query-clause-btn {
+        border-color: var(--ls-border-color);
+    }
+}

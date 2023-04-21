@@ -268,7 +268,8 @@
 
     ;; advanced
 
-    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
+    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
+               [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
@@ -325,8 +326,9 @@
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (when-not backward-truncate-number
-                         (or last-pattern (state/get-editor-command-trigger)))
+    (let [last-pattern (when-not (= last-pattern :skip-check)
+                         (when-not backward-truncate-number
+                          (or last-pattern (state/get-editor-command-trigger))))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
@@ -666,6 +668,9 @@
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
+
+(defmethod handle-step :editor/exit [[_]]
+  (state/clear-edit!))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))

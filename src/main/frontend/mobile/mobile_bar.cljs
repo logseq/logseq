@@ -36,7 +36,7 @@
   [parent-id]
   (let [callback (fn [event]
                    (util/stop event)
-                   (let [target (.-parentNode (.-target event))]
+                   (let [target (gdom/getElement "mobile-toolbar-timestamp-submenu")]
                      (dom/remove-class! target "show-submenu")))
         command-cp (fn [action description]
                      [:button
@@ -48,10 +48,10 @@
      [:button.bottom-action
       {:on-mouse-down (fn [event]
                         (util/stop event)
-                        (let [target (gdom/getNextElementSibling (gdom/getParentElement (.-target event)))]
+                        (let [target (gdom/getElement "mobile-toolbar-timestamp-submenu")]
                           (dom/add-class! target "show-submenu")))}
       (ui/icon "calendar" {:size ui/icon-size})]
-     [:div.submenu.fixed.left-0.bottom-0.hidden.w-full.flex-row.justify-evenly.items-center
+     [:div#mobile-toolbar-timestamp-submenu.submenu
       {:style {:bottom @util/keyboard-height}}
       (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]
                      (commands/simple-insert! parent-id today {}))

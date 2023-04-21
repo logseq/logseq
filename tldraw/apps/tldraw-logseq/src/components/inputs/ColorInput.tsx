@@ -1,9 +1,10 @@
 import type { Side } from '@radix-ui/react-popper'
 import * as Slider from '@radix-ui/react-slider'
-import { Color } from '@tldraw/core'
+import { Color, isBuiltInColor, debounce } from '@tldraw/core'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
 import { Tooltip } from '../Tooltip'
+import React from 'react'
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -33,6 +34,18 @@ export function ColorInput({
     )
   }
 
+  const handleChangeDebounced = React.useMemo(() => {
+    let latestValue = ''
+
+    const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
+      setColor(latestValue)
+    }
+
+    return debounce(handler, 100, e => {
+      latestValue = e.target.value
+    })
+  }, [])
+
   return (
     <PopoverButton
       {...rest}
@@ -56,6 +69,25 @@ export function ColorInput({
               {renderColor(value)}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center tl-custom-color">
+          <div className={`tl-color-drip m-1 mr-3 ${!isBuiltInColor(color) ? 'active' : ''}`}>
+            <div className="color-input-wrapper tl-color-bg">
+              <input
+                className="color-input cursor-pointer"
+                id="tl-custom-color-input"
+                type="color"
+                value={color}
+                onChange={handleChangeDebounced}
+                style={{ opacity: isBuiltInColor(color) ? 0 : 1 }}
+                {...rest}
+              />
+            </div>
+          </div>
+          <label for="tl-custom-color-input" className="cursor-pointer">
+            Select custom color
+          </label>
         </div>
 
         {setOpacity && (

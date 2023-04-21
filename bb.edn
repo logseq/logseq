@@ -31,6 +31,16 @@
   dev:app-watch
   logseq.tasks.dev.mobile/app-watch
 
+  dev:build-publishing
+  logseq.tasks.dev/build-publishing
+
+  dev:publishing
+  {:depends [dev:build-publishing]
+   :doc "Build publishing spa app given graph and output dirs"
+   :task (apply shell {:dir "scripts"}
+           "yarn -s nbb-logseq -cp src -m logseq.tasks.dev.publishing"
+           (into ["static"] *command-line-args*))}
+
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
 
@@ -69,6 +79,9 @@
   dev:validate-global-config-edn
   logseq.tasks.malli/validate-global-config-edn
 
+  dev:validate-ast
+  logseq.tasks.malli/validate-ast
+
   dev:lint
   logseq.tasks.dev/lint
 
@@ -99,8 +112,8 @@
   lang:duplicates
   logseq.tasks.lang/list-duplicates
 
-  lang:invalid-translations
-  logseq.tasks.lang/invalid-translations
+  lang:validate-translations
+  logseq.tasks.lang/validate-translations
 
   file-sync:integration-tests
   logseq.tasks.file-sync/integration-tests}
@@ -118,4 +131,4 @@
   {:paths ["src/main"]
    ;; Ignore namespaces that won't be helpful to document initially
    ;; e.g. frontend.components.onboarding -> "Onboarding fns"
-   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile)"}}}
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile|logseq.sdk)"}}}

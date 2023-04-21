@@ -11,6 +11,7 @@ import * as Separator from '@radix-ui/react-separator'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
+
   const undo = React.useCallback(() => {
     app.api.undo()
   }, [app])
@@ -28,17 +29,19 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   }, [app])
 
   return (
-    <div className="tl-action-bar">
-      <div className="tl-toolbar tl-history-bar">
-        <Button tooltip="Undo" onClick={undo}>
-          <TablerIcon name="arrow-back-up" />
-        </Button>
-        <Button tooltip="Redo" onClick={redo}>
-          <TablerIcon name="arrow-forward-up" />
-        </Button>
-      </div>
+    <div className="tl-action-bar" data-html2canvas-ignore="true">
+      {!app.readOnly && (
+        <div className="tl-toolbar tl-history-bar">
+          <Button tooltip="Undo" onClick={undo}>
+            <TablerIcon name="arrow-back-up" />
+          </Button>
+          <Button tooltip="Redo" onClick={redo}>
+            <TablerIcon name="arrow-forward-up" />
+          </Button>
+        </div>
+      )}
 
-      <div className="tl-toolbar tl-zoom-bar">
+      <div className={`tl-toolbar tl-zoom-bar ${app.readOnly ? '' : 'ml-4'}`}>
         <Button tooltip="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
