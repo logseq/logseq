@@ -2,7 +2,7 @@ import { TLMoveTool, TLSelectTool } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import type { Side } from '@radix-ui/react-popper'
 import { observer } from 'mobx-react-lite'
-import * as React from 'react'
+import type * as React from 'react'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 
@@ -11,19 +11,11 @@ export interface ToolButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
   icon: string | React.ReactNode
   tooltip: string
   tooltipSide?: Side
-  handleClick?: (e: React.MouseEvent<HTMLButtonElement>) => void
+  handleClick: (e: React.MouseEvent<HTMLButtonElement>) => void
 }
 
 export const ToolButton = observer(({ id, icon, tooltip, tooltipSide = "left", handleClick, ...props }: ToolButtonProps) => {
   const app = useApp()
-
-  const handleToolClick = React.useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      const tool = e.currentTarget.dataset.tool
-      if (tool) app.selectTool(tool)
-    },
-    []
-  )
 
   // Tool must exist
   const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
@@ -50,7 +42,7 @@ export const ToolButton = observer(({ id, icon, tooltip, tooltipSide = "left", h
       tooltip={tooltipContent}
       data-tool={id}
       data-selected={id === app.selectedTool.id}
-      onClick={handleClick || handleToolClick}
+      onClick={handleClick}
     >
       {typeof icon === 'string' ? <TablerIcon name={icon} /> : icon}
     </Button>

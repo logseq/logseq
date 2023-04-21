@@ -372,7 +372,7 @@ const GeometryAction = observer(() => {
 
   const handleSetGeometry = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     const type = e.currentTarget.dataset.tool
-    app.api.shiftShapes(type)
+    app.api.convertShapes(type)
   }, [])
 
   return (
