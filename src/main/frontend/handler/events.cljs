@@ -948,13 +948,6 @@
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
-(defmethod handle :editor/toggle-children-number-list [[_ block]]
-  (let [uuid (:block/uuid block)
-        number-list? (= (some-> block :block/properties :logseq.children-as) "number-list")]
-    (if number-list?
-      (editor-handler/remove-block-property! uuid :logseq.children-as)
-      (editor-handler/set-block-property! uuid :logseq.children-as "number-list"))))
-
 (defmethod handle :editor/toggle-own-number-list [[_ block]]
   (when block
     (if (editor-handler/own-order-number-list? block)
