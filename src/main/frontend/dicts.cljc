@@ -731,8 +731,6 @@
         :updater/new-version-install "Eine neue Version wurde heruntergeladen."
         :updater/quit-and-install "Neu starten, um zu installieren"
 
-        :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"}
-
         :content/copy-block-url "Block-URL kopieren"
         :content/copy-export-as "Kopieren / Exportieren als.."
         :content/copy-ref "Diese Referenz kopieren"
@@ -764,6 +762,8 @@
         :right-side-bar/history "(Dev) Verlauf rückgängig machen / wiederherstellen"
         :select/default-select-multiple "Ein oder mehrere auswählen"
         :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
+        
+        :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"}
    :nl {
         :all-files "Alle bestanden"
         :all-graphs "Alle grafieken"
