@@ -29,7 +29,7 @@
  ;; !Warning:
  ;;   This configuration is not retroactive and affects only new journals.
  ;;   To show old journal files in the app, manually rename them to the new pattern.
- ;; De@fault value: "yyyy-MM-dd"
+ ;; Default value: "yyyy-MM-dd"
  ;; :journal/file-name-format "yyyy_MM_dd"
 
  ;; Enable tooltip preview on hover.
