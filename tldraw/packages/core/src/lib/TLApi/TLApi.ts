@@ -41,7 +41,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
    *
    * @param shapes The serialized shape changes to apply.
    */
-  updateShapes = <T extends S>(...shapes: ({ id: string } & Partial<T['props']>)[]): this => {
+  updateShapes = <T extends S>(...shapes: ({ id: string, type: string } & Partial<T['props']>)[]): this => {
     this.app.updateShapes(shapes)
     return this
   }
@@ -433,7 +433,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const clones = shapes.map(s => {
       return new ShapeClass({
         ...s.serialized,
-        id: uniqueId(),
+        // id: uniqueId(),
         type: type,
       })
     })
