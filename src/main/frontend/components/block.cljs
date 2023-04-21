@@ -2784,6 +2784,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
+        config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
