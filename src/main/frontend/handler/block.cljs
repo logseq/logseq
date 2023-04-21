@@ -308,7 +308,8 @@
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
             order-parents-count (count (order-parent-list block))]
-        (if (odd? order-parents-count)
+        (if (or (zero? order-parents-count)
+                (odd? order-parents-count))
           idx (nth (seq "abcdefghijklmnopqrstuvwxyz") (mod (dec idx) 26)))))))
 
 (defn attach-order-list-state
