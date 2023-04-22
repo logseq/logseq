@@ -297,13 +297,14 @@
   (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
         prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
         prev-block      (prev-block-fn block)]
-    (letfn [(order-sibling-list [b]
+    (letfn [(page-fn? [b] (some-> b :block/name some?))
+            (order-sibling-list [b]
               (lazy-seq
-                (when (order-block-fn? b)
+                (when (and (not (page-fn? b)) (order-block-fn? b))
                   (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-                (when (order-block-fn? b)
+                (when (and (not (page-fn? b)) (order-block-fn? b))
                   (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
