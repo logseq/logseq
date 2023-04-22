@@ -253,9 +253,7 @@
 
     ;; order list
     [["Number list" [[:editor/clear-current-slash]
-                     [:editor/toggle-own-number-list]] "Number list"]
-     ["Bullet list" [[:editor/clear-current-slash]
-                     [:editor/remove-own-number-list]] "Bullet list"]]
+                     [:editor/toggle-own-number-list]] "Number list"]]
 
     ;; task management
     (get-preferred-workflow)
