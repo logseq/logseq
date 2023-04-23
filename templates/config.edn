@@ -352,11 +352,20 @@
  ;; You can also reorder them or use only one or two of them in the template.
  ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
- ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
- ;; :media "[[quick capture]] **{time}**: {url}"}
+ :quick-capture-templates
+ {:text "[[quick capture]] **{time}**: {text} from {url}"
+  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
- ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
+ ;; - insert-today?: Insert the capture at the end of today's journal page.
+ ;; - redirect-page?: Redirect to the quick capture page after capturing.
+ ;; - default-page: The default page to capture to if insert-today? is false.
+ :quick-capture-options
+ {:insert-today? true           ;; default: true
+  :redirect-page? false         ;; default: false
+  :default-page "quick capture" ;; default: "quick capture" page
+  }
+
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
@@ -369,12 +378,12 @@
  ;; For instance, pressing Enter within a list generates a new list item,
  ;; whereas pressing Enter in a block reference opens the referenced block.
  :dwim/settings
- {:admonition&src?  true  ;; default: true
-  :markup?          false ;; default: false
-  :block-ref?       true  ;; default: true
-  :page-ref?        true  ;; default: true
-  :properties?      true  ;; default: true
-  :list?            true  ;; default: true
+ {:admonition&src?  true        ;; default: true
+  :markup?          false       ;; default: false
+  :block-ref?       true        ;; default: true
+  :page-ref?        true        ;; default: true
+  :properties?      true        ;; default: true
+  :list?            true        ;; default: true
   }
 
  ;; Configure the escaping method for special characters in page titles.
