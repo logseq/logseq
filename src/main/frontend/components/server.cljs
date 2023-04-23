@@ -92,7 +92,7 @@
         {:auto-focus true
          :value      port
          :min        "1"
-         :max        "65536"
+         :max        "65535"
          :type       "number"
          :on-change  #(let [value (.-value (.-target %))]
                         (swap! *configs assoc :port value))}]]]
