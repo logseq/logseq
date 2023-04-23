@@ -87,7 +87,7 @@
                        (swap! *configs assoc :host value))}]]
 
       [:label
-       [:strong "Port (0 ~ 65536)"]
+       [:strong "Port (1 ~ 65535)"]
        [:input.form-input
         {:auto-focus true
          :value      port
