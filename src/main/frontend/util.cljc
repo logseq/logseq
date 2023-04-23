@@ -528,13 +528,6 @@
   (if (string? s)
     (string/lower-case s) s))
 
-#?(:cljs
-   (defn safe-path-join [prefix & paths]
-     (let [path (apply node-path.join (cons prefix paths))]
-       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (gp-util/safe-decode-uri-component (subs path 7))
-         path))))
-
 (defn trim-safe
   [s]
   (when s
