@@ -12,8 +12,7 @@
             [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]
-            [logseq.graph-parser.text :as text]
-            [frontend.modules.outliner.tree :as tree]))
+            [logseq.graph-parser.text :as text]))
 
 ;; Util fns
 ;; ========
@@ -158,8 +157,7 @@
   (rum/local false ::mouse-down?)
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [result (tree/filter-top-level-blocks result)
-          select? (get state ::select?)
+    (let [select? (get state ::select?)
           *mouse-down? (::mouse-down? state)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)

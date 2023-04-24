@@ -9,7 +9,8 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.tree :as tree]))
 
 (defn trigger-custom-query!
   [state *query-error *query-triggered?]
@@ -66,7 +67,9 @@
             ;; exclude the current one, otherwise it'll loop forever
             remove-blocks (if current-block-uuid [current-block-uuid] nil)
             transformed-query-result (when query-result
-                                       (db/custom-query-result-transform query-result remove-blocks q))
+                                       (cond-> (db/custom-query-result-transform query-result remove-blocks q)
+                                         (get q :remove-block-children? true)
+                                         tree/filter-top-level-blocks))
             group-by-page? (get-group-by-page q options)
             result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
                      (let [result (db-utils/group-by-page transformed-query-result)]
