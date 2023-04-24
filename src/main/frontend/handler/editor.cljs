@@ -2043,7 +2043,7 @@
                   keep-uuid?]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
-                        (some-> (db/pull (:db/id editing-block))
+                        (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
         has-unsaved-edits (and editing-block
                                (not= (:block/content (db/pull (:db/id editing-block)))
