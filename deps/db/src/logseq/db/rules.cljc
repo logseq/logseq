@@ -134,6 +134,7 @@
      [(str ?val) ?str-val]
      (or [(= ?v ?val)]
          [(contains? ?v ?val)]
+         ;; For integer pages that aren't strings
          [(contains? ?v ?str-val)])]
 
    :page-ref

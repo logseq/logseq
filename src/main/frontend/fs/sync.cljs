@@ -784,6 +784,8 @@
 (defn- <retry-rsapi [f]
   (go-loop [n 3]
     (let [r (<! (f))]
+      (when (instance? ExceptionInfo r)
+        (js/console.error "rsapi error:" (str (ex-cause r))))
       (if (and (instance? ExceptionInfo r)
                (string/index-of (str (ex-cause r)) "operation timed out")
                (> n 0))
