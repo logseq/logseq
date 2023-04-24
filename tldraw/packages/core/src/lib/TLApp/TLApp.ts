@@ -113,7 +113,7 @@ export class TLApp<
         fn: () => this.api.zoomToFit(),
       },
       {
-        keys: 'mod+shift+1',
+        keys: 'shift+2',
         fn: () => this.api.zoomToSelection(),
       },
       {
