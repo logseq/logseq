@@ -353,7 +353,7 @@
  ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
  :quick-capture-templates
- {:text "[[quick capture]] **{time}**: {text} from {url}"
+ {:text "[[quick capture]] **{time}**: {text} — {url}"
   :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
