@@ -1,4 +1,5 @@
 import { useApp } from '@tldraw/react'
+import { Geometry } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ToolButton } from '../ToolButton'
@@ -14,23 +15,43 @@ export const PrimaryTools = observer(function PrimaryTools() {
     app.api.setColor(color)
   }, [])
 
+  const handleToolClick = React.useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const tool = e.currentTarget.dataset.tool
+      if (tool) app.selectTool(tool)
+    },
+    []
+  )
+
+  const [activeGeomId, setActiveGeomId] = React.useState(
+    () => (Object.values(Geometry).find((geo: string) => geo === app.selectedTool.id) ?? Object.values(Geometry)[0])
+  )
+
+  React.useEffect(() => {
+    setActiveGeomId((prevId: Geometry) => {
+      return Object.values(Geometry).find((geo: string) => geo === app.selectedTool.id) ?? prevId
+    })
+  }, [app.selectedTool.id])
+
+
   return (
     <div className="tl-primary-tools" data-html2canvas-ignore="true">
       <div className="tl-toolbar tl-tools-floating-panel">
-        <ToolButton tooltip="Select" id="select" icon="select-cursor" />
+        <ToolButton handleClick={() =>app.selectTool("select")} tooltip="Select" id="select" icon="select-cursor" />
         <ToolButton
+         handleClick={() =>app.selectTool("move")}
           tooltip="Move"
           id="move"
           icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
         />
         <Separator.Root className="tl-toolbar-separator" orientation="horizontal" />
-        <ToolButton tooltip="Add block or page" id="logseq-portal" icon="circle-plus" />
-        <ToolButton tooltip="Draw" id="pencil" icon="ballpen" />
-        <ToolButton tooltip="Highlight" id="highlighter" icon="highlight" />
-        <ToolButton tooltip="Eraser" id="erase" icon="eraser" />
-        <ToolButton tooltip="Connector" id="line" icon="connector" />
-        <ToolButton tooltip="Text" id="text" icon="text" />
-        <GeometryTools />
+        <ToolButton handleClick={() =>app.selectTool("logseq-portal")} tooltip="Add block or page" id="logseq-portal" icon="circle-plus" />
+        <ToolButton handleClick={() =>app.selectTool("pencil")} tooltip="Draw" id="pencil" icon="ballpen" />
+        <ToolButton handleClick={() =>app.selectTool("highlighter")} tooltip="Highlight" id="highlighter" icon="highlight" />
+        <ToolButton handleClick={() =>app.selectTool("erase")} tooltip="Eraser" id="erase" icon="eraser" />
+        <ToolButton handleClick={() =>app.selectTool("line")} tooltip="Connector" id="line" icon="connector" />
+        <ToolButton handleClick={() =>app.selectTool("text")} tooltip="Text" id="text" icon="text" />
+        <GeometryTools activeGeometry={activeGeomId} setGeometry={handleToolClick}/>
         <Separator.Root
           className="tl-toolbar-separator"
           orientation="horizontal"
