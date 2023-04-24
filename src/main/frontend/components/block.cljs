@@ -2909,7 +2909,8 @@
         custom-query? (boolean (:custom-query? config))]
     (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block)))
+       (fn [] (block-container-inner state repo config block))
+       {:debug-id (str "block-container-ref " (:db/id block))})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -3337,7 +3338,7 @@
                    "More"
 
                    @*loading?
-                   (ui/lazy-loading-placeholder)
+                   (ui/lazy-loading-placeholder 88)
 
                    :else
                    "")})]))))
@@ -3429,8 +3430,7 @@
                        (rum/with-key
                          (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
                          (:db/id parent)))))
-                 {:debug-id page
-                  :trigger-once? false})])))))]
+                 {:debug-id page})])))))]
 
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
