@@ -33,7 +33,7 @@ import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
-  'Edit',
+  'LogseqPortalViewMode',
   'Geometry',
   'AutoResizing',
   'Swatch',
@@ -44,14 +44,12 @@ export const contextBarActionTypes = [
   'YoutubeLink',
   'TwitterLink',
   'IFrameSource',
-  'LogseqPortalViewMode',
   'ArrowMode',
   'Links',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
 const singleShapeActions: ContextBarActionType[] = [
-  'Edit',
   'YoutubeLink',
   'TwitterLink',
   'IFrameSource',
@@ -65,7 +63,6 @@ type ShapeType = Shape['props']['type']
 export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   'logseq-portal': [
     'Swatch',
-    'Edit',
     'LogseqPortalViewMode',
     'ScaleLevel',
     'AutoResizing',
@@ -74,13 +71,13 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   youtube: ['YoutubeLink', 'Links'],
   tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Edit', 'Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
+  box: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  line: ['TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links', 'ScaleLevel'],
   highlighter: ['Swatch', 'Links', 'ScaleLevel'],
-  text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
+  text: ['TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
@@ -97,54 +94,6 @@ function filterShapeByAction<S extends Shape>(type: ContextBarActionType) {
   const unlockedSelectedShapes = app.selectedShapesArray.filter(s => !s.props.isLocked)
   return unlockedSelectedShapes.filter(shape => shapeMapping[shape.props.type]?.includes(type))
 }
-
-const EditAction = observer(() => {
-  const {
-    handlers: { isWhiteboardPage, redirectToPage, getRedirectPageName, insertFirstPageBlock },
-  } = React.useContext(LogseqContext)
-
-  const app = useApp<Shape>()
-  const shape = filterShapeByAction('Edit')[0]
-
-  const iconName =
-    ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
-      ? 'forms'
-      : 'text'
-
-  return (
-    <Button
-      type="button"
-      tooltip="Edit"
-      onClick={() => {
-        app.api.editShape(shape)
-        if (shape.props.type === 'logseq-portal') {
-          let uuid = shape.props.pageId
-          if (shape.props.blockType === 'P') {
-            if (isWhiteboardPage(uuid)) {
-              redirectToPage(uuid)
-            }
-
-            const pageId = getRedirectPageName(shape.props.pageId)
-            let pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
-
-            if (pageBlocksTree?.length === 0) {
-              insertFirstPageBlock(pageId)
-              pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
-            }
-
-            const firstNonePropertyBlock =
-              pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
-
-            uuid = firstNonePropertyBlock?.uuid
-          }
-          window.logseq?.api?.edit_block?.(uuid)
-        }
-      }}
-    >
-      <TablerIcon name={iconName} />
-    </Button>
-  )
-})
 
 const AutoResizingAction = observer(() => {
   const app = useApp<Shape>()
@@ -181,30 +130,20 @@ const LogseqPortalViewModeAction = observer(() => {
   const shapes = filterShapeByAction<LogseqPortalShape>('LogseqPortalViewMode')
 
   const collapsed = shapes.every(s => s.collapsed)
-  const ViewModeOptions: ToggleGroupInputOption[] = [
-    {
-      value: '1',
-      icon: 'object-compact',
-      tooltip: 'Collapse',
-    },
-    {
-      value: '0',
-      icon: 'object-expanded',
-      tooltip: 'Expand',
-    },
-  ]
+  if (!collapsed && !shapes.every(s => !s.collapsed)) {
+    return null
+  }
+
   return (
-    <ToggleGroupInput
-      title="View Mode"
-      options={ViewModeOptions}
-      value={collapsed ? '1' : '0'}
-      onValueChange={v => {
-        shapes.forEach(shape => {
-          shape.toggleCollapsed()
-        })
-        app.persist()
-      }}
-    />
+    <ToggleInput
+      tooltip={collapsed ? 'Expand' : 'Collapse'}
+      toggle={shapes.every(s => s.props.type === 'logseq-portal')}
+      className="tl-button"
+      pressed={collapsed}
+      onPressedChange={() => app.api.setCollapsed(!collapsed) }
+    >
+      <TablerIcon name={collapsed ? 'object-expanded' : 'object-compact'} />
+    </ToggleInput>
   )
 })
 
@@ -527,7 +466,6 @@ const LinksAction = observer(() => {
   )
 })
 
-contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('Geometry', GeometryAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
