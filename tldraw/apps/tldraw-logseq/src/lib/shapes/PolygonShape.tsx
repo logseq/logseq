@@ -168,7 +168,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { strokeWidth },
+      props: { strokeWidth, isLocked },
     } = this
 
     return (
@@ -176,6 +176,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
         <polygon
           transform={`translate(${x}, ${y})`}
           points={this.getVertices(strokeWidth / 2).join()}
+          strokeDasharray={isLocked ? '8 2' : 'undefined'}
         />
       </g>
     )

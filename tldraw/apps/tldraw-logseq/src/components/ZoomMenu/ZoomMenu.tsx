@@ -41,7 +41,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           Zoom to fit selection
           <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+              <code>⇧</code> <code>2</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>

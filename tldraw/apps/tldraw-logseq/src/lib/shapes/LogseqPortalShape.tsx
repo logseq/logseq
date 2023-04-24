@@ -62,11 +62,11 @@ const LogseqPortalShapeHeader = observer(
         : 'var(--ls-tertiary-background-color)'
 
     const fillGradient =
-        fill && fill !== 'var(--ls-secondary-background-color)'
-          ? isBuiltInColor(fill)
-            ? `var(--ls-highlight-color-${fill})`
-            : fill
-          : 'var(--ls-secondary-background-color)'
+      fill && fill !== 'var(--ls-secondary-background-color)'
+        ? isBuiltInColor(fill)
+          ? `var(--ls-highlight-color-${fill})`
+          : fill
+        : 'var(--ls-secondary-background-color)'
 
     return (
       <div
@@ -78,7 +78,8 @@ const LogseqPortalShapeHeader = observer(
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
-            background: type === 'P' ? bgColor : `linear-gradient(0deg, ${fillGradient}, ${bgColor})`,
+            background:
+              type === 'P' ? bgColor : `linear-gradient(0deg, ${fillGradient}, ${bgColor})`,
           }}
         ></div>
         <div className="relative">{children}</div>
@@ -350,7 +351,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size },
+      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size, isLocked },
     } = this
 
     const app = useApp<Shape>()
@@ -526,7 +527,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
-    return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={bounds.width}
+        height={bounds.height}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={this.props.isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {

@@ -14,6 +14,12 @@ export enum Color {
   Default = '',
 }
 
+export enum Geometry {
+    Box = 'box',
+    Ellipse = 'ellipse',
+    Polygon = 'polygon',
+}
+
 export enum AlignType {
   Top = 'top',
   CenterVertical = 'centerVertical',

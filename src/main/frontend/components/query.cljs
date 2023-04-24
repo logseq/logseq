@@ -253,5 +253,4 @@
    (ui/lazy-visible
     (fn []
       (custom-query* config q (::query-triggered? state)))
-    {:debug-id q
-     :trigger-once? false})))
+    {:debug-id q})))

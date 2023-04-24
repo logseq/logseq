@@ -166,12 +166,20 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       props: {
         size: [w, h],
         borderRadius,
+        isLocked,
       },
     } = this
 
     return (
       <g>
-        <rect width={w} height={h} rx={borderRadius} ry={borderRadius} fill="transparent" />
+        <rect
+          width={w}
+          height={h}
+          rx={borderRadius}
+          ry={borderRadius}
+          fill="transparent"
+          strokeDasharray={isLocked ? '8 2' : undefined}
+        />
       </g>
     )
   })
