@@ -156,7 +156,7 @@
 
 (defn undo
   []
-  (let [[e prev-e] (smart-pop-undo)]
+  (let [[e _prev-e] (smart-pop-undo)]
     (when e
       (let [{:keys [txs tx-meta tx-id]} e
             new-txs (get-txs false txs)
