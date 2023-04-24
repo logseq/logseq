@@ -552,8 +552,7 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [
-                          :graph/export-as-html
+     (build-category-map [:graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -580,7 +579,9 @@
                           :editor/copy
                           :editor/copy-text
                           :editor/cut
-                          :command/toggle-favorite])
+                          :command/toggle-favorite
+                          :editor/undo
+                          :editor/redo])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
@@ -590,8 +591,7 @@
                           :editor/zoom-in
                           :editor/zoom-out
                           :editor/toggle-undo-redo-mode
-                          :editor/undo
-                          :editor/redo
+
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
