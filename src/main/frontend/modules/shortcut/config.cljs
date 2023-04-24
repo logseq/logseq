@@ -71,6 +71,21 @@
    :pdf/find                     {:binding "alt+f"
                                   :fn      pdf-utils/open-finder}
 
+   :whiteboard/lock              {:binding "mod+l"
+                                  :fn      #(.setLocked (state/active-tldraw-app) true)}
+
+   :whiteboard/unlock            {:binding "mod+shift+l"
+                                  :fn      #(.setLocked (state/active-tldraw-app) false)}
+
+   :whiteboard/group             {:binding "mod+g"
+                                  :fn      #(.doGroup (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/ungroup           {:binding "mod+shift+g"
+                                  :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/toggle-grid       {:binding "mod+shift+g"
+                                  :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
+
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
@@ -338,7 +353,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -507,6 +522,13 @@
                              :pdf/find])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
+    :shortcut.handler/whiteboard
+    (-> (build-category-map [:whiteboard/lock
+                             :whiteboard/unlock
+                             :whiteboard/group
+                             :whiteboard/ungroup])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
+
     :shortcut.handler/auto-complete
     (build-category-map [:auto-complete/complete
                          :auto-complete/prev
@@ -552,8 +574,7 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [
-                          :graph/export-as-html
+     (build-category-map [:graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -759,6 +780,12 @@
     :ui/toggle-settings
     :ui/toggle-contents]
 
+   :shortcut.category/whiteboard
+   [:whiteboard/lock
+    :whiteboard/unlock
+    :whiteboard/group
+    :whiteboard/ungroup]
+   
    :shortcut.category/others
    [:pdf/previous-page
     :pdf/next-page

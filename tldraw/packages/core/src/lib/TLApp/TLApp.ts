@@ -77,7 +77,6 @@ export class TLApp<
     this.notify('mount', null)
   }
 
-  keybindingRegistered = false
   uuid = uniqueId()
 
   readOnly: boolean | undefined
@@ -93,16 +92,7 @@ export class TLApp<
 
   Tools: TLToolConstructor<S, K>[] = []
 
-  dispose() {
-    super.dispose()
-    this.keybindingRegistered = false
-    return this
-  }
-
   initKeyboardShortcuts() {
-    if (this.keybindingRegistered) {
-      return
-    }
     const ownShortcuts: TLShortcut<S, K>[] = [
       {
         keys: 'shift+0',
@@ -187,63 +177,7 @@ export class TLApp<
           }
         },
       },
-      {
-        keys: 'mod+g',
-        fn: () => {
-          this.api.doGroup()
-        },
-      },
-      {
-        keys: 'mod+shift+g',
-        fn: () => {
-          this.api.unGroup()
-        },
-      },
-      {
-        keys: 'shift+g',
-        fn: () => {
-          this.api.toggleGrid()
-        },
-      },
-      {
-        keys: 'mod+l',
-        fn: () => {
-          this.setLocked(true)
-        },
-      },
-      {
-        keys: 'mod+shift+l',
-        fn: () => {
-          this.setLocked(false)
-        },
-      },
     ]
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const shortcuts = (this.constructor['shortcuts'] || []) as TLShortcut<S, K>[]
-    const childrenShortcuts = Array.from(this.children.values())
-      // @ts-expect-error ???
-      .filter(c => c.constructor['shortcut'])
-      .map(child => {
-        return {
-          // @ts-expect-error ???
-          keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: KeyboardEvent) => {
-            this.selectTool(child.id)
-            // hack: allows logseq related shortcut combinations to work
-            // fixme?: unsure if it will cause unexpected issues
-            // e.stopPropagation()
-          },
-        }
-      })
-    this._disposables.push(
-      ...[...ownShortcuts, ...shortcuts, ...childrenShortcuts].map(({ keys, fn }) => {
-        return KeyUtils.registerShortcut(keys, e => {
-          fn(this, this, e)
-        })
-      })
-    )
-    this.keybindingRegistered = true
   }
 
   /* --------------------- History -------------------- */
