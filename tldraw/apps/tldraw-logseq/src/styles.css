@@ -246,6 +246,10 @@ html[data-theme='light'] {
       outline: none;
     }
   }
+
+  .tl-geometry-tools-pane-anchor > .tl-button {
+    border: 1px solid var(--ls-secondary-border-color);
+  }
 }
 
 .tl-statusbar {
@@ -318,7 +322,7 @@ button.tl-select-input-trigger {
   @apply flex items-center px-3;
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   background-color: var(--ls-secondary-background-color);
-  border-radius: 8px;
+  border-radius: 0.25rem;
   font-size: 16px;
   height: 100%;
   color: var(--ls-secondary-text-color);
@@ -957,7 +961,6 @@ html[data-theme='dark'] {
 
 .tl-geometry-toolbar {
   box-shadow: none;
-  flex-flow: column;
 }
 
 .tl-popover-arrow {
@@ -1212,6 +1215,10 @@ button.tl-shape-links-panel-item-remove-button {
 
 .tl-tooltip-arrow {
   fill: var(--ls-secondary-background-color);
+}
+
+.tl-locked {
+  stroke-dasharray: calc(3px * var(--tl-scale)) calc(3px * var(--tl-scale));
 }
 
 @keyframes fadeIn {
