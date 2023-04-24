@@ -71,11 +71,8 @@
            (let [repo (get opts :repo (state/get-current-repo))
                  conn (conn/get-db repo false)
                  rs (d/transact! conn txs (assoc opts :outliner/transact? true))
-                 tx-id (get-tx-id rs)
-                 after-editor-cursor (state/get-current-edit-block-and-position)]
-             (swap! state/state assoc-in [:history/tx->editor-cursor tx-id]
-                    {:before before-editor-cursor
-                     :after after-editor-cursor})
+                 tx-id (get-tx-id rs)]
+             (swap! state/state assoc-in [:history/tx->editor-cursor tx-id] before-editor-cursor)
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>
