@@ -1,7 +1,9 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.db :as db]
+            [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]))
 
@@ -141,6 +143,21 @@ prop-d:: nada"}])
   (testing "block property tests with default config"
     (test-helper/with-config {}
       (block-property-queries-test))))
+
+(deftest block-property-query-performance
+  (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
+                   (map-indexed (fn [idx {:keys [tags]}]
+                                  {:file/path (str "pages/page" idx ".md")
+                                   :file/content (if (seq tags)
+                                                   (str "tags:: " (str/join ", " (map page-ref/->page-ref tags)))
+                                                   "")})))
+        _ (load-test-files pages)
+        {:keys [result time]}
+        (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]
+    ;; Specific number isn't as important as ensuring query doesn't take orders
+    ;; of magnitude longer
+    (is (> 25.0 time) "multi property query perf is reasonable")
+    (is (= 10 (count result)))))
 
 (defn- page-property-queries-test
   []

@@ -133,7 +133,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
 
   ReactIndicator = observer(() => {
     const { pointsPath } = this
-    return <path d={pointsPath} />
+    return <path d={pointsPath} strokeDasharray={this.props.isLocked ? '8 2' : 'undefined'} />
   })
 
   validateProps = (props: Partial<PencilShapeProps>) => {
