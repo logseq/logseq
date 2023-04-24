@@ -15,7 +15,6 @@ import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { Shape, SizeLevel } from '.'
-import { CircleButton } from '../../components/Button'
 import { LogseqQuickSearch } from '../../components/QuickSearch'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext } from '../logseq-context'
@@ -149,8 +148,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
   }
 
-  @action toggleCollapsed = async () => {
-    const collapsed = !this.collapsed
+  @action setCollapsed = async (collapsed: boolean) => {
     if (this.props.blockType === 'B') {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
@@ -192,28 +190,30 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
     React.useEffect(() => {
-      if (ref?.current) {
-        const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
-        if (el) {
-          const updateSize = () => {
-            const { width, height } = el.getBoundingClientRect()
-            const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
-            setSize(bound)
-            return bound
-          }
-          updateSize()
-          // Hacky, I know 🤨
-          this.getInnerHeight = () => updateSize()[1]
-          const resizeObserver = new ResizeObserver(() => {
+      setTimeout(() => {
+        if (ref?.current) {
+          const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
+          if (el) {
+            const updateSize = () => {
+              const { width, height } = el.getBoundingClientRect()
+              const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
+              setSize(bound)
+              return bound
+            }
             updateSize()
-          })
-          resizeObserver.observe(el)
-          return () => {
-            resizeObserver.disconnect()
+            // Hacky, I know 🤨
+            this.getInnerHeight = () => updateSize()[1]
+            const resizeObserver = new ResizeObserver(() => {
+              updateSize()
+            })
+            resizeObserver.observe(el)
+            return () => {
+              resizeObserver.disconnect()
+            }
           }
         }
-      }
-      return () => {}
+        return () => {}
+      }, 10);
     }, [ref, selector])
     return size
   }
@@ -494,41 +494,30 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               placeholder="Create or search your graph..."
             />
           ) : (
-            <>
-              <div
-                className="tl-logseq-portal-container"
-                data-collapsed={this.collapsed}
-                data-page-id={pageId}
-                data-portal-selected={portalSelected}
-                data-editing={isEditing}
-                style={portalStyle}
-              >
-                {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader
-                    type={this.props.blockType ?? 'P'}
-                    fill={fill}
-                    opacity={opacity}
-                  >
-                    {this.props.blockType === 'P' ? (
-                      <PageName pageName={pageId} />
-                    ) : (
-                      <Breadcrumb blockId={pageId} />
-                    )}
-                  </LogseqPortalShapeHeader>
-                )}
-                {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
-                {showingPortal && <PortalComponent {...componentProps} />}
-              </div>
-              {!app.readOnly && !isLocked && (
-                <CircleButton
-                  active={!!this.collapsed}
-                  style={{ opacity: isSelected ? 1 : 0 }}
-                  icon={this.props.blockType === 'B' ? 'block' : 'page'}
-                  onClick={this.toggleCollapsed}
-                  otherIcon={'whiteboard-element'}
-                />
+            <div
+              className="tl-logseq-portal-container"
+              data-collapsed={this.collapsed}
+              data-page-id={pageId}
+              data-portal-selected={portalSelected}
+              data-editing={isEditing}
+              style={portalStyle}
+            >
+              {!this.props.compact && !targetNotFound && (
+                <LogseqPortalShapeHeader
+                  type={this.props.blockType ?? 'P'}
+                  fill={fill}
+                  opacity={opacity}
+                >
+                  {this.props.blockType === 'P' ? (
+                    <PageName pageName={pageId} />
+                  ) : (
+                    <Breadcrumb blockId={pageId} />
+                  )}
+                </LogseqPortalShapeHeader>
               )}
-            </>
+              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
+              {showingPortal && <PortalComponent {...componentProps} />}
+            </div>
           )}
         </div>
       </HTMLContainer>

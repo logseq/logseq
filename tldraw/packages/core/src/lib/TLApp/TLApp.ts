@@ -117,6 +117,14 @@ export class TLApp<
         fn: () => this.api.zoomToSelection(),
       },
       {
+        keys: 'mod+up',
+        fn: () => this.api.setCollapsed(true),
+      },
+      {
+        keys: 'mod+down',
+        fn: () => this.api.setCollapsed(false),
+      },
+      {
         keys: 'mod+-',
         fn: () => this.api.zoomOut(),
       },
