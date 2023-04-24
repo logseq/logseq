@@ -33,6 +33,7 @@ import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
+  'LogseqPortalViewMode',
   'Geometry',
   'AutoResizing',
   'Swatch',
@@ -43,7 +44,6 @@ export const contextBarActionTypes = [
   'YoutubeLink',
   'TwitterLink',
   'IFrameSource',
-  'LogseqPortalViewMode',
   'ArrowMode',
   'Links',
 ] as const
@@ -130,30 +130,25 @@ const LogseqPortalViewModeAction = observer(() => {
   const shapes = filterShapeByAction<LogseqPortalShape>('LogseqPortalViewMode')
 
   const collapsed = shapes.every(s => s.collapsed)
-  const ViewModeOptions: ToggleGroupInputOption[] = [
-    {
-      value: '1',
-      icon: 'object-compact',
-      tooltip: 'Collapse',
-    },
-    {
-      value: '0',
-      icon: 'object-expanded',
-      tooltip: 'Expand',
-    },
-  ]
+  if (!collapsed && !shapes.every(s => !s.collapsed)) {
+    return null
+  }
+
   return (
-    <ToggleGroupInput
-      title="View Mode"
-      options={ViewModeOptions}
-      value={collapsed ? '1' : '0'}
-      onValueChange={v => {
+    <ToggleInput
+      tooltip={collapsed ? 'Expand' : 'Collapse'}
+      toggle={shapes.every(s => s.props.type === 'logseq-portal')}
+      className="tl-button"
+      pressed={collapsed}
+      onPressedChange={v => {
         shapes.forEach(shape => {
           shape.toggleCollapsed()
         })
         app.persist()
       }}
-    />
+    >
+      <TablerIcon name={collapsed ? 'object-expanded' : 'object-compact'} />
+    </ToggleInput>
   )
 })
 
