@@ -1102,7 +1102,7 @@
                                                  (let [self-top (.-top (.-boundingClientRect entry))]
                                                    (when (or (and (not visible?) in-view?)
                                                              ;; hide only the components below the current top for better ux
-                                                             (and visible? (not in-view?) (> self-top 0)))
+                                                             (and visible? (not in-view?) (> self-top 100)))
                                                      (set-visible! in-view?))))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref))))
