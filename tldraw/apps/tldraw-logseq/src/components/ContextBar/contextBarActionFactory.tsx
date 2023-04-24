@@ -140,12 +140,7 @@ const LogseqPortalViewModeAction = observer(() => {
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-button"
       pressed={collapsed}
-      onPressedChange={v => {
-        shapes.forEach(shape => {
-          shape.toggleCollapsed()
-        })
-        app.persist()
-      }}
+      onPressedChange={() => app.api.setCollapsed(!collapsed) }
     >
       <TablerIcon name={collapsed ? 'object-expanded' : 'object-compact'} />
     </ToggleInput>

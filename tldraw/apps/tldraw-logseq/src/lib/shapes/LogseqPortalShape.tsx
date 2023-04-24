@@ -148,8 +148,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
   }
 
-  @action toggleCollapsed = async () => {
-    const collapsed = !this.collapsed
+  @action setCollapsed = async (collapsed: boolean) => {
     if (this.props.blockType === 'B') {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed

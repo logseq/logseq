@@ -442,4 +442,12 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app.persist()
     this.app.setSelectedShapes(clones)
   }
+
+  setCollapsed = (collapsed: boolean, shapes: S[] = this.app.allSelectedShapesArray) => {
+    shapes.forEach(shape => {
+      if (shape.props.type === 'logseq-portal')
+        shape.setCollapsed(collapsed)
+    })
+    this.app.persist()
+  }
 }
