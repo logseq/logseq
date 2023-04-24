@@ -197,6 +197,18 @@ export class TLApp<
           this.api.toggleGrid()
         },
       },
+      {
+        keys: 'mod+l',
+        fn: () => {
+          this.setLocked(true)
+        },
+      },
+      {
+        keys: 'mod+shift+l',
+        fn: () => {
+          this.setLocked(false)
+        },
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -354,6 +366,7 @@ export class TLApp<
     const normalizedShapes: S[] = shapes
       .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
       .filter(isNonNullable)
+      .filter(s => !s.props.isLocked)
 
     // delete a group shape should also delete its children
     const shapesInGroups = this.shapesInGroups(normalizedShapes)
@@ -387,6 +400,7 @@ export class TLApp<
     }
 
     this.currentPage.shapes
+      .filter(s => !s.props.isLocked)
       .flatMap(s => Object.values(s.props.handles ?? {}))
       .flatMap(h => h.bindingId)
       .filter(isNonNullable)
@@ -519,6 +533,17 @@ export class TLApp<
 
     shapes.forEach(shape => {
       if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
+  setLocked = (locked: boolean): this => {
+    if (this.selectedShapesArray.length === 0 || this.readOnly) return this
+
+    this.selectedShapesArray.forEach(shape => {
+      shape.update({ isLocked: locked })
     })
 
     this.persist()

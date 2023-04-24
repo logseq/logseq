@@ -83,8 +83,10 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
   }
 
   ReactIndicator = observer(() => {
-    const { pointsPath } = this
-    return <path d={pointsPath} fill="none" />
+    const { pointsPath, props } = this
+    return (
+      <path d={pointsPath} fill="none" strokeDasharray={props.isLocked ? '8 2' : 'undefined'} />
+    )
   })
 
   validateProps = (props: Partial<HighlighterShapeProps>) => {

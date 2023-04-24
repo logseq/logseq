@@ -11,8 +11,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app = app
   }
 
-  editShape = (shape: string | S | undefined): this => {
-    this.app.transition('select').selectedTool.transition('editingShape', { shape })
+  editShape = (shape: S | undefined): this => {
+    if (!shape?.props.isLocked)
+      this.app.transition('select').selectedTool.transition('editingShape', { shape })
+
     return this
   }
 
@@ -174,7 +176,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     settings.update({ color: color })
 
     this.app.selectedShapesArray.forEach(s => {
-      s.update({ fill: color, stroke: color })
+      if (!s.props.isLocked) s.update({ fill: color, stroke: color })
     })
     this.app.persist()
 
@@ -187,7 +189,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     settings.update({ scaleLevel })
 
     this.app.selectedShapes.forEach(shape => {
-      shape.setScaleLevel(scaleLevel)
+      if (!shape.props.isLocked) shape.setScaleLevel(scaleLevel)
     })
     this.app.persist()
 

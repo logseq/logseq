@@ -56,77 +56,81 @@ export const ContextMenu = observer(function ContextMenu({
         tabIndex={-1}
       >
         <div>
-          {app.selectedShapes?.size > 1 && !app.readOnly && (
-            <>
-              <ReactContextMenu.Item>
-                <div className="tl-menu-button-row pb-0">
-                  <Button
-                    tooltip="Align left"
-                    onClick={() => runAndTransition(() => app.align(AlignType.Left))}
-                  >
-                    <TablerIcon name="layout-align-left" />
-                  </Button>
-                  <Button
-                    tooltip="Align center horizontally"
-                    onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
-                  >
-                    <TablerIcon name="layout-align-center" />
-                  </Button>
-                  <Button
-                    tooltip="Align right"
-                    onClick={() => runAndTransition(() => app.align(AlignType.Right))}
-                  >
-                    <TablerIcon name="layout-align-right" />
-                  </Button>
-                  <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                  <Button
-                    tooltip="Distribute horizontally"
-                    onClick={() =>
-                      runAndTransition(() => app.distribute(DistributeType.Horizontal))
-                    }
-                  >
-                    <TablerIcon name="layout-distribute-vertical" />
-                  </Button>
-                </div>
-                <div className="tl-menu-button-row pt-0">
-                  <Button
-                    tooltip="Align top"
-                    onClick={() => runAndTransition(() => app.align(AlignType.Top))}
-                  >
-                    <TablerIcon name="layout-align-top" />
-                  </Button>
-                  <Button
-                    tooltip="Align center vertically"
-                    onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
-                  >
-                    <TablerIcon name="layout-align-middle" />
-                  </Button>
-                  <Button
-                    tooltip="Align bottom"
-                    onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
-                  >
-                    <TablerIcon name="layout-align-bottom" />
-                  </Button>
-                  <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                  <Button
-                    tooltip="Distribute vertically"
-                    onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
-                  >
-                    <TablerIcon name="layout-distribute-horizontal" />
-                  </Button>
-                </div>
-              </ReactContextMenu.Item>
-              <ReactContextMenu.Separator className="menu-separator" />
-              <ReactContextMenu.Item
-                className="tl-menu-item"
-                onClick={() => runAndTransition(app.packIntoRectangle)}
-              >
-                <TablerIcon className="tl-menu-icon" name="layout-grid" />
-                Pack into rectangle
-              </ReactContextMenu.Item>
-              <ReactContextMenu.Separator className="menu-separator" />
-            </>
-          )}
+          {app.selectedShapes?.size > 1 &&
+            !app.readOnly &&
+            app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+              <>
+                <ReactContextMenu.Item>
+                  <div className="tl-menu-button-row pb-0">
+                    <Button
+                      tooltip="Align left"
+                      onClick={() => runAndTransition(() => app.align(AlignType.Left))}
+                    >
+                      <TablerIcon name="layout-align-left" />
+                    </Button>
+                    <Button
+                      tooltip="Align center horizontally"
+                      onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
+                    >
+                      <TablerIcon name="layout-align-center" />
+                    </Button>
+                    <Button
+                      tooltip="Align right"
+                      onClick={() => runAndTransition(() => app.align(AlignType.Right))}
+                    >
+                      <TablerIcon name="layout-align-right" />
+                    </Button>
+                    <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                    <Button
+                      tooltip="Distribute horizontally"
+                      onClick={() =>
+                        runAndTransition(() => app.distribute(DistributeType.Horizontal))
+                      }
+                    >
+                      <TablerIcon name="layout-distribute-vertical" />
+                    </Button>
+                  </div>
+                  <div className="tl-menu-button-row pt-0">
+                    <Button
+                      tooltip="Align top"
+                      onClick={() => runAndTransition(() => app.align(AlignType.Top))}
+                    >
+                      <TablerIcon name="layout-align-top" />
+                    </Button>
+                    <Button
+                      tooltip="Align center vertically"
+                      onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
+                    >
+                      <TablerIcon name="layout-align-middle" />
+                    </Button>
+                    <Button
+                      tooltip="Align bottom"
+                      onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
+                    >
+                      <TablerIcon name="layout-align-bottom" />
+                    </Button>
+                    <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                    <Button
+                      tooltip="Distribute vertically"
+                      onClick={() =>
+                        runAndTransition(() => app.distribute(DistributeType.Vertical))
+                      }
+                    >
+                      <TablerIcon name="layout-distribute-horizontal" />
+                    </Button>
+                  </div>
+                </ReactContextMenu.Item>
+                <ReactContextMenu.Separator className="menu-separator" />
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.packIntoRectangle)}
+                >
+                  <TablerIcon className="tl-menu-icon" name="layout-grid" />
+                  Pack into rectangle
+                </ReactContextMenu.Item>
+                <ReactContextMenu.Separator className="menu-separator" />
+              </>
+            )}
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item
@@ -145,6 +149,7 @@ export const ContextMenu = observer(function ContextMenu({
           )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) &&
+            app.selectedShapesArray?.some(s => !s.props.isLocked) &&
             !app.readOnly && (
               <>
                 {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
@@ -161,24 +166,25 @@ export const ContextMenu = observer(function ContextMenu({
                     </div>
                   </ReactContextMenu.Item>
                 )}
-                {app.selectedShapesArray.length > 1 && (
-                  <ReactContextMenu.Item
-                    className="tl-menu-item"
-                    onClick={() => runAndTransition(app.api.doGroup)}
-                  >
-                    <TablerIcon className="tl-menu-icon" name="group" />
-                    Group
-                    <div className="tl-menu-right-slot">
-                      <span className="keyboard-shortcut">
-                        <code>{MOD_KEY}</code> <code>G</code>
-                      </span>
-                    </div>
-                  </ReactContextMenu.Item>
-                )}
+                {app.selectedShapesArray.length > 1 &&
+                  app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+                    <ReactContextMenu.Item
+                      className="tl-menu-item"
+                      onClick={() => runAndTransition(app.api.doGroup)}
+                    >
+                      <TablerIcon className="tl-menu-icon" name="group" />
+                      Group
+                      <div className="tl-menu-right-slot">
+                        <span className="keyboard-shortcut">
+                          <code>{MOD_KEY}</code> <code>G</code>
+                        </span>
+                      </div>
+                    </ReactContextMenu.Item>
+                  )}
                 <ReactContextMenu.Separator className="menu-separator" />
               </>
             )}
-          {app.selectedShapes?.size > 0 && (
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <>
               {!app.readOnly && (
                 <ReactContextMenu.Item
@@ -276,83 +282,113 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size > 0 && !app.readOnly && (
-            <>
-              <ReactContextMenu.Item
-                className="tl-menu-item"
-                onClick={() => runAndTransition(app.api.deleteShapes)}
-              >
-                <TablerIcon className="tl-menu-icon" name="backspace" />
-                Delete
-                <div className="tl-menu-right-slot">
-                  <span className="keyboard-shortcut">
-                    <code>Del</code>
-                  </span>
-                </div>
-              </ReactContextMenu.Item>
-              {app.selectedShapes?.size > 1 && !app.readOnly && (
-                <>
-                  <ReactContextMenu.Separator className="menu-separator" />
-                  <ReactContextMenu.Item
-                    className="tl-menu-item"
-                    onClick={() => runAndTransition(app.flipHorizontal)}
-                  >
-                    <TablerIcon className="tl-menu-icon" name="flip-horizontal" />
-                    Flip horizontally
-                  </ReactContextMenu.Item>
-                  <ReactContextMenu.Item
-                    className="tl-menu-item"
-                    onClick={() => runAndTransition(app.flipVertical)}
-                  >
-                    <TablerIcon className="tl-menu-icon" name="flip-vertical" />
-                    Flip vertically
-                  </ReactContextMenu.Item>
-                </>
-              )}
-              {!app.readOnly && (
-                <>
-                  <ReactContextMenu.Separator className="menu-separator" />
-                  <ReactContextMenu.Item
-                    className="tl-menu-item"
-                    onClick={() => runAndTransition(app.bringToFront)}
-                  >
-                    Move to front
-                    <div className="tl-menu-right-slot">
-                      <span className="keyboard-shortcut">
-                        <code>⇧</code> <code>]</code>
-                      </span>
-                    </div>
-                  </ReactContextMenu.Item>
-                  <ReactContextMenu.Item
-                    className="tl-menu-item"
-                    onClick={() => runAndTransition(app.sendToBack)}
-                  >
-                    Move to back
-                    <div className="tl-menu-right-slot">
-                      <span className="keyboard-shortcut">
-                        <code>⇧</code> <code>[</code>
-                      </span>
-                    </div>
-                  </ReactContextMenu.Item>
-                </>
-              )}
-
-              {developerMode && (
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.setLocked(true))}
+            >
+              <TablerIcon className="tl-menu-icon" name="lock" />
+              Lock
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                <code>{MOD_KEY}</code> <code>L</code>
+                </span>
+              </div>
+            </ReactContextMenu.Item>
+          )}
+          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(() => app.setLocked(false))}
+            >
+              <TablerIcon className="tl-menu-icon" name="lock-open" />
+              Unlock
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                <code>{MOD_KEY}</code> <code>⇧</code> <code>L</code>
+                </span>
+              </div>
+            </ReactContextMenu.Item>
+          )}
+          {app.selectedShapes?.size > 0 &&
+            !app.readOnly &&
+            app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+              <>
                 <ReactContextMenu.Item
                   className="tl-menu-item"
-                  onClick={() => {
-                    if (app.selectedShapesArray.length === 1) {
-                      console.log(toJS(app.selectedShapesArray[0].serialized))
-                    } else {
-                      console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))
-                    }
-                  }}
+                  onClick={() => runAndTransition(app.api.deleteShapes)}
                 >
-                  (Dev) Print shape props
+                  <TablerIcon className="tl-menu-icon" name="backspace" />
+                  Delete
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>Del</code>
+                    </span>
+                  </div>
                 </ReactContextMenu.Item>
-              )}
-            </>
-          )}
+                {app.selectedShapes?.size > 1 && !app.readOnly && (
+                  <>
+                    <ReactContextMenu.Separator className="menu-separator" />
+                    <ReactContextMenu.Item
+                      className="tl-menu-item"
+                      onClick={() => runAndTransition(app.flipHorizontal)}
+                    >
+                      <TablerIcon className="tl-menu-icon" name="flip-horizontal" />
+                      Flip horizontally
+                    </ReactContextMenu.Item>
+                    <ReactContextMenu.Item
+                      className="tl-menu-item"
+                      onClick={() => runAndTransition(app.flipVertical)}
+                    >
+                      <TablerIcon className="tl-menu-icon" name="flip-vertical" />
+                      Flip vertically
+                    </ReactContextMenu.Item>
+                  </>
+                )}
+                {!app.readOnly && (
+                  <>
+                    <ReactContextMenu.Separator className="menu-separator" />
+                    <ReactContextMenu.Item
+                      className="tl-menu-item"
+                      onClick={() => runAndTransition(app.bringToFront)}
+                    >
+                      Move to front
+                      <div className="tl-menu-right-slot">
+                        <span className="keyboard-shortcut">
+                          <code>⇧</code> <code>]</code>
+                        </span>
+                      </div>
+                    </ReactContextMenu.Item>
+                    <ReactContextMenu.Item
+                      className="tl-menu-item"
+                      onClick={() => runAndTransition(app.sendToBack)}
+                    >
+                      Move to back
+                      <div className="tl-menu-right-slot">
+                        <span className="keyboard-shortcut">
+                          <code>⇧</code> <code>[</code>
+                        </span>
+                      </div>
+                    </ReactContextMenu.Item>
+                  </>
+                )}
+
+                {developerMode && (
+                  <ReactContextMenu.Item
+                    className="tl-menu-item"
+                    onClick={() => {
+                      if (app.selectedShapesArray.length === 1) {
+                        console.log(toJS(app.selectedShapesArray[0].serialized))
+                      } else {
+                        console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))
+                      }
+                    }}
+                  >
+                    (Dev) Print shape props
+                  </ReactContextMenu.Item>
+                )}
+              </>
+            )}
         </div>
       </ReactContextMenu.Content>
     </ReactContextMenu.Root>

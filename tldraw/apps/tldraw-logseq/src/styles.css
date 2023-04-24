@@ -1217,6 +1217,10 @@ button.tl-shape-links-panel-item-remove-button {
   fill: var(--ls-secondary-background-color);
 }
 
+.tl-locked {
+  stroke-dasharray: calc(3px * var(--tl-scale)) calc(3px * var(--tl-scale));
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
