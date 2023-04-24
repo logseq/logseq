@@ -48,7 +48,6 @@
   [root]
   (when (string? root)
     (p/let [exists? (fs/file-exists? root "logseq/graphs-txid.edn")]
-      (prn ::ex exists?)
       (when exists?
         (-> (p/let [txid-str (fs/read-file root "logseq/graphs-txid.edn")
                     txid-meta (and txid-str (reader/read-string txid-str))]

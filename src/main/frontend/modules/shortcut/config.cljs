@@ -677,6 +677,7 @@
    [:editor/bold
     :editor/insert-link
     :editor/italics
+    :editor/strike-through
     :editor/highlight]
 
    :shortcut.category/navigating
