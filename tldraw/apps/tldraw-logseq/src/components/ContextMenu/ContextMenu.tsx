@@ -140,7 +140,7 @@ export const ContextMenu = observer(function ContextMenu({
                 Zoom to fit
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
-                    <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                    <code>⇧</code> <code>2</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>
@@ -241,27 +241,31 @@ export const ContextMenu = observer(function ContextMenu({
               </div>
             </ReactContextMenu.Item>
           )}
-          <ReactContextMenu.Separator className="menu-separator" />
-          <ReactContextMenu.Item
-            className="tl-menu-item"
-            onClick={() =>
-              runAndTransition(() =>
-                handlers.exportToImage(app.currentPageId, {
-                  x: app.selectionBounds.minX + app.viewport.camera.point[0] - EXPORT_PADDING,
-                  y: app.selectionBounds.minY + app.viewport.camera.point[1] - EXPORT_PADDING,
-                  width: app.selectionBounds?.width + EXPORT_PADDING * 2,
-                  height: app.selectionBounds?.height + EXPORT_PADDING * 2,
-                  zoom: app.viewport.camera.zoom,
-                })
-              )
-            }
-          >
-            <TablerIcon className="tl-menu-icon" name="file-export" />
-            Export
-            <div className="tl-menu-right-slot">
-              <span className="keyboard-shortcut"></span>
-            </div>
-          </ReactContextMenu.Item>
+          {app.selectedShapes?.size > 0 && (
+            <>
+              <ReactContextMenu.Separator className="menu-separator" />
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() =>
+                  runAndTransition(() =>
+                    handlers.exportToImage(app.currentPageId, {
+                      x: app.selectionBounds.minX + app.viewport.camera.point[0] - EXPORT_PADDING,
+                      y: app.selectionBounds.minY + app.viewport.camera.point[1] - EXPORT_PADDING,
+                      width: app.selectionBounds?.width + EXPORT_PADDING * 2,
+                      height: app.selectionBounds?.height + EXPORT_PADDING * 2,
+                      zoom: app.viewport.camera.zoom,
+                    })
+                  )
+                }
+              >
+                <TablerIcon className="tl-menu-icon" name="file-export" />
+                Export
+                <div className="tl-menu-right-slot">
+                  <span className="keyboard-shortcut"></span>
+                </div>
+              </ReactContextMenu.Item>
+            </>
+          )}
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
             className="tl-menu-item"
