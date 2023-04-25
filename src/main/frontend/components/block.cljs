@@ -1732,9 +1732,10 @@
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
+        fold-button-right? (state/enable-fold-button-right?)
         collapsable? (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
-     (when collapsable?
+     (when (or (not fold-button-right?) collapsable?)
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
