@@ -138,7 +138,7 @@
    :editor/strike-through        {:binding "mod+shift+s"
                                   :fn      editor-handler/strike-through-format!}
    
-    :editor/underline             {:binding "mod+u"
+   :editor/underline             {:binding "mod+u"
                                   :fn      editor-handler/underline-format!}
 
    :editor/clear-block           {:binding (if mac? "ctrl+l" "alt+l")
