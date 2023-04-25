@@ -96,6 +96,10 @@
     (catch :default _e
       false)))
 
+(defmethod handle :copyFile [_window [_ _repo from-path to-path]]
+  (logger/info ::copy-file from-path to-path)
+  (fs-extra/copy from-path to-path))
+
 (defmethod handle :writeFile [window [_ repo path content]]
   (let [^js Buf (.-Buffer buffer)
         ^js content (if (instance? js/ArrayBuffer content)
@@ -635,6 +639,9 @@
 
 (defmethod handle :delete-local-files [_ args]
   (apply rsapi/delete-local-files (rest args)))
+
+(defmethod handle :fetch-remote-files [_ args]
+  (apply rsapi/fetch-remote-files (rest args)))
 
 (defmethod handle :update-local-files [_ args]
   (apply rsapi/update-local-files (rest args)))

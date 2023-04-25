@@ -1,24 +1,17 @@
 (ns frontend.fs.diff-merge
   "Implementation of text (file) based content diff & merge for conflict resolution"
-  (:require ["@logseq/diff-merge" :refer [Differ attach_uuids]]
+  (:require ["@logseq/diff-merge" :refer [attach_uuids Differ Merger]]
+            [cljs-bean.core :as bean]
+            [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
-            [cljs-bean.core :as bean]
-            [frontend.db.utils :as db-utils]
-            [frontend.db.model :as db-model]))
+            [clojure.string :as string]))
 
-;; (defn diff-merge
-;;   "N-ways diff & merge
-;;    Accept: blocks
-;;    https://github.com/logseq/diff-merge/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22
-;;    https://github.com/logseq/diff-merge/blob/85ca7e9bf7740d3880ed97d535a4f782a963395d/lib/merge.ts#L40"
-;;   [base & branches]
-;;   ()
-;;   (let [merger (Merger.)]
-;;     (.mergeBlocks merger (bean/->js base) (bean/->js branches))))
 
-(defn diff 
+(defn diff
   "2-ways diff
    Accept: blocks in the struct with the required info
    Please refer to the `Block` struct in the link below
@@ -95,3 +88,50 @@
                    :level 1
                    :uuid uuid}
                   (reverse headings))))))))
+
+
+(defn- rebuild-content
+  "translate [[[op block]]] to merged content"
+  [_base-diffblocks diffs format]
+  ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
+  (let  [level-prefix-fn (fn [level]
+                           (when (and (= format :markdown) (not= level 1))
+                             (apply str (repeat (dec level) "\t"))))
+         ops-fn (fn [ops]
+                  (map (fn [[op {:keys [body level]}]]
+                         (when (or (= op 0) (= op 1)) ;; equal or insert
+                           (str (level-prefix-fn level) body)))
+                       ops))]
+    (->> diffs
+         (mapcat ops-fn)
+         (filter seq)
+         (string/join "\n"))))
+
+
+(defn three-way-merge
+  [base income current format]
+  (let [->ast (fn [text] (if (= format :org)
+                           (gp-mldoc/->edn text (gp-mldoc/default-config :org))
+                           (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))))
+        merger (Merger.)
+        base-ast (->ast base)
+        base-diffblocks (ast->diff-blocks base-ast base format {})
+        income-ast (->ast income)
+        income-diffblocks (ast->diff-blocks income-ast income format {})
+        current-ast (->ast current)
+        current-diffblocks (ast->diff-blocks current-ast current format {})
+        branch-diffblocks [income-diffblocks current-diffblocks]
+        merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
+        merged-diff (bean/->clj merged)
+        merged-content (rebuild-content base-diffblocks merged-diff format)]
+    merged-content))
+
+;; (defn diff-merge
+;;   "N-ways diff & merge
+;;    Accept: blocks
+;;    https://github.com/logseq/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22
+;;    https://github.com/logseq/blob/85ca7e9bf7740d3880ed97d535a4f782a963395d/lib/merge.ts#L40"
+;;   [base & branches]
+;;   ()
+;;   (let [merger (Merger.)]
+;;     (.mergeBlocks merger (bean/->js base) (bean/->js branches))))
