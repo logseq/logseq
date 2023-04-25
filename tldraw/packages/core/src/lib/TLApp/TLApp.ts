@@ -22,7 +22,6 @@ import {
   createNewLineBinding,
   dedupe,
   isNonNullable,
-  KeyUtils,
   uniqueId,
 } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
@@ -92,94 +91,6 @@ export class TLApp<
 
   Tools: TLToolConstructor<S, K>[] = []
 
-  initKeyboardShortcuts() {
-    const ownShortcuts: TLShortcut<S, K>[] = [
-      {
-        keys: 'shift+0',
-        fn: () => this.api.resetZoom(),
-      },
-      {
-        keys: 'shift+1',
-        fn: () => this.api.zoomToFit(),
-      },
-      {
-        keys: 'shift+2',
-        fn: () => this.api.zoomToSelection(),
-      },
-      {
-        keys: 'mod+up',
-        fn: () => this.api.setCollapsed(true),
-      },
-      {
-        keys: 'mod+down',
-        fn: () => this.api.setCollapsed(false),
-      },
-      {
-        keys: 'mod+-',
-        fn: () => this.api.zoomOut(),
-      },
-      {
-        keys: 'mod+=',
-        fn: () => this.api.zoomIn(),
-      },
-      {
-        keys: 'mod+x',
-        fn: () => this.cut(),
-      },
-      {
-        keys: '[',
-        fn: () => this.sendBackward(),
-      },
-      {
-        keys: 'shift+[',
-        fn: () => this.sendToBack(),
-      },
-      {
-        keys: ']',
-        fn: () => this.bringForward(),
-      },
-      {
-        keys: 'shift+]',
-        fn: () => this.bringToFront(),
-      },
-      {
-        keys: 'mod+a',
-        fn: () => {
-          const { selectedTool } = this
-          if (selectedTool.id !== 'select') {
-            this.selectTool('select')
-          }
-          this.api.selectAll()
-        },
-      },
-      {
-        keys: 'mod+shift+s',
-        fn: () => {
-          this.saveAs()
-          this.notify('saveAs', null)
-        },
-      },
-      {
-        keys: 'mod+shift+v',
-        fn: (_, __, e) => {
-          if (!this.editingShape) {
-            e.preventDefault()
-            this.paste(undefined, true)
-          }
-        },
-      },
-      {
-        keys: ['del', 'backspace'],
-        fn: () => {
-          if (!this.editingShape) {
-            this.api.deleteShapes()
-            this.selectedTool.transition('idle')
-          }
-        },
-      },
-    ]
-  }
-
   /* --------------------- History -------------------- */
 
   history = new TLHistory<S, K>(this)
@@ -223,12 +134,6 @@ export class TLApp<
   save = (): this => {
     // todo
     this.notify('save', null)
-    return this
-  }
-
-  saveAs = (): this => {
-    // todo
-    this.notify('saveAs', null)
     return this
   }
 

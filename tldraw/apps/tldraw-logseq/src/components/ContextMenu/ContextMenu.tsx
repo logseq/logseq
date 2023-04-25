@@ -20,7 +20,8 @@ export const ContextMenu = observer(function ContextMenu({
   collisionRef,
 }: ContextMenuProps) {
   const app = useApp()
-  const { handlers } = React.useContext(LogseqContext)
+  const { handlers, renderers } = React.useContext(LogseqContext)
+  const KeyboardShortcut = renderers?.KeyboardShortcut
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {
@@ -31,6 +32,14 @@ export const ContextMenu = observer(function ContextMenu({
   const developerMode = React.useMemo(() => {
     return isDev()
   }, [])
+
+  function shortcut(action: string) {
+    return (
+      <div className="tl-menu-right-slot">
+        <KeyboardShortcut action={action} />
+      </div>
+    )
+  }
 
   return (
     <ReactContextMenu.Root
@@ -138,11 +147,7 @@ export const ContextMenu = observer(function ContextMenu({
                 onClick={() => runAndTransition(app.api.zoomToSelection)}
               >
                 Zoom to fit
-                <div className="tl-menu-right-slot">
-                  <span className="keyboard-shortcut">
-                    <code>⇧</code> <code>2</code>
-                  </span>
-                </div>
+                {shortcut("whiteboard/zoom-to-fit")}
               </ReactContextMenu.Item>
               <ReactContextMenu.Separator className="menu-separator" />
             </>
@@ -159,11 +164,7 @@ export const ContextMenu = observer(function ContextMenu({
                   >
                     <TablerIcon className="tl-menu-icon" name="ungroup" />
                     Ungroup
-                    <div className="tl-menu-right-slot">
-                      <span className="keyboard-shortcut">
-                        <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
-                      </span>
-                    </div>
+                    {shortcut("whiteboard/ungroup")}
                   </ReactContextMenu.Item>
                 )}
                 {app.selectedShapesArray.length > 1 &&
@@ -174,11 +175,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon className="tl-menu-icon" name="group" />
                       Group
-                      <div className="tl-menu-right-slot">
-                        <span className="keyboard-shortcut">
-                          <code>{MOD_KEY}</code> <code>G</code>
-                        </span>
-                      </div>
+                      {shortcut("whiteboard/group")}
                     </ReactContextMenu.Item>
                   )}
                 <ReactContextMenu.Separator className="menu-separator" />
@@ -193,11 +190,7 @@ export const ContextMenu = observer(function ContextMenu({
                 >
                   <TablerIcon className="tl-menu-icon" name="cut" />
                   Cut
-                  <div className="tl-menu-right-slot">
-                    <span className="keyboard-shortcut">
-                      <code>{MOD_KEY}</code> <code>X</code>
-                    </span>
-                  </div>
+                  {shortcut("editor/cut")}
                 </ReactContextMenu.Item>
               )}
               <ReactContextMenu.Item
@@ -206,11 +199,7 @@ export const ContextMenu = observer(function ContextMenu({
               >
                 <TablerIcon className="tl-menu-icon" name="copy" />
                 Copy
-                <div className="tl-menu-right-slot">
-                  <span className="keyboard-shortcut">
-                    <code>{MOD_KEY}</code> <code>C</code>
-                  </span>
-                </div>
+                {shortcut("editor/copy")}
               </ReactContextMenu.Item>
             </>
           )}
@@ -223,7 +212,7 @@ export const ContextMenu = observer(function ContextMenu({
               Paste
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>V</code>
+                  <code>{MOD_KEY}</code> <code>v</code>
                 </span>
               </div>
             </ReactContextMenu.Item>
@@ -236,7 +225,7 @@ export const ContextMenu = observer(function ContextMenu({
               Paste as link
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>v</code>
                 </span>
               </div>
             </ReactContextMenu.Item>
@@ -272,11 +261,7 @@ export const ContextMenu = observer(function ContextMenu({
             onClick={() => runAndTransition(app.api.selectAll)}
           >
             Select all
-            <div className="tl-menu-right-slot">
-              <span className="keyboard-shortcut">
-                <code>{MOD_KEY}</code> <code>A</code>
-              </span>
-            </div>
+            {shortcut("editor/select-parent")}
           </ReactContextMenu.Item>
           {app.selectedShapes?.size > 1 && (
             <ReactContextMenu.Item
@@ -293,11 +278,7 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock" />
               Lock
-              <div className="tl-menu-right-slot">
-                <span className="keyboard-shortcut">
-                <code>{MOD_KEY}</code> <code>L</code>
-                </span>
-              </div>
+              {shortcut("whiteboard/lock")}
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
@@ -307,11 +288,7 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock-open" />
               Unlock
-              <div className="tl-menu-right-slot">
-                <span className="keyboard-shortcut">
-                <code>{MOD_KEY}</code> <code>⇧</code> <code>L</code>
-                </span>
-              </div>
+              {shortcut("whiteboard/unlock")}
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 &&
@@ -324,11 +301,7 @@ export const ContextMenu = observer(function ContextMenu({
                 >
                   <TablerIcon className="tl-menu-icon" name="backspace" />
                   Delete
-                  <div className="tl-menu-right-slot">
-                    <span className="keyboard-shortcut">
-                      <code>Del</code>
-                    </span>
-                  </div>
+                  {shortcut("editor/delete")}
                 </ReactContextMenu.Item>
                 {app.selectedShapes?.size > 1 && !app.readOnly && (
                   <>
@@ -357,22 +330,14 @@ export const ContextMenu = observer(function ContextMenu({
                       onClick={() => runAndTransition(app.bringToFront)}
                     >
                       Move to front
-                      <div className="tl-menu-right-slot">
-                        <span className="keyboard-shortcut">
-                          <code>⇧</code> <code>]</code>
-                        </span>
-                      </div>
+                      {shortcut("whiteboard/bring-to-front")}
                     </ReactContextMenu.Item>
                     <ReactContextMenu.Item
                       className="tl-menu-item"
                       onClick={() => runAndTransition(app.sendToBack)}
                     >
                       Move to back
-                      <div className="tl-menu-right-slot">
-                        <span className="keyboard-shortcut">
-                          <code>⇧</code> <code>[</code>
-                        </span>
-                      </div>
+                      {shortcut("whiteboard/send-to-back")}
                     </ReactContextMenu.Item>
                   </>
                 )}

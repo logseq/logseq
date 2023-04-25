@@ -71,6 +71,39 @@
    :pdf/find                     {:binding "alt+f"
                                   :fn      pdf-utils/open-finder}
 
+   :whiteboard/reset-zoom        {:binding "shift+0"
+                                  :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/zoom-to-fit       {:binding "shift+1"
+                                  :fn      #(.zoomToFit (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/zoom-to-selection {:binding "shift+2"
+                                  :fn      #(.zoomToSelection (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/collapse          {:binding "mod+up"
+                                  :fn      #(.setCollapsed (.-api ^js (state/active-tldraw-app)) true)}
+
+   :whiteboard/expand            {:binding "mod+down"
+                                  :fn      #(.setCollapsed (.-api ^js (state/active-tldraw-app)) false)}
+
+   :whiteboard/zoom-out          {:binding "mod+-"
+                                  :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
+
+   :whiteboard/zoom-in           {:binding "mod+="
+                                  :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
+
+   :whiteboard/send-backward     {:binding "["
+                                  :fn      #(.sendBackward (state/active-tldraw-app))}
+
+   :whiteboard/send-to-back      {:binding "shift+["
+                                  :fn      #(.sendToBack (state/active-tldraw-app))}
+
+   :whiteboard/bring-forward     {:binding "]"
+                                  :fn      #(.bringForward (state/active-tldraw-app))}
+
+   :whiteboard/bring-to-front    {:binding "shift+]"
+                                  :fn      #(.bringToFront (state/active-tldraw-app))}
+
    :whiteboard/lock              {:binding "mod+l"
                                   :fn      #(.setLocked (state/active-tldraw-app) true)}
 
@@ -83,7 +116,7 @@
    :whiteboard/ungroup           {:binding "mod+shift+g"
                                   :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
 
-   :whiteboard/toggle-grid       {:binding "mod+shift+g"
+   :whiteboard/toggle-grid       {:binding "shift g"
                                   :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
 
    :auto-complete/complete       {:binding "enter"
@@ -523,10 +556,21 @@
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/whiteboard
-    (-> (build-category-map [:whiteboard/lock
+    (-> (build-category-map [:whiteboard/reset-zoom
+                             :whiteboard/zoom-to-fit
+                             :whiteboard/zoom-to-selection
+                             :whiteboard/collapse
+                             :whiteboard/expand
+                             :whiteboard/send-backward
+                             :whiteboard/send-to-back
+                             :whiteboard/bring-forward
+                             :whiteboard/bring-to-front
+                             :whiteboard/select-all
+                             :whiteboard/lock
                              :whiteboard/unlock
                              :whiteboard/group
-                             :whiteboard/ungroup])
+                             :whiteboard/ungroup
+                             :whiteboard/toggle-grid])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -781,7 +825,12 @@
     :ui/toggle-contents]
 
    :shortcut.category/whiteboard
-   [:whiteboard/lock
+   [:whiteboard/reset-zoom
+    :whiteboard/zoom-to-fit
+    :whiteboard/zoom-to-selection
+    :whiteboard/collapse
+    :whiteboard/expand
+    :whiteboard/lock
     :whiteboard/unlock
     :whiteboard/group
     :whiteboard/ungroup]
