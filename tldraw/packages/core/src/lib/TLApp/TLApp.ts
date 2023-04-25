@@ -113,8 +113,16 @@ export class TLApp<
         fn: () => this.api.zoomToFit(),
       },
       {
-        keys: 'mod+shift+1',
+        keys: 'shift+2',
         fn: () => this.api.zoomToSelection(),
+      },
+      {
+        keys: 'mod+up',
+        fn: () => this.api.setCollapsed(true),
+      },
+      {
+        keys: 'mod+down',
+        fn: () => this.api.setCollapsed(false),
       },
       {
         keys: 'mod+-',
@@ -195,6 +203,18 @@ export class TLApp<
         keys: 'shift+g',
         fn: () => {
           this.api.toggleGrid()
+        },
+      },
+      {
+        keys: 'mod+l',
+        fn: () => {
+          this.setLocked(true)
+        },
+      },
+      {
+        keys: 'mod+shift+l',
+        fn: () => {
+          this.setLocked(false)
         },
       },
     ]
@@ -335,10 +355,16 @@ export class TLApp<
     return this
   }
 
-  @action updateShapes = <T extends S>(shapes: ({ id: string } & Partial<T['props']>)[]): this => {
+  @action updateShapes = <T extends S>(shapes: ({ id: string, type: string } & Partial<T['props']>)[]): this => {
     if (this.readOnly) return this
 
-    shapes.forEach(shape => this.getShapeById(shape.id)?.update(shape))
+    shapes.forEach(shape => {
+      const oldShape = this.getShapeById(shape.id)
+      oldShape?.update(shape)
+      if (shape.type !== oldShape?.type) {
+        this.api.convertShapes(shape.type , [oldShape])
+      }
+    })
     this.persist()
     return this
   }
@@ -348,6 +374,7 @@ export class TLApp<
     const normalizedShapes: S[] = shapes
       .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
       .filter(isNonNullable)
+      .filter(s => !s.props.isLocked)
 
     // delete a group shape should also delete its children
     const shapesInGroups = this.shapesInGroups(normalizedShapes)
@@ -381,6 +408,7 @@ export class TLApp<
     }
 
     this.currentPage.shapes
+      .filter(s => !s.props.isLocked)
       .flatMap(s => Object.values(s.props.handles ?? {}))
       .flatMap(h => h.bindingId)
       .filter(isNonNullable)
@@ -513,6 +541,17 @@ export class TLApp<
 
     shapes.forEach(shape => {
       if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
+  setLocked = (locked: boolean): this => {
+    if (this.selectedShapesArray.length === 0 || this.readOnly) return this
+
+    this.selectedShapesArray.forEach(shape => {
+      shape.update({ isLocked: locked })
     })
 
     this.persist()

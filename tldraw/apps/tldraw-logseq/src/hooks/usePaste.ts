@@ -399,6 +399,7 @@ const handleCreatingShapes = async (
     return {
       ...shape,
       parentId: app.currentPageId,
+      isLocked: false,
       id: validUUID(shape.id) ? shape.id : uniqueId(),
     }
   })

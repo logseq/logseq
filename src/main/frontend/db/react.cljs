@@ -51,7 +51,11 @@
 
 (defonce query-state (atom {}))
 
+;; Current dynamic component
 (def ^:dynamic *query-component*)
+
+;; Which reactive queries are triggered by the current component
+(def ^:dynamic *reactive-queries*)
 
 ;; component -> query-key
 (defonce query-components (atom {}))
@@ -156,11 +160,14 @@
                 transform-fn identity}} query & inputs]
   {:pre [(s/valid? ::react-query-keys k)]}
   (let [kv? (and (vector? k) (= :kv (first k)))
+        origin-key k
         k (vec (cons repo k))]
     (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
+        (when-let [queries *reactive-queries*]
+          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
           (let [{:keys [result time]} (util/with-time
