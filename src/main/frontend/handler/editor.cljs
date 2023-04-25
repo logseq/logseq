@@ -127,7 +127,29 @@
   (format-text! config/get-strike-through))
 
 (defn underline-format! []
-  (format-text! config/get-underline))
+  (when-let [m (get-selection-and-format)]
+    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+          patterns (config/get-underline format)
+          {:keys [open close]} patterns
+          pattern-count (count open)
+          pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
+          pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
+          already-wrapped? (and (= open pattern-prefix) (= close pattern-suffix))
+          prefix (if already-wrapped?
+                   (subs value 0 (- selection-start pattern-count))
+                   (subs value 0 selection-start))
+          postfix (if already-wrapped?
+                    (subs value (+ selection-end pattern-count))
+                    (subs value selection-end))
+          inner-value (if already-wrapped?
+                        selection
+                        (str open selection close))
+          new-value (str prefix inner-value postfix)]
+      (state/set-edit-content! edit-id new-value)
+      (cond
+        already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
+        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
+        :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
 
 (defn html-link-format!
   ([]

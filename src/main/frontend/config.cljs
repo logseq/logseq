@@ -211,10 +211,9 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "_"
-      :markdown ;; no underline for markdown
-      ""
-      "")))
+      {:open "_" :close "_"}
+      :markdown ;; no underline for markdown by default (use HTML syntax instead)
+      {:open "<u>" :close "</u>"})))
 
 (defn get-strike-through
   [format]
