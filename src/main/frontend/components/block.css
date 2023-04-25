@@ -116,6 +116,7 @@
       position: relative;
       top: 4px;
     }
+
     a {
       color: var(--ls-primary-text-color);
 
@@ -202,6 +203,10 @@
 .block-control-wrap {
   height: 24px;
   margin-top: 0;
+
+  &.is-order-list {
+    @apply relative right-0;
+  }
 }
 
 .block-control, .block-control:hover {
@@ -525,6 +530,13 @@
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
+  &.as-order-list {
+    min-width: 16px;
+    width: auto;
+    white-space: nowrap;
+    justify-content: end;
+  }
+
   .bullet {
     border-radius: 50%;
     width: 6px;
@@ -533,17 +545,32 @@
     transition: transform 0.2s;
   }
 
-  &.bullet-closed {
-    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  &:not(.typed-list) {
+    &.bullet-closed {
+      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    }
+  }
+
+  &.typed-list:not(:focus-within) {
+    .bullet {
+      background-color: unset;
+      height: unset;
+      width: unset;
+      box-shadow: none;
+    }
   }
 }
 
-a:hover > .bullet-container .bullet {
-  transform: scale(1.4);
-}
+.bullet-link-wrap {
+  color: var(--ls-primary-text-color);
 
-a:hover > .bullet-container {
-  background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  &:hover > .bullet-container .bullet {
+    transform: scale(1.4);
+  }
+
+  &:hover > .bullet-container:not(.typed-list) {
+    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  }
 }
 
 .content.doc-mode {

@@ -1691,10 +1691,10 @@
 
 (rum/defc block-children < rum/reactive
   [config block children collapsed?]
-  (let [ref? (:ref? config)
-        query? (:custom-query? config)
-        children (when (coll? children)
-                   (remove nil? children))]
+  (let [ref?        (:ref? config)
+        query?      (:custom-query? config)
+        children    (when (coll? children)
+                      (remove nil? children))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -1728,12 +1728,17 @@
 
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id collapsed? *control-show? edit? has-child?]
-  (let [doc-mode? (state/sub :document/mode?)
-        control-show? (util/react *control-show?)
-        ref? (:ref? config)
-        empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)]
+  (let [doc-mode?          (state/sub :document/mode?)
+        control-show?      (util/react *control-show?)
+        ref?               (:ref? config)
+        empty-content?     (block-content-empty? block)
+        fold-button-right? (state/enable-fold-button-right?)
+        own-number-list?   (:own-order-number-list? config)
+        order-list?        (boolean own-number-list?)
+        order-list-idx     (:own-order-list-index config)]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
+     {:class (util/classnames [{:is-order-list order-list?
+                                :bullet-closed collapsed?}])}
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
         {:id       (str "control-" uuid)
@@ -1745,13 +1750,15 @@
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid))))}
-        [:span {:class (if (and control-show?
-                                (or collapsed?
-                                    (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
+        [:span {:class (if (or (and control-show?
+                                    (or collapsed?
+                                        (editor-handler/collapsable? uuid {:semantic? true})))
+                               (and collapsed? order-list?))
+                         "control-show cursor-pointer"
+                         "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (let [bullet [:a {:on-click (fn [event]
-                                   (bullet-on-click event block uuid))}
+     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid)}
                    [:span.bullet-container.cursor
                     {:id (str "dot-" uuid)
                      :draggable true
@@ -1759,11 +1766,14 @@
                                       (bullet-drag-start event block uuid block-id))
                      :blockid (str uuid)
                      :class (str (when collapsed? "bullet-closed")
-                                 " "
                                  (when (and (:document/mode? config)
                                             (not collapsed?))
-                                   "hide-inner-bullet"))}
-                    [:span.bullet {:blockid (str uuid)}]]]]
+                                   " hide-inner-bullet")
+                                 (when order-list? " as-order-list typed-list"))}
+
+                    [:span.bullet {:blockid (str uuid)}
+                     (when order-list?
+                       [:label (str order-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
@@ -1771,14 +1781,14 @@
          bullet
 
          (or
-          (and empty-content?
-               (not edit?)
-               (not (:block/top? block))
-               (not (:block/bottom? block))
-               (not (util/react *control-show?)))
-          (and doc-mode?
-               (not collapsed?)
-               (not (util/react *control-show?))))
+           (and empty-content?
+                (not edit?)
+                (not (:block/top? block))
+                (not (:block/bottom? block))
+                (not (util/react *control-show?)))
+           (and doc-mode?
+                (not collapsed?)
+                (not (util/react *control-show?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -2765,6 +2775,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
+        config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
@@ -2865,6 +2876,12 @@
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
+(defn- attach-order-list-state!
+  [cp-state]
+  (let [args (:rum/args cp-state)]
+    (assoc cp-state
+      :rum/args (assoc (vec args) 0 (block-handler/attach-order-list-state (first args) (second args))))))
+
 (rum/defcs block-container < rum/reactive
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
@@ -2881,20 +2898,26 @@
 
                :else
                nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
+             (-> (assoc state
+                   ::control-show? (atom false)
+                   ::navigating-block (atom (:block/uuid block)))
+                 (attach-order-list-state!))))
+
+   :will-remount (fn [_old-state new-state]
+                   (-> new-state
+                       (attach-order-list-state!)))
+
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
-                          config-compare-keys [:show-cloze?]
-                          b1 (second (:rum/args old-state))
-                          b2 (second (:rum/args new-state))
-                          result (or
-                                  (not= (select-keys b1 compare-keys)
-                                        (select-keys b2 compare-keys))
-                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                    (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
+                                               :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                          config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
+                          b1                  (second (:rum/args old-state))
+                          b2                  (second (:rum/args new-state))
+                          result              (or
+                                                (not= (select-keys b1 compare-keys)
+                                                      (select-keys b2 compare-keys))
+                                                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
@@ -2904,8 +2927,8 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo (state/get-current-repo)
-        ref? (:ref? config)
+  (let [repo          (state/get-current-repo)
+        ref?          (:ref? config)
         custom-query? (boolean (:custom-query? config))]
     (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
@@ -2915,11 +2938,11 @@
 
 (defn divide-lists
   [[f & l]]
-  (loop [l l
+  (loop [l        l
          ordered? (:ordered f)
-         result [[f]]]
+         result   [[f]]]
     (if (seq l)
-      (let [cur (first l)
+      (let [cur          (first l)
             cur-ordered? (:ordered cur)]
         (if (= ordered? cur-ordered?)
           (recur
