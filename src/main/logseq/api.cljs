@@ -495,7 +495,8 @@
   (fn []
     (when-let [input-id (state/get-edit-input-id)]
       (when-let [input (gdom/getElement input-id)]
-        (.focus input)))))
+        (when (util/el-visible-in-viewport? input)
+          (.focus input))))))
 
 (def ^:export get_editing_cursor_position
   (fn []
