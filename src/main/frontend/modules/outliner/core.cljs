@@ -540,8 +540,7 @@
                      :keep-uuid? keep-uuid?
                      :move? move?
                      :outliner-op outliner-op}
-        tx (insert-blocks-aux blocks' target-block' insert-opts)
-        _ (prn "====>>> op:insert-blocks tx#" tx)]
+        tx (insert-blocks-aux blocks' target-block' insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
         (state/pub-event! [:capture-error {:error "Outliner invalid structure"
@@ -573,10 +572,8 @@
             full-tx (util/concat-without-nil uuids-tx tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
-        (let [output {:tx-data full-tx
-                      :blocks  tx}]
-          (prn "==>>> op:insert-blocks full-tx#" output)
-          output)))))
+        {:tx-data full-tx
+         :blocks  tx}))))
 
 (defn- build-move-blocks-next-tx
   [blocks non-consecutive-blocks?]
