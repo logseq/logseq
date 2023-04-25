@@ -102,7 +102,7 @@ export function modKey(e: any): boolean {
   return isDarwin() ? e.metaKey : e.ctrlKey
 }
 
-export const MOD_KEY = isDarwin() ? '⌘' : 'Ctrl'
+export const MOD_KEY = isDarwin() ? '⌘' : 'ctrl'
 
 export function isNonNullable<TValue>(value: TValue): value is NonNullable<TValue> {
   return Boolean(value)

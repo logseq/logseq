@@ -3494,6 +3494,10 @@
                        expand-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
+
+     (whiteboard?)
+     (.setCollapsed (.-api ^js (state/active-tldraw-app)) false)
+     
      :else
      ;; expand one level
      (let [blocks-with-level (all-blocks-with-level {})
@@ -3527,6 +3531,9 @@
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
+     
+     (whiteboard?)
+     (.setCollapsed (.-api ^js (state/active-tldraw-app)) true)
 
      :else
      ;; collapse by one level from outside

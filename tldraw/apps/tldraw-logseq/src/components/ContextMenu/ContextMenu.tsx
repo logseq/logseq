@@ -4,6 +4,7 @@ import { MOD_KEY, AlignType, DistributeType, isDev, EXPORT_PADDING } from '@tldr
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
+import { KeyboardShortcut } from '../KeyboardShortcut'
 import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
@@ -20,8 +21,7 @@ export const ContextMenu = observer(function ContextMenu({
   collisionRef,
 }: ContextMenuProps) {
   const app = useApp()
-  const { handlers, renderers } = React.useContext(LogseqContext)
-  const KeyboardShortcut = renderers?.KeyboardShortcut
+  const { handlers } = React.useContext(LogseqContext)
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {
@@ -32,14 +32,6 @@ export const ContextMenu = observer(function ContextMenu({
   const developerMode = React.useMemo(() => {
     return isDev()
   }, [])
-
-  function shortcut(action: string) {
-    return (
-      <div className="tl-menu-right-slot">
-        <KeyboardShortcut action={action} />
-      </div>
-    )
-  }
 
   return (
     <ReactContextMenu.Root
@@ -147,7 +139,7 @@ export const ContextMenu = observer(function ContextMenu({
                 onClick={() => runAndTransition(app.api.zoomToSelection)}
               >
                 Zoom to fit
-                {shortcut("whiteboard/zoom-to-fit")}
+                <KeyboardShortcut action="whiteboard/zoom-to-fit" />
               </ReactContextMenu.Item>
               <ReactContextMenu.Separator className="menu-separator" />
             </>
@@ -164,7 +156,7 @@ export const ContextMenu = observer(function ContextMenu({
                   >
                     <TablerIcon className="tl-menu-icon" name="ungroup" />
                     Ungroup
-                    {shortcut("whiteboard/ungroup")}
+                    <KeyboardShortcut action="whiteboard/ungroup" />
                   </ReactContextMenu.Item>
                 )}
                 {app.selectedShapesArray.length > 1 &&
@@ -175,7 +167,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon className="tl-menu-icon" name="group" />
                       Group
-                      {shortcut("whiteboard/group")}
+                      <KeyboardShortcut action="whiteboard/group" />
                     </ReactContextMenu.Item>
                   )}
                 <ReactContextMenu.Separator className="menu-separator" />
@@ -190,7 +182,6 @@ export const ContextMenu = observer(function ContextMenu({
                 >
                   <TablerIcon className="tl-menu-icon" name="cut" />
                   Cut
-                  {shortcut("editor/cut")}
                 </ReactContextMenu.Item>
               )}
               <ReactContextMenu.Item
@@ -199,7 +190,7 @@ export const ContextMenu = observer(function ContextMenu({
               >
                 <TablerIcon className="tl-menu-icon" name="copy" />
                 Copy
-                {shortcut("editor/copy")}
+                <KeyboardShortcut action="editor/copy" />
               </ReactContextMenu.Item>
             </>
           )}
@@ -261,7 +252,7 @@ export const ContextMenu = observer(function ContextMenu({
             onClick={() => runAndTransition(app.api.selectAll)}
           >
             Select all
-            {shortcut("editor/select-parent")}
+            <KeyboardShortcut action="editor/select-parent" />
           </ReactContextMenu.Item>
           {app.selectedShapes?.size > 1 && (
             <ReactContextMenu.Item
@@ -278,7 +269,7 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock" />
               Lock
-              {shortcut("whiteboard/lock")}
+              <KeyboardShortcut action="whiteboard/lock" />
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
@@ -288,7 +279,7 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="lock-open" />
               Unlock
-              {shortcut("whiteboard/unlock")}
+              <KeyboardShortcut action="whiteboard/unlock" />
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 &&
@@ -301,7 +292,7 @@ export const ContextMenu = observer(function ContextMenu({
                 >
                   <TablerIcon className="tl-menu-icon" name="backspace" />
                   Delete
-                  {shortcut("editor/delete")}
+                  <KeyboardShortcut action="editor/delete" />
                 </ReactContextMenu.Item>
                 {app.selectedShapes?.size > 1 && !app.readOnly && (
                   <>
@@ -330,14 +321,14 @@ export const ContextMenu = observer(function ContextMenu({
                       onClick={() => runAndTransition(app.bringToFront)}
                     >
                       Move to front
-                      {shortcut("whiteboard/bring-to-front")}
+                      <KeyboardShortcut action="whiteboard/bring-to-front" />
                     </ReactContextMenu.Item>
                     <ReactContextMenu.Item
                       className="tl-menu-item"
                       onClick={() => runAndTransition(app.sendToBack)}
                     >
                       Move to back
-                      {shortcut("whiteboard/send-to-back")}
+                      <KeyboardShortcut action="whiteboard/send-to-back" />
                     </ReactContextMenu.Item>
                   </>
                 )}
