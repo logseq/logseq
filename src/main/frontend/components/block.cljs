@@ -933,11 +933,15 @@
 
 (defn inline-text
   ([format v]
-   (inline-text {} format v))
+   (inline-text {} format v false))
   ([config format v]
+   (inline-text {} format v false))
+  ([config format v no-margin?]
    (when (string? v)
      (let [inline-list (gp-mldoc/inline->edn v (gp-mldoc/default-config format))]
-       [:div.inline.mr-1 (map-inline config inline-list)]))))
+       [:div.inline
+         (when (not no-margin?) {:class "mr-1"})
+         (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -951,7 +955,7 @@
        (if (and (not paragraph?)
                 (mldoc/block-with-title? (ffirst ast)))
          (markup-elements-cp (assoc config :block/format format) ast)
-         (inline-text format macro-content)))
+         (inline-text {} format macro-content true)))
      [:span.warning {:title (str "Unsupported macro name: " name)}
       (macro->text name arguments)])])
 
