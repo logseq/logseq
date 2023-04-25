@@ -69,11 +69,11 @@
   [:div.flex.flex-row.justify-between.py-1.px-2.items-center
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
     (for [color block-background-colors]
-      [:a.shadow-sm
+      [:a
        {:title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
        [:div.heading-bg {:style {:background-color (str "var(--ls-highlight-color-" color)}}]])
-    [:a.shadow-sm
+    [:a
      {:title (t :remove-background)
       :on-click rm-bgcolor-fn}
      [:div.heading-bg.remove "-"]]]])
