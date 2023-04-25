@@ -587,9 +587,7 @@
                     {:ok-handler
                      (fn [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 id)
-                       (when-let [order-list-type (and (own-order-list? block) (get-block-own-order-list-type block))]
-                         (set-block-own-order-list-type! last-block order-list-type)))}))))
+                       (edit-block! last-block 0 id))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!

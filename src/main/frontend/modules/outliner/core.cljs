@@ -409,6 +409,18 @@
            last
            rest))))
 
+(defn blocks-with-?ordered-list-props
+  [blocks target-block sibling?]
+  (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
+    (if-let [list-type (and sibling? target-block (list-type-fn target-block))]
+      (mapv
+        (fn [block]
+          (cond-> block
+            (some? (:block/properties block))
+            (assoc-in [:block/properties :logseq.order-list-type] list-type)))
+        blocks)
+      blocks)))
+
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
 (defn fix-top-level-blocks
@@ -519,6 +531,7 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
+        blocks' (blocks-with-?ordered-list-props blocks' target-block sibling?)
         blocks' (if (= outliner-op :paste)
                   (fix-top-level-blocks blocks')
                   blocks')
@@ -527,7 +540,8 @@
                      :keep-uuid? keep-uuid?
                      :move? move?
                      :outliner-op outliner-op}
-        tx (insert-blocks-aux blocks' target-block' insert-opts)]
+        tx (insert-blocks-aux blocks' target-block' insert-opts)
+        _ (prn "====>>> op:insert-blocks tx#" tx)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
         (state/pub-event! [:capture-error {:error "Outliner invalid structure"
@@ -559,8 +573,10 @@
             full-tx (util/concat-without-nil uuids-tx tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
-        {:tx-data full-tx
-         :blocks tx}))))
+        (let [output {:tx-data full-tx
+                      :blocks  tx}]
+          (prn "==>>> op:insert-blocks full-tx#" output)
+          output)))))
 
 (defn- build-move-blocks-next-tx
   [blocks non-consecutive-blocks?]
