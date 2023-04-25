@@ -126,6 +126,9 @@
 (defn strike-through-format! []
   (format-text! config/get-strike-through))
 
+(defn underline-format! []
+  (format-text! config/get-underline))
+
 (defn html-link-format!
   ([]
    (html-link-format! nil))

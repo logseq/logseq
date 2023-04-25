@@ -205,6 +205,7 @@
       :markdown
       "*"
       "")))
+
 (defn get-underline
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
@@ -214,6 +215,7 @@
       :markdown ;; no underline for markdown
       ""
       "")))
+
 (defn get-strike-through
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]

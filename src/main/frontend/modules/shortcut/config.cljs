@@ -137,6 +137,9 @@
 
    :editor/strike-through        {:binding "mod+shift+s"
                                   :fn      editor-handler/strike-through-format!}
+   
+    :editor/underline             {:binding "mod+u"
+                                  :fn      editor-handler/underline-format!}
 
    :editor/clear-block           {:binding (if mac? "ctrl+l" "alt+l")
                                   :fn      editor-handler/clear-block-content!}
@@ -535,6 +538,7 @@
                           :editor/italics
                           :editor/highlight
                           :editor/strike-through
+                          :editor/underline
                           :editor/clear-block
                           :editor/kill-line-before
                           :editor/kill-line-after
@@ -678,6 +682,7 @@
     :editor/insert-link
     :editor/italics
     :editor/strike-through
+    :editor/underline
     :editor/highlight]
 
    :shortcut.category/navigating
