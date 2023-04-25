@@ -57,6 +57,7 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
