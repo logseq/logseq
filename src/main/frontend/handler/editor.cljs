@@ -62,35 +62,6 @@
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 
-(declare set-block-property!)
-(declare remove-block-property!)
-
-(defn get-block-own-order-list-type
-  [block]
-  (some-> block :block/properties :logseq.order-list-type))
-
-(defn set-block-own-order-list-type!
-  [block type]
-  (when-let [uuid (:block/uuid block)]
-    (set-block-property! uuid :logseq.order-list-type (name type))))
-
-(defn remove-block-own-order-list-type!
-  [block]
-  (when-let [uuid (:block/uuid block)]
-    (remove-block-property! uuid :logseq.order-list-type)))
-
-(defn own-order-list?
-  [block]
-  (not (string/blank? (get-block-own-order-list-type block))))
-
-(defn own-order-number-list?
-  [block]
-  (= (get-block-own-order-list-type block) "number"))
-
-(defn make-block-as-own-order-list!
-  [block]
-  (some-> block (set-block-own-order-list-type! "number")))
-
 (defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -587,9 +558,7 @@
                     {:ok-handler
                      (fn [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 id)
-                       (when-let [order-list-type (and (own-order-list? block) (get-block-own-order-list-type block))]
-                         (set-block-own-order-list-type! last-block order-list-type)))}))))
+                       (edit-block! last-block 0 id))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
@@ -2481,7 +2450,6 @@
     (let [{:keys [block config]} (get-state)]
       (when block
         (let [input (state/get-input)
-              config (assoc config :keydown-new-block true)
               content (gobj/get input "value")
               pos (cursor/pos input)
               current-node (outliner-core/block block)
@@ -2523,12 +2491,6 @@
                              (insert-first-page-block-if-not-exists! page-name)))
               "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
-
-            (and (string/blank? content)
-                 (own-order-number-list? block)
-                 (not (some-> (db-model/get-block-parent (:block/uuid block))
-                              (own-order-number-list?))))
-            (remove-block-own-order-list-type! block)
 
             (and
              (string/blank? content)
@@ -2777,9 +2739,7 @@
                    (not root-block?)
                    (not single-block?)
                    (not custom-query?))
-          (if (own-order-number-list? block)
-            (remove-block-own-order-list-type! block)
-            (delete-block! repo false))))
+          (delete-block! repo false)))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))

@@ -353,8 +353,7 @@
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
-                            block-el (.closest target ".bullet-container[blockid]")
-                            block-id (some-> block-el (.getAttribute "blockid"))
+                            block-id (d/attr target "blockid")
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         (cond

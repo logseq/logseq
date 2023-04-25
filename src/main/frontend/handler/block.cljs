@@ -291,32 +291,3 @@
                               (recur parent (conj result parent))
                               result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))
-
-(defn get-idx-of-order-list-block
-  [block order-list-type]
-  (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
-        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
-        prev-block      (prev-block-fn block)]
-    (letfn [(page-fn? [b] (some-> b :block/name some?))
-            (order-sibling-list [b]
-              (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-sibling-list (prev-block-fn b))))))
-            (order-parent-list [b]
-              (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
-      (let [idx           (if prev-block
-                            (count (order-sibling-list block)) 1)
-            order-parents-count (count (order-parent-list block))]
-        (if (or (zero? order-parents-count)
-                (odd? order-parents-count))
-          idx (nth (seq "abcdefghijklmnopqrstuvwxyz") (mod (dec idx) 26)))))))
-
-(defn attach-order-list-state
-  [config block]
-  (let [own-order-list-type  (some-> block :block/properties :logseq.order-list-type str string/lower-case)
-        own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
-    (assoc config :own-order-list-type own-order-list-type
-                  :own-order-list-index own-order-list-index
-                  :own-order-number-list? (= own-order-list-type "number"))))
