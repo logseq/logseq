@@ -196,16 +196,6 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
-  save = () => {
-    this.app.save()
-    return this
-  }
-
-  saveAs = () => {
-    this.app.save()
-    return this
-  }
-
   undo = () => {
     this.app.undo()
     return this
