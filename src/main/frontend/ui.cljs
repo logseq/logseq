@@ -72,7 +72,7 @@
       [:a.shadow-sm
        {:title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
-       [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
+       [:div.heading-bg {:style {:background-color (str "var(--ls-highlight-color-" color)}}]])
     [:a.shadow-sm
      {:title (t :remove-background)
       :on-click rm-bgcolor-fn}
