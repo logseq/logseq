@@ -1,41 +1,45 @@
 (ns frontend.fs.sync
   "Main ns for providing file sync functionality"
-  (:require [cljs-http.client :as http]
+  (:require ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
+            ["path" :as node-path]
+            [cljs-http.client :as http]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [cljs-time.coerce :as tc]
-            [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
+                                               poll! timeout]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
+            [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.pprint :as pp]
             [electron.ipc :as ipc]
-            [goog.string :as gstring]
             [frontend.config :as config]
-            [frontend.debug :as debug]
-            [frontend.handler.user :as user]
-            [frontend.state :as state]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.util.fs :as fs-util]
-            [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
-            [frontend.diff :as diff]
             [frontend.db :as db]
-            [frontend.fs :as fs]
+            [frontend.debug :as debug]
+            [frontend.diff :as diff]
             [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs.diff-merge :as diff-merge]
+            [frontend.handler.file :as file-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user]
+            [frontend.mobile.util :as mobile-util]
             [frontend.pubsub :as pubsub]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.fs :as fs-util]
+            [frontend.util.persist-var :as persist-var]
+            [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
             [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as node-path]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -719,6 +723,7 @@
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
   (<update-local-files [this graph-uuid base-path filepaths] "remote -> local")
+  (<fetch-remote-files [this graph-uuid base-path filepaths] "remote -> local version-db")
   (<download-version-files [this graph-uuid base-path filepaths])
   (<delete-local-files [this graph-uuid base-path filepaths])
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
@@ -850,6 +855,13 @@
       (<! (<rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
+  (<fetch-remote-files [this graph-uuid base-path filepaths]
+    (println "fetch-remote-files" graph-uuid base-path filepaths)
+    (go
+      (<! (<rsapi-cancel-all-requests))
+      (let [token (<! (<get-token this))]
+        (<! (p->c (ipc/ipc "fetch-remote-files" graph-uuid base-path filepaths token))))))
+
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -944,7 +956,9 @@
                                                                      :basePath base-path
                                                                      :filePaths filepaths'
                                                                      :token token})))))))
-
+  (<fetch-remote-files [this graph-uuid base-path filepaths]
+    (js/console.error "unimpl")
+    (prn ::todo))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -1539,6 +1553,63 @@
                            delete-filetxns)]
     (set (concat update-file-items rename-file-items delete-file-items))))
 
+
+(defn- <fetch-remote-and-update-local-files
+  [graph-uuid base-path relative-paths]
+  (go
+    (let [fetched-file-rpaths (<! (<fetch-remote-files rsapi graph-uuid base-path relative-paths))]
+      (p->c (p/all (->> fetched-file-rpaths
+                        (map (fn [rpath]
+                               (p/let [incoming-file (path/path-join "logseq/version-files/incoming" rpath)
+                                       base-file (path/path-join "logseq/version-files/base" rpath)
+                                       current-change-file rpath
+                                       format (gp-util/get-format current-change-file)
+                                       repo (state/get-current-repo)
+                                       repo-dir (config/get-repo-dir repo)
+                                       base-exists? (fs/file-exists? repo-dir base-file)]
+                                 (cond
+                                   base-exists?
+                                   (p/let [base-content (fs/read-file repo-dir base-file)
+                                           current-content (fs/read-file repo-dir current-change-file)]
+                                     (if (= base-content current-content)
+                                       (do
+                                         (prn "base=current, write directly")
+                                         (p/do!
+                                          (fs/copy! repo
+                                                    (path/path-join repo-dir incoming-file)
+                                                    (path/path-join repo-dir current-change-file))
+                                          (fs/copy! repo
+                                                   (path/path-join repo-dir incoming-file)
+                                                   (path/path-join repo-dir base-file))))
+                                       (do
+                                         (prn "base!=current, should do a 3-way merge")
+                                         (p/let [incoming-content (fs/read-file repo-dir incoming-file)
+                                                 merged-content (diff-merge/three-way-merge base-content incoming-content current-content format)]
+                                           (prn ::merged-content merged-content)
+                                           (when (seq merged-content)
+                                             (p/do!
+                                              (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                              (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                                :from-disk? true
+                                                                                                                :fs/event :fs/remote-file-change})))
+                                           ;; now, let fs watcher handle the rest uploading
+                                           (comment fs/copy! repo-url
+                                                    (path/path-join repo-dir incoming-file)
+                                                    (path/path-join repo-dir current-change-file))))))
+
+                                   :else
+                                   (do
+                                     (prn "no base, use legacy buggy mode")
+                                     (prn ::copy incoming-file current-change-file)
+                                     (fs/copy! repo
+                                               (path/path-join repo-dir incoming-file)
+                                               (path/path-join repo-dir current-change-file))
+                                     (fs/copy! repo
+                                               (path/path-join repo-dir incoming-file)
+                                               (path/path-join repo-dir base-file)))))))))))))
+  
+
+
 (defn- apply-filetxns
   [*sync-state graph-uuid base-path filetxns *paused]
   (go
@@ -1574,7 +1645,7 @@
                 (swap! *sync-state sync-state--remove-recent-remote->local-files
                        [recent-remote->local-file-item])))))
 
-        (let [update-local-files-ch (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns))
+        (let [update-local-files-ch (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
               r (<! (<with-pause update-local-files-ch *paused))]
           (doseq [[filetxn origin-db-content] txn->db-content-vec]
             (when (<! (need-add-version-file? filetxn origin-db-content))
