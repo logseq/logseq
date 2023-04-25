@@ -147,7 +147,6 @@
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
-   "Number list" "LIST TYPE"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -251,12 +250,9 @@
      ["Current time" #(date/get-current-time) "Insert current time"]
      ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
-    ;; order list
-    [["Number list" [[:editor/clear-current-slash]
-                     [:editor/toggle-own-number-list]] "Number list"]]
-
     ;; task management
     (get-preferred-workflow)
+
     [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
@@ -657,18 +653,6 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
-
-(defmethod handle-step :editor/toggle-children-number-list [[_]]
-  (when-let [block (state/get-edit-block)]
-    (state/pub-event! [:editor/toggle-children-number-list block])))
-
-(defmethod handle-step :editor/toggle-own-number-list [[_]]
-  (when-let [block (state/get-edit-block)]
-    (state/pub-event! [:editor/toggle-own-number-list block])))
-
-(defmethod handle-step :editor/remove-own-number-list [[_]]
-  (when-let [block (state/get-edit-block)]
-    (state/pub-event! [:editor/remove-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
