@@ -80,16 +80,10 @@
    :whiteboard/zoom-to-selection {:binding "shift+2"
                                   :fn      #(.zoomToSelection (.-api ^js (state/active-tldraw-app)))}
 
-   :whiteboard/collapse          {:binding "mod+up"
-                                  :fn      #(.setCollapsed (.-api ^js (state/active-tldraw-app)) true)}
-
-   :whiteboard/expand            {:binding "mod+down"
-                                  :fn      #(.setCollapsed (.-api ^js (state/active-tldraw-app)) false)}
-
-   :whiteboard/zoom-out          {:binding "mod+-"
+   :whiteboard/zoom-out          {:binding "shift+dash"
                                   :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/zoom-in           {:binding "mod+="
+   :whiteboard/zoom-in           {:binding "shift+="
                                   :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
 
    :whiteboard/send-backward     {:binding "["
@@ -116,7 +110,7 @@
    :whiteboard/ungroup           {:binding "mod+shift+g"
                                   :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
 
-   :whiteboard/toggle-grid       {:binding "shift g"
+   :whiteboard/toggle-grid       {:binding "shift+g"
                                   :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
 
    :auto-complete/complete       {:binding "enter"
@@ -559,13 +553,12 @@
     (-> (build-category-map [:whiteboard/reset-zoom
                              :whiteboard/zoom-to-fit
                              :whiteboard/zoom-to-selection
-                             :whiteboard/collapse
-                             :whiteboard/expand
+                             :whiteboard/zoom-out
+                             :whiteboard/zoom-in
                              :whiteboard/send-backward
                              :whiteboard/send-to-back
                              :whiteboard/bring-forward
                              :whiteboard/bring-to-front
-                             :whiteboard/select-all
                              :whiteboard/lock
                              :whiteboard/unlock
                              :whiteboard/group
@@ -828,12 +821,17 @@
    [:whiteboard/reset-zoom
     :whiteboard/zoom-to-fit
     :whiteboard/zoom-to-selection
-    :whiteboard/collapse
-    :whiteboard/expand
+    :whiteboard/zoom-out
+    :whiteboard/zoom-in
+    :whiteboard/send-backward
+    :whiteboard/send-to-back
+    :whiteboard/bring-forward
+    :whiteboard/bring-to-front
     :whiteboard/lock
     :whiteboard/unlock
     :whiteboard/group
-    :whiteboard/ungroup]
+    :whiteboard/ungroup
+    :whiteboard/toggle-grid]
    
    :shortcut.category/others
    [:pdf/previous-page
