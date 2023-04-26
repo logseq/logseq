@@ -201,7 +201,10 @@
       (fn [_stat])
       (fn [_error]
         (mkdir! dir))))
-   (p/catch (fn [error] (js/console.error error)))))
+   (p/catch (fn [error]
+              (if (= (.-code error) "EEXIST")
+                (js/console.log "Directory already exists")
+                (js/console.error error))))))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists
