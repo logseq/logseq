@@ -17,6 +17,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
+            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
@@ -75,6 +76,11 @@
                  (fn [data]
                    (let [repo (bean/->clj data)]
                      (repo-handler/remove-repo! repo))))
+
+  (safe-api-call "rebuildSearchIndice"
+                 (fn [_data]
+                   (prn "Rebuild search indices")
+                   (search-handler/rebuild-indices!)))
 
   (safe-api-call "setGitUsernameAndEmail"
                  (fn []
