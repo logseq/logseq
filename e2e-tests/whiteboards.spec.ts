@@ -80,13 +80,12 @@ test('update whiteboard title', async ({ page }) => {
 })
 
 test('draw a rectangle', async ({ page }) => {
-  await page.keyboard.press('Escape')
-  await page.waitForTimeout(1000)
-
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('9')
+  await page.click('.tl-geometry-tools-pane-anchor')
+  await page.waitForTimeout(100)
+  await page.click('.tl-geometry-toolbar [data-tool="box"]')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
