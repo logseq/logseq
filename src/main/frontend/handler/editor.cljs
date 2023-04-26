@@ -79,10 +79,6 @@
   (when-let [uuid (:block/uuid block)]
     (remove-block-property! uuid :logseq.order-list-type)))
 
-(defn own-order-list?
-  [block]
-  (not (string/blank? (get-block-own-order-list-type block))))
-
 (defn own-order-number-list?
   [block]
   (= (get-block-own-order-list-type block) "number"))

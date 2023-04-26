@@ -411,15 +411,16 @@
 
 (defn blocks-with-?ordered-list-props
   [blocks target-block sibling?]
-  (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
-    (if-let [list-type (and sibling? target-block (list-type-fn target-block))]
-      (mapv
-        (fn [block]
-          (cond-> block
-            (some? (:block/properties block))
-            (assoc-in [:block/properties :logseq.order-list-type] list-type)))
-        blocks)
-      blocks)))
+  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))]
+    (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
+      (if-let [list-type (and target-block (list-type-fn target-block))]
+        (mapv
+          (fn [block]
+            (cond-> block
+              (some? (:block/uuid block))
+              (update :block/properties #(assoc % :logseq.order-list-type list-type))))
+          blocks)
+        blocks))))
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
