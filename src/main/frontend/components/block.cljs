@@ -1727,7 +1727,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit? has-child?]
+  [state config block uuid block-id collapsed? *control-show? edit?]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -1735,11 +1735,12 @@
         fold-button-right? (state/enable-fold-button-right?)
         own-number-list?   (:own-order-number-list? config)
         order-list?        (boolean own-number-list?)
-        order-list-idx     (:own-order-list-index config)]
+        order-list-idx     (:own-order-list-index config)
+        collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?}])}
-     (when (or (not fold-button-right?) has-child?)
+     (when (or (not fold-button-right?) collapsable?)
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2857,7 +2858,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit? has-child?))
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
       (when @*show-left-menu?
         (block-left-menu config block))
