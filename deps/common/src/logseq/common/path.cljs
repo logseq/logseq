@@ -315,5 +315,5 @@
 
    This is a loose check, it only checks if there is a valid protocol prefix."
   [p]
-  (boolean (and (re-find #"^[a-zA-Z0-9_+\-\.]+:" p)
+  (boolean (and (re-find #"^[a-zA-Z0-9_+\-\.]{2,}:" p) ;; HACK: avoid matching windows drive
                 (not (string/includes? p " ")))))
