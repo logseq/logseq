@@ -234,15 +234,15 @@
           (if (keyword? status)
             (case status
               :success
-              (icon "circle-check" {:class "text-success" :size "32"})
+              (icon "circle-check" {:class "text-success" :size "20"})
 
               :warning
-              (icon "alert-circle" {:class "text-warning" :size "32"})
+              (icon "alert-circle" {:class "text-warning" :size "20"})
 
               :error
-              (icon "circle-x" {:class "text-error" :size "32"})
+              (icon "circle-x" {:class "text-error" :size "20"})
 
-              (icon "info-circle" {:class "text-indigo-500" :size "32"}))
+              (icon "info-circle" {:class "text-indigo-500" :size "20"}))
             status)]
       [:div.ui__notifications-content
        {:style
