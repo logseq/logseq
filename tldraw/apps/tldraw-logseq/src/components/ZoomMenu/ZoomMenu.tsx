@@ -28,7 +28,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomToFit}
         >
           Zoom to drawing
-          <KeyboardShortcut action="whiteboard/zoom-to-fit"/>
+          <KeyboardShortcut action="whiteboard/zoom-to-fit" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -37,7 +37,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           disabled={app.selectedShapesArray.length === 0}
         >
           Zoom to fit selection
-          <KeyboardShortcut action="whiteboard/zoom-to-selection"/>
+          <KeyboardShortcut action="whiteboard/zoom-to-selection" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -45,7 +45,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomIn}
         >
           Zoom in
-          <KeyboardShortcut action="whiteboard/zoom-in"/>
+          <KeyboardShortcut action="whiteboard/zoom-in" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -53,7 +53,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomOut}
         >
           Zoom out
-          <KeyboardShortcut action="whiteboard/zoom-out"/>
+          <KeyboardShortcut action="whiteboard/zoom-out" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -61,7 +61,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.resetZoom}
         >
           Reset zoom
-          <KeyboardShortcut action="whiteboard/reset-zoom"/>
+          <KeyboardShortcut action="whiteboard/reset-zoom" />
         </DropdownMenuPrimitive.Item>
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Root>

@@ -15,9 +15,9 @@ export enum Color {
 }
 
 export enum Geometry {
-    Box = 'box',
-    Ellipse = 'ellipse',
-    Polygon = 'polygon',
+  Box = 'box',
+  Ellipse = 'ellipse',
+  Polygon = 'polygon',
 }
 
 export enum AlignType {

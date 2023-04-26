@@ -17,13 +17,7 @@ import type {
   TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import {
-  BoundsUtils,
-  createNewLineBinding,
-  dedupe,
-  isNonNullable,
-  uniqueId,
-} from '../../utils'
+import { BoundsUtils, createNewLineBinding, dedupe, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -194,14 +188,16 @@ export class TLApp<
     return this
   }
 
-  @action updateShapes = <T extends S>(shapes: ({ id: string, type: string } & Partial<T['props']>)[]): this => {
+  @action updateShapes = <T extends S>(
+    shapes: ({ id: string; type: string } & Partial<T['props']>)[]
+  ): this => {
     if (this.readOnly) return this
 
     shapes.forEach(shape => {
       const oldShape = this.getShapeById(shape.id)
       oldShape?.update(shape)
       if (shape.type !== oldShape?.type) {
-        this.api.convertShapes(shape.type , [oldShape])
+        this.api.convertShapes(shape.type, [oldShape])
       }
     })
     this.persist()
