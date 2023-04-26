@@ -317,16 +317,17 @@
        :page-content
        (let [{:block/keys [snippet uuid]} data  ;; content here is normalized
              repo (state/sub :git/current-repo)
-             page (model/query-block-by-uuid uuid)  ;; it's actually a page
+             page (when uuid (model/query-block-by-uuid uuid))  ;; it's actually a page
              format (db/get-page-format page)]
-         [:span {:data-block-ref uuid}
-          (search-result-item {:name "page"
-                               :title (t :search-item/page)
-                               :extension? true}
-                              (if page
-                                (page-content-search-result-item repo uuid format snippet search-q search-mode)
-                                (do (log/error "search result with non-existing uuid: " data)
-                                    (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
+         (when page
+           [:span {:data-block-ref uuid}
+            (search-result-item {:name "page"
+                                 :title (t :search-item/page)
+                                 :extension? true}
+                                (if page
+                                  (page-content-search-result-item repo uuid format snippet search-q search-mode)
+                                  (do (log/error "search result with non-existing uuid: " data)
+                                      (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))]))
 
        nil)]))
 
