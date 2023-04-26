@@ -90,10 +90,10 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
           }}
         >
           {this.embedId ? (
-              <div ref={cpRefContainer}>
-                <Tweet tweetId={this.embedId}/>
-              </div>
-          ) : (null)}
+            <div ref={cpRefContainer}>
+              <Tweet tweetId={this.embedId} />
+            </div>
+          ) : null}
         </div>
       </HTMLContainer>
     )
@@ -103,9 +103,19 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
@@ -191,12 +201,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
     if (embedId) {
       return (
         <g>
-          <rect
-            width={bounds.width}
-            height={bounds.height}
-            fill="#15202b"
-            rx={8}
-            ry={8} />
+          <rect width={bounds.width} height={bounds.height} fill="#15202b" rx={8} ry={8} />
           <svg
             x={bounds.width / 4}
             y={bounds.height / 4}

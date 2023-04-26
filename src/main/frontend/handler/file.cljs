@@ -143,6 +143,7 @@
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
                              skip-db-transact? extracted-block-ids]
+                      :fs/keys [event]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -156,7 +157,7 @@
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
                   :skip-db-transact? skip-db-transact?
-                  :extracted-block-ids extracted-block-ids}
+                  :fs/event event}
             result (if reset?
                      (do
                        (when-not skip-db-transact?
@@ -167,6 +168,8 @@
                                          opts)))
                        (file-common-handler/reset-file!
                         repo path content (merge opts
+                                                 ;; To avoid skipping the `:or` bounds for keyword destructuring
+                                                 (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
                                                  (when (some? verbose) {:verbose verbose}))))
                      (db/set-file-content! repo path content opts))]
         (-> (p/let [_ (when-not from-disk?

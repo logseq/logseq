@@ -1,7 +1,8 @@
 import { TLMoveTool, TLSelectTool } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
+import type { Side } from '@radix-ui/react-popper'
 import { observer } from 'mobx-react-lite'
-import * as React from 'react'
+import type * as React from 'react'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 
@@ -9,25 +10,19 @@ export interface ToolButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
   id: string
   icon: string | React.ReactNode
   tooltip: string
+  tooltipSide?: Side
+  handleClick: (e: React.MouseEvent<HTMLButtonElement>) => void
 }
 
-export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonProps) => {
+export const ToolButton = observer(({ id, icon, tooltip, tooltipSide = "left", handleClick, ...props }: ToolButtonProps) => {
   const app = useApp()
-
-  const handleToolClick = React.useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      const tool = e.currentTarget.dataset.tool
-      if (tool) app.selectTool(tool)
-    },
-    [app]
-  )
 
   // Tool must exist
   const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
-  const shortcuts = (Tool as any)['shortcut']
+  const shortcuts = (Tool as any)?.['shortcut']
 
-  const tooltipContent = shortcuts ? (
+  const tooltipContent = shortcuts && tooltip ? (
     <>
       {tooltip}
       <span className="ml-2 keyboard-shortcut">
@@ -43,11 +38,11 @@ export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonP
   return (
     <Button
       {...props}
-      tooltipSide="left"
+      tooltipSide={tooltipSide}
       tooltip={tooltipContent}
       data-tool={id}
       data-selected={id === app.selectedTool.id}
-      onClick={handleToolClick}
+      onClick={handleClick}
     >
       {typeof icon === 'string' ? <TablerIcon name={icon} /> : icon}
     </Button>

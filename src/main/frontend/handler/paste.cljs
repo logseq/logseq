@@ -15,7 +15,6 @@
             [frontend.util.thingatpt :as thingatpt]
             ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
-            [cljs.core.match :refer [match]]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]
@@ -30,7 +29,7 @@
                   text format
                   {:page-name (:block/name (db/entity page-id))})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (editor-handler/paste-blocks blocks' {}))))
+      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text
   [format text]
@@ -96,6 +95,14 @@
          (when blocks-str
            (gp-util/safe-read-string blocks-str))))
 
+(defn- markdown-blocks?
+  [text]
+  (boolean (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
+
+(defn- org-blocks?
+  [text]
+  (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
@@ -147,28 +154,18 @@
                                                 (log/error :exception e)
                                                 nil)))]
                                (if (string/blank? result) nil result))
-                   text (or html-text text)]
-               (match [format
-                       (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                       (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                       (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-                 [:markdown false _ _]
+                   text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
+                   blocks? (text-blocks? text)
+                   text' (or html-text text)]
+               (cond
+                 blocks?
                  (paste-text-parseable format text)
 
-                 [:org _ false _]
-                 (paste-text-parseable format text)
+                 (util/safe-re-find #"(?:\r?\n){2,}" text')
+                 (paste-segmented-text format text')
 
-                 [:markdown true _ false]
-                 (paste-segmented-text format text)
-
-                 [:markdown true _ true]
-                 (replace-text-f text)
-
-                 [:org _ true false]
-                 (paste-segmented-text format text)
-
-                 [:org _ true true]
-                 (replace-text-f text))))))))
+                 :else
+                 (replace-text-f text'))))))))
    (p/catch (fn [error]
               (prn "Paste failed: ")
               (log/error :exception error)))))

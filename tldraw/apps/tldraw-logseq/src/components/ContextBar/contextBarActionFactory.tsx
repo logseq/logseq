@@ -28,11 +28,13 @@ import {
   type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { GeometryTools } from '../GeometryTools'
 import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
-  'Edit',
+  'LogseqPortalViewMode',
+  'Geometry',
   'AutoResizing',
   'Swatch',
   'NoFill',
@@ -42,14 +44,12 @@ export const contextBarActionTypes = [
   'YoutubeLink',
   'TwitterLink',
   'IFrameSource',
-  'LogseqPortalViewMode',
   'ArrowMode',
   'Links',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
 const singleShapeActions: ContextBarActionType[] = [
-  'Edit',
   'YoutubeLink',
   'TwitterLink',
   'IFrameSource',
@@ -63,7 +63,6 @@ type ShapeType = Shape['props']['type']
 export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   'logseq-portal': [
     'Swatch',
-    'Edit',
     'LogseqPortalViewMode',
     'ScaleLevel',
     'AutoResizing',
@@ -72,13 +71,13 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   youtube: ['YoutubeLink', 'Links'],
   tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
+  box: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Geometry', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  line: ['TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links', 'ScaleLevel'],
   highlighter: ['Swatch', 'Links', 'ScaleLevel'],
-  text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
+  text: ['TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
@@ -90,64 +89,15 @@ export const withFillShapes = Object.entries(shapeMapping)
   })
   .map(([key]) => key) as ShapeType[]
 
-function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarActionType): S[] {
-  return shapes.filter(shape => shapeMapping[shape.props.type]?.includes(type)) as S[]
-}
-
-const EditAction = observer(() => {
-  const {
-    handlers: { isWhiteboardPage, redirectToPage, getRedirectPageName, insertFirstPageBlock },
-  } = React.useContext(LogseqContext)
-
+function filterShapeByAction<S extends Shape>(type: ContextBarActionType) {
   const app = useApp<Shape>()
-  const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
-
-  const iconName =
-    ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
-      ? 'forms'
-      : 'text'
-
-  return (
-    <Button
-      type="button"
-      tooltip="Edit"
-      onClick={() => {
-        app.api.editShape(shape)
-        if (shape.props.type === 'logseq-portal') {
-          let uuid = shape.props.pageId
-          if (shape.props.blockType === 'P') {
-            if (isWhiteboardPage(uuid)) {
-              redirectToPage(uuid)
-            }
-
-            const pageId = getRedirectPageName(shape.props.pageId)
-            let pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
-
-            if (pageBlocksTree?.length === 0) {
-              insertFirstPageBlock(pageId)
-              pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
-            }
-
-            const firstNonePropertyBlock =
-              pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
-
-            uuid = firstNonePropertyBlock?.uuid
-          }
-          window.logseq?.api?.edit_block?.(uuid)
-        }
-      }}
-    >
-      <TablerIcon name={iconName} />
-    </Button>
-  )
-})
+  const unlockedSelectedShapes = app.selectedShapesArray.filter(s => !s.props.isLocked)
+  return unlockedSelectedShapes.filter(shape => shapeMapping[shape.props.type]?.includes(type))
+}
 
 const AutoResizingAction = observer(() => {
   const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>(
-    app.selectedShapesArray,
-    'AutoResizing'
-  )
+  const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>('AutoResizing')
 
   const pressed = shapes.every(s => s.props.isAutoResizing)
 
@@ -177,36 +127,23 @@ const AutoResizingAction = observer(() => {
 
 const LogseqPortalViewModeAction = observer(() => {
   const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LogseqPortalShape>(
-    app.selectedShapesArray,
-    'LogseqPortalViewMode'
-  )
+  const shapes = filterShapeByAction<LogseqPortalShape>('LogseqPortalViewMode')
 
   const collapsed = shapes.every(s => s.collapsed)
-  const ViewModeOptions: ToggleGroupInputOption[] = [
-    {
-      value: '1',
-      icon: 'object-compact',
-      tooltip: 'Collapse',
-    },
-    {
-      value: '0',
-      icon: 'object-expanded',
-      tooltip: 'Expand',
-    },
-  ]
+  if (!collapsed && !shapes.every(s => !s.collapsed)) {
+    return null
+  }
+
   return (
-    <ToggleGroupInput
-      title="View Mode"
-      options={ViewModeOptions}
-      value={collapsed ? '1' : '0'}
-      onValueChange={v => {
-        shapes.forEach(shape => {
-          shape.toggleCollapsed()
-        })
-        app.persist()
-      }}
-    />
+    <ToggleInput
+      tooltip={collapsed ? 'Expand' : 'Collapse'}
+      toggle={shapes.every(s => s.props.type === 'logseq-portal')}
+      className="tl-button"
+      pressed={collapsed}
+      onPressedChange={() => app.api.setCollapsed(!collapsed) }
+    >
+      <TablerIcon name={collapsed ? 'object-expanded' : 'object-compact'} />
+    </ToggleInput>
   )
 })
 
@@ -215,8 +152,7 @@ const ScaleLevelAction = observer(() => {
     handlers: { isMobile },
   } = React.useContext(LogseqContext)
 
-  const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
+  const shapes = filterShapeByAction<LogseqPortalShape>('ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
 
   return <ScaleInput scaleLevel={scaleLevel} compact={isMobile()} />
@@ -224,7 +160,7 @@ const ScaleLevelAction = observer(() => {
 
 const IFrameSourceAction = observer(() => {
   const app = useApp<Shape>()
-  const shape = filterShapeByAction<IFrameShape>(app.selectedShapesArray, 'IFrameSource')[0]
+  const shape = filterShapeByAction<IFrameShape>('IFrameSource')[0]
 
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     shape.onIFrameSourceChange(e.target.value.trim().toLowerCase())
@@ -255,7 +191,7 @@ const IFrameSourceAction = observer(() => {
 
 const YoutubeLinkAction = observer(() => {
   const app = useApp<Shape>()
-  const shape = filterShapeByAction<YouTubeShape>(app.selectedShapesArray, 'YoutubeLink')[0]
+  const shape = filterShapeByAction<YouTubeShape>('YoutubeLink')[0]
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     shape.onYoutubeLinkChange(e.target.value)
     app.persist()
@@ -282,7 +218,7 @@ const YoutubeLinkAction = observer(() => {
 
 const TwitterLinkAction = observer(() => {
   const app = useApp<Shape>()
-  const shape = filterShapeByAction<TweetShape>(app.selectedShapesArray, 'TwitterLink')[0]
+  const shape = filterShapeByAction<TweetShape>('TwitterLink')[0]
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     shape.onTwitterLinkChange(e.target.value)
     app.persist()
@@ -309,10 +245,7 @@ const TwitterLinkAction = observer(() => {
 
 const NoFillAction = observer(() => {
   const app = useApp<Shape>()
-  const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>(
-    app.selectedShapesArray,
-    'NoFill'
-  )
+  const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>('NoFill')
   const handleChange = React.useCallback((v: boolean) => {
     shapes.forEach(s => s.update({ noFill: v }))
     app.persist()
@@ -337,7 +270,7 @@ const SwatchAction = observer(() => {
   // Placeholder
   const shapes = filterShapeByAction<
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
-  >(app.selectedShapesArray, 'Swatch')
+  >('Swatch')
 
   const handleSetColor = React.useCallback((color: string) => {
     shapes.forEach(s => {
@@ -365,11 +298,27 @@ const SwatchAction = observer(() => {
   )
 })
 
+const GeometryAction = observer(() => {
+  const app = useApp<Shape>()
+
+  const handleSetGeometry = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const type = e.currentTarget.dataset.tool
+    app.api.convertShapes(type)
+  }, [])
+
+  return (
+    <GeometryTools
+      popoverSide="top"
+      chevron={false}
+      setGeometry={handleSetGeometry}/>
+  )
+})
+
 const StrokeTypeAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape
-  >(app.selectedShapesArray, 'StrokeType')
+  >('StrokeType')
 
   const StrokeTypeOptions: ToggleGroupInputOption[] = [
     {
@@ -409,7 +358,7 @@ const StrokeTypeAction = observer(() => {
 
 const ArrowModeAction = observer(() => {
   const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LineShape>(app.selectedShapesArray, 'ArrowMode')
+  const shapes = filterShapeByAction<LineShape>('ArrowMode')
 
   const StrokeTypeOptions: ToggleGroupInputOption[] = [
     {
@@ -453,7 +402,7 @@ const ArrowModeAction = observer(() => {
 
 const TextStyleAction = observer(() => {
   const app = useApp<Shape>()
-  const shapes = filterShapeByAction<TextShape>(app.selectedShapesArray, 'TextStyle')
+  const shapes = filterShapeByAction<TextShape>('TextStyle')
 
   const bold = shapes.every(s => s.props.fontWeight > 500)
   const italic = shapes.every(s => s.props.italic)
@@ -517,7 +466,7 @@ const LinksAction = observer(() => {
   )
 })
 
-contextBarActionMapping.set('Edit', EditAction)
+contextBarActionMapping.set('Geometry', GeometryAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)

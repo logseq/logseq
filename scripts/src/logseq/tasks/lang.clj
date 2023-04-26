@@ -5,6 +5,7 @@
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [logseq.tasks.util :as task-util]
+            [babashka.cli :as cli]
             [babashka.process :refer [shell]]))
 
 (defn- get-dicts
@@ -46,7 +47,8 @@
   "List missing translations for a given language"
   [& args]
   (let [lang (or (keyword (first args))
-                 (task-util/print-usage "LOCALE"))
+                 (task-util/print-usage "LOCALE [--copy]"))
+        options (cli/parse-opts (rest args) {:coerce {:copy :boolean}})
         _ (when-not (contains? (get-languages) lang)
             (println "Language" lang "does not have an entry in dicts.cljs")
             (System/exit 1))
@@ -60,16 +62,21 @@
                          all-dicts)]
     (if (every? (comp zero? count first) all-missing)
       (println "Language" lang "is fully translated!")
-      (->> all-missing
-           (mapcat (fn [[m file]]
-                     (map (fn [[k v]]
-                            {:translation-key k
-                             ;; Shorten values
-                             :string-to-translate (shorten v 50)
-                             :file file})
-                          m)))
-           (sort-by (juxt :file :translation-key))
-           task-util/print-table))))
+      (let [sorted-missing (->> all-missing
+                                (mapcat (fn [[m file]]
+                                          (map (fn [[k v]]
+                                                 {:translation-key k
+                                                  ;; Shorten values
+                                                  :string-to-translate (shorten v 50)
+                                                  :file file})
+                                               m)))
+                                (sort-by (juxt :file :translation-key)))]
+        (if (:copy options)
+          (doseq [[file missing-for-file] (group-by :file sorted-missing)]
+            (println "\n;; For" file)
+            (doseq [{:keys [translation-key string-to-translate]} missing-for-file]
+              (println translation-key (pr-str string-to-translate))))
+          (task-util/print-table sorted-missing))))))
 
 (defn- validate-non-default-languages
   "This validation finds any translation keys that don't exist in the default

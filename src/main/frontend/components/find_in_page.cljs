@@ -50,7 +50,7 @@
       :on-hide (fn []
                  (search-handler/electron-exit-find-in-page!)))))
   [{:keys [matches match-case? q]}]
-  [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
+  [:div#search-in-page.flex.flex-row.absolute.top-10.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
 
    (search-input q matches)
 

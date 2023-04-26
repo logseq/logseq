@@ -173,3 +173,25 @@
                                                :files files}})]
              (is (= files (js->clj @pasted-file)))
              (reset)))))
+
+(deftest-async editor-on-paste-prefer-text-blocks-to-html
+  (let [actual-blocks (atom nil)
+        ;; Simplified version of block attributes that are copied
+        expected-blocks [{:block/content "Test node"}
+                         {:block/content "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
+        html "<b>bold text</b>"
+        text "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
+    (test-helper/with-reset
+      reset
+      [state/get-input (constantly #js {:value "block"})
+       ;; paste-copied-blocks-or-text mocks below
+       util/stop (constantly nil)
+       html-parser/convert (constantly "**bold text**")
+       paste-handler/get-copied-blocks (constantly (p/resolved nil))
+       state/get-edit-block (constantly {})
+       editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (fn [kind]
+                                                     (if (= kind "text/html") html text))}})]
+        (is (= expected-blocks (map #(select-keys % [:block/content]) @actual-blocks)))
+        (reset)))))

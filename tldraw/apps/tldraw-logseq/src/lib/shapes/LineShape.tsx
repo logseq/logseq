@@ -77,7 +77,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     const labelSize =
       label || isEditing
         ? getTextLabelSize(
-            label || "Enter text",
+            label || 'Enter text',
             { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
             6
           )
@@ -99,7 +99,11 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       [label]
     )
     return (
-      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }} className="tl-line-container">
+      <div
+        {...events}
+        style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+        className="tl-line-container"
+      >
         <TextLabel
           font={font}
           text={label}
@@ -146,6 +150,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       fontSize,
       fontWeight,
       handles: { start, end },
+      isLocked,
     } = this.props
     const bounds = this.getBounds()
     const labelSize =
@@ -176,6 +181,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             decorations?.start,
             decorations?.end
           )}
+          strokeDasharray={isLocked ? '8 2' : 'undefined'}
         />
         {label && !isEditing && (
           <rect

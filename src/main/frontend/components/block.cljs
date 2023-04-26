@@ -1727,14 +1727,15 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit? has-child?]
+  [state config block uuid block-id collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)]
+        fold-button-right? (state/enable-fold-button-right?)
+        collapsable? (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
-     (when (or (not fold-button-right?) has-child?)
+     (when (or (not fold-button-right?) collapsable?)
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2334,7 +2335,7 @@
        (when-not plugin-slotted?
          [:div.flex-1.w-full
           (cond
-            (seq title)
+            (or (seq title) (:block/marker block))
             (build-block-title config block)
 
             :else
@@ -2846,7 +2847,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit? has-child?))
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
       (when @*show-left-menu?
         (block-left-menu config block))
@@ -2909,7 +2910,8 @@
         custom-query? (boolean (:custom-query? config))]
     (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block)))
+       (fn [] (block-container-inner state repo config block))
+       {:debug-id (str "block-container-ref " (:db/id block))})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -3337,7 +3339,7 @@
                    "More"
 
                    @*loading?
-                   (ui/lazy-loading-placeholder)
+                   (ui/lazy-loading-placeholder 88)
 
                    :else
                    "")})]))))
@@ -3429,8 +3431,7 @@
                        (rum/with-key
                          (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
                          (:db/id parent)))))
-                 {:debug-id page
-                  :trigger-once? false})])))))]
+                 {:debug-id page})])))))]
 
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col

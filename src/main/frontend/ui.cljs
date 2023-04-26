@@ -69,11 +69,11 @@
   [:div.flex.flex-row.justify-between.py-1.px-2.items-center
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
     (for [color block-background-colors]
-      [:a.shadow-sm
+      [:a
        {:title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
        [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-    [:a.shadow-sm
+    [:a
      {:title (t :remove-background)
       :on-click rm-bgcolor-fn}
      [:div.heading-bg.remove "-"]]]])
@@ -234,15 +234,15 @@
           (if (keyword? status)
             (case status
               :success
-              (icon "circle-check" {:class "text-success" :size "32"})
+              (icon "circle-check" {:class "text-success" :size "20"})
 
               :warning
-              (icon "alert-circle" {:class "text-warning" :size "32"})
+              (icon "alert-circle" {:class "text-warning" :size "20"})
 
               :error
-              (icon "circle-x" {:class "text-error" :size "32"})
+              (icon "circle-x" {:class "text-error" :size "20"})
 
-              (icon "info-circle" {:class "text-indigo-500" :size "32"}))
+              (icon "info-circle" {:class "text-indigo-500" :size "20"}))
             status)]
       [:div.ui__notifications-content
        {:style
@@ -1065,8 +1065,8 @@
    (progress-bar width)])
 
 (rum/defc lazy-loading-placeholder
-  []
-  [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
+  [height]
+  [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height height}}
    [:div.animate-pulse.flex.space-x-4
     [:div.flex-1.space-y-3.py-1
      [:div.h-2.bg-base-4.rounded]
@@ -1076,37 +1076,37 @@
        [:div.h-2.bg-base-4.rounded.col-span-1]]
       [:div.h-2.bg-base-4.rounded]]]]])
 
-(rum/defcs lazy-visible-inner
-  [state visible? content-fn ref]
-  [:div.lazy-visibility
-   {:ref ref
-    :style {:min-height 24}}
-   (if visible?
-     (when (fn? content-fn)
-       [:div.fade-enter
-        {:ref #(when-let [^js cls (and % (.-classList %))]
-                 (.add cls "fade-enter-active"))}
-        (content-fn)])
-     (lazy-loading-placeholder))])
+(rum/defc lazy-visible-inner
+  [visible? content-fn ref]
+  (let [[set-ref rect] (r/use-bounding-client-rect)
+        placeholder-height (or (when rect (.-height rect)) 88)]
+    [:div.lazy-visibility {:ref ref}
+     [:div {:ref set-ref}
+      (if visible?
+        (when (fn? content-fn)
+          [:div.fade-enter
+           {:ref #(when-let [^js cls (and % (.-classList %))]
+                    (.add cls "fade-enter-active"))}
+           (content-fn)])
+        (lazy-loading-placeholder placeholder-height))]]))
 
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? true}}]
-   (if (or (util/mobile?) (mobile-util/native-platform?))
-     (content-fn)
-     (let [[visible? set-visible!] (rum/use-state false)
-           inViewState (useInView #js {:rootMargin "100px"
-                                       :triggerOnce trigger-once?
-                                       :onChange (fn [in-view? entry]
-                                                   (let [self-top (.-top (.-boundingClientRect entry))]
-                                                     (when (or (and (not visible?) in-view?)
-                                                               ;; hide only the components below the current top for better ux
-                                                               (and visible? (not in-view?) (> self-top 0)))
-                                                       (set-visible! in-view?))))})
-           ref (.-ref inViewState)]
-       (lazy-visible-inner visible? content-fn ref)))))
+                :or {trigger-once? false}}]
+   (let [[visible? set-visible!] (rum/use-state false)
+         root-margin 100
+         inViewState (useInView #js {:rootMargin (str root-margin "px")
+                                     :triggerOnce trigger-once?
+                                     :onChange (fn [in-view? entry]
+                                                 (let [self-top (.-top (.-boundingClientRect entry))]
+                                                   (when (or (and (not visible?) in-view?)
+                                                             ;; hide only the components below the current top for better ux
+                                                             (and visible? (not in-view?) (> self-top root-margin)))
+                                                     (set-visible! in-view?))))})
+         ref (.-ref inViewState)]
+     (lazy-visible-inner visible? content-fn ref))))
 
 (rum/defc portal
   ([children]

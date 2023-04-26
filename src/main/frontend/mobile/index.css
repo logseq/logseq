@@ -1,7 +1,7 @@
 .cp__footer {
-  position: absolute;
-  bottom: 0px;
-  left: 0px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
   padding: 10px 20px;
   background-color: var(--ls-primary-background-color);
   z-index: 10;
