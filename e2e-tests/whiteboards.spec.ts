@@ -80,10 +80,13 @@ test('update whiteboard title', async ({ page }) => {
 })
 
 test('draw a rectangle', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('r')
+  await page.keyboard.press('9')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
