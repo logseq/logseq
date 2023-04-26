@@ -3631,8 +3631,10 @@
         target-element (.-nodeName (.-target e))]
     (cond
       (whiteboard?)
-      (.selectAll (.-api ^js (state/active-tldraw-app)))
-      
+      (do
+        (util/stop e)
+        (.selectAll (.-api ^js (state/active-tldraw-app))))
+
       ;; editing block fully selected
       (and edit-block edit-input
            (= (util/get-selected-text) (.-value edit-input)))
