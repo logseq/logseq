@@ -417,7 +417,8 @@
         (mapv
           (fn [block]
             (cond-> block
-              (some? (:block/uuid block))
+              (and (some? (:block/uuid block))
+                   (nil? (list-type-fn block)))
               (update :block/properties #(assoc % :logseq.order-list-type list-type))))
           blocks)
         blocks))))
