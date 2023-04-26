@@ -5,6 +5,7 @@ import { observer } from 'mobx-react-lite'
 import type * as React from 'react'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
+import { KeyboardShortcut } from '../KeyboardShortcut'
 
 export interface ToolButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   id: string
@@ -23,14 +24,10 @@ export const ToolButton = observer(({ id, icon, tooltip, tooltipSide = "left", h
   const shortcuts = (Tool as any)?.['shortcut']
 
   const tooltipContent = shortcuts && tooltip ? (
-    <>
+    <div className="flex">
       {tooltip}
-      <span className="ml-2 keyboard-shortcut">
-        {shortcuts
-          .map((shortcut: string, idx: number) => <code key={idx}>{shortcut.toUpperCase()}</code>)
-          .reduce((prev: React.ReactNode, curr: React.ReactNode) => [prev, ' | ', curr])}
-      </span>
-    </>
+      <KeyboardShortcut action={shortcuts}/>
+    </div>
   ) : (
     tooltip
   )

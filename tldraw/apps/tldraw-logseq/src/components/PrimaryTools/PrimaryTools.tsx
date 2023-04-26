@@ -40,12 +40,12 @@ export const PrimaryTools = observer(function PrimaryTools() {
         <ToolButton handleClick={() =>app.selectTool("select")} tooltip="Select" id="select" icon="select-cursor" />
         <ToolButton
          handleClick={() =>app.selectTool("move")}
-          tooltip="Move"
+          tooltip="Pan"
           id="move"
           icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
         />
         <Separator.Root className="tl-toolbar-separator" orientation="horizontal" />
-        <ToolButton handleClick={() =>app.selectTool("logseq-portal")} tooltip="Add block or page" id="logseq-portal" icon="circle-plus" />
+        <ToolButton handleClick={() =>app.selectTool("`logseq-portal")} tooltip="Add block or page" id="logseq-portal" icon="circle-plus" />
         <ToolButton handleClick={() =>app.selectTool("pencil")} tooltip="Draw" id="pencil" icon="ballpen" />
         <ToolButton handleClick={() =>app.selectTool("highlighter")} tooltip="Highlight" id="highlighter" icon="highlight" />
         <ToolButton handleClick={() =>app.selectTool("erase")} tooltip="Eraser" id="erase" icon="eraser" />
