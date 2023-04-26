@@ -83,9 +83,7 @@ test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.click('.tl-geometry-tools-pane-anchor')
-  await page.waitForTimeout(100)
-  await page.click('.tl-geometry-toolbar [data-tool="box"]')
+  await page.keyboard.press('r')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
@@ -132,7 +130,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.click('.tl-toolbar [data-tool="line"]')
+  await page.keyboard.press('c')
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
