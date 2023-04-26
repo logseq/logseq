@@ -49,7 +49,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
         />
         <Separator.Root className="tl-toolbar-separator" orientation="horizontal" />
         <ToolButton
-          handleClick={() => app.selectTool('`logseq-portal')}
+          handleClick={() => app.selectTool('logseq-portal')}
           tooltip="Add block or page"
           id="logseq-portal"
           icon="circle-plus"
