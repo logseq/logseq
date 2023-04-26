@@ -3178,7 +3178,7 @@
                            (gdom/getElement (state/get-edit-input-id))))
     (keydown-backspace-handler true e)
     
-    (state/whiteboard-route?)
+    (whiteboard?)
     (.cut (state/active-tldraw-app))
 
     :else
@@ -3190,7 +3190,7 @@
     (state/selection?)
     (shortcut-delete-selection e)
 
-    (state/whiteboard-route?)
+    (whiteboard?)
     (.deleteShapes (.-api ^js (state/active-tldraw-app)))
 
     :else
