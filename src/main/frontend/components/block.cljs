@@ -943,7 +943,7 @@
 
 (defn- render-macro
   [config name arguments macro-content format]
-  [:div.macro {:data-macro-name name}
+  [:div.macro.inline-block {:data-macro-name name}
 
    (if macro-content
      (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
