@@ -858,7 +858,8 @@
     :ui/toggle-contents]
 
    :shortcut.category/whiteboard
-   [:whiteboard/select
+   [:editor/new-whiteboard
+    :whiteboard/select
     :whiteboard/pan
     :whiteboard/portal
     :whiteboard/pencil
@@ -905,7 +906,6 @@
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
     :editor/copy-page-url
-    :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
