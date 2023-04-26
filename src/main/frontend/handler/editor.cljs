@@ -127,29 +127,21 @@
   (format-text! config/get-strike-through))
 
 (defn underline-format! []
-  (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-          patterns (config/get-underline format)
-          {:keys [open close]} patterns
-          pattern-count (count open)
-          pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
-          pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
-          already-wrapped? (and (= open pattern-prefix) (= close pattern-suffix))
-          prefix (if already-wrapped?
-                   (subs value 0 (- selection-start pattern-count))
-                   (subs value 0 selection-start))
-          postfix (if already-wrapped?
-                    (subs value (+ selection-end pattern-count))
-                    (subs value selection-end))
-          inner-value (if already-wrapped?
-                        selection
-                        (str open selection close))
-          new-value (str prefix inner-value postfix)]
-      (state/set-edit-content! edit-id new-value)
-      (cond
-        already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
-        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
-        :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
+  (let [m (get-selection-and-format)]
+    (when m
+      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+            underline-pattern (config/get-underline format)
+            open-tag (if (vector? underline-pattern) (first underline-pattern) underline-pattern)
+            close-tag (if (vector? underline-pattern) (second underline-pattern) underline-pattern)
+            pattern (re-pattern (str (re-quote-replacement open-tag) "[\\s\\S]+" (re-quote-replacement close-tag)))
+            already-wrapped? (re-find pattern value)
+            new-value (if already-wrapped?
+                        (clojure.string/replace value pattern "$1")
+                        (str open-tag selection close-tag))]
+        (state/set-edit-content! edit-id new-value)
+        (if selection
+          (cursor/move-cursor-to input (if already-wrapped? selection-start (+ selection-end (count new-value))))
+          (cursor/set-selection-to input (+ selection-start (count new-value)) (+ selection-end (count new-value))))))))
 
 (defn html-link-format!
   ([]
