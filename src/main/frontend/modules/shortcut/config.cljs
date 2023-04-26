@@ -71,6 +71,36 @@
    :pdf/find                     {:binding "alt+f"
                                   :fn      pdf-utils/open-finder}
 
+   :whiteboard/select            {:binding ["1" "s"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "select")}
+   
+   :whiteboard/pan               {:binding ["2" "p"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "move")}
+   
+   :whiteboard/portal            {:binding "3"
+                                  :fn      #(.selectTool (state/active-tldraw-app) "logseq-portal")}
+
+   :whiteboard/pencil            {:binding ["4" "d"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "pencil")}
+
+   :whiteboard/highlighter       {:binding ["5" "h"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "highlighter")}
+   
+   :whiteboard/eraser            {:binding ["6" "e"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "erase")}
+   
+   :whiteboard/connector         {:binding ["7" "c"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "line")}
+   
+   :whiteboard/text              {:binding ["8" "t"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "text")}
+
+   :whiteboard/rectangle         {:binding ["9" "r"]
+                                  :fn      #(.selectTool (state/active-tldraw-app) "box")}
+
+   :whiteboard/ellipse           {:binding "o"
+                                  :fn      #(.selectTool (state/active-tldraw-app) "ellipse")}
+
    :whiteboard/reset-zoom        {:binding "shift+0"
                                   :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
 
@@ -550,7 +580,17 @@
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/whiteboard
-    (-> (build-category-map [:whiteboard/reset-zoom
+    (-> (build-category-map [:whiteboard/select
+                             :whiteboard/pan
+                             :whiteboard/portal
+                             :whiteboard/pencil
+                             :whiteboard/highlighter
+                             :whiteboard/eraser
+                             :whiteboard/connector
+                             :whiteboard/text
+                             :whiteboard/rectangle
+                             :whiteboard/ellipse
+                             :whiteboard/reset-zoom
                              :whiteboard/zoom-to-fit
                              :whiteboard/zoom-to-selection
                              :whiteboard/zoom-out
@@ -818,7 +858,17 @@
     :ui/toggle-contents]
 
    :shortcut.category/whiteboard
-   [:whiteboard/reset-zoom
+   [:whiteboard/select
+    :whiteboard/pan
+    :whiteboard/portal
+    :whiteboard/pencil
+    :whiteboard/highlighter
+    :whiteboard/eraser
+    :whiteboard/connector
+    :whiteboard/text
+    :whiteboard/rectangle
+    :whiteboard/ellipse
+    :whiteboard/reset-zoom
     :whiteboard/zoom-to-fit
     :whiteboard/zoom-to-selection
     :whiteboard/zoom-out
