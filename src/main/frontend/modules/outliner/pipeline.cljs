@@ -41,14 +41,36 @@
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
                                            parents-refs))
+                            ;; Usually has changed as new-refs has page id while old-refs doesn't
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
-                            children-refs (map (fn [id]
-                                                 (let [entity (db/entity [:block/uuid id])]
-                                                   {:db/id (:db/id entity)
-                                                    :block/path-refs (concat
-                                                                      (map :db/id (:block/path-refs entity))
-                                                                      new-refs)})) children)]
+                            ;; Builds map of children ids to their parent id and :block/refs ids
+                            children-maps (into {}
+                                                (map (fn [id]
+                                                       (let [entity (db/entity [:block/uuid id])]
+                                                         [(:db/id entity)
+                                                          {:parent-id (get-in entity [:block/parent :db/id])
+                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))
+                                                     children))
+                            children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
+                                                 {:db/id id
+                                                  ;; Recalculate :block/path-refs as db contains stale data for this attribute
+                                                  :block/path-refs
+                                                  (set/union
+                                                   ;; Refs from top-level parent
+                                                   new-refs
+                                                   ;; Refs from current block
+                                                   block-ref-ids
+                                                   ;; Refs from parents in between top-level
+                                                   ;; parent and current block
+                                                   (loop [parent-refs #{}
+                                                          parent-id (:parent-id child-map)]
+                                                     (if-let [parent (children-maps parent-id)]
+                                                       (recur (into parent-refs (:block-ref-ids parent))
+                                                              (:parent-id parent))
+                                                       ;; exits when top-level parent is reached
+                                                       parent-refs)))})
+                                               children-maps)]
                         (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                         (util/concat-without-nil
                          [(when (and (seq new-refs)
