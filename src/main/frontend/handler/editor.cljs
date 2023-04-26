@@ -64,6 +64,8 @@
 
 (declare set-block-property!)
 (declare remove-block-property!)
+(declare batch-add-block-property!)
+(declare batch-remove-block-property!)
 
 (defn get-block-own-order-list-type
   [block]
@@ -86,6 +88,16 @@
 (defn make-block-as-own-order-list!
   [block]
   (some-> block (set-block-own-order-list-type! "number")))
+
+(defn toggle-blocks-as-own-order-list!
+  [blocks]
+  (when (seq blocks)
+    (let [has-ordered?    (some own-order-number-list? blocks)
+          blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
+          order-list-prop :logseq.order-list-type]
+      (if has-ordered?
+        (batch-remove-block-property! blocks-uuids order-list-prop)
+        (batch-add-block-property! blocks-uuids order-list-prop "number")))))
 
 (defn get-selection-and-format
   []

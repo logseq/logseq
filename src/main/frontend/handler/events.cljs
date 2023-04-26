@@ -948,11 +948,17 @@
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
-(defmethod handle :editor/toggle-own-number-list [[_ block]]
-  (when block
-    (if (editor-handler/own-order-number-list? block)
-      (editor-handler/remove-block-own-order-list-type! block)
-      (editor-handler/make-block-as-own-order-list! block))))
+(defmethod handle :editor/toggle-own-number-list [[_ blocks]]
+  (let [batch? (sequential? blocks)
+        blocks (cond->> blocks
+                  batch?
+                  (map #(cond-> % (or (uuid? %) (string? %)) (db-model/get-block-by-uuid))))]
+    (if (and batch? (> (count blocks) 1))
+      (editor-handler/toggle-blocks-as-own-order-list! blocks)
+      (when-let [block (cond-> blocks batch? (first))]
+        (if (editor-handler/own-order-number-list? block)
+          (editor-handler/remove-block-own-order-list-type! block)
+          (editor-handler/make-block-as-own-order-list! block))))))
 
 (defmethod handle :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))

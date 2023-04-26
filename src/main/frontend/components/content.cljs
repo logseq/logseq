@@ -85,6 +85,12 @@
       nil))
 
    (ui/menu-link
+     {:key "Toggle number list"
+      :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+     (t :context-menu/toggle-number-list)
+     nil)
+
+   (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
     (t :editor/cycle-todo)
@@ -253,6 +259,12 @@
             (t :context-menu/make-a-flashcard)
             nil)
            :else
+           nil)
+
+         (ui/menu-link
+           {:key "Toggle number list"
+            :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+           (t :context-menu/toggle-number-list)
            nil)
 
          [:hr.menu-separator]

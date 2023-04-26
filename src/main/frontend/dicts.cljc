@@ -171,6 +171,7 @@
         :content/open-in-sidebar "Open in sidebar"
         :content/click-to-edit "Click to edit"
         :context-menu/make-a-flashcard "Make a Flashcard"
+        :context-menu/toggle-number-list "Toggle number list"
         :context-menu/preview-flashcard "Preview Flashcard"
         :context-menu/make-a-template "Make a Template"
         :context-menu/input-template-name "What's the template's name?"
