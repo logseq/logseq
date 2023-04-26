@@ -32,7 +32,7 @@
 (declare delete-db!)
 
 (defn prepare
-  [db-name ^object db sql]
+  [^object db sql db-name]
   (when db
     (try
       (.prepare db sql)
@@ -65,7 +65,7 @@
                       VALUES (new.id, new.uuid, new.content, new.page);
                   END;"]]
     (doseq [trigger triggers]
-      (let [stmt (prepare db-name db trigger)]
+      (let [stmt (prepare db trigger db-name)]
         (.run ^object stmt)))))
 
 (defn add-pages-fts-triggers!
@@ -90,34 +90,36 @@
                       VALUES (new.id, new.uuid, new.content);
                   END;"]]
     (doseq [trigger triggers]
-      (let [stmt (prepare db-name db trigger)]
+      (let [stmt (prepare db trigger db-name)]
         (.run ^object stmt)))))
 
 (defn create-blocks-table!
   [db db-name]
-  (let [stmt (prepare db-name db "CREATE TABLE IF NOT EXISTS blocks (
+  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
                         id INTEGER PRIMARY KEY,
                         uuid TEXT NOT NULL,
                         content TEXT NOT NULL,
-                        page INTEGER)")]
+                        page INTEGER)"
+                      db-name)]
     (.run ^object stmt)))
 
 (defn create-blocks-fts-table!
   [db db-name]
-  (let [stmt (prepare db-name db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)" db-name)]
     (.run ^object stmt)))
 
 (defn create-pages-table!
   [db db-name]
-  (let [stmt (prepare db-name db "CREATE TABLE IF NOT EXISTS pages (
+  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS pages (
                         id INTEGER PRIMARY KEY,
                         uuid TEXT NOT NULL,
-                        content TEXT NOT NULL)")]
+                        content TEXT NOT NULL)"
+                      db-name)]
     (.run ^object stmt)))
 
 (defn create-pages-fts-table!
   [db db-name]
-  (let [stmt (prepare db-name db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content)" db-name)]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -180,7 +182,7 @@
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     ;; Should update all values on id conflict
-    (let [insert (prepare repo db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)")
+    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)" repo)
           insert-many (.transaction ^object db
                                     (fn [pages]
                                       (doseq [page pages]
@@ -194,7 +196,7 @@
   [repo ids]
   (when-let [db (get-db repo)]
     (let [sql (str "DELETE from pages WHERE id IN " (clj-list->sql ids))
-          stmt (prepare repo db sql)]
+          stmt (prepare db sql repo)]
       (.run ^object stmt))))
 
 (defn upsert-blocks!
@@ -202,7 +204,7 @@
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     ;; Should update all values on id conflict
-    (let [insert (prepare repo db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)")
+    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)" repo)
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
@@ -216,13 +218,13 @@
   [repo ids]
   (when-let [db (get-db repo)]
     (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
-          stmt (prepare repo db sql)]
+          stmt (prepare db sql repo)]
       (.run ^object stmt))))
 
 (defn- search-blocks-aux
   [repo database sql input page limit]
   (try
-    (let [stmt (prepare repo database sql)]
+    (let [stmt (prepare database sql repo)]
       (js->clj
        (if page
          (.all ^object stmt (int page) input limit)
@@ -303,7 +305,7 @@
 
 (defn- search-pages-aux
   [repo database sql input limit]
-  (let [stmt (prepare repo database sql)]
+  (let [stmt (prepare database sql repo)]
     (try
       (doall
        (map search-pages-res-unpack (-> (.raw ^object stmt)
@@ -345,27 +347,23 @@
 (defn truncate-blocks-table!
   [repo]
   (when-let [database (get-db repo)]
-    (let [stmt (prepare repo database
-                        "delete from blocks;")
+    (let [stmt (prepare database "delete from blocks;" repo)
           _ (.run ^object stmt)
-          stmt (prepare repo database
-                        "delete from blocks_fts;")]
+          stmt (prepare database "delete from blocks_fts;" repo)]
       (.run ^object stmt))))
 
 (defn truncate-pages-table!
   [repo]
   (when-let [database (get-db repo)]
-    (let [stmt (prepare repo database
-                        "delete from pages;")
+    (let [stmt (prepare database "delete from pages;" repo)
           _ (.run ^object stmt)
-          stmt (prepare repo database
-                        "delete from pages_fts;")]
+          stmt (prepare database "delete from pages_fts;" repo)]
       (.run ^object stmt))))
 
 (defn query
   [repo sql]
   (when-let [database (get-db repo)]
-    (let [stmt (prepare repo database sql)]
+    (let [stmt (prepare database sql repo)]
       (.all ^object stmt))))
 
 (defn delete-db!
