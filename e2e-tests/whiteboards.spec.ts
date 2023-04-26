@@ -132,7 +132,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('c')
+  await page.click('.tl-toolbar [data-tool="line"]')
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
