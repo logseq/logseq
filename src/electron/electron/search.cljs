@@ -6,7 +6,8 @@
             [clojure.string :as string]
             ["electron" :refer [app]]
             [electron.logger :as logger]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [electron.utils :as utils]))
 
 (defonce databases (atom nil))
 
@@ -36,8 +37,10 @@
     (try
       (.prepare db sql)
       (catch :default e
+        (logger/error (str "SQLite prepare failed: " e ": " db-name))
         ;; case 1: vtable constructor failed: blocks_fts https://github.com/logseq/logseq/issues/7467
         (delete-db! db-name)
+        (utils/send-to-renderer "rebuildSearchIndice" {})
         (throw e)))))
 
 (defn add-blocks-fts-triggers!
