@@ -418,7 +418,7 @@
 
    :editor/copy-page-url            {:binding false
                                      :inactive (not (util/electron?))
-                                     :fn      page-handler/copy-page-url}
+                                     :fn      #(page-handler/copy-page-url)}
 
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
