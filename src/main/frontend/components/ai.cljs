@@ -9,7 +9,8 @@
             [frontend.handler.ai :as ai-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util.property :as property]))
 
 (defonce *messages (atom []))
 
@@ -39,7 +40,7 @@
                                  {:block/properties {:logseq.ai.type "question"}
                                   :block/content q})
                           (scroll-to-bottom)
-                          (ai-handler/ask!
+                          (ai-handler/chat!
                            q
                            {:conversation-id (:chat/current-conversation @state/state)
                             :on-message (fn [message]
@@ -56,7 +57,7 @@
 (rum/defc conversation-message < rum/static
   [block]
   [:div.message {:class (get-in block [:block/properties :logseq.ai.type])}
-   (:block/content block)])
+   (property/remove-properties :markdown (:block/content block))])
 
 (rum/defcs conversation < rum/reactive
   [state conversation-id]
@@ -72,11 +73,12 @@
 (rum/defc conversations
   []
   [:div.conversations
-   (ui/button "New conversation")
+   (ui/button "New conversation"
+     :on-click (fn [] (ai-handler/new-conversation! nil)))
    (let [conversations (db-model/get-chat-conversations)]
      (for [c conversations]
        [:div.conversation-item
-        [:a {:on-click (state/set-state! :chat/current-conversation (:db/id c))}
+        [:a {:on-click #(state/set-state! :chat/current-conversation (:db/id c))}
          (string/replace-first (:block/original-name c) "Chat/" "")]]))])
 
 (rum/defc chat < rum/reactive

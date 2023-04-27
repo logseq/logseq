@@ -22,8 +22,8 @@
                        (map #(get-in % [:message :content]))))
                 (fn [failed-resp]
                   failed-resp)))
-  (ask-stream [_this q {:keys [model on-message on-finished]
-                        :or {model "gpt-3.5-turbo"}}]
+  (chat [_this conversation {:keys [model on-message on-finished]
+                             :or {model "gpt-3.5-turbo"}}]
     (let [*buffer (atom "")
           sse ^js (SSE. "https://api.openai.com/v1/chat/completions"
                         (bean/->js
@@ -33,8 +33,7 @@
                           :payload (js/JSON.stringify
                                     (bean/->js {:model model
                                                 :stream true
-                                                :messages [{:role "user"
-                                                            :content q}]}))}))]
+                                                :messages conversation}))}))]
       (.addEventListener sse "message"
                          (fn [e]
                            (let [data (.-data e)]
@@ -68,7 +67,8 @@
 
   (protocol/ask open-ai "What's logseq?" {})
 
-  (protocol/ask-stream open-ai "What's logseq?" {:on-message (fn [message]
+  (protocol/chat open-ai [{:role :user
+                           :message "What's logseq?"}] {:on-message (fn [message]
                                                                (prn "received: " message))
                                                  :on-finished (fn [message]
                                                                 (prn "finished: " message))})

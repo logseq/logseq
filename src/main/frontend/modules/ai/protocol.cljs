@@ -2,7 +2,7 @@
 
 (defprotocol AI
   (ask [this q opts])
-  (ask-stream [this q opts])
+  (chat [this conversation opts])
   ;; (index-graph [this repo])
   ;; encode && embedding
   (summarize [this content opts])
