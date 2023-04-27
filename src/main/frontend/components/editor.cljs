@@ -76,7 +76,7 @@
                                   (and
                                    (not (fn? command-steps))
                                    (not (contains? (set (map first command-steps)) :editor/input))
-                                   (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+                                   (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
                                               {:restore? restore-slash?
@@ -416,26 +416,6 @@
                     :exit  300}}
      (absolute-modal cp modal-name set-default-width? pos))))
 
-(rum/defc image-uploader < rum/reactive
-  [id format]
-  [:div.image-uploader
-   [:input
-    {:id        "upload-file"
-     :type      "file"
-     :on-change (fn [e]
-                  (let [files (.-files (.-target e))]
-                    (editor-handler/upload-asset id files format editor-handler/*asset-uploading? false)))
-     :hidden    true}]
-   #_:clj-kondo/ignore
-   (when-let [uploading? (util/react editor-handler/*asset-uploading?)]
-     (let [processing (util/react editor-handler/*asset-uploading-process)]
-       (transition-cp
-        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
-         (ui/loading
-          (util/format "Uploading %s%" (util/format "%2d" processing)))]
-        "upload-file"
-        false)))])
-
 (defn- set-up-key-down!
   [state format]
   (mixins/on-key-down
@@ -618,7 +598,4 @@
        :class             heading-class})
 
      (mock-textarea content)
-     (modals id format)
-
-     (when format
-       (image-uploader id format))]))
+     (modals id format)]))

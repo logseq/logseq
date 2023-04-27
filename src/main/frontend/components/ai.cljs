@@ -59,7 +59,7 @@
 (rum/defc conversation-message < rum/static
   [block]
   [:div.message {:class (get-in block [:block/properties :logseq.ai.type])}
-   (block/block-content {} (db/pull (:db/id block)) nil nil false)])
+   (block/single-block-cp (:block/uuid block))])
 
 (rum/defcs conversation < rum/reactive
   [state conversation-id]
