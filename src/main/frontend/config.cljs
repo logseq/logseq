@@ -191,9 +191,9 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "*"
+      "*%s*"
       :markdown
-      "**"
+      "**%s**"
       "")))
 
 (defn get-italic
@@ -201,9 +201,19 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "/"
+      "/*/"
       :markdown
-      "*"
+      "*%s*"
+      "")))
+
+(defn get-strike-through
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "+%s+"
+      :markdown
+      "~~%s~~"
       "")))
 
 (defn get-underline
@@ -216,23 +226,13 @@
       "<u>%s</u>"
       "")))
 
-(defn get-strike-through
-  [format]
-  (let [format (or format (keyword (state/get-preferred-format)))]
-    (case format
-      :org
-      "+"
-      :markdown
-      "~~"
-      "")))
-
 (defn get-highlight
   [format]
   (case format
     :org
-    "^^"
+    "^^%s^^"
     :markdown
-    "=="
+    "==%s=="
     ""))
 
 (defn get-code

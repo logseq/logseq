@@ -92,20 +92,19 @@
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           pattern (pattern-fn format)
-          pattern (if (string? pattern) {:open pattern :close pattern} pattern)
-          pattern-count (count (:open pattern))
+          open (string/replace pattern "%s" "")
+          close open
+          pattern-count (count open)
           pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
           pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
-          already-wrapped? (= (:open pattern) pattern-prefix (:close pattern) pattern-suffix)
+          already-wrapped? (= open pattern-prefix close pattern-suffix)
           prefix (if already-wrapped?
                    (subs value 0 (- selection-start pattern-count))
                    (subs value 0 selection-start))
           postfix (if already-wrapped?
                     (subs value (+ selection-end pattern-count))
                     (subs value selection-end))
-          inner-value (cond-> selection
-                        (not already-wrapped?)
-                        (#(str (:open pattern) % (:close pattern))))
+          inner-value (if already-wrapped? selection (string/replace pattern "%s" selection))
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
