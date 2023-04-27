@@ -12,6 +12,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
@@ -415,11 +416,12 @@
     (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
       (if-let [list-type (and target-block (list-type-fn target-block))]
         (mapv
-          (fn [block]
+          (fn [{:block/keys [content format] :as block}]
             (cond-> block
               (and (some? (:block/uuid block))
                    (nil? (list-type-fn block)))
-              (update :block/properties #(assoc % :logseq.order-list-type list-type))))
+              (-> (update :block/properties #(assoc % :logseq.order-list-type list-type))
+                  (assoc :block/content (property/insert-property format content :logseq.order-list-type list-type)))))
           blocks)
         blocks))))
 
