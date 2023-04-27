@@ -27,7 +27,8 @@
        :on-change on-change-fn
        :on-key-down   (fn [^js e]
                         (when (= (gobj/get e "key") "Enter")
-                          (ai-handler/ask! q {:conversation-id (:chat/current-conversation @state/state)})))}]]))
+                          (ai-handler/ask! q {:conversation-id (:chat/current-conversation @state/state)})
+                          (state/set-state! [:ui/chat :q] "")))}]]))
 
 (rum/defc conversation
   [conversation-id]

@@ -21,9 +21,35 @@
     :block/uuid
     :block/content
     :block/format
+    :block/tags
     :block/created-at
     :block/updated-at
     :block/collapsed?
+    {:block/page      [:block/uuid]}
+    {:block/left      [:block/uuid]}
+    {:block/parent    [:block/uuid]}])
+
+(def chat-blocks-pull-keys-with-persisted-ids
+  '[:block/uuid
+    :block/type
+    :block/properties
+    :block/properties-order
+    :block/properties-text-values
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/tags
+    :block/content
+    :block/format
+    :block/created-at
+    :block/updated-at
+    :block/collapsed?
+    :block/marker
+    :block/priority
+    ;; FIXME: persist namesaces into the edn
+    {:block/namespace [:block/uuid]}
+    {:block/refs      [:block/uuid]}
+    {:block/path-refs [:block/uuid]}
     {:block/page      [:block/uuid]}
     {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
@@ -48,6 +74,7 @@
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
         whiteboard? (= "whiteboard" (:block/type page-block))
+        chat? (= "chat" (:block/type page-block))
         blocks-count (model/get-page-blocks-count repo page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
@@ -57,13 +84,19 @@
               ;; when this whiteboard page is just being updated
               (and whiteboard? (not (state/whiteboard-idle? repo))))
         (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op])
-        (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
+        (let [pull-keys (cond
+                          chat?
+                          chat-blocks-pull-keys-with-persisted-ids
+                          whiteboard?
+                          whiteboard-blocks-pull-keys-with-persisted-ids
+                          :else
+                          '[*])
               blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
-              blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
+              blocks (if (or chat? whiteboard?) (map cleanup-whiteboard-block blocks) blocks)]
           (when-not (and (= 1 (count blocks))
                          (string/blank? (:block/content (first blocks)))
                          (nil? (:block/file page-block)))
-            (let [tree-or-blocks (if whiteboard? blocks
+            (let [tree-or-blocks (if (or chat? whiteboard?) blocks
                                      (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
               (if page-block
                 (file/save-tree! page-block tree-or-blocks blocks-just-deleted?)

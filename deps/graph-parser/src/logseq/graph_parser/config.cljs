@@ -40,10 +40,17 @@
 (defonce default-draw-directory "draws")
 ;; TODO read configurable value?
 (defonce default-whiteboards-directory "whiteboards")
+(defonce default-chats-directory "chats")
 
 (defn draw?
   [path]
   (string/starts-with? path default-draw-directory))
+
+(defn chat?
+  [path]
+  (and path
+       (string/includes? path (str default-chats-directory "/"))
+       (string/ends-with? path ".edn")))
 
 (defn whiteboard?
   [path]

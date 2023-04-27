@@ -1623,6 +1623,10 @@ independent of format as format specific heading characters are stripped"
 
     :else false))
 
+(defn chat-page?
+  [page]
+  (= "chat" (:block/type page)))
+
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
     :or {repo (state/get-current-repo)
