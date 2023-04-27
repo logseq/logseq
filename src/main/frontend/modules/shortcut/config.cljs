@@ -348,7 +348,7 @@
                                                 (state/pub-event! [:command/run]))}
 
    :go/home                        {:binding "g h"
-                                    :fn      route-handler/redirect-to-home!}
+                                    :fn      #(route-handler/redirect-to-home!)}
 
    :go/all-pages                   {:binding "g a"
                                     :fn      route-handler/redirect-to-all-pages!}
