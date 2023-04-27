@@ -1708,17 +1708,16 @@ independent of format as format specific heading characters are stripped"
   []
   (when-let [repo (state/get-current-repo)]
     (->>
-    (react/q repo [:frontend.db.react/conversations] {}
-      '[:find [(pull ?page [*]) ...]
-        :where
-        [?page :block/type "chat"]])
-    (react)
-    (sort-by :block/created-at)
+     (d/q
+       '[:find [(pull ?page [*]) ...]
+         :where
+         [?page :block/type "chat"]]
+       (conn/get-db repo))
+     (sort-by :block/created-at)
     (reverse)
     (take 50))))
 
 (defn get-chat-conversation
   "Get conversation messages."
   [conversation-id]
-  (->> (:block/_page (db-utils/entity conversation-id))
-       (sort-by :block/created-at)))
+  (get-sorted-page-block-ids conversation-id))

@@ -2159,6 +2159,8 @@
         sibling? (if (= page-id (:db/id target-block))
                    false
                    sibling?)]
+    (prn {:sibling? sibling?
+          :target-block target-block})
     (insert-block-tree tree-vec format
                       {:target-block target-block
                        :keep-uuid?   keep-uuid?

@@ -280,7 +280,8 @@
      :history/page-only-mode?               false
 
      ;; AI related
-     :open-ai/token                         (storage/get :open-ai-token)})))
+     :open-ai/token                         (storage/get :open-ai-token)
+     :chat/current-conversation             nil})))
 
 ;; Block ast state
 ;; ===============

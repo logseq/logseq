@@ -1,0 +1,43 @@
+.chat {
+    @apply flex flex-row transition rounded m-2;
+    height: 600px;
+    border: 1px solid var(--ls-border-color);
+
+    .conversations {
+        @apply w-64 p-2 overflow-y-scroll;
+        border-right-width: 1px;
+        border-color: var(--ls-border-color);
+    }
+
+    .conversation {
+        @apply p-2 overflow-y-scroll;
+        height: 540px;
+    }
+
+    .conversation-item {
+        @apply my-2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .input-box {
+        @apply absolute bottom-0 p-2 w-full;
+    }
+
+    input {
+        @apply block sm:text-sm sm:leading-5;
+    }
+
+    .message {
+        @apply p-1 mb-2;
+    }
+
+    .message.question {
+        @apply mr-4;
+    }
+
+    .message.answer {
+        @apply ml-4;
+    }
+}

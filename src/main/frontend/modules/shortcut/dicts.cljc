@@ -81,7 +81,7 @@
    :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
    :ui/toggle-brackets             "Toggle whether to display brackets"
    :go/search-in-page              "Search blocks in the current page"
-   :go/ai-dialog                   "Open AI dialog"
+   :go/ai-chat                     "Open chat"
    :go/electron-find-in-page       "Find text in page"
    :go/electron-jump-to-the-next   "Jump to the next match to your Find bar search"
    :go/electron-jump-to-the-previous "Jump to the previous match to your Find bar search"

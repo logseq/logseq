@@ -286,7 +286,7 @@
                                       :inactive (not (util/electron?))
                                       :fn      #(search-handler/loop-find-in-page! true)}
 
-   :go/ai-dialog                   {:binding "mod+j"
+   :go/ai-chat                     {:binding "mod+j"
                                     :fn      ai-handler/open-chat}
 
    :go/journals                    {:binding "g j"
@@ -599,7 +599,7 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
-                          :go/ai-dialog
+                          :go/ai-chat
                           :go/electron-find-in-page
                           :go/electron-jump-to-the-next
                           :go/electron-jump-to-the-previous
@@ -669,7 +669,7 @@
     :editor/select-parent
     :go/search
     :go/search-in-page
-    :go/ai-dialog
+    :go/ai-chat
     :go/electron-find-in-page
     :go/electron-jump-to-the-next
     :go/electron-jump-to-the-previous

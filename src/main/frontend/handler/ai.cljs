@@ -6,7 +6,6 @@
             [promesa.core :as p]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.modules.outliner.core :as outliner-core]
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.db :as db]))
@@ -27,9 +26,8 @@
                           (let [page (str "Chat/" (date/date->file-name (t/now)) "/" (random-uuid))]
                             (page-handler/create! page {:redirect? false
                                                         :create-first-block? false
-                                                        :additional-tx (outliner-core/block-with-timestamps
-                                                                        {:block/type "chat"
-                                                                         :block/properties {:logseq.ai.service service}})})
+                                                        :additional-tx {:block/type "chat"
+                                                                        :block/properties {:logseq.ai.service service}}})
                             (:db/id (db/entity [:block/name (string/lower-case page)]))))]
     (-> (p/let [result (ai/ask service q opts)
                 result (first result)]
@@ -41,11 +39,11 @@
                        :children (mapv (fn [answer] {:content answer
                                                      :properties {:logseq.ai.type "answer"}}) answers)}]
                 format (state/get-preferred-format)]
-            (editor-handler/insert-page-block-tree conversation-id false data format false)))
+            (editor-handler/insert-page-block-tree conversation-id true data format false)))
         (p/catch (fn [error]
                    ;; TODO: UI
                    (log/error :exception error))))))
 
 (defn open-chat
   []
-  )
+  (state/sidebar-add-block! (state/get-current-repo) :chat :chat))
