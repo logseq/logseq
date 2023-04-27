@@ -135,8 +135,8 @@
    :editor/highlight             {:binding "mod+shift+h"
                                   :fn      editor-handler/highlight-format!}
 
-   :editor/strike-through        {:binding "mod+shift+s"
-                                  :fn      editor-handler/strike-through-format!}
+   :editor/strikethrough        {:binding "mod+shift+s"
+                                  :fn      editor-handler/strikethrough-format!}
    
    :editor/underline             {:binding "mod+u"
                                   :fn      editor-handler/underline-format!}
@@ -537,7 +537,7 @@
                           :editor/bold
                           :editor/italics
                           :editor/highlight
-                          :editor/strike-through
+                          :editor/strikethrough
                           :editor/underline
                           :editor/clear-block
                           :editor/kill-line-before
@@ -681,7 +681,7 @@
    [:editor/bold
     :editor/insert-link
     :editor/italics
-    :editor/strike-through
+    :editor/strikethrough
     :editor/underline
     :editor/highlight]
 

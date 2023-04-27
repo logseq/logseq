@@ -118,8 +118,8 @@
 (defn italics-format! []
   (format-text! config/get-italic))
 
-(defn strike-through-format! []
-  (format-text! config/get-strike-through))
+(defn strikethrough-format! []
+  (format-text! config/get-strikethrough))
 
 (defn underline-format! []
   (format-text! config/get-underline))

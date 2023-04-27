@@ -120,7 +120,7 @@
        (thing-at-point (config/get-bold format) input)
        (thing-at-point (config/get-italic format) input)
        (thing-at-point (config/get-underline format) input)
-       (thing-at-point (config/get-strike-through format) input)
+       (thing-at-point (config/get-strikethrough format) input)
        (thing-at-point (config/get-highlight format) input)
        (thing-at-point (config/get-code format) input))))
 
