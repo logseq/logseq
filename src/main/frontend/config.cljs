@@ -201,7 +201,7 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "/*/"
+      "/%s/"
       :markdown
       "*%s*"
       "%s")))
