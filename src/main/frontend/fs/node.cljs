@@ -83,8 +83,7 @@
     (-> (ipc/ipc "mkdir" dir)
         (p/then (fn [_] (js/console.log (str "Directory created: " dir))))
         (p/catch (fn [error]
-                   (if (= (.-code error) "EEXIST")
-                     (js/console.log (str "Directory already exists: " dir))
+                   (when (not= (.-code error) "EEXIST")
                      (js/console.error (str "Error creating directory: " dir) error))))))
 
   (mkdir-recur! [_this dir]
