@@ -17,7 +17,7 @@
          (remove string/blank?))))
 
 (defn ask!
-  [q {:keys [conversation-id service] :as opts
+  [q {:keys [conversation-id service on-message on-finished] :as opts
       :or {service :openai}}]
   (let [conversation-id (if conversation-id
                           conversation-id
@@ -29,20 +29,18 @@
                                                         :additional-tx {:block/type "chat"
                                                                         :block/properties {:logseq.ai.service service}}})
                             (:db/id (db/entity [:block/name (string/lower-case page)]))))]
-    (-> (p/let [result (ai/ask service q opts)
-                result (first result)]
-          (js/console.log "Question: " q)
-          (js/console.log "Answers: " result)
-          (let [answers (text->segments result)
-                data [{:content q
-                       :properties {:logseq.ai.type "question"}
-                       :children (mapv (fn [answer] {:content answer
-                                                     :properties {:logseq.ai.type "answer"}}) answers)}]
-                format (state/get-preferred-format)]
-            (editor-handler/insert-page-block-tree conversation-id true data format false)))
-        (p/catch (fn [error]
-                   ;; TODO: UI
-                   (log/error :exception error))))))
+    (ai/ask-stream service q
+                   (assoc opts
+                          :on-message on-message
+                          :on-finished (fn [result]
+                                         (let [answers (text->segments result)
+                                               data [{:content q
+                                                      :properties {:logseq.ai.type "question"}
+                                                      :children (mapv (fn [answer] {:content answer
+                                                                                    :properties {:logseq.ai.type "answer"}}) answers)}]
+                                               format (state/get-preferred-format)]
+                                           (editor-handler/insert-page-block-tree conversation-id true data format false)
+                                           (on-finished)))))))
 
 (defn open-chat
   []

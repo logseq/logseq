@@ -15,3 +15,7 @@
 (defn ask
   [service q opts]
   (protocol/ask (get-record service) q opts))
+
+(defn ask-stream
+  [service q opts]
+  (protocol/ask-stream (get-record service) q opts))

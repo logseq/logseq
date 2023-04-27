@@ -9,7 +9,7 @@
         border-color: var(--ls-border-color);
     }
 
-    .conversation {
+    #conversation {
         @apply p-2 overflow-y-scroll;
         height: 540px;
     }

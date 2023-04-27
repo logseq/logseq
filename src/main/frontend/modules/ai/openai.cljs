@@ -33,7 +33,6 @@
                           :payload (js/JSON.stringify
                                     (bean/->js {:model model
                                                 :stream true
-                                                :stop ["\n\n"]
                                                 :messages [{:role "user"
                                                             :content q}]}))}))]
       (.addEventListener sse "message"
@@ -42,8 +41,8 @@
                              (if (and (string? data)
                                       (= data "[DONE]"))
                                (do
-                                 (.close sse)
-                                 (when on-finished (on-finished @*buffer)))
+                                 (when on-finished (on-finished @*buffer))
+                                 (.close sse))
                                (try
                                  (let [result (-> (bean/->clj (js/JSON.parse data))
                                                   :choices

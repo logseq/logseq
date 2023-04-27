@@ -11,6 +11,13 @@
             [frontend.db.model :as db-model]
             [clojure.string :as string]))
 
+(defonce *messages (atom []))
+
+(defn- scroll-to-bottom
+  []
+  (when-let [node (gdom/getElement "conversation")]
+    (util/scroll-to-bottom node)))
+
 (rum/defc input < rum/reactive
   []
   (let [q (state/sub [:ui/chat :q])
@@ -26,19 +33,41 @@
        :value q
        :on-change on-change-fn
        :on-key-down   (fn [^js e]
-                        (when (= (gobj/get e "key") "Enter")
-                          (ai-handler/ask! q {:conversation-id (:chat/current-conversation @state/state)})
+                        (when (and (= (gobj/get e "key") "Enter")
+                                   (not (string/blank? q)))
+                          (swap! *messages conj
+                                 {:block/properties {:logseq.ai.type "question"}
+                                  :block/content q})
+                          (scroll-to-bottom)
+                          (ai-handler/ask!
+                           q
+                           {:conversation-id (:chat/current-conversation @state/state)
+                            :on-message (fn [message]
+                                          (let [last-message (peek @*messages)
+                                                answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
+                                            (reset! *messages (conj (if answer? (pop @*messages) @*messages)
+                                                                    {:block/properties {:logseq.ai.type "answer"}
+                                                                     :block/content message}))
+                                            (scroll-to-bottom)))
+                            :on-finished (fn []
+                                           (reset! *messages []))})
                           (state/set-state! [:ui/chat :q] "")))}]]))
 
-(rum/defc conversation
-  [conversation-id]
-  [:div.conversation
+(rum/defc conversation-message < rum/static
+  [block]
+  [:div.message {:class (get-in block [:block/properties :logseq.ai.type])}
+   (:block/content block)])
+
+(rum/defcs conversation < rum/reactive
+  [state conversation-id]
+  [:div#conversation
    [:div.messages
-    (let [messages (db-model/get-chat-conversation conversation-id)]
-      (for [message-id messages]
-        (let [block (db/entity message-id)]
-          [:div.message {:class (get-in block [:block/properties :logseq.ai.type])}
-           (:block/content block)])))]])
+    (let [messages (concat (db-model/get-chat-conversation conversation-id) (rum/react *messages))]
+      (for [message messages]
+        (let [block (if (integer? message)
+                      (db/entity message)
+                      message)]
+          (conversation-message block))))]])
 
 (rum/defc conversations
   []
