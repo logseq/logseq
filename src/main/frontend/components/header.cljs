@@ -114,17 +114,19 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :join-community)]]
-        :options {:href "https://discuss.logseq.com"
-                  :title (t :discourse-title)
-                  :target "_blank"}
-        :icon (ui/icon "brand-discord")}
+       (when-not config/publishing? 
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :join-community)]]
+          :options {:href "https://discuss.logseq.com"
+                    :title (t :discourse-title)
+                    :target "_blank"}
+          :icon (ui/icon "brand-discord")})
 
-       {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :help/bug)]]
-        :options {:href (rfe/href :bug-report)}
-        :icon (ui/icon "bug")}
+       (when-not config/publishing?
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :help/bug)]]
+          :options {:href (rfe/href :bug-report)}
+          :icon (ui/icon "bug")})
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
