@@ -78,8 +78,8 @@
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
                                     (file-sync-handler/get-current-graph-uuid))]
-      (when (and page (not (or (block?)
-                               (config/publishing?))))
+      (when (and page (not (or block?
+                               config/publishing?)))
         (->>
          [{:title   (if favorited?
                       (t :page/unfavorite)
@@ -110,8 +110,8 @@
             {:title   (t :page/copy-page-url)
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
-          (when-not (or (contents?) 
-                        (config/publishing?))
+          (when-not (or contents? 
+                        config/publishing?)
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
