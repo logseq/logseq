@@ -297,9 +297,10 @@
                            :block/type "chat"
                            :block/file {:file/path (gp-util/path-normalize file)}}
                           serialized-page)
+        blocks' (map (fn [b] (assoc b :block/page {:block/uuid (:block/uuid page-block)})) blocks)
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
-     :blocks blocks}))
+     :blocks blocks'}))
 
 (defn- with-block-uuid
   [pages]

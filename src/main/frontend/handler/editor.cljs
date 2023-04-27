@@ -2042,8 +2042,10 @@
                   exclude-properties
                   target-block
                   sibling?
-                  keep-uuid?]
-           :or {exclude-properties []}}]
+                  keep-uuid?
+                  edit?]
+           :or {exclude-properties []
+                edit? true}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull (:db/id editing-block))
                                 (assoc :block/content (state/get-edit-content))))
@@ -2094,7 +2096,7 @@
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
-          (edit-last-block-after-inserted! result))))))
+          (when edit? (edit-last-block-after-inserted! result)))))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2154,7 +2156,7 @@
 (defn insert-page-block-tree
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
-  [page-id sibling? tree-vec format keep-uuid?]
+  [page-id tree-vec format {:keys [sibling? keep-uuid? edit?]}]
   (let [target-block (get-page-last-block page-id)
         sibling? (if (= page-id (:db/id target-block))
                    false
@@ -2162,7 +2164,8 @@
     (insert-block-tree tree-vec format
                       {:target-block target-block
                        :keep-uuid?   keep-uuid?
-                       :sibling?     sibling?})))
+                       :sibling?     sibling?
+                       :edit?        edit?})))
 
 (defn insert-template!
   ([element-id db-id]

@@ -175,6 +175,7 @@
           page (:block/page (db/entity [:block/uuid block-uuid]))
           page-name (:block/name page)
           long-page? (block-handler/long-page? repo (:db/id page))]
+      (prn {:block-uuid block-uuid})
       (if page
         (cond
           (model/whiteboard-page? page-name)

@@ -9,7 +9,8 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]))
+            [frontend.db.model :as db-model]
+            [frontend.modules.ai.prompts :as prompts]))
 
 (defn- text->segments
   [text]
@@ -48,7 +49,7 @@
                                             "assistant"
                                             "user")
                                     :content (:block/content b)}))))
-        conversation' (concat [{:role "system" :content "You are a helpful assistant. Answer as concisely as possible."}]
+        conversation' (concat [{:role "system" :content prompts/assistant}]
                               conversation
                               [{:role "user" :content q}])]
     (ai/chat service conversation'
@@ -61,7 +62,10 @@
                                                 :children (mapv (fn [answer] {:content answer
                                                                               :properties {:logseq.ai.type "answer"}}) answers)}]
                                          format (state/get-preferred-format)]
-                                     (editor-handler/insert-page-block-tree conversation-id true data format false)
+                                     (editor-handler/insert-page-block-tree conversation-id data format
+                                                                            {:sibling? true
+                                                                             :keep-uuid? false
+                                                                             :edit? false})
                                      (on-finished)))))))
 
 (defn open-chat
