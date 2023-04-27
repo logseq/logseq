@@ -91,24 +91,27 @@
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+          selection (or selection "")
           pattern (pattern-fn format)
           wrapped-pattern (string/replace pattern "%s" selection)
           wrapped-pattern-count (count wrapped-pattern)
-          wrapped-pattern-prefix (subs value (max 0 (- selection-start wrapped-pattern-count)) selection-start)
-          wrapped-pattern-suffix (subs value selection-end (min (count value) (+ selection-end wrapped-pattern-count)))
+          selection-start-minus-wpc (max 0 (- selection-start wrapped-pattern-count))
+          selection-end-plus-wpc (min (count value) (+ selection-end wrapped-pattern-count))
+          wrapped-pattern-prefix (subs value selection-start-minus-wpc selection-start)
+          wrapped-pattern-suffix (subs value selection-end selection-end-plus-wpc)
           already-wrapped? (= wrapped-pattern (str wrapped-pattern-prefix selection wrapped-pattern-suffix))
-          prefix (if already-wrapped?
-                   (subs value 0 (- selection-start wrapped-pattern-count))
-                   (subs value 0 selection-start))
-          postfix (if already-wrapped?
-                    (subs value (+ selection-end wrapped-pattern-count))
-                    (subs value selection-end))
-          inner-value (if already-wrapped? selection wrapped-pattern)
+          [prefix inner-value postfix] (if already-wrapped?
+                                         [(subs value 0 selection-start-minus-wpc)
+                                          selection
+                                          (subs value selection-end-plus-wpc)]
+                                         [(subs value 0 selection-start)
+                                          wrapped-pattern
+                                          (subs value selection-end)])
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
-        already-wrapped? (cursor/set-selection-to input (- selection-start wrapped-pattern-count) (- selection-end wrapped-pattern-count))
-        selection (cursor/move-cursor-to input (+ selection-end wrapped-pattern-count))
+        already-wrapped? (cursor/set-selection-to input selection-start-minus-wpc (- selection-end wrapped-pattern-count))
+        selection (cursor/move-cursor-to input (+ selection-end (- (count wrapped-pattern) (count selection))))
         :else (cursor/set-selection-to input (+ selection-start wrapped-pattern-count) (+ selection-end wrapped-pattern-count))))))
 
 (defn bold-format! []

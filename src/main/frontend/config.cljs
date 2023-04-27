@@ -194,7 +194,7 @@
       "*%s*"
       :markdown
       "**%s**"
-      "%s")))
+      "")))
 
 (defn get-italic
   [format]
@@ -204,7 +204,7 @@
       "/%s/"
       :markdown
       "*%s*"
-      "%s")))
+      "")))
 
 (defn get-strikethrough
   [format]
@@ -214,7 +214,7 @@
       "+%s+"
       :markdown
       "~~%s~~"
-      "%s")))
+      "")))
 
 (defn get-underline
   [format]
@@ -224,7 +224,7 @@
       "_%s_"
       :markdown
       "<u>%s</u>"
-      "%s")))
+      "")))
 
 (defn get-highlight
   [format]
@@ -233,7 +233,7 @@
     "^^%s^^"
     :markdown
     "==%s=="
-    "%s"))
+    ""))
 
 (defn get-code
   [format]
