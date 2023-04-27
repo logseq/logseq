@@ -6,57 +6,46 @@
             [promesa.core :as p]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.modules.outliner.core :as outliner-core]
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.db :as db]))
 
-(def default-service :openai)
-
-(defn open-dialog!
-  []
-  (let [{:keys [active?]} (:ui/ai-dialog @state/state)]
-    (when-not active?
-      (state/set-state! [:ui/ai-dialog :active?] true))))
-
-(defn close-dialog!
-  []
-  (let [{:keys [active?]} (:ui/ai-dialog @state/state)]
-    (state/set-state! :ui/ai-dialog nil)))
-
 (defn- text->segments
-  [i text multiple?]
-  (let [content (string/trim text)
-        segments (string/split content #"(?:\r?\n){2,}")]
-    (if (= 1 (count segments))
-      (if multiple?
-        {:content (str "Choice " (inc i))
-         :children [{:content content}]}
-        {:content content})
-      (let [result (map (fn [s] {:content s}) segments)]
-        (if multiple?
-          {:content (str "Choice " (inc i))
-           :children result}
-          result)))))
+  [text]
+  (let [content (string/trim text)]
+    (->> (string/split content #"(?:\r?\n){2,}")
+         (remove string/blank?))))
 
 (defn ask!
-  [q {:keys [parent-block] :as opts}]
-  (-> (p/let [result (ai/ask default-service q opts)]
-        (js/console.log "Question: " q)
-        (js/console.log "Answers: " result)
-        (let [parent-id (if parent-block
-                          (:db/id parent-block)
-                          (let [page (str "Chat/" (date/date->file-name (t/now)))]
+  [q {:keys [conversation-id service] :as opts
+      :or {service :openai}}]
+  (let [conversation-id (if conversation-id
+                          conversation-id
+                          ;; Create conversation
+                          ;; TODO: user-friendly page name, could be summarized by AI
+                          (let [page (str "Chat/" (date/date->file-name (t/now)) "/" (random-uuid))]
                             (page-handler/create! page {:redirect? false
-                                                        :create-first-block? false})
-                            (:db/id (db/entity [:block/name (string/lower-case page)]))))
-              multiple-choices? (> (count result) 1)]
-          (let [children (if multiple-choices?
-                           (map-indexed (fn [i text] (text->segments i text true)) result)
-                           (text->segments 0 (first result) false))
+                                                        :create-first-block? false
+                                                        :additional-tx (outliner-core/block-with-timestamps
+                                                                        {:block/type "chat"
+                                                                         :block/properties {:logseq.ai.service service}})})
+                            (:db/id (db/entity [:block/name (string/lower-case page)]))))]
+    (-> (p/let [result (ai/ask service q opts)
+                result (first result)]
+          (js/console.log "Question: " q)
+          (js/console.log "Answers: " result)
+          (let [answers (text->segments result)
                 data [{:content q
-                       :children (if (map? children) [children] children)}]
+                       :properties {:logseq.ai.type "question"}
+                       :children (mapv (fn [answer] {:content answer
+                                                     :properties {:logseq.ai.type "answer"}}) answers)}]
                 format (state/get-preferred-format)]
-            (editor-handler/insert-block-tree-after-target parent-id false data format false))))
-      (p/catch (fn [error]
-                 ;; TODO: UI
-                 (log/error :exception error)))))
+            (editor-handler/insert-page-block-tree conversation-id false data format false)))
+        (p/catch (fn [error]
+                   ;; TODO: UI
+                   (log/error :exception error))))))
+
+(defn open-chat
+  []
+  )

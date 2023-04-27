@@ -122,16 +122,20 @@ necessary db filtering"
       }(window.location))"]
             ;; TODO: should make this configurable
             [:script {:src "static/js/main.js"}]
-            [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/interact.min.js"}]
+            [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
+            [:script {:src "static/js/html2canvas.min.js"}]
             [:script {:src "static/js/code-editor.js"}]])))))
 
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
   [db* {:keys [app-state repo-config html-options]}]
-  (let [[db asset-filenames'] (if (:publishing/all-pages-public? repo-config)
+  (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
+                            val
+                            (:all-pages-public? repo-config))
+        [db asset-filenames'] (if all-pages-public?
                                 (db/clean-export! db*)
                                 (db/filter-only-public-pages-and-blocks db*))
         asset-filenames (remove nil? asset-filenames')

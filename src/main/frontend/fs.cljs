@@ -123,6 +123,7 @@
    (protocol/read-file (get-fs dir) dir path options)))
 
 (defn rename!
+  "Rename files, incoming relative path, converted to absolute path"
   [repo old-path new-path]
   (let [new-path (gp-util/path-normalize new-path)]
     (cond

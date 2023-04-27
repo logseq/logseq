@@ -371,7 +371,7 @@
         refs (distinct (concat (:refs block) ref-blocks))]
     (assoc block :refs refs)))
 
-(defn- block-keywordize
+(defn block-keywordize
   [block]
   (update-keys
    block
@@ -381,6 +381,7 @@
        (keyword "block" k)))))
 
 (defn- sanity-blocks-data
+  "Clean up blocks data and add `block` ns to all keys"
   [blocks]
   (map (fn [block]
          (if (map? block)
@@ -396,7 +397,7 @@
                                 [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
     block))
 
-(defn- get-block-content
+(defn get-block-content
   [utf8-content block format meta block-pattern]
   (let [content (if-let [end-pos (:end_pos meta)]
                   (utf8/substring utf8-content
@@ -608,24 +609,37 @@
   [block]
   (println "Logseq will assign a new id for this block: " block)
   (-> block
-      (assoc :uuid (d/squuid))
-      (update :properties dissoc :id)
-      (update :properties-text-values dissoc :id)
-      (update :properties-order #(vec (remove #{:id} %)))
-      (update :content (fn [c]
+      (assoc :block/uuid (d/squuid))
+      (update :block/properties dissoc :id)
+      (update :block/properties-text-values dissoc :id)
+      (update :block/properties-order #(vec (remove #{:id} %)))
+      (update :block/content (fn [c]
                          (let [replace-str (re-pattern
                                             (str
                                              "\n*\\s*"
-                                             (if (= :markdown (:format block))
-                                               (str "id" gp-property/colons " " (:uuid block))
-                                               (str (gp-property/colons-org "id") " " (:uuid block)))))]
+                                             (if (= :markdown (:block/format block))
+                                               (str "id" gp-property/colons " " (:block/uuid block))
+                                               (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page?
+(defn block-exists-in-another-page? 
+  "For sanity check only.
+   For renaming file externally, the file is actually deleted and transacted before-hand."
   [db block-uuid current-page-name]
   (when (and db current-page-name)
     (when-let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid])))]
       (not= current-page-name block-page-name))))
+
+(defn fix-block-id-if-duplicated!
+  "If the block exists in another page, we need to fix it
+   If the block exists in the current extraction process, we also need to fix it"
+  [db page-name *block-exists-in-extraction block]
+  (let [block (if (or (@*block-exists-in-extraction (:block/uuid block))
+                      (block-exists-in-another-page? db (:block/uuid block) page-name))
+                (fix-duplicate-id block)
+                block)]
+    (swap! *block-exists-in-extraction conj (:block/uuid block))
+    block))
 
 (defn extract-blocks
   "Extract headings from mldoc ast.
@@ -635,12 +649,10 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-               :extract-macros, :extracted-block-ids, :date-formatter, :page-name and :db"
-  [blocks content with-id? format {:keys [user-config db page-name extracted-block-ids] :as options}]
+               :extract-macros, :date-formatter, :page-name and :db"
+  [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
-        *block-ids (or extracted-block-ids (atom #{}))
-        ;; TODO: nbb doesn't support `Atom`
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)
@@ -666,14 +678,8 @@
 
                 (heading-block? block)
                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))
-                      block-uuid (:uuid block'')
-                      fixed-block (if (or (@*block-ids block-uuid)
-                                          (block-exists-in-another-page? db block-uuid page-name))
-                                    (fix-duplicate-id block'')
-                                    block'')]
-                  (swap! *block-ids conj (:uuid fixed-block))
-                  (recur (conj headings fixed-block) (rest blocks) {} {} []))
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))

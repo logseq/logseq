@@ -17,6 +17,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
@@ -129,7 +130,8 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?
+                  additional-tx]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
@@ -162,6 +164,9 @@
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
+             last-txs (if additional-tx
+                        (update last-txs 0 merge additional-tx)
+                        last-txs)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! txs)))
@@ -854,7 +859,8 @@
                               :create-first-block? (not template)
                               :journal? true})
               (state/pub-event! [:journal/insert-template today-page])
-              (ui-handler/re-render-root!))))))))
+              (ui-handler/re-render-root!)
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page}))))))))
 
 (defn open-today-in-sidebar
   []

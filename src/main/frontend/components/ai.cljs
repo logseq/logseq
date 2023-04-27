@@ -8,12 +8,13 @@
             [goog.dom :as gdom]
             [frontend.handler.ai :as ai-handler]))
 
-(rum/defc input
-  [q]
-  (let [on-change-fn (fn [e]
+(rum/defc input < rum/reactive
+  []
+  (let [q (state/sub [:ui/chat :q])
+        on-change-fn (fn [e]
                        (let [value (util/evalue e)
                              e-type (gobj/getValueByKeys e "type")]
-                         (state/set-state! [:ui/ai-dialog :q] value)))]
+                         (state/set-state! [:ui/chat :q] value)))]
     [:div.flex.w-full.relative
      [:input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.outline-none.shadow-none.focus:shadow-none
       {:auto-focus true
@@ -25,19 +26,16 @@
                         (when (= (gobj/get e "key") "Enter")
                           (ai-handler/ask! q {})))}]]))
 
-(rum/defc dialog-inner < rum/static
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :node (gdom/getElement "ai-dialog")
-      :on-hide ai-handler/close-dialog!)))
-  [{:keys [q]}]
-  [:div#ai-dialog.flex.flex-1.flex-row.absolute.bottom-4.shadow-lg.p-4.faster-fade-in.items-center
-   (input q)])
+(rum/defc conversation
+  [page-id]
+  [:div.conversation
+   ])
 
-(rum/defc dialog < rum/reactive
+(rum/defc chat
   []
-  (let [{:keys [active?] :as opt} (state/sub :ui/ai-dialog)]
-    (when active?
-      (dialog-inner opt))))
+  (let [page-id 1]
+    [:div.chat
+     [:div.conversations]
+     [:div
+      (conversation page-id)
+      (input)]]))

@@ -79,8 +79,19 @@ html[data-theme='light'] {
   }
 }
 
+.color-input-wrapper {
+  overflow: hidden;
+  width: 24px;
+  height: 24px;
+
+  .color-input {
+    transform: translate(-50%, -50%) scale(4);
+  }
+}
+
 .tl-container {
   overflow: hidden;
+  background-color: transparent !important;
 }
 
 .tl-menu-item {
@@ -163,13 +174,17 @@ html[data-theme='light'] {
   pointer-events: all;
   position: relative;
   background-color: var(--ls-secondary-background-color);
-  color: #a4b5b6;
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
+
+  label {
+    font-family: var(--ls-font-family);
+    font-size: 10px;
+  }
 }
 
 .tl-context-bar {
@@ -190,10 +205,6 @@ html[data-theme='light'] {
     width: 44px;
     height: 24px;
     padding: 2px;
-  }
-
-  .color-input {
-    transform: translate(-50%, -50%) scale(4);
   }
 
   .switch-input-root {
@@ -234,6 +245,10 @@ html[data-theme='light'] {
     &:focus {
       outline: none;
     }
+  }
+
+  .tl-geometry-tools-pane-anchor > .tl-button {
+    border: 1px solid var(--ls-secondary-border-color);
   }
 }
 
@@ -289,23 +304,32 @@ html[data-theme='light'] {
 }
 
 .tl-tools-floating-panel {
-  max-height: 90vh;
-  overflow-y: auto;
   flex-flow: column;
+
+  .tl-select-input-trigger {
+    @apply p-0 text-xs;
+
+    height: 32px;
+    min-width: 32px;
+  }
+
+  .tl-select-input-trigger-value {
+    @apply font-semibold justify-center;
+  }
 }
 
 button.tl-select-input-trigger {
   @apply flex items-center px-3;
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   background-color: var(--ls-secondary-background-color);
-  border-radius: 8px;
+  border-radius: 0.25rem;
   font-size: 16px;
   height: 100%;
   color: var(--ls-secondary-text-color);
 }
 
 .tl-select-input-trigger-value {
-  @apply flex items-center justify-start flex-1 mr-1 md:mr-3;
+  @apply flex items-center justify-start flex-1;
 }
 
 .tl-select-input-viewport {
@@ -523,7 +547,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-circle-button {
-  @apply absolute flex items-center justify-center transition-all rounded-full shadow;
+  @apply absolute flex items-center justify-center rounded-full shadow;
 
   color: var(--ls-primary-text-color);
   background-color: var(--ls-secondary-background-color);
@@ -533,59 +557,13 @@ button.tl-select-input-trigger {
   width: 34px;
   border: 2px solid var(--ls-secondary-background-color);
   top: 2px;
-  transition-delay: 0;
 
   .tie {
     transform: translateY(-100%);
   }
 
-  &[data-active='false']:hover:not([data-recently-changed='true']) {
-    .tie {
-      transform: translateY(0);
-
-      &:first-of-type {
-        opacity: 0.6;
-      }
-    }
-  }
-
-  &[data-active='true'] {
-    background-color: var(--ls-active-primary-color);
-    color: var(--ls-block-highlight-color);
-    border: 2px solid var(--ls-active-primary-color);
-
-    .tie {
-      transform: translateY(0);
-
-      &:last-of-type {
-        opacity: 0.6;
-      }
-    }
-
-    &:hover:not([data-recently-changed='true']) {
-      color: var(--ls-primary-text-color);
-      background-color: var(--ls-secondary-background-color);
-
-      .tie {
-        transform: translateY(-100%);
-      }
-    }
-  }
-
   .tl-circle-button-icons-wrapper {
     @apply flex flex-col;
-  }
-
-  i.tie {
-    transition: transform 0.2s ease-in-out;
-    transition-delay: 0;
-  }
-
-  .tl-circle-button-icons-wrapper[data-icons-count='2'] {
-    position: relative;
-    width: 22px;
-    height: 22px;
-    overflow: hidden;
   }
 }
 
@@ -716,10 +694,6 @@ button.tl-select-input-trigger {
   opacity: 1;
   user-select: text;
   transform-origin: top left;
-
-  &[data-collapsed='true'][data-editing='false'] {
-    @apply overflow-hidden;
-  }
 
   &[data-portal-selected='true'] {
     filter: brightness(0.9) contrast(0.5);
@@ -941,7 +915,6 @@ html[data-theme='dark'] {
 
 .tl-geometry-toolbar {
   box-shadow: none;
-  flex-flow: column;
 }
 
 .tl-popover-arrow {
@@ -1196,6 +1169,10 @@ button.tl-shape-links-panel-item-remove-button {
 
 .tl-tooltip-arrow {
   fill: var(--ls-secondary-background-color);
+}
+
+.tl-locked {
+  stroke-dasharray: calc(3px * var(--tl-scale)) calc(3px * var(--tl-scale));
 }
 
 @keyframes fadeIn {

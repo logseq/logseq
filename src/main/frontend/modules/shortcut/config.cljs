@@ -16,6 +16,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -258,6 +259,8 @@
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
+   :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
+
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
 
@@ -284,7 +287,7 @@
                                       :fn      #(search-handler/loop-find-in-page! true)}
 
    :go/ai-dialog                   {:binding "mod+j"
-                                    :fn      ai-handler/open-dialog!}
+                                    :fn      ai-handler/open-chat}
 
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
@@ -590,6 +593,7 @@
                           :editor/select-all-blocks
                           :editor/zoom-in
                           :editor/zoom-out
+                          :editor/toggle-undo-redo-mode
                           :editor/undo
                           :editor/redo
                           :ui/toggle-brackets
@@ -679,6 +683,7 @@
    [:editor/bold
     :editor/insert-link
     :editor/italics
+    :editor/strike-through
     :editor/highlight]
 
    :shortcut.category/navigating
@@ -749,6 +754,7 @@
    :shortcut.category/toggle
    [:ui/toggle-help
     :editor/toggle-open-blocks
+    :editor/toggle-undo-redo-mode
     :ui/toggle-wide-mode
     :ui/toggle-cards
     :ui/toggle-document-mode

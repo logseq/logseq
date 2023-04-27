@@ -16,7 +16,7 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
 
-(rum/defc scheduled-and-deadlines < rum/reactive db-mixins/query
+(rum/defc scheduled-and-deadlines-inner < rum/reactive db-mixins/query
   [page-name]
   (let [scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                  (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
@@ -33,3 +33,9 @@
                                           {})]
            (content/content page-name {:hiccup ref-hiccup}))]
         {:title-trigger? true})])))
+
+(rum/defc scheduled-and-deadlines
+  [page-name]
+  (ui/lazy-visible
+   (fn [] (scheduled-and-deadlines-inner page-name))
+   {:debug-id "scheduled-and-deadlines"}))

@@ -628,6 +628,13 @@
       width: 100%;
       max-width: 760px;
     }
+
+    .html-content {
+      > p {
+        padding-bottom: 2px;
+        margin: 0;
+      }
+    }
   }
 }
 

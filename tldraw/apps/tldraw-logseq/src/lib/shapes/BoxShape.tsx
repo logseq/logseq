@@ -98,7 +98,11 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       )
 
       return (
-        <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}  className="tl-box-container">
+        <div
+          {...events}
+          style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+          className="tl-box-container"
+        >
           <TextLabel
             font={font}
             text={label}
@@ -152,6 +156,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     this.update({
       scaleLevel: v,
       fontSize: levelToScale[v ?? 'md'],
+      strokeWidth: levelToScale[v ?? 'md'] / 10,
     })
     this.onResetBounds()
   }
@@ -161,12 +166,20 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       props: {
         size: [w, h],
         borderRadius,
+        isLocked,
       },
     } = this
 
     return (
       <g>
-        <rect width={w} height={h} rx={borderRadius} ry={borderRadius} fill="transparent" />
+        <rect
+          width={w}
+          height={h}
+          rx={borderRadius}
+          ry={borderRadius}
+          fill="transparent"
+          strokeDasharray={isLocked ? '8 2' : undefined}
+        />
       </g>
     )
   })

@@ -58,6 +58,7 @@ export class CreatingState<
       this.initialBounds.maxY = this.initialBounds.minY + this.initialBounds.height
     }
     this.creatingShape = shape
+    this.creatingShape.setScaleLevel(this.app.settings.scaleLevel)
     this.app.currentPage.addShapes(shape as unknown as S)
     this.app.setSelectedShapes([shape as unknown as S])
   }
@@ -87,8 +88,10 @@ export class CreatingState<
     this.tool.transition('idle')
     if (this.creatingShape) {
       this.app.setSelectedShapes([this.creatingShape as unknown as S])
+      this.app.api.editShape(this.creatingShape)
+    } else {
+      this.app.transition('select')
     }
-    this.app.transition('select')
     this.app.persist()
   }
 

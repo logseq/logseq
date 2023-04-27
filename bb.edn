@@ -131,4 +131,4 @@
   {:paths ["src/main"]
    ;; Ignore namespaces that won't be helpful to document initially
    ;; e.g. frontend.components.onboarding -> "Onboarding fns"
-   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile)"}}}
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile|logseq.sdk)"}}}

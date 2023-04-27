@@ -13,7 +13,7 @@
     "@radix-ui/react-context-menu": "^2.1.0",
     "@radix-ui/react-dropdown-menu": "^2.0.1",
     "@radix-ui/react-popover": "^1.0.0",
-    "@radix-ui/react-select": "^1.1.2",
+    "@radix-ui/react-select": "^1.2.1",
     "@radix-ui/react-separator": "^1.0.1",
     "@radix-ui/react-slider": "^1.1.0",
     "@radix-ui/react-switch": "^1.0.1",

@@ -362,6 +362,7 @@
                 block
                 (dissoc block :block/pre-block?))
         block (update block :block/refs remove-non-existed-refs!)
+        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         new-properties (merge
                         (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
@@ -778,26 +779,30 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format id value]
-  (when (and repo sibling-block)
-    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-        (let [original-content (util/trim-safe (:block/content block))
-              value' (-> (property/remove-built-in-properties format original-content)
-                         (drawer/remove-logbook))
-              new-value (str value' value)
-              tail-len (count value)
-              pos (max
-                   (if original-content
-                     (gobj/get (utf8/encode original-content) "length")
-                     0)
-                   0)]
-          (edit-block! block pos id
-                       {:custom-content new-value
-                        :tail-len tail-len
-                        :move-cursor? false})
-          {:prev-block block
-           :new-content new-value})))))
+  ([repo sibling-block format id value]
+   (move-to-prev-block repo sibling-block format id value true))
+  ([repo sibling-block format id value edit?]
+   (when (and repo sibling-block)
+     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+         (let [original-content (util/trim-safe (:block/content block))
+               value' (-> (property/remove-built-in-properties format original-content)
+                          (drawer/remove-logbook))
+               new-value (str value' value)
+               tail-len (count value)
+               pos (max
+                    (if original-content
+                      (gobj/get (utf8/encode original-content) "length")
+                      0)
+                    0)]
+           (when edit?
+             (edit-block! block pos id
+                          {:custom-content new-value
+                           :tail-len tail-len
+                           :move-cursor? false}))
+           {:prev-block block
+            :new-content new-value
+            :pos pos}))))))
 
 (declare save-block!)
 
@@ -899,7 +904,8 @@
                                      distinct
                                      vec)
                     content (property/remove-properties format content)
-                    kvs (for [key property-ks] [key (get properties key)])
+                    kvs (for [key property-ks] [key (or (get properties-text-values key)
+                                                        (get properties key))])
                     content (property/insert-properties format content kvs)
                     content (property/remove-empty-properties content)
                     block {:block/uuid block-id
@@ -2135,6 +2141,29 @@
                       :keep-uuid?   keep-uuid?
                       :sibling?     sibling?}))
 
+(defn- get-page-last-block
+  [page-id]
+  (let [page-block (db/entity page-id)
+        children (:block/_parent page-block)
+        blocks (db/sort-by-left children page-block)
+        last-block-id (:db/id (last blocks))]
+    (if last-block-id
+      (db/entity last-block-id)
+      page-block)))
+
+(defn insert-page-block-tree
+  "`tree-vec`: a vector of blocks.
+   A block element: {:content :properties :children [block-1, block-2, ...]}"
+  [page-id sibling? tree-vec format keep-uuid?]
+  (let [target-block (get-page-last-block page-id)
+        sibling? (if (= page-id (:db/id target-block))
+                   false
+                   sibling?)]
+    (insert-block-tree tree-vec format
+                      {:target-block target-block
+                       :keep-uuid?   keep-uuid?
+                       :sibling?     sibling?})))
+
 (defn insert-template!
   ([element-id db-id]
    (insert-template! element-id db-id {}))
@@ -3117,16 +3146,7 @@
     (when-let [block-id (:block/uuid current-block)]
       (if (= format "embed")
        (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
-       (copy-block-ref! block-id block-ref/->block-ref))
-      (notification/show!
-       [:div
-        [:span.mb-1.5 (str "Block " format " copied!")]
-        [:div [:code.whitespace.break-all (if (= format "embed")
-                                         (str "{{embed ((" block-id "))}}")
-                                         (block-ref/->block-ref block-id))]]]
-       :success true
-       ;; use uuid to make sure there is only one toast a time
-       (str "copied-block-ref:" block-id)))))
+       (copy-block-ref! block-id block-ref/->block-ref)))))
 
 (defn copy-current-block-embed []
   (copy-current-block-ref "embed"))
@@ -3339,6 +3359,17 @@
                          (catch :default _e
                            nil)))))))))
 
+(defn- valid-custom-query-block?
+  "Whether block has a valid customl query."
+  [block]
+  (let [entity (db/entity (:db/id block))
+        content (:block/content entity)]
+    (when (and (string/includes? content "#+BEGIN_QUERY")
+               (string/includes? content "#+END_QUERY"))
+      (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config (or (:block/format entity) :markdown)))
+            q (mldoc/extract-first-query-from-ast ast)]
+        (some? (:query (gp-util/safe-read-string q)))))))
+
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
@@ -3348,6 +3379,7 @@
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (or (db-model/has-children? block-id)
            (valid-dsl-query-block? block)
+           (valid-custom-query-block? block)
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)

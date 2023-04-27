@@ -5,7 +5,8 @@ import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { withClampedStyles } from './style-props'
 
-export const YOUTUBE_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
+export const YOUTUBE_REGEX =
+  /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
 
 export interface YouTubeShapeProps extends TLBoxShapeProps {
   type: 'youtube'
@@ -58,6 +59,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
           style={{
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
+            background: `url('https://img.youtube.com/vi/${this.embedId}/mqdefault.jpg') no-repeat center/cover`,
           }}
         >
           {this.embedId ? (
@@ -117,9 +119,19 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<YouTubeShapeProps>) => {

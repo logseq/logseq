@@ -37,7 +37,6 @@
             [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -89,10 +88,7 @@
 (defn- enable-beta-features!
   []
   (when-not (false? (state/enable-sync?)) ; user turns it off
-    (file-sync-handler/set-sync-enabled! true))
-
-  (when-not (false? (state/enable-whiteboards?))
-    (config-handler/set-config! :feature/enable-whiteboards? true)))
+    (file-sync-handler/set-sync-enabled! true)))
 
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
@@ -573,36 +569,44 @@
               (file-sync-restart!))))
         (state/pub-event! [:graph/ready (state/get-current-repo)])))))
 
-(defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
-  (let [downloading? (:plugin/updates-downloading? @state/state)]
-
+(defmethod handle :plugin/consume-updates [[_ id prev-pending? updated?]]
+  (let [downloading?   (:plugin/updates-downloading? @state/state)
+        auto-checking? (plugin-handler/get-auto-checking?)]
     (when-let [coming (and (not downloading?)
                            (get-in @state/state [:plugin/updates-coming id]))]
       (let [error-code (:error-code coming)
-            error-code (if (= error-code (str :no-new-version)) nil error-code)]
-        (when (or pending? (not error-code))
-          (notification/show!
-            (str "[Checked]<" (:title coming) "> " error-code)
-            (if error-code :error :success)))))
+            error-code (if (= error-code (str :no-new-version)) nil error-code)
+            title      (:title coming)]
+        (when (and prev-pending? (not auto-checking?))
+          (if-not error-code
+            (plugin/set-updates-sub-content! (str title "...") 0)
+            (notification/show!
+              (str "[Checked]<" title "> " error-code) :error)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
-      (if-let [n (state/get-next-selected-coming-update)]
-        (plugin-handler/check-or-update-marketplace-plugin
-         (assoc n :only-check false :error-code nil)
-         (fn [^js e] (js/console.error "[Download Err]" n e)))
+      (if-let [next-coming (state/get-next-selected-coming-update)]
+        (plugin-handler/check-or-update-marketplace-plugin!
+          (assoc next-coming :only-check false :error-code nil)
+          (fn [^js e] (js/console.error "[Download Err]" next-coming e)))
         (plugin-handler/close-updates-downloading))
 
       ;; try to start consume pending item
-      (if-let [n (second (first (:plugin/updates-pending @state/state)))]
-        (plugin-handler/check-or-update-marketplace-plugin
-         (assoc n :only-check true :error-code nil)
-         (fn [^js e]
-           (notification/show! (.toString e) :error)
-           (js/console.error "[Check Err]" n e)))
+      (if-let [next-pending (second (first (:plugin/updates-pending @state/state)))]
+        (do
+          (println "Updates: take next pending - " (:id next-pending))
+          (js/setTimeout
+            #(plugin-handler/check-or-update-marketplace-plugin!
+               (assoc next-pending :only-check true :auto-check auto-checking? :error-code nil)
+               (fn [^js e]
+                 (notification/show! (.toString e) :error)
+                 (js/console.error "[Check Err]" next-pending e))) 500))
+
         ;; try to open waiting updates list
-        (when (and pending? (seq (state/all-available-coming-updates)))
-          (plugin/open-waiting-updates-modal!))))))
+        (do (when (and prev-pending? (not auto-checking?)
+                       (seq (state/all-available-coming-updates)))
+              (plugin/open-waiting-updates-modal!))
+            (plugin-handler/set-auto-checking! false))))))
 
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
   (when-let [payload (and (seq blocks)

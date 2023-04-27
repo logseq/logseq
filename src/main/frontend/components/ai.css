@@ -1,6 +1,0 @@
-#ai-dialog {
-    background: var(--ls-primary-background-color);
-    width: 100%;
-    max-width: var(--ls-main-content-max-width);
-    z-index: 1000;
-}
