@@ -84,6 +84,7 @@ test('draw a rectangle', async ({ page }) => {
   const bounds = (await canvas.boundingBox())!
 
   await page.keyboard.press('r')
+  await page.waitForTimeout(100)
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
