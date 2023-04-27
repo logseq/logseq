@@ -92,25 +92,24 @@
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           pattern (pattern-fn format)
-          open (string/replace pattern "%s" "")
-          close open
-          pattern-count (count open)
-          pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
-          pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
-          already-wrapped? (= open pattern-prefix close pattern-suffix)
+          wrapped-pattern (string/replace pattern "%s" selection)
+          wrapped-pattern-count (count wrapped-pattern)
+          wrapped-pattern-prefix (subs value (max 0 (- selection-start wrapped-pattern-count)) selection-start)
+          wrapped-pattern-suffix (subs value selection-end (min (count value) (+ selection-end wrapped-pattern-count)))
+          already-wrapped? (= wrapped-pattern (str wrapped-pattern-prefix selection wrapped-pattern-suffix))
           prefix (if already-wrapped?
-                   (subs value 0 (- selection-start pattern-count))
+                   (subs value 0 (- selection-start wrapped-pattern-count))
                    (subs value 0 selection-start))
           postfix (if already-wrapped?
-                    (subs value (+ selection-end pattern-count))
+                    (subs value (+ selection-end wrapped-pattern-count))
                     (subs value selection-end))
-          inner-value (if already-wrapped? selection (string/replace pattern "%s" selection))
+          inner-value (if already-wrapped? selection wrapped-pattern)
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
-        already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
-        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
-        :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
+        already-wrapped? (cursor/set-selection-to input (- selection-start wrapped-pattern-count) (- selection-end wrapped-pattern-count))
+        selection (cursor/move-cursor-to input (+ selection-end wrapped-pattern-count))
+        :else (cursor/set-selection-to input (+ selection-start wrapped-pattern-count) (+ selection-end wrapped-pattern-count))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
