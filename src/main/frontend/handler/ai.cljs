@@ -10,7 +10,8 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.modules.ai.prompts :as prompts]))
+            [frontend.modules.ai.prompts :as prompts]
+            [frontend.util :as util]))
 
 (defn- text->segments
   [text]
@@ -20,10 +21,18 @@
 
 (def default-service :openai)
 
+;; TODO: openai summarize not working great for short text
+(defn- get-page-name-from-q
+  [q]
+  (let [result (if (<= (count q) 64) q (subs q 0 63))]
+    (str "Chat/" (string/replace result "/" "_"))))
+
 (defn new-conversation!
-  [service]
+  [service q]
   (let [service (or service default-service)
-        page (str "Chat/" (date/date->file-name (t/now)) "/" (random-uuid))]
+        page (if q
+               (get-page-name-from-q q)
+               (str "Chat/" (date/date->file-name (t/now)) "/" (random-uuid)))]
     (page-handler/create! page {:redirect? false
                                 :create-first-block? false
                                 :additional-tx {:block/type "chat"
@@ -39,7 +48,7 @@
                           conversation-id
                           ;; Create conversation
                           ;; TODO: user-friendly page name, could be summarized by AI
-                          (new-conversation! service))
+                          (new-conversation! service q))
         conversation (->> (db-model/get-chat-conversation conversation-id)
                           (map (fn [id]
                                  (let [b (db/entity id)
@@ -51,7 +60,14 @@
                                     :content (:block/content b)}))))
         conversation' (concat [{:role "system" :content prompts/assistant}]
                               conversation
-                              [{:role "user" :content q}])]
+                              [{:role "user" :content q}])
+        c-e (db/entity conversation-id)
+        c-name (:block/name c-e)]
+    (when (and c-name
+               (empty? conversation)
+               (util/uuid-string? (subs c-name (- (count c-name) 36)))) ; initial name
+      (let [new-page-name (get-page-name-from-q q)]
+        (page-handler/rename! (:block/original-name c-e) new-page-name false)))
     (ai/chat service conversation'
              (assoc opts
                     :on-message on-message

@@ -5,7 +5,6 @@
 
 (defn- get-record
   [kind]
-  (prn "kind: " kind)
   (case kind
     :openai
     (openai/->OpenAI (:open-ai/token @state/state))
@@ -19,3 +18,7 @@
 (defn chat
   [service conversation opts]
   (protocol/chat (get-record service) conversation opts))
+
+(defn summarize
+  [service q opts]
+  (protocol/summarize (get-record service) q opts))

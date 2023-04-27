@@ -10,7 +10,8 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.string :as string]
-            [frontend.util.property :as property]))
+            [frontend.util.property :as property]
+            [cljs-time.coerce :as tc]))
 
 (defonce *messages (atom []))
 
@@ -77,12 +78,14 @@
      :icon "plus"
      :intent "border-link"
      :small? true
-     :on-click (fn [] (ai-handler/new-conversation! nil)))
+     :on-click (fn [] (ai-handler/new-conversation! nil nil)))
    (let [conversations (db-model/get-chat-conversations)]
      (for [c conversations]
        (let [current? (= conversation-id (:db/id c))]
          [:div.conversation-item
-          [:a {:on-click #(state/set-state! :chat/current-conversation (:db/id c))}
+          [:a {:title (str (:block/original-name c) " - "
+                           (tc/to-date (:block/created-at c)))
+               :on-click #(state/set-state! :chat/current-conversation (:db/id c))}
            (str (when current? "-> ") (string/replace-first (:block/original-name c) "Chat/" ""))]])))])
 
 (rum/defc chat < rum/reactive

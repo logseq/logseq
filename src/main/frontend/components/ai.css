@@ -4,7 +4,7 @@
     border: 1px solid var(--ls-border-color);
 
     .conversations {
-        @apply w-64 p-2 overflow-y-scroll;
+        @apply w-64 px-2 py-4 overflow-y-scroll;
         border-right-width: 1px;
         border-color: var(--ls-border-color);
     }
