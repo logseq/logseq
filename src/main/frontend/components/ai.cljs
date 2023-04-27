@@ -11,7 +11,8 @@
             [frontend.db.model :as db-model]
             [clojure.string :as string]
             [frontend.util.property :as property]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [frontend.components.block :as block]))
 
 (defonce *messages (atom []))
 
@@ -58,7 +59,7 @@
 (rum/defc conversation-message < rum/static
   [block]
   [:div.message {:class (get-in block [:block/properties :logseq.ai.type])}
-   (property/remove-properties :markdown (:block/content block))])
+   (block/block-content {} (db/pull (:db/id block)) nil nil false)])
 
 (rum/defcs conversation < rum/reactive
   [state conversation-id]
