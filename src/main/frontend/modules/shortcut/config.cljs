@@ -72,34 +72,34 @@
                                   :fn      pdf-utils/open-finder}
 
    :whiteboard/select            {:binding ["1" "s"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "select")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
    
    :whiteboard/pan               {:binding ["2" "p"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "move")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
    
    :whiteboard/portal            {:binding "3"
-                                  :fn      #(.selectTool (state/active-tldraw-app) "logseq-portal")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
    :whiteboard/pencil            {:binding ["4" "d"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "pencil")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "pencil")}
 
    :whiteboard/highlighter       {:binding ["5" "h"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "highlighter")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
    
    :whiteboard/eraser            {:binding ["6" "e"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "erase")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
    
    :whiteboard/connector         {:binding ["7" "c"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "line")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
    
    :whiteboard/text              {:binding ["8" "t"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "text")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
 
    :whiteboard/rectangle         {:binding ["9" "r"]
-                                  :fn      #(.selectTool (state/active-tldraw-app) "box")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "box")}
 
    :whiteboard/ellipse           {:binding "o"
-                                  :fn      #(.selectTool (state/active-tldraw-app) "ellipse")}
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "ellipse")}
 
    :whiteboard/reset-zoom        {:binding "shift+0"
                                   :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
@@ -117,22 +117,22 @@
                                   :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
 
    :whiteboard/send-backward     {:binding "["
-                                  :fn      #(.sendBackward (state/active-tldraw-app))}
+                                  :fn      #(.sendBackward ^js (state/active-tldraw-app))}
 
    :whiteboard/send-to-back      {:binding "shift+["
-                                  :fn      #(.sendToBack (state/active-tldraw-app))}
+                                  :fn      #(.sendToBack ^js (state/active-tldraw-app))}
 
    :whiteboard/bring-forward     {:binding "]"
-                                  :fn      #(.bringForward (state/active-tldraw-app))}
+                                  :fn      #(.bringForward ^js (state/active-tldraw-app))}
 
    :whiteboard/bring-to-front    {:binding "shift+]"
-                                  :fn      #(.bringToFront (state/active-tldraw-app))}
+                                  :fn      #(.bringToFront ^js (state/active-tldraw-app))}
 
    :whiteboard/lock              {:binding "mod+l"
-                                  :fn      #(.setLocked (state/active-tldraw-app) true)}
+                                  :fn      #(.setLocked ^js (state/active-tldraw-app) true)}
 
    :whiteboard/unlock            {:binding "mod+shift+l"
-                                  :fn      #(.setLocked (state/active-tldraw-app) false)}
+                                  :fn      #(.setLocked ^js (state/active-tldraw-app) false)}
 
    :whiteboard/group             {:binding "mod+g"
                                   :fn      #(.doGroup (.-api ^js (state/active-tldraw-app)))}
