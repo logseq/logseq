@@ -10,8 +10,7 @@
             [logseq.graph-parser.util :as gp-util]
             [shadow.resource :as rc]
             [goog.crypt.Md5]
-            [goog.crypt :as crypt]
-            [clojure.string :as string]))
+            [goog.crypt :as crypt]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
