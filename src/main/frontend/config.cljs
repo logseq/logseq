@@ -10,7 +10,8 @@
             [logseq.graph-parser.util :as gp-util]
             [shadow.resource :as rc]
             [goog.crypt.Md5]
-            [goog.crypt :as crypt]))
+            [goog.crypt :as crypt]
+            [clojure.string :as string]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -211,9 +212,10 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      {:open "_" :close "_"}
-      :markdown ;; no underline for markdown by default (use HTML syntax instead)
-      {:open "<u>" :close "</u>"})))
+      "_%s_"
+      :markdown
+      "<u>%s</u>"
+      "")))
 
 (defn get-strike-through
   [format]
