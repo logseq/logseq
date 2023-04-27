@@ -26,7 +26,7 @@
           }
         }
       }
-      
+
       &:hover, &.chosen {
         .has-help small {
           visibility: visible;
@@ -267,7 +267,7 @@ html.is-mobile {
 }
 
 .ui__button {
-  @apply inline-flex items-center px-3 py-2 border border-transparent
+  @apply inline-flex items-center border border-transparent
   text-sm leading-4 font-medium rounded-md text-white
   focus:outline-none transition ease-in-out duration-150;
 

@@ -71,21 +71,25 @@
           (conversation-message block))))]])
 
 (rum/defc conversations
-  []
+  [conversation-id]
   [:div.conversations
    (ui/button "New conversation"
+     :icon "plus"
+     :intent "border-link"
+     :small? true
      :on-click (fn [] (ai-handler/new-conversation! nil)))
    (let [conversations (db-model/get-chat-conversations)]
      (for [c conversations]
-       [:div.conversation-item
-        [:a {:on-click #(state/set-state! :chat/current-conversation (:db/id c))}
-         (string/replace-first (:block/original-name c) "Chat/" "")]]))])
+       (let [current? (= conversation-id (:db/id c))]
+         [:div.conversation-item
+          [:a {:on-click #(state/set-state! :chat/current-conversation (:db/id c))}
+           (str (when current? "-> ") (string/replace-first (:block/original-name c) "Chat/" ""))]])))])
 
 (rum/defc chat < rum/reactive
   []
   (let [conversation-id (state/sub :chat/current-conversation)]
     [:div.chat
-     (conversations)
+     (conversations conversation-id)
      [:div.flex.flex-1.relative
       (conversation conversation-id)
       (input)]]))
