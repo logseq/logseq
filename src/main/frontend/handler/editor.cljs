@@ -115,11 +115,11 @@
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
           updated-selection (or selection "")
-          has-prefix? (string/ends-with? before-text prefix)
-          has-postfix? (string/starts-with? after-text postfix)
-          [updated-text cursor-pos] (if (and has-prefix? has-postfix?)
+          wrapped? (and (string/ends-with? before-text prefix)
+                        (string/starts-with? after-text postfix))
+          [updated-text cursor-pos] (if wrapped?
                                       [(wrapped before-text updated-selection after-text [prefix postfix])
-                                       (+ (- selection-start (count prefix)) (count updated-selection))]
+                                       (- selection-end (count postfix))]
                                       [(unwrapped before-text updated-selection pattern after-text)
                                        (+ selection-start (count prefix) (count updated-selection))])]
       (update-content! edit-id input updated-text cursor-pos))))
