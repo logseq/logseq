@@ -92,11 +92,6 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- update-content! [edit-id input content cursor-pos]
-  (state/set-edit-content! edit-id content)
-  (cursor/set-selection-to input cursor-pos cursor-pos)
-  (reset-cursor-range! input))
-
 (defn- wrapped [before-text updated-selection after-text [prefix postfix]]
   (str (subs before-text 0 (- (count before-text) (count prefix)))
        updated-selection
@@ -105,6 +100,7 @@
 (defn- unwrapped [before-text updated-selection pattern after-text]
   (str before-text (string/replace pattern "%s" updated-selection) after-text))
 
+;; TODO: Fix cursor position when selection is empty.
 (defn- format-text! [pattern-fn]
   (when-let [selection-data (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format selection
@@ -121,8 +117,14 @@
                                       [(wrapped before-text updated-selection after-text [prefix postfix])
                                        (- selection-end (count postfix))]
                                       [(unwrapped before-text updated-selection pattern after-text)
-                                       (+ selection-start (count prefix) (count updated-selection) (count postfix))])]
-      (update-content! edit-id input updated-text cursor-pos))))
+                                       (+ selection-start (count prefix) (count updated-selection) (count postfix))])] 
+      (state/set-edit-content! edit-id updated-text) 
+      (if wrapped? 
+        (cursor/set-selection-to input (- selection-start (count prefix)) cursor-pos)
+        (do 
+          (reset-cursor-range! input)
+          (cursor/move-cursor-to input cursor-pos))))))
+
 
 (defn bold-format! []
   (format-text! config/get-bold))
