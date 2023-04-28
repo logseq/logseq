@@ -68,40 +68,19 @@
   (when node
     (state/set-cursor-range! (util/caret-range node))))
 
-(def clear-selection! editor-property/clear-selection!)
-(def edit-block! editor-property/edit-block!)
+(defn restore-cursor-pos!
+  [id markup]
+  (when-let [node (gdom/getElement (str id))]
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
 
-(defn get-block-own-order-list-type
-  [block]
-  (some-> block :block/properties :logseq.order-list-type))
-
-(defn set-block-own-order-list-type!
-  [block type]
-  (when-let [uuid (:block/uuid block)]
-    (editor-property/set-block-property! uuid :logseq.order-list-type (name type))))
-
-(defn remove-block-own-order-list-type!
-  [block]
-  (when-let [uuid (:block/uuid block)]
-    (editor-property/remove-block-property! uuid :logseq.order-list-type)))
-
-(defn own-order-number-list?
-  [block]
-  (= (get-block-own-order-list-type block) "number"))
-
-(defn make-block-as-own-order-list!
-  [block]
-  (some-> block (set-block-own-order-list-type! "number")))
-
-(defn toggle-blocks-as-own-order-list!
-  [blocks]
-  (when (seq blocks)
-    (let [has-ordered?    (some own-order-number-list? blocks)
-          blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop :logseq.order-list-type]
-      (if has-ordered?
-        (editor-property/batch-remove-block-property! blocks-uuids order-list-prop)
-        (editor-property/batch-add-block-property! blocks-uuids order-list-prop "number")))))
+(defn clear-selection!
+  []
+  (state/clear-selection!))
 
 (defn get-selection-and-format
   []
@@ -256,16 +235,6 @@
          (:db/id block)
          (if page? :page :block))))))
 
-(defn restore-cursor-pos!
-  [id markup]
-  (when-let [node (gdom/getElement (str id))]
-    (let [cursor-range (state/get-cursor-range)
-          pos (or (state/get-editor-last-pos)
-                  (and cursor-range
-                       (diff/find-position markup cursor-range)))]
-      (cursor/move-cursor-to node pos)
-      (state/clear-editor-last-pos!))))
-
 (defn highlight-block!
   [block-uuid]
   (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
@@ -279,6 +248,26 @@
                         (apply concat))]
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
+
+(defn- get-edit-input-id-with-block-id
+  [block-id]
+  (when-let [first-block (util/get-first-block-by-id block-id)]
+    (string/replace (gobj/get first-block "id")
+                    "ls-block"
+                    "edit-block")))
+
+
+(defn- text-range-by-lst-fst-line [content [direction pos]]
+  (case direction
+    :up
+    (let [last-new-line (or (string/last-index-of content \newline) -1)
+          end (+ last-new-line pos 1)]
+      (subs content 0 end))
+    :down
+    (-> (string/split-lines content)
+        first
+        (or "")
+        (subs 0 pos))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?
