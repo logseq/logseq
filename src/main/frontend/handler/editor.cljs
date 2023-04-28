@@ -106,53 +106,40 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- format-text!
-  [pattern-fn]
-  (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+(defn- get-prefix-and-postfix [pattern]
+  (string/split pattern #"%s"))
+
+(defn- update-content! [edit-id input content cursor-pos]
+  (state/set-edit-content! edit-id content)
+  (cursor/set-selection-to input cursor-pos cursor-pos)
+  (reset-cursor-range! input)
+  (clear-selection!))
+
+(defn- wrapped [before-text updated-selection after-text prefix postfix]
+  (str (subs before-text 0 (- (count before-text) (count prefix)))
+       updated-selection
+       (subs after-text (count postfix))))
+
+(defn- unwrapped [before-text updated-selection pattern after-text]
+  (str before-text (string/replace pattern "%s" updated-selection) after-text))
+
+(defn- format-text! [pattern-fn]
+  (when-let [selection-data (get-selection-and-format)]
+    (let [{:keys [selection-start selection-end format selection value edit-id input]} selection-data
           default-format (or format "")
           pattern (pattern-fn default-format)
-          pattern-start (string/index-of pattern "%s")
-          pattern-end (+ pattern-start 2)
-          before-pattern (subs pattern 0 pattern-start)
-          after-pattern (subs pattern pattern-end)
-          update-content! (fn [content cursor-pos]
-                            (state/set-edit-content! edit-id content)
-                            (cursor/set-selection-to input cursor-pos cursor-pos))]
-      (if (seq selection)
-        (let [before-selected-text (subs value 0 selection-start)
-              after-selected-text (subs value selection-end)
-              already-wrapped? (and (string/ends-with? before-selected-text before-pattern)
-                                    (string/starts-with? after-selected-text after-pattern))]
-          (if already-wrapped?
-            (let [unwrapped-text (str (subs before-selected-text 0 (- (count before-selected-text) (count before-pattern)))
-                                      selection
-                                      (subs after-selected-text (count after-pattern)))
-                  cursor-pos (+ selection-start (- (count selection) (count before-pattern)))]
-              (update-content! unwrapped-text cursor-pos)
-              (reset-cursor-range! input)
-              (clear-selection!))
-            (let [wrapped-text (str before-selected-text (string/replace pattern "%s" selection) after-selected-text)
-                  cursor-pos (+ selection-start (count before-pattern) (count selection) (count after-pattern))]
-              (update-content! wrapped-text cursor-pos)
-              (reset-cursor-range! input)
-              (clear-selection!))))
-        (let [before-cursor (subs value 0 selection-start)
-              after-cursor (subs value selection-start)]
-          (if (and (string/ends-with? before-cursor before-pattern)
-                   (string/starts-with? after-cursor after-pattern))
-            (let [updated-text (str (subs before-cursor 0 (- (count before-cursor) (count before-pattern)))
-                                    (subs after-cursor (count after-pattern)))
-                  cursor-pos (- selection-start (count before-pattern))]
-              (update-content! updated-text cursor-pos)
-              (reset-cursor-range! input)
-              (clear-selection!))
-            (let [pattern-without-placeholder (string/replace pattern "%s" "")
-                  new-value (str before-cursor pattern-without-placeholder after-cursor)
-                  cursor-pos (+ selection-start pattern-start)]
-              (update-content! new-value cursor-pos)
-              (reset-cursor-range! input)
-              (clear-selection!))))))))
+          [prefix postfix] (get-prefix-and-postfix pattern)
+          before-text (subs value 0 selection-start)
+          after-text (subs value selection-end)
+          updated-selection (if (seq selection) selection "")
+          has-prefix? (string/ends-with? before-text prefix)
+          has-postfix? (string/starts-with? after-text postfix)
+          [updated-text cursor-pos] (if (and has-prefix? has-postfix?)
+                                      [(wrapped before-text updated-selection after-text prefix postfix)
+                                       (+ selection-start (if (seq selection) (- (count selection) (count prefix)) (- (count prefix))))]
+                                      [(unwrapped before-text updated-selection pattern after-text)
+                                       (+ selection-start (count prefix) (count updated-selection))])]
+      (update-content! edit-id input updated-text cursor-pos))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
