@@ -92,13 +92,13 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- wrapped [before-text updated-selection after-text [prefix postfix]]
+(defn- remove-pattern [before-text text after-text [prefix postfix]]
   (str (subs before-text 0 (- (count before-text) (count prefix)))
-       updated-selection
+       text
        (subs after-text (count postfix))))
 
-(defn- unwrapped [before-text updated-selection pattern after-text]
-  (str before-text (string/replace pattern "%s" updated-selection) after-text))
+(defn- apply-pattern [before-text text pattern after-text]
+  (str before-text (string/replace pattern "%s" text) after-text))
 
 ;; TODO: Fix cursor position when selection is empty.
 (defn- format-text! [pattern-fn]
@@ -116,9 +116,9 @@
           already-wrapped? (and (string/ends-with? before-text pattern-prefix)
                         (string/starts-with? after-text pattern-postfix))
           [updated-text cursor-pos] (if already-wrapped?
-                                      [(wrapped before-text updated-selection after-text [pattern-prefix pattern-postfix])
+                                      [(remove-pattern before-text updated-selection after-text [pattern-prefix pattern-postfix])
                                        (- selection-end pattern-postfix-length)]
-                                      [(unwrapped before-text updated-selection pattern after-text)
+                                      [(apply-pattern before-text updated-selection pattern after-text)
                                        (+ selection-start pattern-prefix-length (count updated-selection) pattern-postfix-length)])] 
       (state/set-edit-content! edit-id updated-text) 
       (if already-wrapped? 
