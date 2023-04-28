@@ -1947,14 +1947,23 @@
 
 (defn handle-last-input []
   (let [input           (state/get-input)
+        input-id        (state/get-edit-input-id)
+        edit-block      (state/get-edit-block)
         pos             (cursor/pos input)
-        last-input-char (util/nth-safe (.-value input) (dec pos))
-        last-prev-input-char (util/nth-safe (.-value input) (dec (dec pos)))
-        prev-prev-input-char (util/nth-safe (.-value input) (- pos 3))]
+        content         (.-value input)
+        last-input-char (util/nth-safe content (dec pos))
+        last-prev-input-char (util/nth-safe content (dec (dec pos)))
+        prev-prev-input-char (util/nth-safe content (- pos 3))]
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
+      (and (= content "1. ") (= last-input-char " ") input-id edit-block
+           (not (own-order-number-list? edit-block)))
+      (do
+        (state/pub-event! [:editor/toggle-own-number-list edit-block])
+        (state/set-edit-content! input-id ""))
+
       (and (= last-input-char (state/get-editor-command-trigger))
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
