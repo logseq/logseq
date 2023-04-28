@@ -67,20 +67,6 @@
   (when node
     (state/set-cursor-range! (util/caret-range node))))
 
-(defn restore-cursor-pos!
-  [id markup]
-  (when-let [node (gdom/getElement (str id))]
-    (let [cursor-range (state/get-cursor-range)
-          pos (or (state/get-editor-last-pos)
-                  (and cursor-range
-                       (diff/find-position markup cursor-range)))]
-      (cursor/move-cursor-to node pos)
-      (state/clear-editor-last-pos!))))
-
-(defn clear-selection!
-  []
-  (state/clear-selection!))
-
 (defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -109,8 +95,7 @@
 (defn- update-content! [edit-id input content cursor-pos]
   (state/set-edit-content! edit-id content)
   (cursor/set-selection-to input cursor-pos cursor-pos)
-  (reset-cursor-range! input)
-  (clear-selection!))
+  (reset-cursor-range! input))
 
 (defn- wrapped [before-text updated-selection after-text [prefix postfix]]
   (str (subs before-text 0 (- (count before-text) (count prefix)))
@@ -134,11 +119,10 @@
           has-postfix? (string/starts-with? after-text postfix)
           [updated-text cursor-pos] (if (and has-prefix? has-postfix?)
                                       [(wrapped before-text updated-selection after-text [prefix postfix])
-                                       (+ selection-start (if (empty? selection) (- (count selection) (count prefix)) (dec (count prefix))))]
+                                       (+ (- selection-start (count prefix)) (count updated-selection))]
                                       [(unwrapped before-text updated-selection pattern after-text)
                                        (+ selection-start (count prefix) (count updated-selection))])]
       (update-content! edit-id input updated-text cursor-pos))))
-
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -199,6 +183,16 @@
          (:db/id block)
          (if page? :page :block))))))
 
+(defn restore-cursor-pos!
+  [id markup]
+  (when-let [node (gdom/getElement (str id))]
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
+
 (defn highlight-block!
   [block-uuid]
   (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
@@ -212,6 +206,10 @@
                         (apply concat))]
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
+
+(defn clear-selection!
+  []
+  (state/clear-selection!))
 
 (defn- get-edit-input-id-with-block-id
   [block-id]
