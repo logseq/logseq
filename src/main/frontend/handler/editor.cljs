@@ -106,9 +106,6 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- get-prefix-and-postfix [pattern]
-  (string/split pattern #"%s"))
-
 (defn- update-content! [edit-id input content cursor-pos]
   (state/set-edit-content! edit-id content)
   (cursor/set-selection-to input cursor-pos cursor-pos)
@@ -129,7 +126,7 @@
                   value edit-id input]} selection-data
           default-format (or format "")
           pattern (pattern-fn default-format)
-          [prefix postfix] (get-prefix-and-postfix pattern)
+          [prefix postfix] (string/split pattern #"%s")
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
           updated-selection (or selection "")
