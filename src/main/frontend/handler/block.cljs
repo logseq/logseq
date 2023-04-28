@@ -308,10 +308,16 @@
                   (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
-            order-parents-count (count (order-parent-list block))]
-        (if (or (zero? order-parents-count)
-                (odd? order-parents-count))
-          idx (nth (seq "abcdefghijklmnopqrstuvwxyz") (mod (dec idx) 26)))))))
+            order-parents-count (dec (count (order-parent-list block)))
+            delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
+        (cond
+          (zero? delta) idx
+
+          (= delta 1)
+          (some-> (util/convert-to-letters idx) util/safe-lower-case)
+
+          :else
+          (util/convert-to-roman idx))))))
 
 (defn attach-order-list-state
   [config block]
