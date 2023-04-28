@@ -112,14 +112,17 @@
           pattern-postfix-length (count pattern-postfix)
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
-          updated-selection (or selection "")
+          selection (or selection "")
           already-wrapped? (and (string/ends-with? before-text pattern-prefix)
                         (string/starts-with? after-text pattern-postfix))
           [updated-text cursor-pos] (if already-wrapped?
-                                      [(remove-pattern before-text updated-selection after-text [pattern-prefix pattern-postfix])
+                                      [(remove-pattern before-text selection after-text
+                                                       [pattern-prefix pattern-postfix])
                                        (- selection-end pattern-postfix-length)]
-                                      [(apply-pattern before-text updated-selection pattern after-text)
-                                       (+ selection-start pattern-prefix-length (count updated-selection) pattern-postfix-length)])] 
+                                      [(apply-pattern before-text selection pattern after-text)
+                                       (+ selection-start pattern-prefix-length
+                                          (count selection)
+                                          pattern-postfix-length)])] 
       (state/set-edit-content! edit-id updated-text) 
       (if already-wrapped? 
         (cursor/set-selection-to input (- selection-start pattern-prefix-length) cursor-pos)
