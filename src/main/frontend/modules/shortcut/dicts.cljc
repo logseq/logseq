@@ -79,6 +79,7 @@
    :editor/zoom-in                 "Zoom in editing block / Forwards otherwise"
    :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
    :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
+   :editor/toggle-number-list      "Toggle number list"
    :ui/toggle-brackets             "Toggle whether to display brackets"
    :go/search-in-page              "Search blocks in the current page"
    :go/electron-find-in-page       "Find text in page"
