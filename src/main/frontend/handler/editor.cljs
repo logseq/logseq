@@ -62,6 +62,25 @@
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 
+(defn reset-cursor-range!
+  [node]
+  (when node
+    (state/set-cursor-range! (util/caret-range node))))
+
+(defn restore-cursor-pos!
+  [id markup]
+  (when-let [node (gdom/getElement (str id))]
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
+
+(defn clear-selection!
+  []
+  (state/clear-selection!))
+
 (defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -92,14 +111,17 @@
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           default-format (or format "")
-          pattern (pattern-fn default-format)]
+          pattern (pattern-fn default-format)
+          pattern-start (string/index-of pattern "%s")
+          pattern-end (+ pattern-start 2)
+          before-pattern (subs pattern 0 pattern-start)
+          after-pattern (subs pattern pattern-end)
+          update-content! (fn [content cursor-pos]
+                            (state/set-edit-content! edit-id content)
+                            (cursor/set-selection-to input cursor-pos cursor-pos))]
       (if (seq selection)
         (let [before-selected-text (subs value 0 selection-start)
               after-selected-text (subs value selection-end)
-              pattern-start (string/index-of pattern "%s")
-              pattern-end (+ pattern-start 2)
-              before-pattern (subs pattern 0 pattern-start)
-              after-pattern (subs pattern pattern-end)
               already-wrapped? (and (string/ends-with? before-selected-text before-pattern)
                                     (string/starts-with? after-selected-text after-pattern))]
           (if already-wrapped?
@@ -107,30 +129,30 @@
                                       selection
                                       (subs after-selected-text (count after-pattern)))
                   cursor-pos (+ selection-start (- (count selection) (count before-pattern)))]
-              (state/set-edit-content! edit-id unwrapped-text)
-              (cursor/set-selection-to input cursor-pos cursor-pos))
+              (update-content! unwrapped-text cursor-pos)
+              (reset-cursor-range! input)
+              (clear-selection!))
             (let [wrapped-text (str before-selected-text (string/replace pattern "%s" selection) after-selected-text)
                   cursor-pos (+ selection-start (count before-pattern) (count selection) (count after-pattern))]
-              (state/set-edit-content! edit-id wrapped-text)
-              (cursor/set-selection-to input cursor-pos cursor-pos))))
+              (update-content! wrapped-text cursor-pos)
+              (reset-cursor-range! input)
+              (clear-selection!))))
         (let [before-cursor (subs value 0 selection-start)
-              after-cursor (subs value selection-start)
-              pattern-start (string/index-of pattern "%s")
-              pattern-end (+ pattern-start 2)
-              before-pattern (subs pattern 0 pattern-start)
-              after-pattern (subs pattern pattern-end)]
+              after-cursor (subs value selection-start)]
           (if (and (string/ends-with? before-cursor before-pattern)
                    (string/starts-with? after-cursor after-pattern))
             (let [updated-text (str (subs before-cursor 0 (- (count before-cursor) (count before-pattern)))
                                     (subs after-cursor (count after-pattern)))
                   cursor-pos (- selection-start (count before-pattern))]
-              (state/set-edit-content! edit-id updated-text)
-              (cursor/set-selection-to input cursor-pos cursor-pos))
+              (update-content! updated-text cursor-pos)
+              (reset-cursor-range! input)
+              (clear-selection!))
             (let [pattern-without-placeholder (string/replace pattern "%s" "")
                   new-value (str before-cursor pattern-without-placeholder after-cursor)
                   cursor-pos (+ selection-start pattern-start)]
-              (state/set-edit-content! edit-id new-value)
-              (cursor/set-selection-to input cursor-pos cursor-pos))))))))
+              (update-content! new-value cursor-pos)
+              (reset-cursor-range! input)
+              (clear-selection!))))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -191,21 +213,6 @@
          (:db/id block)
          (if page? :page :block))))))
 
-(defn reset-cursor-range!
-  [node]
-  (when node
-    (state/set-cursor-range! (util/caret-range node))))
-
-(defn restore-cursor-pos!
-  [id markup]
-  (when-let [node (gdom/getElement (str id))]
-    (let [cursor-range (state/get-cursor-range)
-          pos (or (state/get-editor-last-pos)
-                  (and cursor-range
-                       (diff/find-position markup cursor-range)))]
-      (cursor/move-cursor-to node pos)
-      (state/clear-editor-last-pos!))))
-
 (defn highlight-block!
   [block-uuid]
   (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
@@ -227,9 +234,6 @@
                     "ls-block"
                     "edit-block")))
 
-(defn clear-selection!
-  []
-  (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
