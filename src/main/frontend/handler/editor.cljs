@@ -121,7 +121,7 @@
                                       [(wrapped before-text updated-selection after-text [prefix postfix])
                                        (- selection-end (count postfix))]
                                       [(unwrapped before-text updated-selection pattern after-text)
-                                       (+ selection-start (count prefix) (count updated-selection))])]
+                                       (+ selection-start (count prefix) (count updated-selection) (count postfix))])]
       (update-content! edit-id input updated-text cursor-pos))))
 
 (defn bold-format! []
