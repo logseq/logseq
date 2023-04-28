@@ -10,3 +10,11 @@
   [^js exts]
   (p/let [files (ipc/ipc :getAssetsFiles {:exts exts})]
     (bean/->js files)))
+
+(defn ^:export delete_files_of_current_graph
+  [^js files]
+  (this-as this1
+    (let [files (bean/->clj files)
+          pid   (some-> this1 (.-id))]
+      (prn "===>>> delete assets #" files)
+      (prn "==>>" pid))))

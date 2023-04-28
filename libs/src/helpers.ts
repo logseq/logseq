@@ -1,4 +1,4 @@
-import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
+import { SettingSchemaDesc, StyleString, UIOptions, UserProxyTags } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
@@ -205,17 +205,31 @@ export function deferred<T = any>(timeout?: number, tag?: string) {
 export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
   const method1 = safeSnakeCase(method)
+  const proxyNs = ['git', 'ui', 'assets'] as UserProxyTags[]
+  let logseqHostNsAPIs = null
+  let method2 = ''
+  const _isNsMethod = proxyNs.some((ns) => {
+    const prefix = ns + '_'
+    const ret = method1.startsWith(prefix)
+    if (ret) {
+      // @ts-ignore
+      logseqHostNsAPIs = window.logseq?.sdk?.[ns]
+      method2 = method1.replace(prefix, '')
+    }
+    return ret
+  })
 
-  const logseqHostExportedApi = Object.assign(
+  const logseqHostExportedAPIs = Object.assign(
     // @ts-ignore
     window.logseq?.api || {},
     callables
   )
 
   const fn =
-    logseqHostExportedApi[method1] ||
+    logseqHostNsAPIs?.[method2] ||
+    logseqHostExportedAPIs[method1] ||
     window.apis[method1] ||
-    logseqHostExportedApi[method] ||
+    logseqHostExportedAPIs[method] ||
     window.apis[method]
 
   if (!fn) {
