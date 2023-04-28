@@ -309,3 +309,11 @@
                  (string/starts-with? p "/")
                  ;; is windows dir
                  (re-find #"^[a-zA-Z]:[/\\]" p)))))
+
+(defn protocol-url?
+  "Whether path `p` is a protocol URL.
+
+   This is a loose check, it only checks if there is a valid protocol prefix."
+  [p]
+  (boolean (and (re-find #"^[a-zA-Z0-9_+\-\.]{2,}:" p) ;; HACK: avoid matching windows drive
+                (not (string/includes? p " ")))))

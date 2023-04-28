@@ -207,10 +207,6 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-(defn clear-selection!
-  []
-  (state/clear-selection!))
-
 (defn- get-edit-input-id-with-block-id
   [block-id]
   (when-let [first-block (util/get-first-block-by-id block-id)]
@@ -218,6 +214,9 @@
                     "ls-block"
                     "edit-block")))
 
+(defn clear-selection!
+  []
+  (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
