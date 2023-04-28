@@ -10,6 +10,7 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -31,8 +32,8 @@
 (rum/defc custom-context-menu-content
   []
   [:.menu-links-wrapper
-   (ui/menu-background-color #(editor-handler/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
-                             #(editor-handler/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
+   (ui/menu-background-color #(editor-property/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
+                             #(editor-property/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
 
    (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
                     #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
@@ -157,9 +158,9 @@
                                         [:p (t :context-menu/template-exists-warning)]
                                         :error)
                                        (do
-                                         (editor-handler/set-block-property! block-id :template title)
+                                         (editor-property/set-block-property! block-id :template title)
                                          (when (false? template-including-parent?)
-                                           (editor-handler/set-block-property! block-id :template-including-parent false))
+                                           (editor-property/set-block-property! block-id :template-including-parent false))
                                          (state/hide-custom-context-menu!)))))))]
          [:hr.menu-separator]])
       (ui/menu-link
@@ -176,8 +177,8 @@
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [heading (-> block :block/properties :heading (or false))]
         [:.menu-links-wrapper
-         (ui/menu-background-color #(editor-handler/set-block-property! block-id :background-color %)
-                                   #(editor-handler/remove-block-property! block-id :background-color))
+         (ui/menu-background-color #(editor-property/set-block-property! block-id :background-color %)
+                                   #(editor-property/remove-block-property! block-id :background-color))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)
