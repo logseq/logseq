@@ -115,7 +115,7 @@
   (reset-cursor-range! input)
   (clear-selection!))
 
-(defn- wrapped [before-text updated-selection after-text prefix postfix]
+(defn- wrapped [before-text updated-selection after-text [prefix postfix]]
   (str (subs before-text 0 (- (count before-text) (count prefix)))
        updated-selection
        (subs after-text (count postfix))))
@@ -124,22 +124,23 @@
   (str before-text (string/replace pattern "%s" updated-selection) after-text))
 
 (defn- format-text! [pattern-fn]
-  (when-let [selection-data (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection value edit-id input]} selection-data
-          default-format (or format "")
+  (when-let [{:keys [selection-start selection-end format selection
+                     value edit-id input]} (get-selection-and-format)]
+    (let [default-format (or format "")
           pattern (pattern-fn default-format)
-          [prefix postfix] (get-prefix-and-postfix pattern)
+          prefix-postfix (get-prefix-and-postfix pattern)
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
           updated-selection (if (seq selection) selection "")
-          has-prefix? (string/ends-with? before-text prefix)
-          has-postfix? (string/starts-with? after-text postfix)
+          has-prefix? (string/ends-with? before-text (first prefix-postfix))
+          has-postfix? (string/starts-with? after-text (second prefix-postfix))
           [updated-text cursor-pos] (if (and has-prefix? has-postfix?)
-                                      [(wrapped before-text updated-selection after-text prefix postfix)
-                                       (+ selection-start (if (seq selection) (- (count selection) (count prefix)) (- (count prefix))))]
+                                      [(wrapped before-text updated-selection after-text prefix-postfix)
+                                       (+ selection-start (if (seq selection) (- (count selection) (count (first prefix-postfix))) (dec (count (first prefix-postfix)))))]
                                       [(unwrapped before-text updated-selection pattern after-text)
-                                       (+ selection-start (count prefix) (count updated-selection))])]
+                                       (+ selection-start (count (first prefix-postfix)) (count updated-selection))])]
       (update-content! edit-id input updated-text cursor-pos))))
+
 
 (defn bold-format! []
   (format-text! config/get-bold))
