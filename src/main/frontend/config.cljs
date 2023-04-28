@@ -211,7 +211,7 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "+%s+"
+      "~%s~"
       :markdown
       "~~%s~~"
       "")))
@@ -222,7 +222,7 @@
     (case format
       :org
       "_%s_"
-      :markdown
+      :markdown ;; no underline in markdown spec, use HML instead.
       "<u>%s</u>"
       "")))
 
