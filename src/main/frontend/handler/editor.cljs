@@ -107,20 +107,22 @@
                   value edit-id input]} selection-data
           default-format (or format "")
           pattern (pattern-fn default-format)
-          [prefix postfix] (string/split pattern #"%s")
+          [pattern-prefix pattern-postfix] (string/split pattern #"%s")
+          pattern-prefix-length (count pattern-prefix)
+          pattern-postfix-length (count pattern-postfix)
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
           updated-selection (or selection "")
-          wrapped? (and (string/ends-with? before-text prefix)
-                        (string/starts-with? after-text postfix))
-          [updated-text cursor-pos] (if wrapped?
-                                      [(wrapped before-text updated-selection after-text [prefix postfix])
-                                       (- selection-end (count postfix))]
+          already-wrapped? (and (string/ends-with? before-text pattern-prefix)
+                        (string/starts-with? after-text pattern-postfix))
+          [updated-text cursor-pos] (if already-wrapped?
+                                      [(wrapped before-text updated-selection after-text [pattern-prefix pattern-postfix])
+                                       (- selection-end pattern-postfix-length)]
                                       [(unwrapped before-text updated-selection pattern after-text)
-                                       (+ selection-start (count prefix) (count updated-selection) (count postfix))])] 
+                                       (+ selection-start pattern-prefix-length (count updated-selection) pattern-postfix-length)])] 
       (state/set-edit-content! edit-id updated-text) 
-      (if wrapped? 
-        (cursor/set-selection-to input (- selection-start (count prefix)) cursor-pos)
+      (if already-wrapped? 
+        (cursor/set-selection-to input (- selection-start pattern-prefix-length) cursor-pos)
         (do 
           (reset-cursor-range! input)
           (cursor/move-cursor-to input cursor-pos))))))
