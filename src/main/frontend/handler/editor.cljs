@@ -68,16 +68,6 @@
   (when node
     (state/set-cursor-range! (util/caret-range node))))
 
-(defn restore-cursor-pos!
-  [id markup]
-  (when-let [node (gdom/getElement (str id))]
-    (let [cursor-range (state/get-cursor-range)
-          pos (or (state/get-editor-last-pos)
-                  (and cursor-range
-                       (diff/find-position markup cursor-range)))]
-      (cursor/move-cursor-to node pos)
-      (state/clear-editor-last-pos!))))
-
 (defn clear-selection!
   []
   (state/clear-selection!))
@@ -255,7 +245,6 @@
     (string/replace (gobj/get first-block "id")
                     "ls-block"
                     "edit-block")))
-
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
