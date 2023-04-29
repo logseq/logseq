@@ -998,7 +998,9 @@
 
 (defn- relative-assets-path->absolute-path
   [path]
-  (if (path/absolute? path)
+  (when (path/protocol-url? path)
+    (js/console.error "BUG: relative-assets-path->absolute-path called with protocol url" path))
+  (if (or (path/absolute? path) (path/protocol-url? path))
     path
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
@@ -1080,7 +1082,7 @@
     (not (string/includes? s "."))
     (page-reference (:html-export? config) s config label)
 
-    (gp-util/url? s)
+    (path/protocol-url? s)
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
@@ -1102,7 +1104,7 @@
       (->elem
        :a
        (cond->
-        {:href      (str "file://" path)
+        {:href      (path/path-join "file://" path)
          :data-href path
          :target    "_blank"}
          title
@@ -1184,7 +1186,7 @@
                               href)]
                   (->elem
                    :a
-                   (cond-> {:href      (str "file://" href*)
+                   (cond-> {:href      (path/path-join "file://" href*)
                             :data-href href*
                             :target    "_blank"}
                      title (assoc :title title))
@@ -1727,14 +1729,15 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit? has-child?]
+  [state config block uuid block-id collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)]
+        fold-button-right? (state/enable-fold-button-right?)
+        collapsable? (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
-     (when (or (not fold-button-right?) has-child?)
+     (when (or (not fold-button-right?) collapsable?)
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2846,7 +2849,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit? has-child?))
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
       (when @*show-left-menu?
         (block-left-menu config block))

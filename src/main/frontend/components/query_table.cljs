@@ -12,8 +12,7 @@
             [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]
-            [logseq.graph-parser.text :as text]
-            [frontend.modules.outliner.tree :as tree]))
+            [logseq.graph-parser.text :as text]))
 
 ;; Util fns
 ;; ========
@@ -158,20 +157,17 @@
   (rum/local false ::mouse-down?)
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [result (tree/filter-top-level-blocks result)
-          select? (get state ::select?)
+    (let [select? (get state ::select?)
           *mouse-down? (::mouse-down? state)
-          ;; remove templates
-          result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
-          result (if page? result (attach-clock-property result))
+          result' (if page? result (attach-clock-property result))
           clock-time-total (when-not page?
-                             (->> (map #(get-in % [:block/properties :clock-time] 0) result)
+                             (->> (map #(get-in % [:block/properties :clock-time] 0) result')
                                   (apply +)))
-          columns (get-columns current-block result {:page? page?})
+          columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block)
-          result' (sort-result result (assoc sort-state :page? page?))
+          sort-result (sort-result result (assoc sort-state :page? page?))
           property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}
@@ -186,7 +182,7 @@
                              (name column))]
               (sortable-title title column sort-state (:block/uuid current-block))))]]
         [:tbody
-         (for [row result']
+         (for [row sort-result]
            (let [format (:block/format row)]
              [:tr.cursor
               (for [column columns]

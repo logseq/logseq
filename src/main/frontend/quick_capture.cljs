@@ -67,7 +67,7 @@
                (config/link-format format title url))
         template (get-in (state/get-config)
                          [:quick-capture-templates :text]
-                         "**{time}** [[quick capture]]: {text} {url}")
+                         "**{time}** [[quick capture]]: {text} — {url}")
         date-ref-name (date/today)
         content (-> template
                     (string/replace "{time}" time)
