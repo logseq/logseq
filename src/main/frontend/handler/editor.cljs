@@ -109,7 +109,6 @@
           [pattern-prefix pattern-postfix] (string/split pattern #"%s")
           pattern-prefix-length (count pattern-prefix)
           pattern-postfix-length (count pattern-postfix)
-          ;; FIXME: account for prefix/postfix length
           before-text (subs value 0 selection-start)
           after-text (subs value selection-end)
           selection (or selection "")
@@ -117,7 +116,7 @@
           has-prefix? (string/ends-with? before-text pattern-prefix)
           has-postfix? (string/starts-with? after-text pattern-postfix)
           already-wrapped? (and has-prefix? has-postfix?)
-          
+
           [updated-text cursor-pos]
           (if already-wrapped?
             [(remove-pattern
@@ -130,12 +129,12 @@
              (+ selection-start
                 pattern-prefix-length
                 selection-length
-                pattern-postfix-length)])] 
-      
-      (state/set-edit-content! edit-id updated-text) 
-      (if already-wrapped? 
+                pattern-postfix-length)])]
+
+      (state/set-edit-content! edit-id updated-text)
+      (if already-wrapped?
         (cursor/set-selection-to
-         input (- selection-start pattern-prefix-length) cursor-pos)
+         input (- selection-start pattern-prefix-length) (- selection-end pattern-postfix-length))
         (if (empty? selection)
           (cursor/move-cursor-to input (+ selection-start pattern-prefix-length))
           (cursor/move-cursor-to input cursor-pos))))))
