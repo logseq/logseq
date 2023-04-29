@@ -96,53 +96,74 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- remove-pattern [before-text text after-text [prefix postfix]]
-  (str (subs before-text 0 (- (count before-text) (count prefix)))
+(defn- remove-pattern!
+  [selection-prefix text selection-postfix
+   [pattern-prefix pattern-postfix]]
+  (str (subs selection-prefix 0 (- (count selection-prefix)
+                                   (count pattern-prefix)))
        text
-       (subs after-text (count postfix))))
+       (subs selection-postfix (count pattern-postfix))))
 
-(defn- apply-pattern [before-text text pattern after-text]
-  (str before-text (string/replace pattern "%s" text) after-text))
+(defn- apply-pattern!
+  [selection-prefix text pattern selection-postfix]
+  (str selection-prefix (string/replace pattern "%s" text) selection-postfix))
+
+(defn- update-text-and-cursor!
+  [already-wrapped?
+   selection-prefix selection selection-postfix
+   pattern-prefix pattern-postfix
+   selection-start selection-end]
+
+  (if already-wrapped?
+    [(remove-pattern!
+      selection-prefix selection selection-postfix
+      [pattern-prefix pattern-postfix])
+     (- selection-end (count pattern-postfix))]
+    [(apply-pattern!
+      selection-prefix selection
+      (str pattern-prefix "%s" pattern-postfix)
+      selection-postfix)
+     (+ selection-start
+        (count pattern-prefix) (count selection) (count pattern-postfix))]))
+
+(defn- handle-selection!
+  [already-wrapped? selection input selection-start
+   selection-end pattern-prefix cursor-pos]
+
+  (cond
+    already-wrapped?
+    (cursor/set-selection-to input
+                             (- selection-start (count pattern-prefix))
+                             (- selection-end (count pattern-prefix)))
+    (empty? selection)
+    (cursor/move-cursor-to input
+                           (+ selection-start (count pattern-prefix)))
+    :else
+    (do (cursor/move-cursor-to input cursor-pos)
+        (clear-selection!))))
 
 (defn- format-text! [pattern-fn]
-  (when-let [selection-data (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection
-                  value edit-id input]} selection-data
-          default-format (or format "")
+  (when-let [{:keys
+              [selection-start selection-end format selection
+               value edit-id input]} (get-selection-and-format)]
+    (let [default-format (or format "")
           pattern (pattern-fn default-format)
           [pattern-prefix pattern-postfix] (string/split pattern #"%s")
-          pattern-prefix-length (count pattern-prefix)
-          pattern-postfix-length (count pattern-postfix)
-          before-text (subs value 0 selection-start)
-          after-text (subs value selection-end)
           selection (or selection "")
-          selection-length (count selection)
-          has-prefix? (string/ends-with? before-text pattern-prefix)
-          has-postfix? (string/starts-with? after-text pattern-postfix)
+          selection-prefix (subs value 0 selection-start)
+          selection-postfix (subs value selection-end)
+          has-prefix? (string/ends-with? selection-prefix pattern-prefix)
+          has-postfix? (string/starts-with? selection-postfix pattern-postfix)
           already-wrapped? (and has-prefix? has-postfix?)
 
           [updated-text cursor-pos]
-          (if already-wrapped?
-            [(remove-pattern
-              before-text selection after-text
-              [pattern-prefix pattern-postfix])
-             (- selection-end
-                pattern-postfix-length)]
-            [(apply-pattern
-              before-text selection pattern after-text)
-             (+ selection-start
-                pattern-prefix-length
-                selection-length
-                pattern-postfix-length)])]
-
+          (update-text-and-cursor! already-wrapped?
+                                   selection-prefix selection selection-postfix
+                                   pattern-prefix pattern-postfix
+                                   selection-start selection-end)]
       (state/set-edit-content! edit-id updated-text)
-      (if already-wrapped?
-        (cursor/set-selection-to
-         input (- selection-start pattern-prefix-length) (- selection-end pattern-prefix-length))
-        (if (empty? selection)
-          (cursor/move-cursor-to input (+ selection-start pattern-prefix-length))
-          (do (cursor/move-cursor-to input cursor-pos)
-              (clear-selection!))))
+      (handle-selection! already-wrapped? selection input selection-start
+                         selection-end pattern-prefix cursor-pos)
       (reset-cursor-range! input))))
 
 (defn bold-format! []

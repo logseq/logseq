@@ -222,7 +222,7 @@
     (case format
       :org
       "_%s_"
-      :markdown ;; no underline in markdown spec, use HML instead.
+      :markdown ;; no underline in markdown spec, use HTML instead.
       "<u>%s</u>"
       "")))
 
