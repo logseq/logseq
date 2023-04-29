@@ -67,6 +67,10 @@
   (when node
     (state/set-cursor-range! (util/caret-range node))))
 
+(defn clear-selection!
+  []
+  (state/clear-selection!))
+
 (defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -134,10 +138,11 @@
       (state/set-edit-content! edit-id updated-text)
       (if already-wrapped?
         (cursor/set-selection-to
-         input (- selection-start pattern-prefix-length) (- selection-end pattern-postfix-length))
+         input (- selection-start pattern-prefix-length) (- selection-end pattern-prefix-length))
         (if (empty? selection)
           (cursor/move-cursor-to input (+ selection-start pattern-prefix-length))
-          (cursor/move-cursor-to input cursor-pos))))))
+          (cursor/move-cursor-to input cursor-pos)))
+      (reset-cursor-range! input))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -228,10 +233,6 @@
     (string/replace (gobj/get first-block "id")
                     "ls-block"
                     "edit-block")))
-
-(defn clear-selection!
-  []
-  (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
