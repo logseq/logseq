@@ -1278,10 +1278,17 @@
 
 (defn save-block!
   ([repo block-or-uuid content]
+    (save-block! repo block-or-uuid content {}))
+  ([repo block-or-uuid content {:keys [properties] :or {}}]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
                  (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)]
-     (save-block! {:block block :repo repo} content)))
+     (save-block!
+       {:block block :repo repo}
+       (if (seq properties)
+          (property/insert-properties (:block/format block) content properties)
+        content)
+     )))
   ([{:keys [block repo] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
      (when (db/entity repo [:block/uuid (:block/uuid block)])
