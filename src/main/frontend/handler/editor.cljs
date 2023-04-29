@@ -141,7 +141,8 @@
          input (- selection-start pattern-prefix-length) (- selection-end pattern-prefix-length))
         (if (empty? selection)
           (cursor/move-cursor-to input (+ selection-start pattern-prefix-length))
-          (cursor/move-cursor-to input cursor-pos)))
+          (do (cursor/move-cursor-to input cursor-pos)
+              (clear-selection!))))
       (reset-cursor-range! input))))
 
 (defn bold-format! []
