@@ -16,7 +16,7 @@
 
     #conversation {
         @apply p-2 overflow-y-auto w-full;
-        height: 560px;
+        height: 550px;
     }
 
     .conversation-item {

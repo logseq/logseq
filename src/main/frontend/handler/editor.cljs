@@ -2112,6 +2112,9 @@
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
+                                fst-block)
+                    fst-block (if (:type block)
+                                (assoc fst-block :block/type (:type block))
                                 fst-block)]
                 (assert fst-block "fst-block shouldn't be nil")
                 (assoc fst-block :block/level (:block/level block)))))))

@@ -64,7 +64,7 @@
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
-     :logseq.tldraw.page :logseq.tldraw.shape :logseq.ai.service :logseq.ai.type
+     :logseq.tldraw.page :logseq.tldraw.shape :logseq.ai.service :logseq.ai.type :logseq.url
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))

@@ -2273,20 +2273,25 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-      (when (and (not block-ref-with-title?)
-                 (seq body)
-                 (or (not title-collapse-enabled?)
-                     (and title-collapse-enabled?
-                          (or (not collapsed?)
-                              (some? (mldoc/extract-first-query-from-ast body))))))
-        [:div.block-body
-         ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
-           (for [[idx child] (medley/indexed body)]
-             (when-let [block (markup-element-cp config child)]
-               (rum/with-key (block-child block)
-                 (str uuid "-" idx)))))]))))
+    (cond
+      (= (:block/type block) "image")
+      [:img {:src (get-in block [:block/properties :logseq.url])}]
+
+      :else
+      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+       (when (and (not block-ref-with-title?)
+                  (seq body)
+                  (or (not title-collapse-enabled?)
+                      (and title-collapse-enabled?
+                           (or (not collapsed?)
+                               (some? (mldoc/extract-first-query-from-ast body))))))
+         [:div.block-body
+          ;; TODO: consistent id instead of the idx (since it could be changed later)
+          (let [body (block/trim-break-lines! (:block/body block))]
+            (for [[idx child] (medley/indexed body)]
+              (when-let [block (markup-element-cp config child)]
+                (rum/with-key (block-child block)
+                  (str uuid "-" idx)))))])))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]

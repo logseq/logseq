@@ -22,3 +22,7 @@
 (defn summarize
   [service q opts]
   (protocol/summarize (get-record service) q opts))
+
+(defn generate-image
+  [service description opts]
+  (protocol/generate-image (get-record service) description opts))

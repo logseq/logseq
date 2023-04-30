@@ -37,25 +37,31 @@
        :value q
        :on-change on-change-fn
        :on-key-down   (fn [^js e]
-                        (when (and (= (gobj/get e "key") "Enter")
-                                   (not (string/blank? q)))
-                          (swap! *messages conj
-                                 {:block/properties {:logseq.ai.type "question"}
-                                  :block/content q})
-                          (scroll-to-bottom)
-                          (ai-handler/chat!
-                           q
-                           {:conversation-id (:chat/current-conversation @state/state)
-                            :on-message (fn [message]
-                                          (let [last-message (peek @*messages)
-                                                answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
-                                            (reset! *messages (conj (if answer? (pop @*messages) @*messages)
-                                                                    {:block/properties {:logseq.ai.type "answer"}
-                                                                     :block/content message}))
-                                            (scroll-to-bottom)))
-                            :on-finished (fn []
-                                           (reset! *messages []))})
-                          (state/set-state! [:ui/chat :q] "")))}]]))
+                        (let [drawing? (string/starts-with? q "/draw ")]
+                          (when (and (= (gobj/get e "key") "Enter")
+                                    (not (string/blank? q)))
+                           (swap! *messages conj
+                                  {:block/properties {:logseq.ai.type "question"}
+                                   :block/content q})
+                           (when drawing?
+                             (swap! *messages conj
+                                    {:block/properties {:logseq.ai.type "answer"}
+                                     :block/content "Loading ..."}))
+                           (scroll-to-bottom)
+                           (ai-handler/chat!
+                            q
+                            {:conversation-id (:chat/current-conversation @state/state)
+                             :on-message (fn [message]
+                                           (let [last-message (peek @*messages)
+                                                 answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
+                                             (reset! *messages (conj (if answer? (pop @*messages) @*messages)
+                                                                     {:block/properties {:logseq.ai.type "answer"}
+                                                                      :block/content message}))
+                                             (scroll-to-bottom)))
+                             :on-finished (fn []
+                                            (reset! *messages [])
+                                            (scroll-to-bottom))})
+                           (state/set-state! [:ui/chat :q] ""))))}]]))
 
 (rum/defc conversation-message < rum/static
   [block]

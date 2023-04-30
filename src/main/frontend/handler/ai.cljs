@@ -24,7 +24,8 @@
 ;; TODO: openai summarize not working great for short text
 (defn- get-page-name-from-q
   [q]
-  (let [result (if (<= (count q) 64) q (subs q 0 63))]
+  (let [q' (string/replace q "/draw " "")
+        result (if (<= (count q') 64) q' (subs q' 0 63))]
     (str "Chat/" (string/replace result "/" "_"))))
 
 (defn new-conversation!
@@ -62,27 +63,43 @@
                               conversation
                               [{:role "user" :content q}])
         c-e (db/entity conversation-id)
-        c-name (:block/name c-e)]
+        c-name (:block/name c-e)
+        draw? (string/starts-with? (string/lower-case q) "/draw ")
+        format (state/get-preferred-format)]
     (when (and c-name
                (empty? conversation)
                (util/uuid-string? (subs c-name (- (count c-name) 36)))) ; initial name
       (let [new-page-name (get-page-name-from-q q)]
         (page-handler/rename! (:block/original-name c-e) new-page-name false)))
-    (ai/chat service conversation'
-             (assoc opts
-                    :on-message on-message
-                    :on-finished (fn [result]
-                                   (let [answers (text->segments result)
-                                         data [{:content q
-                                                :properties {:logseq.ai.type "question"}
-                                                :children (mapv (fn [answer] {:content answer
-                                                                              :properties {:logseq.ai.type "answer"}}) answers)}]
-                                         format (state/get-preferred-format)]
-                                     (editor-handler/insert-page-block-tree conversation-id data format
-                                                                            {:sibling? true
-                                                                             :keep-uuid? false
-                                                                             :edit? false})
-                                     (on-finished)))))))
+    (if draw?
+      (p/let [url (ai/generate-image service (string/replace-first q "/draw " "") {})]
+        (do
+          (editor-handler/insert-page-block-tree conversation-id
+                                                [{:content q
+                                                  :properties {:logseq.ai.type "question"}
+                                                  :children [{:type "image"
+                                                              :content ""
+                                                              :properties {:logseq.ai.type "answer"
+                                                                           :logseq.url url}}]}]
+                                                format
+                                                {:sibling? true
+                                                 :keep-uuid? false
+                                                 :edit? false})
+          (on-finished)))
+      (ai/chat service conversation'
+              (assoc opts
+                     :on-message on-message
+                     :on-finished (fn [result]
+                                    (let [answers (text->segments result)
+                                          data [{:content q
+                                                 :properties {:logseq.ai.type "question"}
+                                                 :children (mapv (fn [answer] {:content answer
+                                                                               :properties {:logseq.ai.type "answer"}}) answers)}]]
+                                      (editor-handler/insert-page-block-tree conversation-id data format
+                                                                             {:sibling? true
+                                                                              :keep-uuid? false
+                                                                              :edit? false})
+                                      (on-finished))))))))
 
 (defn open-chat
   []
