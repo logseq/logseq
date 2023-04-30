@@ -86,4 +86,4 @@
 
 (defn open-chat
   []
-  (state/sidebar-add-block! (state/get-current-repo) :chat :chat))
+  (state/sidebar-add-block! (state/get-current-repo) "chat" :chat))

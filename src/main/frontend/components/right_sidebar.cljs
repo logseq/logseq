@@ -14,6 +14,7 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -121,7 +122,16 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :chat
-    ["Chat"
+    [[:div.flex.flex-row.items-center
+      (ui/button
+        (ui/icon "arrow-move-left")
+        :title "Open Chat in the left"
+        :on-click (fn []
+                    (state/sidebar-remove-block! "chat")
+                    (route-handler/redirect! {:to :chat}))
+        :small? true
+        :intent "link")
+      [:span.ml-1 "Chat"]]
      (ai/chat)]
 
     :page-graph

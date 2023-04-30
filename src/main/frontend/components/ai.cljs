@@ -7,6 +7,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.handler.ai :as ai-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.string :as string]
@@ -99,3 +100,18 @@
      [:div.flex.flex-1.relative
       (conversation conversation-id)
       (input)]]))
+
+(rum/defc chat-main
+  []
+  [:div.mt-8.p-4#chat-main
+   [:div.flex.flex-row.items-center
+    [:h1.title "Chat"
+     (ui/button
+       (ui/icon "arrow-move-right")
+       :title "Open chat in right sidebar"
+       :on-click (fn []
+                   (state/sidebar-add-block! (state/get-current-repo) "chat" :chat)
+                   (route-handler/redirect! {:to :home}))
+       :small? true
+       :intent "link")]]
+   (chat)])

@@ -1,3 +1,8 @@
+#chat-main {
+    margin: 0 auto;
+    max-width: 1024px;
+}
+
 .chat {
     @apply flex flex-row transition rounded m-2;
     height: 600px;
@@ -11,7 +16,7 @@
 
     #conversation {
         @apply p-2 overflow-y-auto w-full;
-        height: 530px;
+        height: 560px;
     }
 
     .conversation-item {
