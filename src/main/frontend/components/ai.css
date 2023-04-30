@@ -4,14 +4,14 @@
     border: 1px solid var(--ls-border-color);
 
     .conversations {
-        @apply w-64 px-2 py-4 overflow-y-scroll;
+        @apply w-64 px-2 py-4 overflow-y-auto;
         border-right-width: 1px;
         border-color: var(--ls-border-color);
     }
 
     #conversation {
-        @apply p-2 overflow-y-scroll;
-        height: 540px;
+        @apply p-2 overflow-y-auto w-full;
+        height: 530px;
     }
 
     .conversation-item {
@@ -30,14 +30,17 @@
     }
 
     .message {
-        @apply p-1 mb-2;
+        @apply p-1 mb-1;
+        .single-block > :is(.block-content-wrapper, .editor-wrapper) {
+            padding: 0;
+        }
     }
 
     .message.question {
-        @apply mr-4;
+        @apply mr-8;
     }
 
     .message.answer {
-        @apply ml-4;
+        @apply ml-8;
     }
 }
