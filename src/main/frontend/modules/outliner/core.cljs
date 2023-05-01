@@ -410,7 +410,7 @@
            last
            rest))))
 
-(defn blocks-with-?ordered-list-props
+(defn blocks-with-ordered-list-props
   [blocks target-block sibling?]
   (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))]
     (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
@@ -535,7 +535,7 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
-        blocks' (blocks-with-?ordered-list-props blocks' target-block sibling?)
+        blocks' (blocks-with-ordered-list-props blocks' target-block sibling?)
         blocks' (if (= outliner-op :paste)
                   (fix-top-level-blocks blocks')
                   blocks')
