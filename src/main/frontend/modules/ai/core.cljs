@@ -11,17 +11,13 @@
 
     nil))
 
-(defn ask
+(defn generate-text
   [service q opts]
-  (protocol/ask (get-record service) q opts))
+  (protocol/generate-text (get-record service) q opts))
 
 (defn chat
   [service conversation opts]
   (protocol/chat (get-record service) conversation opts))
-
-(defn summarize
-  [service q opts]
-  (protocol/summarize (get-record service) q opts))
 
 (defn generate-image
   [service description opts]

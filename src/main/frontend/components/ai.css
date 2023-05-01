@@ -49,3 +49,13 @@
         @apply ml-8;
     }
 }
+
+.ask-ai input {
+    border: none;
+}
+
+@media (min-width: 1024px) {
+  .ask-ai .prompt, .ask-ai .cp__select-main {
+    width: var(--ls-main-content-max-width);
+  }
+}

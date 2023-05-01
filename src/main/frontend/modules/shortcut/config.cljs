@@ -424,6 +424,9 @@
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/copy-page-url}
 
+   :ai/ask                          {:binding "mod+;"
+                                     :fn      #(state/pub-event! [:ai/show])}
+
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
@@ -609,7 +612,8 @@
                           :sidebar/open-today-page
                           :sidebar/clear
                           :command/run
-                          :command-palette/toggle])
+                          :command-palette/toggle
+                          :ai/ask])
      (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
@@ -766,7 +770,8 @@
     :ui/toggle-contents]
 
    :shortcut.category/others
-   [:pdf/previous-page
+   [:ai/ask
+    :pdf/previous-page
     :pdf/next-page
     :pdf/close
     :pdf/find

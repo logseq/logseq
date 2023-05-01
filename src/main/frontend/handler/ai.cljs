@@ -59,7 +59,7 @@
                                             "assistant"
                                             "user")
                                     :content (:block/content b)}))))
-        conversation' (concat [{:role "system" :content prompts/assistant}]
+        conversation' (concat [{:role "system" :content (prompts/get-prompt "Assistant")}]
                               conversation
                               [{:role "user" :content q}])
         c-e (db/entity conversation-id)
@@ -104,3 +104,8 @@
 (defn open-chat
   []
   (state/sidebar-add-block! (state/get-current-repo) "chat" :chat))
+
+(defn generate-text
+  [content {:keys [service] :as opts
+           :or {service default-service}}]
+  (ai/generate-text service content (dissoc opts :service)))

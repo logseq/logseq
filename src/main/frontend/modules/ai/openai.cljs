@@ -6,23 +6,25 @@
             [frontend.modules.ai.prompts :as prompts]
             ["sse.js" :refer [SSE]]))
 
-(defn- -ask
+(defn- -generate-text
   [q {:keys [model]
       :or {model "gpt-3.5-turbo"}
       :as opts} token]
-  (util/fetch "https://api.openai.com/v1/completions"
+  (util/fetch "https://api.openai.com/v1/chat/completions"
               {:method "POST"
                :headers {:Content-Type "application/json"
                          :authorization (str "Bearer " token)}
                :body (js/JSON.stringify
                       (bean/->js (merge
                                   {:model model
-                                   :prompt q}
+                                   :messages [{:role "system" :content "Do not refer to yourself in your answers. Do not say as an AI language model..."}
+                                              {:role "user" :content q}]}
                                   opts)))}
               (fn [result]
                 (->> (:choices result)
                      first
-                     :text
+                     :message
+                     :content
                      string/trim))
               (fn [failed-resp]
                 failed-resp)))
@@ -89,20 +91,10 @@
 
 (defrecord OpenAI [token]
   protocol/AI
-  (ask [_this q opts]
-    (-ask q opts token))
+  (generate-text [_this q opts]
+    (-generate-text q opts token))
   (chat [_this conversation opts]
     (-chat conversation opts token))
-  (summarize [this content opts]
-    (let [content' (util/format (get opts :prompt prompts/summarize) content)]
-      (protocol/ask this
-                    content'
-                    (merge
-                     {:model "text-davinci-003"
-                      :max_tokens 200
-                      :temperature 1}
-                     opts))))
-  (translate [this content opts])
   (generate-image [this description opts]
     (-generate-image description opts token))
   (speech-to-text [this audio opts])
@@ -111,15 +103,10 @@
 (comment
   (def open-ai (->OpenAI (:open-ai/token @frontend.state/state)))
 
-  (protocol/ask open-ai "What's logseq?" {})
+  (protocol/generate-text open-ai "What's logseq?" {})
 
   (protocol/chat open-ai [{:role :user
                            :message "What's logseq?"}] {:on-message (fn [message]
                                                                (prn "received: " message))
                                                  :on-finished (fn [message]
-                                                                (prn "finished: " message))})
-
-  (protocol/summarize open-ai "- How to reply `what's up`?
-        - You can respond with a casual greeting or update on your current state such as "not much, just hanging in there" or "just busy with work, and you?"
-" {})
-  )
+                                                                (prn "finished: " message))}))

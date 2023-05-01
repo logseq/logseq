@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.ai :as ai-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -947,6 +948,9 @@
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :ai/show [[_ _args]]
+  (state/set-modal! ai-component/ai-modal))
 
 (defn run!
   []

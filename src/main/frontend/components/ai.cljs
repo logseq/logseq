@@ -13,7 +13,10 @@
             [clojure.string :as string]
             [frontend.util.property :as property]
             [cljs-time.coerce :as tc]
-            [frontend.components.block :as block]))
+            [frontend.components.block :as block]
+            [frontend.components.select :as select]
+            [frontend.modules.ai.prompts :as prompts]
+            [promesa.core :as p]))
 
 (defonce *messages (atom []))
 
@@ -121,3 +124,81 @@
        :small? true
        :intent "link")]]
    (chat)])
+
+(defn- selected-blocks->content
+  [blocks]
+  (let [down? (= (:selectin/direction @state/state) :down)]
+    (->> (if down? blocks (reverse blocks))
+         (map #(:block/content (db/entity [:block/uuid %])))
+         (remove string/blank?)
+         (string/join "\n"))))
+
+(defn- send-request
+  [state]
+  (let [[prompt content] (:rum/args state)
+        content' (str (:prompt prompt) "\n" content)]
+    (reset! (::loading? state) true)
+    (->
+     (p/let [result (ai-handler/generate-text content' {})]
+       (reset! (::result state) result)
+       (reset! (::loading? state) false))
+     (p/catch (fn [error]
+                (js/console.error error)
+                (reset! (::error state) error))))))
+
+(rum/defcs ai-prompt-body < rum/static
+  (rum/local nil ::result)
+  (rum/local false ::loading?)
+  (rum/local nil ::error)
+  {:will-mount (fn [state]
+                 (send-request state)
+                 state)}
+  [state prompt content]
+  (let [*result (::result state)
+        *loading? (::loading? state)
+        *error (::error state)]
+    [:div
+     [:div.whitespace-pre-wrap.my-2
+      content]
+     (when @*loading?
+       (ui/loading "Loading ..."))
+     (if @*error
+       [:div.warning (str @*error)]
+       (when @*result
+        [:div.result.whitespace-pre-wrap.my-2
+         @*result]))
+     [:div.flex.flex-row.justify-between.my-2
+      (ui/button "Regenerate" :on-click (fn [] (send-request state)))
+      [:div.flex.flex-row.justify-between
+       (ui/button "Replace"
+         :on-click (fn [])
+         :class "mr-2")
+       (ui/button "Insert"
+         :on-click (fn []))]]]))
+
+(rum/defcs ai-modal <
+  (rum/local nil ::prompt)
+  [state]
+  (let [*prompt (::prompt state)
+        items @prompts/prompts
+        editing-block (state/get-edit-block)
+        selected-blocks (state/get-selection-block-ids)
+        content (if editing-block
+                  (some-> (state/get-input) (.-value))
+                  (selected-blocks->content selected-blocks))]
+    [:div.ask-ai
+     (cond
+       (and @*prompt (or editing-block selected-blocks))
+       [:div.prompt
+        [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
+        (ai-prompt-body @*prompt content)]
+
+       :else
+       (select/select {:items items
+                      :item-cp (fn [result chosen?]
+                                 (:name result))
+                      :on-chosen (fn [chosen]
+                                   (reset! *prompt chosen))
+                      :extract-fn :name
+                      :close-modal? false
+                      :input-default-placeholder "Ask AI"}))]))
