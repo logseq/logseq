@@ -425,7 +425,7 @@
                                      :fn      page-handler/copy-page-url}
 
    :ai/ask                          {:binding "mod+;"
-                                     :fn      #(state/pub-event! [:ai/show])}
+                                     :fn      ai-handler/open-ask}
 
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}

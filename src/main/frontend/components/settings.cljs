@@ -708,20 +708,32 @@
 
 (rum/defc settings-ai < rum/reactive
   [_current-repo]
-  [:div.panel-wrap
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-sm.font-medium.leading-5.opacity-70
-     {:for "OpenAI token"}
-     "OpenAI token"]
-    [:div.mt-1.sm:mt-0.sm:col-span-2
-     [:div.max-w-lg.rounded-md.sm:max-w-xs
-      [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-       {:default-value (or (:open-ai/token @state/state) "")
-        :on-blur       (fn [e]
-                         (set-openai-token! (util/evalue e)))
-        :on-key-press  (fn [e]
-                         (when (= "Enter" (util/ekey e))
-                           (set-openai-token! (util/evalue e))))}]]]]])
+  (let [enable-ai? (state/enable-ai?)]
+    [:div.panel-wrap
+     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+      [:label.block.text-sm.font-medium.leading-5.opacity-70
+       {:for "Enable AI"}
+       (t :settings-page/enable-ai)]
+      [:div
+       [:div.rounded-md.sm:max-w-xs
+        (ui/toggle enable-ai?
+                   config-handler/toggle-enable-ai!
+                   true)]]]
+     (when enable-ai?
+       [:div
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "OpenAI token"}
+          "OpenAI token"]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+            {:default-value (or (:open-ai/token @state/state) "")
+             :on-blur       (fn [e]
+                              (set-openai-token! (util/evalue e)))
+             :on-key-press  (fn [e]
+                              (when (= "Enter" (util/ekey e))
+                                (set-openai-token! (util/evalue e))))}]]]]])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]

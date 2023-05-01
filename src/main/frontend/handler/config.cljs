@@ -31,6 +31,10 @@
   (let [show-brackets? (state/show-brackets?)]
     (set-config! :ui/show-brackets? (not show-brackets?))))
 
+(defn toggle-enable-ai! []
+  (let [enable-ai? (state/enable-ai?)]
+    (set-config! :feature/enable-ai? (not enable-ai?))))
+
 (defn toggle-logical-outdenting! []
   (let [logical-outdenting? (state/logical-outdenting?)]
     (set-config! :editor/logical-outdenting? (not logical-outdenting?))))

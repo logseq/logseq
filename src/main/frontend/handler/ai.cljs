@@ -105,7 +105,13 @@
 
 (defn open-chat
   []
-  (state/sidebar-add-block! (state/get-current-repo) "chat" :chat))
+  (when (state/enable-ai?)
+    (state/sidebar-add-block! (state/get-current-repo) "chat" :chat)))
+
+(defn open-ask
+  []
+  (when (state/enable-ai?)
+    (state/pub-event! [:ai/show])))
 
 (defn generate-text
   [content {:keys [service] :as opts

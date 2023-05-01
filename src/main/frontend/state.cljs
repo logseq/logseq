@@ -280,6 +280,7 @@
      :history/page-only-mode?               false
 
      ;; AI related
+     :feature/enable-ai?                    (or (storage/get :feature/enable-ai?) false)
      :open-ai/token                         (storage/get :open-ai-token)
      :chat/current-conversation             nil})))
 
@@ -619,6 +620,11 @@ Similar to re-frame subscriptions"
 (defn show-brackets?
   []
   (not (false? (:ui/show-brackets? (sub-config)))))
+
+;; Disabled by default
+(defn enable-ai?
+  []
+  (:feature/enable-ai? (sub-config)))
 
 (defn sub-default-home-page
   []
