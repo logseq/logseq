@@ -348,7 +348,7 @@
                                                 (state/pub-event! [:command/run]))}
 
    :go/home                        {:binding "g h"
-                                    :fn      route-handler/redirect-to-home!}
+                                    :fn      #(route-handler/redirect-to-home!)}
 
    :go/all-pages                   {:binding "g a"
                                     :fn      route-handler/redirect-to-all-pages!}
@@ -418,7 +418,7 @@
 
    :editor/copy-page-url            {:binding false
                                      :inactive (not (util/electron?))
-                                     :fn      page-handler/copy-page-url}
+                                     :fn      #(page-handler/copy-page-url)}
 
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}

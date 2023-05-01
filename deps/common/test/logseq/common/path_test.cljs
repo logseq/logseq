@@ -45,3 +45,15 @@
     (is (false? (path/absolute? "test.md")))
     (is (false? (path/absolute? "test")))
     (is (false? (path/absolute? "D:test.md")))))
+
+(deftest protocol-url
+  (testing "protocol url"
+    (is (true? (path/protocol-url? "mailto:help@logseq.com")))
+    (is (true? (path/protocol-url? "https://logseq.com")))
+    (is (true? (path/protocol-url? "ftp://logseq.com")))
+    (is (true? (path/protocol-url? "file:///home/xxx/logseq/test.md")))
+    (is (true? (path/protocol-url? "assets:///home/xxx/logseq/test.md")))
+    (is (false? (path/protocol-url? "logseq/test.md")))
+    (is (false? (path/protocol-url? "test.md")))
+    (is (false? (path/protocol-url? "test")))
+    (is (false? (path/protocol-url? "D:test.md")))))
