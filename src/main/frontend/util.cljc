@@ -63,6 +63,7 @@
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]
+  #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
   (string/join "/" parts))
 
 

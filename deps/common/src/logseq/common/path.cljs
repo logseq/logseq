@@ -1,7 +1,8 @@
 (ns logseq.common.path
   "Path manipulation functions, use '/' sep on all platforms.
    Also handles URL paths."
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [frontend.util :as util]))
 
 (defn- safe-decode-uri-component
   [uri]
@@ -79,8 +80,7 @@
                   (case segs
                     []   "."
                     [""] "/"
-                    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
-                    (string/join "/" segs)))]
+                    (util/string-join-path segs)))]
     (->> (filter seq segments)
          (mapcat split-fn)
          (reduce (fn [acc segment]
@@ -118,8 +118,7 @@
                   (case segs
                     []   "."
                     [""] "/"
-                    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
-                    (string/join "/" segs)))]
+                    (util/string-join-path segs)))]
     (->> (filter seq segments)
          (mapcat split-fn)
          (map #(js/encodeURIComponent %))
@@ -247,10 +246,9 @@
             remain-segs (drop (count common-segs) path-segs)
             base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
         (js/console.error (js/Error. "buggy relative-path") base-path sub-path)
-        #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
         (if is-url?
-          (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
-          (str base-prefix (string/join "/" remain-segs)))))))
+          (safe-decode-uri-component (str base-prefix (util/string-join-path remain-segs)))
+          (str base-prefix (util/string-join-path remain-segs)))))))
 
 
 (defn parent
@@ -286,10 +284,9 @@
         base-segs (drop (count common-segs) base-segs)
         remain-segs (drop (count common-segs) path-segs)
         base-prefix (apply str (repeat (max 0 (count base-segs)) "../"))]
-    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
     (if is-url?
-      (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
-      (str base-prefix (string/join "/" remain-segs)))))
+      (safe-decode-uri-component (str base-prefix (util/string-join-path remain-segs)))
+      (str base-prefix (util/string-join-path remain-segs)))))
 
 ;; compat
 (defn basename
