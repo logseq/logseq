@@ -128,6 +128,11 @@
   padding-left: 1rem;
 }
 
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__header .dropdown-wrapper .title-wrap {
+  position: relative;
+}
+
 .cp__header a, .cp__header svg {
   -webkit-app-region: no-drag;
 }
