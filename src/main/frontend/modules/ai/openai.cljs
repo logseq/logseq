@@ -21,13 +21,13 @@
                                               {:role "user" :content q}]}
                                   opts)))}
               (fn [result]
-                (->> (:choices result)
-                     first
-                     :message
-                     :content
-                     string/trim))
+                [:success (->> (:choices result)
+                               first
+                               :message
+                               :content
+                               string/trim)])
               (fn [failed-resp]
-                failed-resp)))
+                [:failed failed-resp])))
 
 (defn- -chat
   [conversation {:keys [model on-message on-finished]

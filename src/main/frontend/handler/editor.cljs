@@ -1014,7 +1014,7 @@
   [block-uuid]
   (block-handler/select-block! block-uuid))
 
-(defn- compose-copied-blocks-contents
+(defn compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)

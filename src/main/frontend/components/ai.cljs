@@ -8,6 +8,7 @@
             [goog.dom :as gdom]
             [frontend.handler.ai :as ai-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.string :as string]
@@ -16,7 +17,8 @@
             [frontend.components.block :as block]
             [frontend.components.select :as select]
             [frontend.modules.ai.prompts :as prompts]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]))
 
 (defonce *messages (atom []))
 
@@ -126,31 +128,35 @@
    (chat)])
 
 (defn- selected-blocks->content
-  [blocks]
-  (let [down? (= (:selectin/direction @state/state) :down)]
-    (->> (if down? blocks (reverse blocks))
-         (map #(:block/content (db/entity [:block/uuid %])))
-         (remove string/blank?)
-         (string/join "\n"))))
+  [ids]
+  (second
+   (editor-handler/compose-copied-blocks-contents
+    (state/get-current-repo)
+    ids)))
 
 (defn- send-request
   [state]
-  (let [[prompt content] (:rum/args state)
-        content' (str (:prompt prompt) "\n" content)]
-    (reset! (::loading? state) true)
-    (->
-     (p/let [result (ai-handler/generate-text content' {})]
-       (reset! (::result state) result)
-       (reset! (::loading? state) false))
-     (p/catch (fn [error]
-                (js/console.error error)
-                (reset! (::error state) error))))))
+  (let [prompt (first (:rum/args state))
+        content (::initial-content state)]
+    (when-not (string/blank? content)
+      (let [content' (str (:prompt prompt) "\n" content)]
+        (reset! (::loading? state) true)
+        (p/let [[id result] (ai-handler/generate-text content' {})]
+          (reset! (::loading? state) false)
+          (if (= id :failed)
+            (p/let [result (.json result)
+                    result' (bean/->clj result)]
+              (reset! (::error state) (or (get-in result' [:error :message])
+                                          (str result'))))
+            (reset! (::result state) result)))))))
 
 (rum/defcs ai-prompt-body < rum/static
   (rum/local nil ::result)
   (rum/local false ::loading?)
   (rum/local nil ::error)
-  {:will-mount (fn [state]
+  {:init (fn [state]
+           (assoc state ::initial-content (last (:rum/args state))))
+   :will-mount (fn [state]
                  (send-request state)
                  state)}
   [state prompt content]
@@ -165,8 +171,8 @@
      (if @*error
        [:div.warning (str @*error)]
        (when @*result
-        [:div.result.whitespace-pre-wrap.my-2
-         @*result]))
+         [:div.result.whitespace-pre-wrap.my-2
+          (str @*result)]))
      [:div.flex.flex-row.justify-between.my-2
       (ui/button "Regenerate" :on-click (fn [] (send-request state)))
       [:div.flex.flex-row.justify-between
@@ -180,7 +186,12 @@
   (rum/local nil ::prompt)
   [state]
   (let [*prompt (::prompt state)
-        items @prompts/prompts
+        items (->>
+               (remove
+                (fn [p] (contains? #{"Assistant"} (:name p)))
+                @prompts/prompts)
+               (cons {:name "Preview content"
+                      :description "Preview content before sending to any AI service"}))
         editing-block (state/get-edit-block)
         selected-blocks (state/get-selection-block-ids)
         content (if editing-block
@@ -188,6 +199,12 @@
                   (selected-blocks->content selected-blocks))]
     [:div.ask-ai
      (cond
+       (and @*prompt (= (:name @*prompt) "Preview content"))
+       [:div
+        [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
+        [:div.whitespace-pre-wrap.my-2
+         content]]
+
        (and @*prompt (or editing-block selected-blocks))
        [:div.prompt
         [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
