@@ -190,8 +190,8 @@
                (remove
                 (fn [p] (contains? #{"Assistant"} (:name p)))
                 @prompts/prompts)
-               (cons {:name "Preview content"
-                      :description "Preview content before sending to any AI service"}))
+               (cons {:name "Review content"
+                      :description "Review content before sending to any AI service"}))
         editing-block (state/get-edit-block)
         selected-blocks (state/get-selection-block-ids)
         content (if editing-block
@@ -199,7 +199,7 @@
                   (selected-blocks->content selected-blocks))]
     [:div.ask-ai
      (cond
-       (and @*prompt (= (:name @*prompt) "Preview content"))
+       (and @*prompt (= (:name @*prompt) "Review content"))
        [:div
         [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
         [:div.whitespace-pre-wrap.my-2
