@@ -390,7 +390,7 @@
  ;; - redirect-page?: Redirect to the quick capture page after capturing.
  ;; - default-page: The default page to capture to if insert-today? is false.
   :quick-capture-options
-  {:insert-today? true            ;; Default value: true
+  {:insert-today? false            ;; Default value: true
    :redirect-page? false          ;; Default value: false
    :default-page "quick capture"} ;; Default value: "quick capture" page
 
