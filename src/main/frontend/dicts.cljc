@@ -318,7 +318,7 @@
         :plugin/found-updates "New updates"
         :plugin/found-n-updates "Found {1} updates"
         :plugin/update-all-selected "Update all of selected"
-        :plugin/updates-downloading "Downloading for the updates"
+        :plugin/updates-downloading "Downloading updates"
         :plugin/refresh-lists "Refresh lists"
         :plugin/enabled "Enabled"
         :plugin/disabled "Disabled"
