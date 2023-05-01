@@ -4,14 +4,12 @@
  ;; Available options:
  ;; - "Markdown" (default)
  ;; - "Org"
- ;; Default value: "Markdown"
  :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
  ;; Available options:
  ;; - ":now" for NOW/LATER style (default)
  ;; - ":todo" for TODO/DOING style
- ;; Default value: :now
  :preferred-workflow :now
 
  ;; Exclude directories/files.
@@ -40,7 +38,7 @@
  ;; Default value: true
  :ui/enable-tooltip? true
 
- ;; Display brackets around [[page]] references.
+ ;; Display brackets [[]] around page references.
  ;; Default value: true
  :ui/show-brackets? true
 
@@ -69,7 +67,7 @@
  ;; Default value: true
  :feature/enable-flashcards? true
 
- ;; Enable Whiteboards.
+ ;; Enable whiteboards.
  ;; Default value: true
  :feature/enable-whiteboards? true
 
@@ -107,12 +105,12 @@
  ;; Default gateway: https://arweave.net
  :arweave/gateway "https://arweave.net"
 
- ;; Set Bullet indentation when exporting
+ ;; Set bullet indentation when exporting
  ;; Available options:
  ;;  - `:eight-spaces` as eight spaces
  ;;  - `:four-spaces` as four spaces
  ;;  - `:two-spaces` as two spaces
- ;; Default value: :tab
+ ;; - `:tab` as a tab character (default)
  :export/bullet-indentation :tab
 
  ;; Publish all pages within the Graph
@@ -125,11 +123,10 @@
  ;; If unspecified, Logseq will load the journal page by default on startup. 
  ;; The `:page` value represents the name of the page displayed at startup. 
  ;; Available options for `:sidebar` are: 
- ;; 1. "Contents" to display the Contents page in the right sidebar. 
- ;; 2. A specific page name to display in the right sidebar. 
- ;; 3. An array of multiple pages, e.g., ["Contents" "Page A" "Page B"]. 
+ ;; - "Contents" to display the Contents page in the right sidebar. 
+ ;; - A specific page name to display in the right sidebar. 
+ ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"]. 
  ;; If `:sidebar` remains unset, the right sidebar will stay hidden.
- ;;
  ;; Examples:
  ;; 1. Set "Changelog" as the home page and display "Contents" in the right sidebar:
  ;; :default-home {:page "Changelog", :sidebar "Contents"}
@@ -330,14 +327,11 @@
 
  ;; logbook configuration.
  :logbook/settings 
- {; Disable logbook.
-  ; Default value: false
+ {; Disable logbook. (Default value: false)
   :enabled-in-timestamped-blocks false
-  ; limit logbook to minutes, eliminating seconds.
-  ; Default value: false
+  ; limit logbook to minutes, eliminating seconds. (Default value: false)
   :with-second-support? false
-  ; display logbook in all blocks after time-tracking.
-  ; Default value: false
+  ; display logbook in all blocks after time-tracking. (Default value: false)
   :enabled-in-all-blocks false}
 
  ;; Mobile photo upload configuration.
@@ -385,9 +379,9 @@
    :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
- ;; - insert-today?: Insert the capture at the end of today's journal page.
+ ;; - insert-today?:  Insert the capture at the end of today's journal page.
  ;; - redirect-page?: Redirect to the quick capture page after capturing.
- ;; - default-page: The default page to capture to if insert-today? is false.
+ ;; - default-page:   The default page to capture to if insert-today? is false.
   :quick-capture-options
   {:insert-today? false            ;; Default value: true
    :redirect-page? false          ;; Default value: false
@@ -420,7 +414,7 @@
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:
- ;;   :file/name-format :triple-lowbar
+ ;;   -:triple-lowbar (default)
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
   :file/name-format :triple-lowbar}
