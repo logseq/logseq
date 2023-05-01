@@ -16,8 +16,10 @@
 (defn- text->segments
   [text]
   (let [content (string/trim text)]
-    (->> (string/split content #"(?:\r?\n){2,}")
-         (remove string/blank?))))
+    (if (string/includes? content "```")
+      [content]
+      (->> (string/split content #"(?:\r?\n){2,}")
+           (remove string/blank?)))))
 
 (def default-service :openai)
 
