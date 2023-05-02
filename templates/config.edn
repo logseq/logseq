@@ -8,8 +8,8 @@
 
  ;; Set the preferred workflow style.
  ;; Available options:
- ;; - ":now" for NOW/LATER style (default)
- ;; - ":todo" for TODO/DOING style
+ ;; - :now for NOW/LATER style (default)
+ ;; - :todo for TODO/DOING style
  :preferred-workflow :now
 
  ;; Exclude directories/files.
@@ -248,7 +248,7 @@
  ;; [
  ;;  ["js" "Javascript"]
  ;;  ["md" "Markdown"]
- ;  ]
+ ;;  ]
  :commands []
 
  ;; Enable collapsing blocks with titles but no children.
@@ -289,7 +289,7 @@
  :favorites []
 
  ;; Set flashcards interval.
- ;; default value: 0.5
+ ;; Default value: 0.5
  ;; Expected value:
  ;; - Float between 0 and 1
  ;; higher values result in faster changes to the next review interval.
@@ -297,7 +297,7 @@
  :srs/learning-fraction 0.5
 
  ;; Set the initial interval after the first successful review of a card.
- ;; default value: 4
+ ;; Default value: 4
  :srs/initial-interval 4
 
  ;; Hide specific block properties.
@@ -306,7 +306,7 @@
  :block-hidden-properties #{}
 
  ;; Create a page for all properties.
- ;; default value: false
+ ;; Default value: false
  :property-pages/enabled? false
 
  ;; Properties to exclude from having property pages
@@ -329,9 +329,9 @@
  :logbook/settings 
  {; Disable logbook. (Default value: false)
   :enabled-in-timestamped-blocks false
-  ; limit logbook to minutes, eliminating seconds. (Default value: false)
+  ;; limit logbook to minutes, eliminating seconds. (Default value: false)
   :with-second-support? false
-  ; display logbook in all blocks after time-tracking. (Default value: false)
+  ;; display logbook in all blocks after time-tracking. (Default value: false)
   :enabled-in-all-blocks false}
 
  ;; Mobile photo upload configuration.
@@ -357,11 +357,11 @@
   :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
- ;; default value: false
+ ;; Default value: false
   :editor/logical-outdenting? false
 
  ;; Prefer pasting the file when text and a file are in the clipboard.
- ;; default value: false
+ ;; Default value: false
   :editor/preferred-pasting-file? false
 
  ;; Quick capture templates for receiving content from other apps.
@@ -383,7 +383,7 @@
  ;; - redirect-page?: Redirect to the quick capture page after capturing.
  ;; - default-page:   The default page to capture to if insert-today? is false.
   :quick-capture-options
-  {:insert-today? false            ;; Default value: true
+  {:insert-today? false           ;; Default value: true
    :redirect-page? false          ;; Default value: false
    :default-page "quick capture"} ;; Default value: "quick capture" page
 
@@ -414,7 +414,7 @@
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:
- ;;   -:triple-lowbar (default)
- ;;     ;use triple underscore `___` for slash `/` in page title
- ;;     ;use Percent-encoding for other invalid characters
+ ;;   - :triple-lowbar (default)
+ ;;      ;use triple underscore `___` for slash `/` in page title
+ ;;      ;use Percent-encoding for other invalid characters
   :file/name-format :triple-lowbar}
