@@ -141,42 +141,49 @@
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
-          block-entity (db/entity id)
-          remove-self-page #(remove (fn [b]
-                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
-          old-refs (remove-self-page (:block/refs block-entity))
-          new-refs (remove-self-page (:block/refs m))]
+          block-entity (db/entity id)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
 
       (when id
+        ;; Retract attributes to prepare for tx which rewrites block attributes
         (swap! txs-state (fn [txs]
                            (vec
                             (concat txs
                                     (map (fn [attribute]
                                            [:db/retract id attribute])
-                                      db-schema/retract-attributes)))))
+                                         db-schema/retract-attributes)))))
 
+        ;; Update block's page attributes
         (when-let [e (:block/page block-entity)]
-          (let [m' {:db/id (:db/id e)
-                   :block/updated-at (util/time-ms)}
-                m' (if (:block/created-at e)
-                    m'
-                    (assoc m' :block/created-at (util/time-ms)))
-                m' (if (or (:block/pre-block? block-entity)
-                           (:block/pre-block? m))
-                     (let [properties (:block/properties m)
-                           alias (set (:alias properties))
-                           tags (set (:tags properties))
-                           alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
-                           tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)]
-                       (assoc m'
-                              :block/alias alias
-                              :block/tags tags
-                              :block/properties properties))
-                     m')]
-            (swap! txs-state conj m'))
+          (let [m' (cond-> {:db/id (:db/id e)
+                            :block/updated-at (util/time-ms)}
+                     (not (:block/created-at e))
+                     (assoc :block/created-at (util/time-ms)))
+                txs (if (or (:block/pre-block? block-entity)
+                            (:block/pre-block? m))
+                      (let [properties (:block/properties m)
+                            alias (set (:alias properties))
+                            tags (set (:tags properties))
+                            alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
+                            tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)
+                            deleteable-page-attributes {:block/alias alias
+                                                        :block/tags tags
+                                                        :block/properties properties
+                                                        :block/properties-text-values (:block/properties-text-values m)}
+                            ;; Retract page attributes to allow for deletion of page attributes
+                            page-retractions
+                            (mapv #(vector :db/retract (:db/id e) %) (keys deleteable-page-attributes))]
+                        (conj page-retractions (merge m' deleteable-page-attributes)))
+                      [m'])]
+            (swap! txs-state into txs)))
+
+        ;; Remove orphaned refs from block
+        (let [remove-self-page #(remove (fn [b]
+                                          (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+              old-refs (remove-self-page (:block/refs block-entity))
+              new-refs (remove-self-page (:block/refs m))]
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
