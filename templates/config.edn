@@ -2,8 +2,8 @@
 
  ;; Set the preferred format.
  ;; Available options:
- ;; - "Markdown" (default)
- ;; - "Org"
+ ;; - Markdown (default)
+ ;; - Org
  :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
@@ -23,7 +23,11 @@
  {:journals ""}
 
  ;; Set a custom date format for the journal page title.
+ ;; Example usage:
+ ;; :journal/page-title-format "EEE do, MMM yyyy"
+ ;; e.g., "Tue 19th, Jan 2038"
  ;; Default value: "MMM do, yyyy"
+ ;; e.g., "Jan 19th, 2038"
  :journal/page-title-format "MMM do, yyyy"
 
  ;; Specify the journal filename format using a valid date format string.
