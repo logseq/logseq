@@ -36,7 +36,7 @@
  ;;   To show old journal files in the app, manually rename the files in the
  ;;   journal directory to match the new format.
  ;; Default value: "yyyy_MM_dd"
- :journal/file-name-format "yyyy_MM_dd"
+ ;; :journal/file-name-format "yyyy_MM_dd"
 
  ;; Enable tooltip preview on hover.
  ;; Default value: true
@@ -46,7 +46,7 @@
  ;; Default value: true
  :ui/show-brackets? true
 
- ;; Display the complete block content when referencing.
+ ;; Display all lines of a block when referencing ((block)).
  ;; Default value: false
  :ui/show-full-blocks? false
 
@@ -82,7 +82,7 @@
  ;; Specify the number of days displayed in the future for
  ;; the 'scheduled tasks and deadlines' query.
  ;; Example usage:
- ;; Display all scheduled tasks and deadlines for the next 14 days:
+ ;; Display all scheduled and deadline blocks for the next 14 days:
  ;; :scheduled/future-days 14
  ;; Default value: 7
  :scheduled/future-days 7
@@ -96,13 +96,13 @@
  ;; Import a custom CSS file.
  ;; This option takes precedence over the local `logseq/custom.css` file.
  ;; Example usage:
- ;; :custom-css-url "@import url('https://cdn.logseq.com/custom.css');"
+ ;; :custom-css-url "https://cdn.logseq.com/custom.css"
  :custom-css-url ""
 
  ;; Import a custom JS file.
  ;; This option takes precedence over the local `logseq/custom.js` file.
  ;; Example usage:
- ;; :custom-js-url "@import url('https://cdn.logseq.com/custom.js');"
+ ;; :custom-js-url "https://cdn.logseq.com/custom.js"
  :custom-js-url ""
 
  ;; Set a custom Arweave gateway
@@ -159,10 +159,10 @@
 
  ;; Configure custom shortcuts.
  ;; Syntax:
- ;; 1. + indicates simultaneous key presses, e.g., ctrl+shift+a.
+ ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Ahift+a`.
  ;; 2. A space between keys represents key chords, e.g., `t s` means 
  ;;    pressing `t` followed by `s`.
- ;; 3. mod refers to Ctrl for Windows/Linux and Command for Mac.
+ ;; 3. mod refers to `Ctrl` for Windows/Linux and `Command` for Mac.
  ;; 4. Use false to disable a specific shortcut.
  ;; 5. You can define multiple bindings for a single action, e.g., ["ctrl+j" "down"].
  ;; The full list of configurable shortcuts is available at:
@@ -185,7 +185,8 @@
  ;; Default value: false
  :shortcut/doc-mode-enter-for-new-block? false
 
- ;; Limit the searchable and editable block content length for performance
+ ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; or editable for performance.
  ;; Default value: 10000
  :block/content-max-length 10000
 
@@ -196,9 +197,7 @@
  ;; Display empty bullet points.
  :ui/show-empty-bullets? false
 
- ;; Advanced queries view function.
- ;; Format the query result with `pprint`. 
- ;; 
+ ;; Pre-defined :view function to use with advanced queries.
  :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
@@ -293,7 +292,6 @@
  :favorites []
 
  ;; Set flashcards interval.
- ;; Default value: 0.5
  ;; Expected value:
  ;; - Float between 0 and 1
  ;; higher values result in faster changes to the next review interval.
@@ -383,13 +381,13 @@
    :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
- ;; - insert-today?:  Insert the capture at the end of today's journal page.
- ;; - redirect-page?: Redirect to the quick capture page after capturing.
- ;; - default-page:   The default page to capture to if insert-today? is false.
+ ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
+ ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
+ ;; - default-page    The default page to capture to if insert-today? is false (string).
   :quick-capture-options
   {:insert-today? false           ;; Default value: true
    :redirect-page? false          ;; Default value: false
-   :default-page "quick capture"} ;; Default value: "quick capture" page
+   :default-page "quick capture"} ;; Default page: "quick capture"
 
 
  ;; File sync options
