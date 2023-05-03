@@ -14,6 +14,7 @@ import {
   Grid as _Grid,
   Brush as _Brush,
   Handle as _Handle,
+  CloneButton as _CloneButton,
   DirectionIndicator as _DirectionIndicator,
 } from '../../components'
 
@@ -56,6 +57,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
       DirectionIndicator,
       Grid,
       Handle,
+      CloneButton,
       SelectionBackground,
       SelectionDetail,
       SelectionForeground,
@@ -72,6 +74,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
         ...rest,
         Brush: Brush === null ? undefined : _Brush,
         ContextBar,
+        CloneButton,
         DirectionIndicator: DirectionIndicator === null ? undefined : _DirectionIndicator,
         Grid: Grid === null ? undefined : _Grid,
         Handle: Handle === null ? undefined : _Handle,

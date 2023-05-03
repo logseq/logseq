@@ -33,6 +33,7 @@ import { Indicator } from '../Indicator'
 import { QuickLinksContainer } from '../QuickLinksContainer'
 import { BacklinksCountContainer } from '../BacklinksCountContainer'
 import { SelectionDetailContainer } from '../SelectionDetailContainer'
+import { CloneButtonsContainer } from '../CloneButtonsContainer'
 import { Shape } from '../Shape'
 import { SVGContainer } from '../SVGContainer'
 import { DirectionIndicator } from '../ui'
@@ -183,6 +184,9 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           )}
           {hoveredShape && hoveredShape !== singleSelectedShape && components.QuickLinks && (
             <QuickLinksContainer hidden={false} bounds={hoveredShape.bounds} shape={hoveredShape} />
+          )}
+          {singleSelectedShape && components.QuickLinks && (
+            <CloneButtonsContainer hidden={false} bounds={singleSelectedShape.bounds} shape={singleSelectedShape} />
           )}
           {brush && components.Brush && <components.Brush bounds={brush} />}
           {selectedShapes && selectionBounds && (

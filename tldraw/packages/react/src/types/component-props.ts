@@ -98,6 +98,15 @@ export interface TLGridProps {
 
 export type TLGridComponent = (props: TLGridProps) => JSX.Element | null
 
+export interface TLCloneButtonComponentProps<
+  S extends TLReactShape = TLReactShape
+> {
+  shape: S
+  direction: string
+}
+
+export type TLCloneButtonComponent = (props: TLCloneButtonComponentProps) => JSX.Element | null
+
 export type TLReactComponents<S extends TLReactShape = TLReactShape> = {
   SelectionBackground?: TLBoundsComponent<S> | null
   SelectionForeground?: TLBoundsComponent<S> | null
@@ -109,4 +118,5 @@ export type TLReactComponents<S extends TLReactShape = TLReactShape> = {
   ContextBar?: TLContextBarComponent<S> | null
   Brush?: TLBrushComponent | null
   Grid?: TLGridComponent | null
+  CloneButton?: TLCloneButtonComponent | null
 }
