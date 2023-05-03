@@ -80,24 +80,33 @@
 (defrecord Node []
   protocol/Fs
   (mkdir! [_this dir]
-    (ipc/ipc "mkdir" dir))
+    (-> (ipc/ipc "mkdir" dir)
+        (p/then (fn [_] (js/console.log (str "Directory created: " dir))))
+        (p/catch (fn [error]
+                   (when (not= (.-code error) "EEXIST")
+                     (js/console.error (str "Error creating directory: " dir) error))))))
+
   (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
+
   (readdir [_this dir]                   ; recursive
     (p/then (ipc/ipc "readdir" dir)
             bean/->clj))
+
   (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
              (config/get-repo-dir repo)
              path))
   (rmdir! [_this _dir]
-    ;; Too dangerious!!! We'll never implement this.
+    ;; !Too dangerous! We'll never implement this.
     nil)
+
   (read-file [_this dir path _options]
     (let [path (if (nil? dir)
                  path
                  (path/path-join dir path))]
       (ipc/ipc "readFile" path)))
+
   (write-file! [this repo dir path content opts]
     (p/let [fpath (path/path-join dir path)
             stat (p/catch
@@ -106,18 +115,24 @@
             parent-dir (path/parent fpath)
             _ (protocol/mkdir-recur! this parent-dir)]
       (write-file-impl! repo dir path content opts stat)))
+
   (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
+
   (stat [_this fpath]
     (-> (ipc/ipc "stat" fpath)
         (p/then bean/->clj)))
+
   (open-dir [_this dir]
     (open-dir dir))
+
   (get-files [_this dir]
     (-> (ipc/ipc "getFiles" dir)
         (p/then (fn [result]
                   (:files (bean/->clj result))))))
+
   (watch-dir! [_this dir options]
     (ipc/ipc "addDirWatcher" dir options))
+
   (unwatch-dir! [_this dir]
     (ipc/ipc "unwatchDir" dir)))
