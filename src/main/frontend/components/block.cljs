@@ -943,23 +943,24 @@
 
 (defn- render-macro
   [config name arguments macro-content format]
-  (let [attributes {:data-macro-name name}]
-    [:div.macro
-
-     (if macro-content
-       (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
-                      (map first))
-             paragraph? (and (= 1 (count ast))
-                             (= "Paragraph" (ffirst ast)))]
-         (if (and (not paragraph?)
-                  (mldoc/block-with-title? (ffirst ast)))
-           (list attributes
-                 (markup-elements-cp (assoc config :block/format format) ast))
-           (list (assoc attributes :class "inline-block")
-                 (inline-text {:add-margin? false} format macro-content))))
-       (list attributes
-             [:span.warning {:title (str "Unsupported macro name: " name)}
-               (macro->text name arguments)]))]))
+  (vec
+   (cons
+    :div.macro
+    (let [attributes {:data-macro-name name}]
+       (if macro-content
+         (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
+                        (map first))
+               paragraph? (and (= 1 (count ast))
+                               (= "Paragraph" (ffirst ast)))]
+           (if (and (not paragraph?)
+                    (mldoc/block-with-title? (ffirst ast)))
+             [attributes
+              (markup-elements-cp (assoc config :block/format format) ast)]
+             [(assoc attributes :class "inline-block")
+              (inline-text {:add-margin? false} format macro-content)]))
+         [attributes
+          [:span.warning {:title (str "Unsupported macro name: " name)}
+           (macro->text name arguments)]])))))
 
 (rum/defc nested-link < rum/reactive
   [config html-export? link]
