@@ -943,9 +943,8 @@
 
 (defn- render-macro
   [config name arguments macro-content format]
-  (vec
-   (cons
-    :div.macro
+  (into
+    [:div.macro]
     (let [attributes {:data-macro-name name}]
        (if macro-content
          (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
@@ -960,7 +959,7 @@
               (inline-text {:add-margin? false} format macro-content)]))
          [attributes
           [:span.warning {:title (str "Unsupported macro name: " name)}
-           (macro->text name arguments)]])))))
+           (macro->text name arguments)]]))))
 
 (rum/defc nested-link < rum/reactive
   [config html-export? link]
