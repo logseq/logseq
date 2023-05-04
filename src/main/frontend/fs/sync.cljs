@@ -958,7 +958,15 @@
                                                                      :token token})))))))
   (<fetch-remote-files [this graph-uuid base-path filepaths]
     (js/console.error "unimpl")
-    (prn ::todo))
+    (go
+      (let [token (<! (<get-token this))
+            r (<! (<retry-rsapi
+                   #(p->c (.fetchRemoteFiles mobile-util/file-sync
+                                             (clj->js {:graphUUID graph-uuid
+                                                       :basePath base-path
+                                                       :filePaths filepaths
+                                                       :token token})))))]
+        (js->clj (.-value r)))))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -994,12 +1002,13 @@
             r
             (get (js->clj r) "txid"))))))
 
-  (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
+  (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
                                               (clj->js {:graphUUID graph-uuid
+                                                        :basePath base-path
                                                         :filePaths normalized-filepaths
                                                         :txid local-txid
                                                         :token token}))))]
