@@ -23,6 +23,16 @@
 
 (def default-service :openai)
 
+(defn open-chat
+  []
+  (when (state/enable-ai?)
+    (state/sidebar-add-block! (state/get-current-repo) "chat" :chat)))
+
+(defn open-ask
+  []
+  (when (state/enable-ai?)
+    (state/pub-event! [:ai/show])))
+
 ;; TODO: openai summarize not working great for short text
 (defn- get-page-name-from-q
   [q]
@@ -102,16 +112,6 @@
                                                                               :keep-uuid? false
                                                                               :edit? false})
                                       (on-finished))))))))
-
-(defn open-chat
-  []
-  (when (state/enable-ai?)
-    (state/sidebar-add-block! (state/get-current-repo) "chat" :chat)))
-
-(defn open-ask
-  []
-  (when (state/enable-ai?)
-    (state/pub-event! [:ai/show])))
 
 (defn generate-text
   [content {:keys [service] :as opts

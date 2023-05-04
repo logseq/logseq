@@ -1469,6 +1469,19 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
+(defn get-template-instances
+  [name]
+  (when (string? name)
+    (d/q
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?name
+        :where
+        [?b :block/properties ?p]
+        [(get ?p :logseq.build.template) ?t]
+        [(= ?t ?name)]]
+      (conn/get-db)
+      name)))
+
 (defonce blocks-count-cache (atom nil))
 
 (defn blocks-count

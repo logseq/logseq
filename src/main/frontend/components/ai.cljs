@@ -10,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.string :as string]
@@ -28,6 +29,34 @@
   (when-let [node (gdom/getElement "conversation")]
     (util/scroll-to-bottom node)))
 
+(defn- new-message!
+  [^js e q]
+  (let [drawing? (string/starts-with? q "/draw ")]
+    (when (and (or (nil? e) (= (gobj/get e "key") "Enter"))
+               (not (string/blank? q)))
+      (swap! *messages conj
+             {:block/properties {:logseq.ai.type "question"}
+              :block/content q})
+      (when drawing?
+        (swap! *messages conj
+               {:block/properties {:logseq.ai.type "answer"}
+                :block/content "Loading ..."}))
+      (scroll-to-bottom)
+      (ai-handler/chat!
+       q
+       {:conversation-id (:chat/current-conversation @state/state)
+        :on-message (fn [message]
+                      (let [last-message (peek @*messages)
+                            answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
+                        (reset! *messages (conj (if answer? (pop @*messages) @*messages)
+                                                {:block/properties {:logseq.ai.type "answer"}
+                                                 :block/content message}))
+                        (scroll-to-bottom)))
+        :on-finished (fn []
+                       (reset! *messages [])
+                       (scroll-to-bottom))})
+      (state/set-state! [:ui/chat :q] ""))))
+
 (rum/defc input < rum/reactive
   []
   (let [q (state/sub [:ui/chat :q])
@@ -42,32 +71,7 @@
        :aria-label "Write a message"
        :value q
        :on-change on-change-fn
-       :on-key-down   (fn [^js e]
-                        (let [drawing? (string/starts-with? q "/draw ")]
-                          (when (and (= (gobj/get e "key") "Enter")
-                                    (not (string/blank? q)))
-                           (swap! *messages conj
-                                  {:block/properties {:logseq.ai.type "question"}
-                                   :block/content q})
-                           (when drawing?
-                             (swap! *messages conj
-                                    {:block/properties {:logseq.ai.type "answer"}
-                                     :block/content "Loading ..."}))
-                           (scroll-to-bottom)
-                           (ai-handler/chat!
-                            q
-                            {:conversation-id (:chat/current-conversation @state/state)
-                             :on-message (fn [message]
-                                           (let [last-message (peek @*messages)
-                                                 answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
-                                             (reset! *messages (conj (if answer? (pop @*messages) @*messages)
-                                                                     {:block/properties {:logseq.ai.type "answer"}
-                                                                      :block/content message}))
-                                             (scroll-to-bottom)))
-                             :on-finished (fn []
-                                            (reset! *messages [])
-                                            (scroll-to-bottom))})
-                           (state/set-state! [:ui/chat :q] ""))))}]]))
+       :on-key-down (fn [e] (new-message! e q))}]]))
 
 (rum/defc conversation-message < rum/static
   [block]
@@ -138,9 +142,13 @@
 (defn- send-request
   [state]
   (let [prompt (first (:rum/args state))
-        content (::initial-content state)]
-    (when-not (string/blank? content)
-      (let [content' (str (:prompt prompt) "\n" content)]
+        *input (last (:rum/args state))
+        content (or (::initial-content state) @*input)]
+    (when-not (or (string/blank? content)
+                  (contains? #{:new-conversation :create-prompt} (:id prompt)))
+      (let [content' (if (= :answer (:id prompt))
+                       content
+                       (str (:prompt prompt) "\n" content))]
         (reset! (::loading? state) true)
         (p/let [[id result] (ai-handler/generate-text content' {})]
           (reset! (::loading? state) false)
@@ -156,11 +164,13 @@
   (rum/local false ::loading?)
   (rum/local nil ::error)
   {:init (fn [state]
-           (assoc state ::initial-content (nth (:rum/args state) 1)))
+           (let [[_ content opts] (:rum/args state)
+                 content' (or content @(:input opts))]
+             (assoc state ::initial-content content')))
    :will-mount (fn [state]
                  (send-request state)
                  state)}
-  [state prompt content {:keys [editing-block selected-blocks]}]
+  [state prompt content {:keys [editing-block selected-blocks input]}]
   (let [*result (::result state)
         *loading? (::loading? state)
         *error (::error state)
@@ -168,7 +178,7 @@
         target-block (when target-block-id (db/pull [:block/uuid target-block-id]))]
     [:div.my-4
      [:div.whitespace-pre-wrap.my-2
-      content]
+      (::initial-content state)]
      (when @*loading?
        [:div.my-4
         (ui/loading "Loading ...")])
@@ -185,13 +195,13 @@
          :on-click (fn []
                      (let [repo (state/get-current-repo)]
                        (when target-block
-                        (if (or editing-block (= 1 (count selected-blocks)))
-                          ;; replace the content
-                          (editor-handler/edit-block! target-block :max
-                                                      (:block/uuid target-block)
-                                                      {:custom-content @*result})
-                          (paste-handler/delete-blocks-and-new-block! selected-blocks @*result))
-                        (state/close-modal!))))
+                         (if (or editing-block (= 1 (count selected-blocks)))
+                           ;; replace the content
+                           (editor-handler/edit-block! target-block :max
+                                                       (:block/uuid target-block)
+                                                       {:custom-content @*result})
+                           (paste-handler/delete-blocks-and-new-block! selected-blocks @*result))
+                         (state/close-modal!))))
          :class "mr-2")
        (ui/button "Insert"
          :on-click (fn []
@@ -272,14 +282,13 @@
                     :selected-blocks (state/get-selection-block-ids)
                     :editing-block-content (some-> (state/get-input) (.-value)))))}
   (rum/local nil ::prompt)
+  (rum/local nil ::input)
   [state]
   (let [*prompt (::prompt state)
-        items (->>
-               (remove
-                (fn [p] (contains? #{"Assistant"} (:name p)))
-                @prompts/prompts)
-               (cons {:name "Review content"
-                      :description "Review content before sending to any AI service"}))
+        *input (::input state)
+        prompts (remove
+                 (fn [p] (contains? #{"Assistant"} (:name p)))
+                 (prompts/get-all-prompts))
         {:keys [editing-block selected-blocks editing-block-content]} state
         content (cond
                   editing-block
@@ -290,51 +299,91 @@
 
                   :else
                   nil)
+        prompt-items (vec
+                      (if content
+                        (concat
+                         [{:name "Review content"}]
+                         prompts)
+                        prompts))
+        items (concat prompt-items
+                      [{:id :answer
+                        :name "Get answer"
+                        :select/non-matched? true}
+                       {:id :new-conversation
+                        :name "New conversation"
+                        :select/non-matched? true}
+                       {:id :create-prompt
+                        :name "Create a new prompt"
+                        :select/non-matched? true}])
         preferred-lang (state/sub :ai/preferred-translate-target-lang)
         translate? (and @*prompt (= (:name @*prompt) "Translate"))]
-    (when content
-      [:div.ask-ai
-       (cond
-         (and @*prompt (= (:name @*prompt) "Review content"))
-         [:div
-          [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
-          [:div.whitespace-pre-wrap.my-4
-           content]]
+    [:div.ask-ai
+     (cond
+       (and @*prompt (= (:name @*prompt) "Review content"))
+       [:div
+        [:div.font-medium.text-lg.mb-4 (:name @*prompt)]
+        [:div.whitespace-pre-wrap.my-4
+         content]]
 
-         (and @*prompt translate? (nil? preferred-lang))
-         (select/select {:items (map (fn [l] {:value l}) langs)
-                         :on-chosen (fn [chosen]
-                                      (state/set-preferred-translate-target-lang! (:value chosen)))
-                         :close-modal? false
-                         :input-default-placeholder "Translate to: "})
+       (and @*prompt translate? (nil? preferred-lang))
+       (select/select {:items (map (fn [l] {:value l}) langs)
+                       :on-chosen (fn [chosen]
+                                    (state/set-preferred-translate-target-lang! (:value chosen)))
+                       :close-modal? false
+                       :input-default-placeholder "Translate to: "})
 
-         (and @*prompt (or editing-block selected-blocks))
-         (let [prompt @*prompt
-               prompt (if translate?
-                        (update prompt :prompt #(util/format % preferred-lang))
-                        prompt)
-               description (if translate?
-                             "Translate to: "
-                             (:description @*prompt))]
-           [:div.prompt
-            [:div.font-medium.text-lg.mb-4 description]
-            (when translate?
-              (ui/select (map (fn [l] {:label l
-                                       :value l
-                                       :selected (= preferred-lang l)}) langs)
-                (fn [_ value]
-                  (state/set-preferred-translate-target-lang! value))))
-            (rum/with-key
-              (ai-prompt-body prompt content {:editing-block editing-block
-                                              :selected-blocks selected-blocks})
-              (:prompt prompt))])
+       @*prompt
+       (let [prompt @*prompt
+             prompt (if translate?
+                      (update prompt :prompt #(util/format % preferred-lang))
+                      prompt)
+             prompt-name (if translate?
+                           "Translate to: "
+                           (:name @*prompt))]
+         [:div.prompt
+          [:div.font-medium.text-lg.mb-4 prompt-name]
+          (when translate?
+            (ui/select (map (fn [l] {:label l
+                                     :value l
+                                     :selected (= preferred-lang l)}) langs)
+              (fn [_ value]
+                (state/set-preferred-translate-target-lang! value))))
+          (rum/with-key
+            (ai-prompt-body prompt content {:editing-block editing-block
+                                            :selected-blocks selected-blocks
+                                            :input *input})
+            (:prompt prompt))])
 
-         :else
-         (select/select {:items items
-                         :item-cp (fn [result chosen?]
-                                    (:name result))
-                         :on-chosen (fn [chosen]
-                                      (reset! *prompt chosen))
-                         :extract-fn :name
-                         :close-modal? false
-                         :input-default-placeholder "Ask AI"}))])))
+       :else
+       (select/select {:items items
+                       :item-cp (fn [result chosen?]
+                                  (:name result))
+                       :on-chosen (fn [chosen]
+                                    (case (:id chosen)
+                                      :new-conversation
+                                      (do
+                                        (state/set-state! :chat/current-conversation nil)
+                                        (ai-handler/open-chat)
+                                        (new-message! nil @*input)
+                                        (state/close-modal!))
+
+                                      :create-prompt
+                                      (do
+                                        ;; create page if not exists
+                                        (page-handler/create! "AI/Prompts" {:create-first-block? false})
+                                        (when-not (db-model/get-template-by-name "ai-prompt")
+                                          (editor-handler/api-insert-new-block! ""
+                                                                                {:page "AI/Prompts"
+                                                                                 :properties {:template "ai-prompt"
+                                                                                              :name ""}}))
+                                        (editor-handler/api-insert-new-block! @*input
+                                                                              {:page "AI/Prompts"
+                                                                               :properties {:logseq.build.template "ai-prompt"
+                                                                                            :name ""}})
+                                        (state/close-modal!))
+
+                                      (reset! *prompt chosen)))
+                       :on-input (fn [v] (reset! *input v))
+                       :extract-fn :name
+                       :close-modal? false
+                       :input-default-placeholder "Ask AI"}))]))

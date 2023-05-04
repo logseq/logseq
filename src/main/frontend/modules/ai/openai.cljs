@@ -3,7 +3,6 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.modules.ai.prompts :as prompts]
             ["sse.js" :refer [SSE]]))
 
 (defn- -generate-text

@@ -71,26 +71,32 @@
                                 (and (fn? on-input) (on-input v))))}
               input-opts)]]
 
-     [:div.item-results-wrap
-      (ui/auto-complete
-       (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
-         (fn? transform-fn)
-         (transform-fn @input))
+     (let [match-items (remove :select/non-matched? items)
+           non-matched-items (filter :select/non-matched? items)
+           search-result (search/fuzzy-search match-items @input :limit limit :extract-fn extract-fn)
+           search-result' (if (and (empty? search-result) (seq non-matched-items))
+                            non-matched-items
+                            search-result)]
+       [:div.item-results-wrap
+        (ui/auto-complete
+         (cond-> search-result'
+           (fn? transform-fn)
+           (transform-fn @input))
 
-       {:item-render       (or item-cp (fn [result chosen?]
-                                         (render-item result chosen? multiple-choices? *selected-choices)))
-        :class             "cp__select-results"
-        :on-chosen         (fn [x]
-                             (reset! input "")
-                             (if multiple-choices?
-                               (if (@*selected-choices x)
-                                 (swap! *selected-choices disj x)
-                                 (swap! *selected-choices conj x))
-                               (do
-                                 (when close-modal? (state/close-modal!))
-                                 (when on-chosen
-                                   (on-chosen (if multiple-choices? @*selected-choices x))))))
-        :empty-placeholder (empty-placeholder t)})]
+         {:item-render       (or item-cp (fn [result chosen?]
+                                           (render-item result chosen? multiple-choices? *selected-choices)))
+          :class             "cp__select-results"
+          :on-chosen         (fn [x]
+                               (reset! input "")
+                               (if multiple-choices?
+                                 (if (@*selected-choices x)
+                                   (swap! *selected-choices disj x)
+                                   (swap! *selected-choices conj x))
+                                 (do
+                                   (when close-modal? (state/close-modal!))
+                                   (when on-chosen
+                                     (on-chosen (if multiple-choices? @*selected-choices x))))))
+          :empty-placeholder (empty-placeholder t)})])
 
      (when multiple-choices?
        [:div.p-4 (ui/button "Apply updates" :on-click on-apply)])]))

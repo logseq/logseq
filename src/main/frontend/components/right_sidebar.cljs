@@ -122,17 +122,20 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :chat
-    [[:div.flex.flex-row.items-center
-      (ui/button
-        (ui/icon "arrow-move-left")
-        :title "Open Chat in the left"
-        :on-click (fn []
-                    (state/sidebar-remove-block! "chat")
-                    (route-handler/redirect! {:to :chat}))
-        :small? true
-        :intent "link")
-      [:span.ml-1 "Chat"]]
-     (ai/chat)]
+    (let [redirect-to-chat (fn []
+                             (state/sidebar-remove-block! "chat")
+                             (route-handler/redirect! {:to :chat}))]
+      [[:div.flex.flex-row.items-center
+        (ui/button
+          (ui/icon "arrow-move-left")
+          :title "Open Chat in the left"
+          :on-click redirect-to-chat
+          :small? true
+          :intent "link")
+        [:a.ml-1 {:on-click redirect-to-chat
+                  :title "Open Chat in the left"}
+         "Chat"]]
+       (ai/chat)])
 
     :page-graph
     [(str (t :right-side-bar/page-graph))
