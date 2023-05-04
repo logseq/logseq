@@ -248,7 +248,7 @@
          "Path-refs remain the same"))))
 
 (deftest save-block
-  (testing "Saving blocks"
+  (testing "Saving blocks with and without properties"
     (test-helper/load-test-files [{:file/path "foo.md"
                                    :file/content "# foo"}])
     (let [repo test-helper/test-db
