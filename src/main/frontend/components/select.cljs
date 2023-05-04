@@ -71,9 +71,8 @@
                                 (and (fn? on-input) (on-input v))))}
               input-opts)]]
 
-     (let [match-items (remove :select/non-matched? items)
-           non-matched-items (filter :select/non-matched? items)
-           search-result (search/fuzzy-search match-items @input :limit limit :extract-fn extract-fn)
+     (let [non-matched-items (filter :select/non-matched? items)
+           search-result (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
            search-result' (if (and (empty? search-result) (seq non-matched-items))
                             non-matched-items
                             search-result)]

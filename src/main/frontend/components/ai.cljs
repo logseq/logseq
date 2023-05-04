@@ -307,7 +307,7 @@
                         prompts))
         items (concat prompt-items
                       [{:id :answer
-                        :name "Get answer"
+                        :name "Get reply"
                         :select/non-matched? true}
                        {:id :new-conversation
                         :name "New conversation"
