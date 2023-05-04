@@ -205,7 +205,7 @@
   margin-top: 0;
 
   &.is-order-list {
-    @apply relative right-0;
+    @apply relative right-0 mr-0;
   }
 }
 
@@ -531,10 +531,7 @@
   }
 
   &.as-order-list {
-    min-width: 16px;
-    width: auto;
-    white-space: nowrap;
-    justify-content: end;
+    @apply w-[28px] whitespace-nowrap justify-start;
   }
 
   .bullet {
