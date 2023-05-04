@@ -6,7 +6,8 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db :as db]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [datascript.core :as d]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -24,7 +25,7 @@
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
-  [{:keys [tx-meta]} blocks]
+  [{:keys [tx-meta db-before]} blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
     (when (:outliner-op tx-meta)
@@ -36,7 +37,7 @@
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
-                            old-refs (set (map :db/id (:block/path-refs block)))
+                            old-refs (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
                             new-refs (set (util/concat-without-nil
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
