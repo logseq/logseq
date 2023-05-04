@@ -1560,12 +1560,6 @@ Similar to re-frame subscriptions"
   (when-let [tldraw-el (.querySelector js/document.body ".logseq-tldraw[data-tlapp]")]
     (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
 
-(defn tldraw-editing-logseq-block?
-  []
-  (when-let [app (active-tldraw-app)]
-    (and (= 1 (.. app -selectedShapesArray -length))
-         (= (.. app -editingShape) (.. app -selectedShapesArray (at 0))))))
-
 (defn set-graph-syncing?
   [value]
   (set-state! :graph/syncing? value))
@@ -1737,14 +1731,9 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn editing-whiteboard-portal?
-  []
-  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
-
 (defn block-component-editing?
   []
-  (and (:block/component-editing-mode? @state)
-       (not (editing-whiteboard-portal?))))
+  (:block/component-editing-mode? @state))
 
 (defn set-block-component-editing-mode!
   [value]
