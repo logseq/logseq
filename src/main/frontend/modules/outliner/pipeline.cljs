@@ -37,7 +37,9 @@
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
-                            old-refs (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
+                            old-refs (when db-before
+                                       (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
+                                       #{})
                             new-refs (set (util/concat-without-nil
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
