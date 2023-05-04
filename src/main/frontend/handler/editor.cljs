@@ -3189,6 +3189,11 @@
       :else
       (js/document.execCommand "copy"))))
 
+(defn whiteboard?
+  []
+  (and (state/whiteboard-route?)
+       (.closest (.-activeElement js/document) ".logseq-tldraw")))
+
 (defn shortcut-cut
   "shortcut cut action:
   * when in selection mode, cut selected blocks
@@ -3202,14 +3207,24 @@
     (and (state/editing?) (util/input-text-selected?
                            (gdom/getElement (state/get-edit-input-id))))
     (keydown-backspace-handler true e)
+    
+    (whiteboard?)
+    (.cut (state/active-tldraw-app))
 
     :else
     nil))
 
 (defn delete-selection
   [e]
-  (when (state/selection?)
-    (shortcut-delete-selection e)))
+  (cond
+    (state/selection?)
+    (shortcut-delete-selection e)
+
+    (whiteboard?)
+    (.deleteShapes (.-api ^js (state/active-tldraw-app)))
+
+    :else
+    nil))
 
 (defn editor-delete
   [_state e]
@@ -3509,6 +3524,10 @@
                        expand-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
+
+     (whiteboard?)
+     (.setCollapsed (.-api ^js (state/active-tldraw-app)) false)
+     
      :else
      ;; expand one level
      (let [blocks-with-level (all-blocks-with-level {})
@@ -3542,6 +3561,9 @@
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
+     
+     (whiteboard?)
+     (.setCollapsed (.-api ^js (state/active-tldraw-app)) true)
 
      :else
      ;; collapse by one level from outside
@@ -3638,6 +3660,11 @@
         edit-block (state/get-edit-block)
         target-element (.-nodeName (.-target e))]
     (cond
+      (whiteboard?)
+      (do
+        (util/stop e)
+        (.selectAll (.-api ^js (state/active-tldraw-app))))
+
       ;; editing block fully selected
       (and edit-block edit-input
            (= (util/get-selected-text) (.-value edit-input)))

@@ -9,7 +9,7 @@ export class LogseqPortalTool extends TLTool<
   TLApp<Shape, TLReactEventMap>
 > {
   static id = 'logseq-portal'
-  static shortcut = ['3']
+  static shortcut = 'whiteboard/portal'
   static states = [IdleState, CreatingState]
   static initial = 'idle'
 

@@ -920,6 +920,9 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
+(defonce linux? #?(:cljs goog.userAgent/LINUX
+                   :clj nil))
+
 (defn default-content-with-title
   [text-format]
   (case (name text-format)

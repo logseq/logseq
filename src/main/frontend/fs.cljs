@@ -194,14 +194,12 @@
 
 (defn mkdir-if-not-exists
   [dir]
-  (->
-   (when dir
-     (util/p-handle
-      (stat dir)
-      (fn [_stat])
-      (fn [_error]
-        (mkdir! dir))))
-   (p/catch (fn [error] (js/console.error error)))))
+  (when dir
+    (util/p-handle
+     (stat dir)
+     (fn [_stat])
+     (fn [_error]
+       (mkdir! dir)))))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists

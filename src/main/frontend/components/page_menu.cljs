@@ -80,15 +80,16 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>
-         [{:title   (if favorited?
-                      (t :page/unfavorite)
-                      (t :page/add-to-favorites))
-           :options {:on-click
-                     (fn []
-                       (if favorited?
-                         (page-handler/unfavorite-page! page-original-name)
-                         (page-handler/favorite-page! page-original-name)))}}
-
+         [(when-not config/publishing?
+            {:title   (if favorited?
+                        (t :page/unfavorite)
+                        (t :page/add-to-favorites))
+             :options {:on-click
+                       (fn []
+                         (if favorited?
+                           (page-handler/unfavorite-page! page-original-name)
+                           (page-handler/favorite-page! page-original-name)))}})
+          
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
              :options {:on-click
@@ -109,7 +110,8 @@
             {:title   (t :page/copy-page-url)
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
-          (when-not contents?
+          (when-not (or contents?
+                        config/publishing?)
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 

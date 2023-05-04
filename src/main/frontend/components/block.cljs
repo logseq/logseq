@@ -998,7 +998,9 @@
 
 (defn- relative-assets-path->absolute-path
   [path]
-  (if (path/absolute? path)
+  (when (path/protocol-url? path)
+    (js/console.error "BUG: relative-assets-path->absolute-path called with protocol url" path))
+  (if (or (path/absolute? path) (path/protocol-url? path))
     path
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
@@ -1080,7 +1082,7 @@
     (not (string/includes? s "."))
     (page-reference (:html-export? config) s config label)
 
-    (gp-util/url? s)
+    (path/protocol-url? s)
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
@@ -1102,7 +1104,7 @@
       (->elem
        :a
        (cond->
-        {:href      (str "file://" path)
+        {:href      (path/path-join "file://" path)
          :data-href path
          :target    "_blank"}
          title
@@ -1184,7 +1186,7 @@
                               href)]
                   (->elem
                    :a
-                   (cond-> {:href      (str "file://" href*)
+                   (cond-> {:href      (path/path-join "file://" href*)
                             :data-href href*
                             :target    "_blank"}
                      title (assoc :title title))
