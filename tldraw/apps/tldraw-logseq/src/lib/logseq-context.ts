@@ -37,6 +37,9 @@ export interface LogseqContextValue {
         renderFn?: (open?: boolean, count?: number) => React.ReactNode
       }
     }>
+    KeyboardShortcut: React.FC<{
+      action: string
+    }>
   }
   handlers: {
     search: (

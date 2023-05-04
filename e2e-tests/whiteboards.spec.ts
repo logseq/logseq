@@ -296,7 +296,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}++`)
+  await page.keyboard.press('Shift+=')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
@@ -304,7 +304,7 @@ test('zoom in', async ({ page }) => {
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}+-`)
+  await page.keyboard.press('Shift+-')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })

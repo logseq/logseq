@@ -11,6 +11,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
@@ -290,7 +291,8 @@
                                                                       {:extension? true})])})]]
      (tldraw-app page-name block-id)]))
 
-(rum/defc whiteboard-route
+(rum/defc whiteboard-route <
+(shortcut/mixin :shortcut.handler/whiteboard)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
