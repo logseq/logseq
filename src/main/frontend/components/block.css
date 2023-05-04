@@ -535,11 +535,14 @@
   }
 
   .bullet {
-    border-radius: 50%;
-    width: 6px;
-    height: 6px;
+    @apply rounded-full w-[6px] h-[6px];
+
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
+
+    > * {
+      @apply cursor-pointer;
+    }
   }
 
   &:not(.typed-list) {
