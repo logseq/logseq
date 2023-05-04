@@ -148,7 +148,7 @@
                                           "")
                           (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
                                           ""))]
-    (util/safe-path-join repo-dir (str bak-dir "/" relative-path))))
+    (path/path-join repo-dir bak-dir relative-path)))
 
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
@@ -174,7 +174,8 @@
         dir (case dir
               :backup-dir (get-backup-dir repo-dir path backup-dir ext)
               :version-file-dir (get-backup-dir repo-dir path version-file-dir ext))
-        new-path (util/safe-path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) "." ext))]
+        new-path (path/path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) "." ext))]
+
     (<write-file-with-utf8 new-path content)
     (truncate-old-versioned-files! dir)))
 
@@ -187,14 +188,14 @@
                                (string/includes? repo-dir divider-schema))
         repo-dir          (if-not dir-schema?
                             (str file-schema divider-schema repo-dir) repo-dir)
-        backup-root       (util/safe-path-join repo-dir backup-dir)
+        backup-root       (path/path-join repo-dir backup-dir)
         backup-dir-parent (util/node-path.dirname file-path)
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")
         backup-dir-name (util/node-path.name file-path)
         file-extname (.extname util/node-path file-path)
-        file-root (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
-        file-path (util/safe-path-join file-root
-                                       (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
+        file-root (path/path-join backup-root backup-dir-parent backup-dir-name)
+        file-path (path/path-join file-root
+                                  (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
     (<write-file-with-utf8 file-path content)
     (truncate-old-versioned-files! file-root)))
 

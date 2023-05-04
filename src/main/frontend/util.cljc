@@ -57,6 +57,7 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
@@ -528,13 +529,6 @@
   (if (string? s)
     (string/lower-case s) s))
 
-#?(:cljs
-   (defn safe-path-join [prefix & paths]
-     (let [path (apply node-path.join (cons prefix paths))]
-       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (gp-util/safe-decode-uri-component (subs path 7))
-         path))))
-
 (defn trim-safe
   [s]
   (when s
@@ -919,6 +913,9 @@
                  :clj nil))
 
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
+                   :clj nil))
+
+(defonce linux? #?(:cljs goog.userAgent/LINUX
                    :clj nil))
 
 (defn default-content-with-title

@@ -374,28 +374,36 @@ export const nodePath = Object.assign({}, path, {
 })
 
 // https://stackoverflow.com/questions/376373/pretty-printing-xml-with-javascript
-export const prettifyXml = function(sourceXml)
-{
-    var xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml');
-    var xsltDoc = new DOMParser().parseFromString([
-        // describes how we want to modify the XML - indent everything
-        '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
-        '  <xsl:strip-space elements="*"/>',
-        '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
-        '    <xsl:value-of select="normalize-space(.)"/>',
-        '  </xsl:template>',
-        '  <xsl:template match="node()|@*">',
-        '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
-        '  </xsl:template>',
-        '  <xsl:output indent="yes"/>',
-        '</xsl:stylesheet>',
-    ].join('\n'), 'application/xml');
+export const prettifyXml = (sourceXml) => {
+  const xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml')
+  const xsltDoc = new DOMParser().parseFromString([
+    // describes how we want to modify the XML - indent everything
+    '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
+    '  <xsl:strip-space elements="*"/>',
+    '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
+    '    <xsl:value-of select="normalize-space(.)"/>',
+    '  </xsl:template>',
+    '  <xsl:template match="node()|@*">',
+    '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
+    '  </xsl:template>',
+    '  <xsl:output indent="yes"/>',
+    '</xsl:stylesheet>',
+  ].join('\n'), 'application/xml')
 
-    var xsltProcessor = new XSLTProcessor();
-    xsltProcessor.importStylesheet(xsltDoc);
-    var resultDoc = xsltProcessor.transformToDocument(xmlDoc);
-    var resultXml = new XMLSerializer().serializeToString(resultDoc);
-    // if it has parsererror, then return the original text
-    return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml;
+  const xsltProcessor = new XSLTProcessor()
+  xsltProcessor.importStylesheet(xsltDoc)
+  const resultDoc = xsltProcessor.transformToDocument(xmlDoc)
+  const resultXml = new XMLSerializer().serializeToString(resultDoc)
+  // if it has parsererror, then return the original text
+  return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml
+}
 
-};
+export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {
+  const { top, left, bottom, right } = el.getBoundingClientRect()
+  const { innerHeight, innerWidth } = window
+  return partiallyVisible
+    ? ((top > 0 && top < innerHeight) ||
+      (bottom > 0 && bottom < innerHeight)) &&
+    ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
+    : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth
+}
