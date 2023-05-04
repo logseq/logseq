@@ -23,6 +23,12 @@
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
 
+(def *dirties-toggle-items (atom {}))
+
+(defn- clear-dirties-states!
+  []
+  (reset! *dirties-toggle-items {}))
+
 (rum/defcs installed-themes
   <
   (rum/local [] ::themes)
@@ -272,7 +278,9 @@
 
     (ui/toggle (not disabled?)
                (fn []
-                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id))
+                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
+                 (when (nil? (get @*dirties-toggle-items (keyword id)))
+                   (swap! *dirties-toggle-items assoc (keyword id) (not disabled?))))
                true)]])
 
 (defn get-open-plugin-readme-handler
@@ -796,11 +804,15 @@
                                 filtered-plugins)
         sorted-plugins        (if default-filter-by?
                                 (->> filtered-plugins
-                                     (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
+                                     (reduce #(let [disabled? (get-in %2 [:settings :disabled])
+                                                    old-dirty (get @*dirties-toggle-items (keyword (:id %2)))
+                                                    k         (if (if (boolean? old-dirty) (not old-dirty) disabled?) 1 0)]
                                                 (update %1 k conj %2)) [[] []])
                                      (#(update % 0 (fn [coll] (sort-by :iir coll))))
                                      (flatten))
-                                filtered-plugins)
+                                (do
+                                  (clear-dirties-states!)
+                                  filtered-plugins))
 
         fn-query-flag         (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag        (fn-query-flag)
@@ -1092,16 +1104,17 @@
         [:div.ui-items-container
          {:data-type (name type)}
 
-         ;; manage plugin buttons
-         (when toolbar?
-           [:<>
-            (header-ui-items-list-wrap
-              (for [[_ {:keys [key pinned?] :as opts} pid] items]
-                (when (or (not toolbar?)
-                          (not (set? pinned-items)) pinned?)
-                  (rum/with-key (ui-item-renderer pid type opts) key))))
+         [:<>
+          (header-ui-items-list-wrap
+            (for [[_ {:keys [key pinned?] :as opts} pid] items]
+              (when (or (not toolbar?)
+                        (not (set? pinned-items)) pinned?)
+                (rum/with-key (ui-item-renderer pid type opts) key))))
+
+          ;; manage plugin buttons
+          (when toolbar?
             (let [updates-coming (state/sub :plugin/updates-coming)]
-              (toolbar-plugins-manager-list updates-coming items))])]))))
+              (toolbar-plugins-manager-list updates-coming items)))]]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]
@@ -1120,8 +1133,14 @@
         *el-ref (rum/create-ref)]
 
     (rum/use-effect!
-      #(state/load-app-user-cfgs)
+      (fn []
+        (state/load-app-user-cfgs)
+        #(clear-dirties-states!))
       [])
+
+    (rum/use-effect!
+      #(clear-dirties-states!)
+      [market?])
 
     [:div.cp__plugins-page
      {:ref       *el-ref

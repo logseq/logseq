@@ -14,6 +14,12 @@ export enum Color {
   Default = '',
 }
 
+export enum Geometry {
+  Box = 'box',
+  Ellipse = 'ellipse',
+  Polygon = 'polygon',
+}
+
 export enum AlignType {
   Top = 'top',
   CenterVertical = 'centerVertical',
@@ -158,14 +164,6 @@ export type TLSubscriptionEvent =
       info: { replace: boolean }
     }
   | {
-      event: 'save'
-      info: null
-    }
-  | {
-      event: 'saveAs'
-      info: null
-    }
-  | {
       event: 'undo'
       info: null
     }
@@ -254,8 +252,6 @@ export interface TLCallbacks<
 > {
   onMount: TLCallback<S, K, R, 'mount'>
   onPersist: TLCallback<S, K, R, 'persist'>
-  onSave: TLCallback<S, K, R, 'save'>
-  onSaveAs: TLCallback<S, K, R, 'saveAs'>
   onError: TLCallback<S, K, R, 'error'>
 }
 

@@ -513,9 +513,6 @@
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
 
-      (when (util/electron?)
-        (find-in-page/search))
-
       (when show-action-bar?
         (action-bar/action-bar))
 
@@ -839,6 +836,9 @@
                         :route-match    route-match
                         :default-home   default-home
                         :new-block-mode new-block-mode})
+
+        (when (util/electron?)
+          (find-in-page/search))
 
         (main {:route-match         route-match
                :margin-less-pages?  margin-less-pages?

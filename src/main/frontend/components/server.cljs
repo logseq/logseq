@@ -87,12 +87,12 @@
                        (swap! *configs assoc :host value))}]]
 
       [:label
-       [:strong "Port (0 ~ 65536)"]
+       [:strong "Port (1 ~ 65535)"]
        [:input.form-input
         {:auto-focus true
          :value      port
          :min        "1"
-         :max        "65536"
+         :max        "65535"
          :type       "number"
          :on-change  #(let [value (.-value (.-target %))]
                         (swap! *configs assoc :port value))}]]]

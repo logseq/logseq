@@ -209,7 +209,7 @@
           [:span.px-3.flex (ui/icon "key")]
           [:p.dark:text-gray-100
            [:span "Please make sure you "]
-           "remember the password you have set, "
+           "remember the password you have set, as we are unable to reset or retrieve it in case you forget it, "
            [:span "and we recommend you "]
            "keep a secure backup "
            [:span "of the password."]]]

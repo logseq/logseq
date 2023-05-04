@@ -190,6 +190,7 @@
     :result-transform (fn [result]
                         (sort-by (fn [h]
                                    (get h :block/priority "Z")) result))
+    :group-by-page? false
     :collapsed? false}
    {:title "📅 NEXT"
     :query [:find (pull ?h [*])
@@ -203,6 +204,7 @@
             [(> ?d ?start)]
             [(< ?d ?next)]]
     :inputs [:today :7d-after]
+    :group-by-page? false
     :collapsed? false}]}
 
  ;; Add your own commands to slash menu to speedup.

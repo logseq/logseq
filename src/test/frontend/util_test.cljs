@@ -22,17 +22,6 @@
     (is (= 2 (util/safe-inc-current-pos-from-start "abcde" 1)))
     (is (= 1 (util/safe-inc-current-pos-from-start "中文" 0)))))
 
-(deftest test-safe-path-join
-  (testing "safe path join with custom schema"
-    (is (= (util/node-path.join "a/b" "c/d.md") "a/b/c/d.md"))
-    (is (= (util/node-path.join "a/b/c" "../../d.md") "a/d.md"))
-    (is (= (util/node-path.join "file:///a/b" "c/d.md") "file:///a/b/c/d.md"))
-    (is (= (util/node-path.join "file:///a/b" "../d.md") "file:///a/d.md"))
-    (is (= (util/node-path.join "file:///a   a2/b" "c/d.md") "file:///a   a2/b/c/d.md"))
-    (is (= (util/node-path.join "C:/a2/b" "c/d.md") "C:/a2/b/c/d.md"))
-    (is (= (util/node-path.join "content://a/b" "../d.md") "content://a/d.md"))
-    (is (= (util/node-path.join "https://logseq.com/a/b" "c/d.md") "https://logseq.com/a/b/c/d.md"))))
-
 (deftest test-memoize-last
   (testing "memoize-last add test"
     (let [actual-ops (atom 0)

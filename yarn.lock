@@ -487,10 +487,10 @@
     "@jridgewell/resolve-uri" "^3.0.3"
     "@jridgewell/sourcemap-codec" "^1.4.10"
 
-"@logseq/capacitor-file-sync@0.0.22":
-  version "0.0.22"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.22.tgz#3fa94d40e5c44c70a12537ce17cf3089ff72f93b"
-  integrity sha512-lb0+43YAaWy0umBCP2mPKyAPlIr2YHrLBfqGkCJUGAbrhTCAj37KZzb3snwSqeLA8dUSks9PcAN3jSgS74VMMw==
+"@logseq/capacitor-file-sync@0.0.24":
+  version "0.0.24"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.24.tgz#be7b69492b92df9c4e899502c632deebe179746b"
+  integrity sha512-CBIXEPYVp1ddjyYN+Z2dTQ9gwF0KYwZwlvwnl+zmR0Q3ODXxg75BExh5vAU8khXkSNZjZXgZT/J61/kn9xN11w==
 
 "@logseq/diff-merge@^0.0.2":
   version "0.0.2"
