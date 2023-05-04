@@ -7,6 +7,7 @@
             [frontend.search :as search]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
+            [frontend.extensions.lightbox :as lightbox]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [camel-snake-kebab.core :as csk]
@@ -228,13 +229,17 @@
                   {:dangerouslySetInnerHTML {:__html (inflate-content-assets-urls content)}
                    :on-click                (fn [^js e]
                                               (when-let [target (.-target e)]
-                                                (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
-                                                  (when-let [to-k (and (not (string/starts-with? link "http"))
-                                                                       (parse-key-from-href link parent-key))]
-                                                    (if-let [to (get handbook-nodes to-k)]
-                                                      (nav! [:topic-detail to (:title parent)] pane-state)
-                                                      (js/console.error "ERROR: handbook link resource not found: " link))
-                                                    (util/stop e)))))}]
+                                                (if-let [^js img (.closest target "img")]
+                                                  (lightbox/preview-images! [{:src (.-src img)
+                                                                              :w   (.-naturalWidth img)
+                                                                              :h   (.-naturalHeight img)}])
+                                                  (when-let [link (some-> (.closest target "a") (.getAttribute "href"))]
+                                                    (when-let [to-k (and (not (string/starts-with? link "http"))
+                                                                         (parse-key-from-href link parent-key))]
+                                                      (if-let [to (get handbook-nodes to-k)]
+                                                        (nav! [:topic-detail to (:title parent)] pane-state)
+                                                        (js/console.error "ERROR: handbook link resource not found: " link))
+                                                      (util/stop e))))))}]
 
                  (when-let [idx (and (> chapters-len 1) chapter-current-idx)]
                    (let [prev (when-not (zero? idx) (dec idx))

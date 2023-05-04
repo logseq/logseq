@@ -289,6 +289,10 @@
     :not(pre) > code {
       white-space: nowrap;
     }
+
+    img {
+      @apply cursor-pointer active:opacity-80;
+    }
   }
 
   &-popup {
