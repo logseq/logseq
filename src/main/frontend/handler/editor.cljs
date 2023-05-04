@@ -2664,7 +2664,9 @@
                    (not single-block?)
                    (not custom-query?))
           (if (own-order-number-list? block)
-            (remove-block-own-order-list-type! block)
+            (do
+              (save-current-block!)
+              (remove-block-own-order-list-type! block))
             (delete-block! repo false))))
 
       (and (> current-pos 1)
@@ -3103,7 +3105,7 @@
     (and (state/editing?) (util/input-text-selected?
                            (gdom/getElement (state/get-edit-input-id))))
     (keydown-backspace-handler true e)
-    
+
     (whiteboard?)
     (.cut (state/active-tldraw-app))
 
@@ -3423,7 +3425,7 @@
 
      (whiteboard?)
      (.setCollapsed (.-api ^js (state/active-tldraw-app)) false)
-     
+
      :else
      ;; expand one level
      (let [blocks-with-level (all-blocks-with-level {})
@@ -3457,7 +3459,7 @@
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
-     
+
      (whiteboard?)
      (.setCollapsed (.-api ^js (state/active-tldraw-app)) true)
 
