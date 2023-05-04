@@ -857,17 +857,6 @@
                             (dom/attr sibling-block "id")
                             "")))))
 
-(defn delete-blocks-and-new-block!
-  [delete-block-uuids new-block-content]
-  (when (seq delete-block-uuids)
-    (let [left (:block/uuid (:block/left (db/entity [:block/uuid (first delete-block-uuids)])))
-          blocks (map (fn [id] (db/pull [:block/uuid id])) delete-block-uuids)]
-      (api-insert-new-block! new-block-content
-                             {:block-uuid left})
-      (outliner-tx/transact!
-        {:outliner-op :delete-blocks}
-        (outliner-core/delete-blocks! blocks {})))))
-
 (defn- set-block-property-aux!
   [block-or-id key value]
   (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])

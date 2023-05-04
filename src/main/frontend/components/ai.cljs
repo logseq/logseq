@@ -156,7 +156,7 @@
   (rum/local false ::loading?)
   (rum/local nil ::error)
   {:init (fn [state]
-           (assoc state ::initial-content (last (:rum/args state))))
+           (assoc state ::initial-content (nth (:rum/args state) 1)))
    :will-mount (fn [state]
                  (send-request state)
                  state)}
@@ -188,7 +188,7 @@
                           (editor-handler/edit-block! target-block :max
                                                       (:block/uuid target-block)
                                                       {:custom-content @*result})
-                          (editor-handler/delete-blocks-and-new-block! selected-blocks @*result))
+                          (paste-handler/delete-blocks-and-new-block! selected-blocks @*result))
                         (state/close-modal!))))
          :class "mr-2")
        (ui/button "Insert"

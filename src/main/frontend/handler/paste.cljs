@@ -18,9 +18,11 @@
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.core :as outliner-core]))
 
-(defn paste-text-parseable
+(defn- paste-text-parseable
   [format text paste-opts]
   (let [editing-block (state/get-edit-block)]
     (when (or (:target-block paste-opts) editing-block)
@@ -241,3 +243,19 @@
        (editor-handler/insert clipboard-data true)))
    (fn [error]
      (js/console.error error))))
+
+(defn delete-blocks-and-new-block!
+  [delete-block-uuids new-block-content]
+  (when (seq delete-block-uuids)
+    (let [first-block (db/entity [:block/uuid (first delete-block-uuids)])
+          left (:block/left first-block)
+          blocks (map (fn [id] (db/pull [:block/uuid id])) delete-block-uuids)]
+      (paste-text-parseable
+       (state/get-preferred-format)
+       new-block-content
+       {:target-block left
+        :sibling? (not= (:db/id (:block/parent first-block))
+                        (:db/id left))})
+      (outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (outliner-core/delete-blocks! blocks {})))))
