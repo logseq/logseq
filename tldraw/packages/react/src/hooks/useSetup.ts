@@ -10,8 +10,6 @@ export function useSetup<
 >(app: R, props: TLAppPropsWithApp<S, R> | TLAppPropsWithoutApp<S, R>) {
   const {
     onPersist,
-    onSave,
-    onSaveAs,
     onError,
     onMount,
     onCreateAssets,
@@ -43,8 +41,6 @@ export function useSetup<
   React.useLayoutEffect(() => {
     const unsubs: (() => void)[] = []
     if (onPersist) unsubs.push(app.subscribe('persist', onPersist))
-    if (onSave) unsubs.push(app.subscribe('save', onSave))
-    if (onSaveAs) unsubs.push(app.subscribe('saveAs', onSaveAs))
     if (onError) unsubs.push(app.subscribe('error', onError))
     if (onCreateShapes) unsubs.push(app.subscribe('create-shapes', onCreateShapes))
     if (onCreateAssets) unsubs.push(app.subscribe('create-assets', onCreateAssets))
@@ -56,5 +52,5 @@ export function useSetup<
     if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?
     return () => unsubs.forEach(unsub => unsub())
-  }, [app, onPersist, onSave, onSaveAs, onError])
+  }, [app, onPersist, onError])
 }

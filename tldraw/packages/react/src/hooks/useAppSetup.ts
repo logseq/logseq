@@ -11,7 +11,6 @@ export function useAppSetup<S extends TLReactShape, R extends TLReactApp<S> = TL
   )
 
   React.useLayoutEffect(() => {
-    app.initKeyboardShortcuts()
     return () => {
       app.dispose()
     }
