@@ -965,7 +965,7 @@
     (editor-handler/remove-block-own-order-list-type! block)))
 
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
-  (when-let [blocks (and block (db-model/get-block-children (state/get-current-repo) (:block/uuid block)))]
+  (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
 (defn run!
