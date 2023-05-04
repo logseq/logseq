@@ -4,7 +4,7 @@ import { HighlighterShape, type Shape } from '../shapes'
 
 export class HighlighterTool extends TLDrawTool<HighlighterShape, Shape, TLReactEventMap> {
   static id = 'highlighter'
-  static shortcut = ['5', 'h']
+  static shortcut = 'whiteboard/highlighter'
   Shape = HighlighterShape
   simplify = true
   simplifyTolerance = 0.618

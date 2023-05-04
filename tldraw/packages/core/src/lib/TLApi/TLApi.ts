@@ -43,7 +43,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
    *
    * @param shapes The serialized shape changes to apply.
    */
-  updateShapes = <T extends S>(...shapes: ({ id: string, type: string } & Partial<T['props']>)[]): this => {
+  updateShapes = <T extends S>(
+    ...shapes: ({ id: string; type: string } & Partial<T['props']>)[]
+  ): this => {
     this.app.updateShapes(shapes)
     return this
   }
@@ -193,16 +195,6 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     })
     this.app.persist()
 
-    return this
-  }
-
-  save = () => {
-    this.app.save()
-    return this
-  }
-
-  saveAs = () => {
-    this.app.save()
     return this
   }
 
@@ -445,8 +437,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   setCollapsed = (collapsed: boolean, shapes: S[] = this.app.allSelectedShapesArray) => {
     shapes.forEach(shape => {
-      if (shape.props.type === 'logseq-portal')
-        shape.setCollapsed(collapsed)
+      if (shape.props.type === 'logseq-portal') shape.setCollapsed(collapsed)
     })
     this.app.persist()
   }
