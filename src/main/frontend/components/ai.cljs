@@ -166,17 +166,19 @@
         *error (::error state)
         target-block-id (or (:block/uuid editing-block) (last selected-blocks))
         target-block (when target-block-id (db/pull [:block/uuid target-block-id]))]
-    [:div
+    [:div.my-4
      [:div.whitespace-pre-wrap.my-2
       content]
      (when @*loading?
-       (ui/loading "Loading ..."))
+       [:div.my-4
+        (ui/loading "Loading ...")])
      (if @*error
        [:div.warning (str @*error)]
        (when @*result
-         [:div.result.whitespace-pre-wrap.my-2
+         [:div.result.whitespace-pre-wrap.my-4
+          [:hr]
           (str @*result)]))
-     [:div.flex.flex-row.justify-between.my-2
+     [:div.flex.flex-row.justify-between.my-4
       (ui/button "Regenerate" :on-click (fn [] (send-request state)))
       [:div.flex.flex-row.justify-between
        (ui/button "Replace"
@@ -201,7 +203,74 @@
                          :sibling? (not (or editing-block (= 1 (count selected-blocks))))})
                        (state/close-modal!))))]]]))
 
-(rum/defcs ai-modal <
+(def langs ["English"
+            "中文"
+            "繁體中文"
+            "日本語"
+            "한국어"
+            "Français"
+            "Deutsch"
+            "Español"
+            "Italiano"
+            "Русский"
+            "Português"
+            "Nederlands"
+            "Polski"
+            "العربية"
+            "Afrikaans"
+            "አማርኛ"
+            "Azərbaycan"
+            "Беларуская"
+            "Български"
+            "বাংলা"
+            "Bosanski"
+            "Català"
+            "Cebuano"
+            "Corsu"
+            "Čeština"
+            "Cymraeg"
+            "Dansk"
+            "Ελληνικά"
+            "Esperanto"
+            "Eesti"
+            "Euskara"
+            "فارسی"
+            "Suomi"
+            "Fijian"
+            "Frysk"
+            "Gaeilge"
+            "Gàidhlig"
+            "Galego"
+            "ગુજરાતી"
+            "Hausa"
+            "Hawaiʻi"
+            "עברית"
+            "हिन्दी"
+            "Hmong"
+            "Hrvatski"
+            "Kreyòl Ayisyen"
+            "Magyar"
+            "Հայերեն"
+            "Bahasa Indonesia"
+            "Igbo"
+            "Íslenska"
+            "Jawa"
+            "ქართული"
+            "Қазақ"
+            "Монгол хэл"
+            "Türkçe"
+            "ئۇيغۇر تىلى"
+            "Українська"
+            "اردو"
+            "Tiếng Việt"])
+
+(rum/defcs ai-modal < rum/reactive
+  {:init (fn [state]
+           (let [editing-block (state/get-edit-block)]
+             (assoc state
+                    :editing-block editing-block
+                    :selected-blocks (state/get-selection-block-ids)
+                    :editing-block-content (some-> (state/get-input) (.-value)))))}
   (rum/local nil ::prompt)
   [state]
   (let [*prompt (::prompt state)
@@ -211,31 +280,54 @@
                 @prompts/prompts)
                (cons {:name "Review content"
                       :description "Review content before sending to any AI service"}))
-        editing-block (state/get-edit-block)
-        selected-blocks (state/get-selection-block-ids)
+        {:keys [editing-block selected-blocks editing-block-content]} state
         content (cond
                   editing-block
-                  (some-> (state/get-input) (.-value))
+                  editing-block-content
 
                   (seq selected-blocks)
                   (selected-blocks->content selected-blocks)
 
                   :else
-                  nil)]
+                  nil)
+        preferred-lang (state/sub :ai/preferred-translate-target-lang)
+        translate? (and @*prompt (= (:name @*prompt) "Translate"))]
     (when content
       [:div.ask-ai
        (cond
          (and @*prompt (= (:name @*prompt) "Review content"))
          [:div
           [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
-          [:div.whitespace-pre-wrap.my-2
+          [:div.whitespace-pre-wrap.my-4
            content]]
 
+         (and @*prompt translate? (nil? preferred-lang))
+         (select/select {:items (map (fn [l] {:value l}) langs)
+                         :on-chosen (fn [chosen]
+                                      (state/set-preferred-translate-target-lang! (:value chosen)))
+                         :close-modal? false
+                         :input-default-placeholder "Translate to: "})
+
          (and @*prompt (or editing-block selected-blocks))
-         [:div.prompt
-          [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
-          (ai-prompt-body @*prompt content {:editing-block editing-block
-                                            :selected-blocks selected-blocks})]
+         (let [prompt @*prompt
+               prompt (if translate?
+                        (update prompt :prompt #(util/format % preferred-lang))
+                        prompt)
+               description (if translate?
+                             "Translate to: "
+                             (:description @*prompt))]
+           [:div.prompt
+            [:div.font-medium.text-lg.mb-4 description]
+            (when translate?
+              (ui/select (map (fn [l] {:label l
+                                       :value l
+                                       :selected (= preferred-lang l)}) langs)
+                (fn [_ value]
+                  (state/set-preferred-translate-target-lang! value))))
+            (rum/with-key
+              (ai-prompt-body prompt content {:editing-block editing-block
+                                              :selected-blocks selected-blocks})
+              (:prompt prompt))])
 
          :else
          (select/select {:items items

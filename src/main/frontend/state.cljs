@@ -282,7 +282,8 @@
      ;; AI related
      :feature/enable-ai?                    (or (storage/get :feature/enable-ai?) false)
      :open-ai/token                         (storage/get :open-ai-token)
-     :chat/current-conversation             nil})))
+     :chat/current-conversation             nil
+     :ai/preferred-translate-target-lang              (storage/get :ai/preferred-translate-target-lang)})))
 
 ;; Block ast state
 ;; ===============
@@ -2106,3 +2107,8 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn set-preferred-translate-target-lang!
+  [lang]
+  (storage/set :ai/preferred-translate-target-lang lang)
+  (set-state! :ai/preferred-translate-target-lang lang))
