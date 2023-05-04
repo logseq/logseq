@@ -9,6 +9,7 @@
             [frontend.handler.ai :as ai-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.string :as string]
@@ -159,10 +160,12 @@
    :will-mount (fn [state]
                  (send-request state)
                  state)}
-  [state prompt content]
+  [state prompt content {:keys [editing-block selected-blocks]}]
   (let [*result (::result state)
         *loading? (::loading? state)
-        *error (::error state)]
+        *error (::error state)
+        target-block-id (or (:block/uuid editing-block) (last selected-blocks))
+        target-block (when target-block-id (db/pull [:block/uuid target-block-id]))]
     [:div
      [:div.whitespace-pre-wrap.my-2
       content]
@@ -177,10 +180,26 @@
       (ui/button "Regenerate" :on-click (fn [] (send-request state)))
       [:div.flex.flex-row.justify-between
        (ui/button "Replace"
-         :on-click (fn [])
+         :on-click (fn []
+                     (let [repo (state/get-current-repo)]
+                       (when target-block
+                        (if (or editing-block (= 1 (count selected-blocks)))
+                          ;; replace the content
+                          (editor-handler/edit-block! target-block :max
+                                                      (:block/uuid target-block)
+                                                      {:custom-content @*result})
+                          (editor-handler/delete-blocks-and-new-block! selected-blocks @*result))
+                        (state/close-modal!))))
          :class "mr-2")
        (ui/button "Insert"
-         :on-click (fn []))]]]))
+         :on-click (fn []
+                     (when target-block
+                       (paste-handler/paste-text-parseable
+                        (state/get-preferred-format)
+                        @*result
+                        {:target-block target-block
+                         :sibling? (not (or editing-block (= 1 (count selected-blocks))))})
+                       (state/close-modal!))))]]]))
 
 (rum/defcs ai-modal <
   (rum/local nil ::prompt)
@@ -194,28 +213,36 @@
                       :description "Review content before sending to any AI service"}))
         editing-block (state/get-edit-block)
         selected-blocks (state/get-selection-block-ids)
-        content (if editing-block
+        content (cond
+                  editing-block
                   (some-> (state/get-input) (.-value))
-                  (selected-blocks->content selected-blocks))]
-    [:div.ask-ai
-     (cond
-       (and @*prompt (= (:name @*prompt) "Review content"))
-       [:div
-        [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
-        [:div.whitespace-pre-wrap.my-2
-         content]]
 
-       (and @*prompt (or editing-block selected-blocks))
-       [:div.prompt
-        [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
-        (ai-prompt-body @*prompt content)]
+                  (seq selected-blocks)
+                  (selected-blocks->content selected-blocks)
 
-       :else
-       (select/select {:items items
-                      :item-cp (fn [result chosen?]
-                                 (:name result))
-                      :on-chosen (fn [chosen]
-                                   (reset! *prompt chosen))
-                      :extract-fn :name
-                      :close-modal? false
-                      :input-default-placeholder "Ask AI"}))]))
+                  :else
+                  nil)]
+    (when content
+      [:div.ask-ai
+       (cond
+         (and @*prompt (= (:name @*prompt) "Review content"))
+         [:div
+          [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
+          [:div.whitespace-pre-wrap.my-2
+           content]]
+
+         (and @*prompt (or editing-block selected-blocks))
+         [:div.prompt
+          [:div.font-medium.text-lg.mb-4 (:description @*prompt)]
+          (ai-prompt-body @*prompt content {:editing-block editing-block
+                                            :selected-blocks selected-blocks})]
+
+         :else
+         (select/select {:items items
+                         :item-cp (fn [result chosen?]
+                                    (:name result))
+                         :on-chosen (fn [chosen]
+                                      (reset! *prompt chosen))
+                         :extract-fn :name
+                         :close-modal? false
+                         :input-default-placeholder "Ask AI"}))])))

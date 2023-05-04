@@ -20,16 +20,17 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(defn- paste-text-parseable
-  [format text]
-  (when-let [editing-block (state/get-edit-block)]
-    (let [page-id (:db/id (:block/page editing-block))
-          blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format))
-                  text format
-                  {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
+(defn paste-text-parseable
+  [format text paste-opts]
+  (let [editing-block (state/get-edit-block)]
+    (when (or (:target-block paste-opts) editing-block)
+      (let [page-id (:db/id (:block/page editing-block))
+           blocks (block/extract-blocks
+                   (mldoc/->edn text (gp-mldoc/default-config format))
+                   text format
+                   {:page-name (:block/name (db/entity page-id))})
+           blocks' (gp-block/with-parent-and-left page-id blocks)]
+        (editor-handler/paste-blocks blocks' (merge {:keep-uuid? true} paste-opts))))))
 
 (defn- paste-segmented-text
   [format text]
@@ -44,7 +45,7 @@
                                              p
                                              (str (if (= format :org) "* " "- ") p))))))
                            paragraphs))]
-    (paste-text-parseable format updated-paragraphs)))
+    (paste-text-parseable format updated-paragraphs {})))
 
 (defn- wrap-macro-url
   [url]
@@ -159,7 +160,7 @@
                    text' (or html-text text)]
                (cond
                  blocks?
-                 (paste-text-parseable format text)
+                 (paste-text-parseable format text {})
 
                  (util/safe-re-find #"(?:\r?\n){2,}" text')
                  (paste-segmented-text format text')

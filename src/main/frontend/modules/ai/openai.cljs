@@ -97,8 +97,7 @@
     (-chat conversation opts token))
   (generate-image [this description opts]
     (-generate-image description opts token))
-  (speech-to-text [this audio opts])
-  (transcription [this audio opts]))
+  (speech-to-text [this audio opts]))
 
 (comment
   (def open-ai (->OpenAI (:open-ai/token @frontend.state/state)))

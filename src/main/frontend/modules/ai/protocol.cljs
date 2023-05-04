@@ -7,5 +7,4 @@
   ;; encode && embedding
   (generate-image [this description opts])
   (speech-to-text [this audio opts])
-  (transcription [this audio opts])
   )
