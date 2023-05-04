@@ -253,7 +253,9 @@
 
     ;; order list
     [["Number list" [[:editor/clear-current-slash]
-                     [:editor/toggle-own-number-list]] "Number list"]]
+                     [:editor/toggle-own-number-list]] "Number list"]
+     ["Number children" [[:editor/clear-current-slash]
+                         [:editor/toggle-children-number-list]] "Number children"]]
 
     ;; task management
     (get-preferred-workflow)
