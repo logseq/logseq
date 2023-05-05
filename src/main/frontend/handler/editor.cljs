@@ -753,7 +753,7 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format id value]
+  [repo sibling-block format id value move?]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
@@ -766,13 +766,15 @@
                    (if original-content
                      (gobj/get (utf8/encode original-content) "length")
                      0)
-                   0)]
-          (edit-block! block pos id
-                       {:custom-content new-value
-                        :tail-len tail-len
-                        :move-cursor? false})
+                   0)
+              f (fn [] (edit-block! block pos id
+                                    {:custom-content new-value
+                                     :tail-len tail-len
+                                     :move-cursor? false}))]
+          (when move? (f))
           {:prev-block block
-           :new-content new-value})))))
+           :new-content new-value
+           :move-fn f})))))
 
 (declare save-block!)
 
@@ -798,19 +800,18 @@
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       before-editor-cursor (state/get-current-edit-block-and-position)
-                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                       {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-block
-                                        :before-editor-cursor before-editor-cursor}
+                                       {:outliner-op :delete-block}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
                      (when concat-prev-block?
                        (save-block! repo prev-block new-content))
-                     (delete-block-aux! block delete-children?))))))))))
+                     (delete-block-aux! block delete-children?))
+                   (move-fn)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -827,7 +828,8 @@
         (move-to-prev-block repo sibling-block
                             (:block/format block)
                             (dom/attr sibling-block "id")
-                            "")))))
+                            ""
+                            true)))))
 
 (defn- set-block-property-aux!
   [block-or-id key value]
@@ -2423,7 +2425,7 @@
             :else
             (profile
              "Insert block"
-             (outliner-tx/transact! {:outliner-op :insert-block}
+             (outliner-tx/transact! {:outliner-op :insert-blocks}
                (save-current-block!)
                (insert-new-block! state)))))))))
 

@@ -28,9 +28,7 @@
          opts# (if transact-data#
                  (assoc ~opts :nested-transaction? true)
                  ~opts)
-         before-editor-cursor# (or
-                                (:before-editor-cursor ~opts)
-                                (frontend.state/get-current-edit-block-and-position))]
+         before-editor-cursor# (frontend.state/get-current-edit-block-and-position)]
      (if transact-data#
        (do ~@body)
        (binding [frontend.modules.outliner.core/*transaction-data* (transient [])]
