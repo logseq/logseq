@@ -3569,7 +3569,7 @@
         :settings-page/disable-sentry "Отправлять данные использования и диагностики в Logseq"
         :settings-page/disable-sentry-desc "Logseq никогда не будет собирать вашу локальную базу данных графов или продавать ваши данные"
         :settings-page/preferred-outdenting "Логические отступы"
-        :settings-page/show-full-blocks "Показать все ссылки на блок"
+        :settings-page/show-full-blocks "Показать все строки в ссылке на блок"
         :settings-page/auto-expand-block-refs "Автоматически раскрывать ссылки на блок при увеличении масштаба"
         :settings-page/custom-date-format "Формат даты"
         :settings-page/custom-date-format-warning "Требуется переиндексация! Существующие ссылки на журналы будут нарушены!"
@@ -3726,11 +3726,11 @@
         :updater/new-version-install "Была загружена новая версия"
         :updater/quit-and-install "Перезапустить для установки"
 
-        :paginates/pages "Всего {1} страница"
+        :paginates/pages "Всего {1} страниц(а)"
         :paginates/prev "Предыдущая"
         :paginates/next "Следующая"
 
-        :tips/all-done "Все готово"
+        :tips/all-done "Всё готово"
 
         :command-palette/prompt "Введите команду"
         :select/default-prompt "Выберите"
@@ -3742,7 +3742,7 @@
         :file-sync/other-user-graph "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
         :file-sync/graph-deleted "Текущий удаленный граф был удален"
 
-        :notification/clear-all "Очистить все"}
+        :notification/clear-all "Очистить всё"}
 
    :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
                           :default "tutorial-ja.md")
