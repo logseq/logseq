@@ -79,6 +79,7 @@
    :editor/zoom-in                 "Zoom in editing block / Forwards otherwise"
    :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
    :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
+   :editor/toggle-number-list      "Toggle number list"
    :whiteboard/select              "Select tool"
    :whiteboard/pan                 "Pan tool"
    :whiteboard/portal              "Portal tool"
