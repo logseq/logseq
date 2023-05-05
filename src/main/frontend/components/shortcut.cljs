@@ -17,8 +17,8 @@
   [state k action-name current-binding]
   (let [keypress (:rum/local state)
         keyboard-shortcut (if (= "" @keypress) current-binding @keypress)]
-    [:div
-     [:div
+    [:<>
+     [:div.sm:w-lsm
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
       [:p.mb-4.mt-4
        (ui/render-keyboard-shortcut (-> keyboard-shortcut
@@ -61,7 +61,9 @@
                  (if disabled? "Cannot override system default" "Click to modify"))
         :background (if conflict? "pink" (when disabled? "gray"))
         :on-click (when-not disabled?
-                    #(state/set-modal! (customize-shortcut-dialog k action-name displayed-binding))))])))
+                    #(state/set-sub-modal!
+                       (customize-shortcut-dialog k action-name displayed-binding)
+                       {:center? true})))])))
 
 (rum/defc shortcut-table < rum/reactive
   ([name]
