@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
@@ -80,8 +80,8 @@
   [title column {:keys [sort-by-column sort-desc?]} block-id]
   [:th.whitespace-nowrap
    [:a {:on-click (fn []
-                    (editor-handler/set-block-property! block-id :query-sort-by (name column))
-                    (editor-handler/set-block-property! block-id :query-sort-desc (not sort-desc?)))}
+                    (editor-property/set-block-property! block-id :query-sort-by (name column))
+                    (editor-property/set-block-property! block-id :query-sort-desc (not sort-desc?)))}
     [:div.flex.items-center
      [:span.mr-1 title]
      (when (= sort-by-column column)

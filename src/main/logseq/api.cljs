@@ -21,6 +21,7 @@
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -734,11 +735,11 @@
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
-    (editor-handler/set-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key value)))
+    (editor-property/set-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key value)))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (editor-handler/remove-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key)))
+    (editor-property/remove-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key)))
 
 (def ^:export get_block_property
   (fn [block-uuid key]
@@ -987,14 +988,14 @@
           exist? (page-handler/template-exists? template-name)]
       (if (or (not exist?) (true? overwrite))
         (do (when-let [old-target (and exist? (db-model/get-template-by-name template-name))]
-              (editor-handler/remove-block-property! (:block/uuid old-target) :template))
-            (editor-handler/set-block-property! target-uuid :template template-name))
+              (editor-property/remove-block-property! (:block/uuid old-target) :template))
+            (editor-property/set-block-property! target-uuid :template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template
   [name]
   (when-let [target (db-model/get-template-by-name name)]
-    (editor-handler/remove-block-property! (:block/uuid target) :template)))
+    (editor-property/remove-block-property! (:block/uuid target) :template)))
 
 ;; search
 (defn ^:export search
