@@ -166,8 +166,6 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             elm.select()
           }
         })
-      } else {
-        onEditingEnd?.()
       }
     }, [isEditing, onEditingEnd])
 
