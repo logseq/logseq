@@ -334,6 +334,9 @@
                                     :fn      editor-handler/zoom-out!}
 
    :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
+   
+   :editor/toggle-number-list      {:binding "t n"
+                                    :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
@@ -692,6 +695,7 @@
                           :editor/zoom-in
                           :editor/zoom-out
                           :editor/toggle-undo-redo-mode
+                          :editor/toggle-number-list
                           :editor/undo
                           :editor/redo
                           :ui/toggle-brackets
@@ -852,6 +856,7 @@
    [:ui/toggle-help
     :editor/toggle-open-blocks
     :editor/toggle-undo-redo-mode
+    :editor/toggle-number-list
     :ui/toggle-wide-mode
     :ui/toggle-cards
     :ui/toggle-document-mode

@@ -177,7 +177,7 @@
    :block-ref?       true
    :page-ref?        true
    :properties?      true
-   :list?            true})
+   :list?            false})
 
 (defn get-setting [setting]
   (let [value (get-in (state/get-config) [:dwim/settings setting])]
