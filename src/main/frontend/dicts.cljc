@@ -2739,7 +2739,7 @@
            :color/gray "Grå"
            :color/green "Grønn"
            :color/pink "Rosa"
-           :color/purple "Lilla"/logseq$
+           :color/purple "Lilla"
            :color/red "Rød"
            :color/yellow "Gul"
            :content/copy-block-url "Kopier blokk URL"
