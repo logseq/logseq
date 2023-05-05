@@ -4,7 +4,7 @@
  ;; Available options:
  ;; - Markdown (default)
  ;; - Org
- :preferred-format "Markdown"
+ ;; :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
  ;; Available options:
@@ -23,12 +23,10 @@
  {:journals ""}
 
  ;; Set a custom date format for the journal page title.
- ;; Example usage:
- ;; :journal/page-title-format "EEE do, MMM yyyy"
- ;; e.g., "Tue 19th, Jan 2038"
  ;; Default value: "MMM do, yyyy"
  ;; e.g., "Jan 19th, 2038"
- :journal/page-title-format "MMM do, yyyy"
+ ;; Example usage e.g., "Tue 19th, Jan 2038"
+ ;; :journal/page-title-format "EEE do, MMM yyyy"
 
  ;; Specify the journal filename format using a valid date format string.
  ;; !Warning:
@@ -44,7 +42,7 @@
 
  ;; Display brackets [[]] around page references.
  ;; Default value: true
- :ui/show-brackets? true
+ ;; :ui/show-brackets? true
 
  ;; Display all lines of a block when referencing ((block)).
  ;; Default value: false
@@ -65,19 +63,19 @@
 
  ;; Enable journals.
  ;; Default value: true
- :feature/enable-journals? true
+ ;; :feature/enable-journals? true
 
  ;; Enable flashcards.
  ;; Default value: true
- :feature/enable-flashcards? true
+ ;; :feature/enable-flashcards? true
 
  ;; Enable whiteboards.
  ;; Default value: true
- :feature/enable-whiteboards? true
+ ;; :feature/enable-whiteboards? true
 
  ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
  ;; Default value: false
- :feature/disable-scheduled-and-deadline-query? false
+ ;; :feature/disable-scheduled-and-deadline-query? false
 
  ;; Specify the number of days displayed in the future for
  ;; the 'scheduled tasks and deadlines' query.
@@ -85,7 +83,7 @@
  ;; Display all scheduled and deadline blocks for the next 14 days:
  ;; :scheduled/future-days 14
  ;; Default value: 7
- :scheduled/future-days 7
+ ;; :scheduled/future-days 7
 
  ;; Specify the first day of the week.
  ;; Available options:
@@ -93,21 +91,19 @@
  ;; Default value: 6 (Sunday)
  :start-of-week 6
 
- ;; Import a custom CSS file.
+ ;; Specify a custom CSS import.
  ;; This option takes precedence over the local `logseq/custom.css` file.
  ;; Example usage:
- ;; :custom-css-url "https://cdn.logseq.com/custom.css"
- :custom-css-url ""
+ ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
 
- ;; Import a custom JS file.
+ ;; Specify a custom JS import.
  ;; This option takes precedence over the local `logseq/custom.js` file.
  ;; Example usage:
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
- :custom-js-url ""
 
  ;; Set a custom Arweave gateway
  ;; Default gateway: https://arweave.net
- :arweave/gateway "https://arweave.net"
+ ;; :arweave/gateway "https://arweave.net"
 
  ;; Set bullet indentation when exporting
  ;; Available options:
@@ -115,12 +111,12 @@
  ;;  - `:four-spaces` as four spaces
  ;;  - `:two-spaces` as two spaces
  ;; - `:tab` as a tab character (default)
- :export/bullet-indentation :tab
+ ;; :export/bullet-indentation :tab
 
  ;; Publish all pages within the Graph
  ;; regardless of whether individual pages have been marked as public.
  ;; Default value: false
- :publishing/all-pages-public? false
+ ;; :publishing/all-pages-public? false
 
  ;; Set the default home page and sidebar status.
  ;; Define the default home page and sidebar status. 
@@ -138,28 +134,27 @@
  ;; :default-home {:page "Jun 3rd, 2021"}
  ;; 3. Set "home" as the home page and display multiple pages in the right sidebar:
  ;; :default-home {:page "home", :sidebar ["Page A" "Page B"]}
- :default-home {}
 
  ;; Set the default location for storing notes.
  ;; Default value: "pages"
- :pages-directory "pages"
+ ;; :pages-directory "pages"
 
  ;; Set the default location for storing journals.
  ;; Default value: "journals"
- :journals-directory "journals"
+ ;; :journals-directory "journals"
 
  ;; Set the default location for storing whiteboards.
  ;; If not specified, whiteboards will be stored in the 'whiteboards' subdirectory.
- :whiteboards-directory "whiteboards"
+ ;; :whiteboards-directory "whiteboards"
 
  ;; Enabling this option converts
  ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
  ;; For more information, visit https://github.com/logseq/logseq/issues/672
- :org-mode/insert-file-link? false
+ ;; :org-mode/insert-file-link? false
 
  ;; Configure custom shortcuts.
  ;; Syntax:
- ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Ahift+a`.
+ ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Shift+a`.
  ;; 2. A space between keys represents key chords, e.g., `t s` means 
  ;;    pressing `t` followed by `s`.
  ;; 3. mod refers to `Ctrl` for Windows/Linux and `Command` for Mac.
@@ -286,7 +281,7 @@
 
  ;; Configure the threshold for linked references before collapsing.
  ;; Default value: 100
- :ref/linked-references-collapsed-threshold 100
+ :ref/linked-references-collapsed-threshold 50
 
  ;; Favorites to list on the left sidebar
  :favorites []
@@ -296,75 +291,66 @@
  ;; - Float between 0 and 1
  ;; higher values result in faster changes to the next review interval.
  ;; Default value: 0.5
- :srs/learning-fraction 0.5
+ ;; :srs/learning-fraction 0.5
 
  ;; Set the initial interval after the first successful review of a card.
  ;; Default value: 4
- :srs/initial-interval 4
+ ;; :srs/initial-interval 4
 
  ;; Hide specific block properties.
  ;; Example usage:
  ;; :block-hidden-properties #{:public :icon}
- :block-hidden-properties #{}
 
  ;; Create a page for all properties.
  ;; Default value: false
- :property-pages/enabled? false
+ :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
  ;; Example usage:
  ;; :property-pages/excludelist #{:duration :author}
- :property-pages-exclude-list #{}
 
  ;; By default, property value separated by commas will not be treated as
  ;; page references. You can add properties to enable it.
  ;; Example usage:
  ;; :property/separated-by-commas #{:alias :tags}
- :property/separated-by-commas #{}
 
  ;; Properties that are ignored when parsing property values for references
  ;; Example usage:
  ;; :ignored-page-references-keywords #{:author :website}
- :ignored-page-references-keywords #{}
 
  ;; logbook configuration.
- :logbook/settings 
- {; Disable logbook. (Default value: false)
-  :enabled-in-timestamped-blocks false
-  ;; limit logbook to minutes, eliminating seconds. (Default value: false)
-  :with-second-support? false
-  ;; display logbook in all blocks after time-tracking. (Default value: false)
-  :enabled-in-all-blocks false}
+ ;; :logbook/settings
+ ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
+ ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
+ ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
+ ;; }
 
  ;; Mobile photo upload configuration.
- :mobile/photo
- {:allow-editing? true
-  :quality        80}
+ ;; :mobile/photo
+ ;; {:allow-editing? true
+ ;;  :quality        80}
 
  ;; Mobile features options
  ;; Gestures
  ;; Example usage:
  ;; :mobile 
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
- :mobile
- {:gestures/disabled-in-block-with-tags []}
 
  ;; Extra CodeMirror options
  ;; See https://codemirror.net/5/doc/manual.html#config for possible options
  ;; Example usage:
- ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
- :editor/extra-codemirror-options 
- {:lineWrapping  false  ; Default value: false
-  :lineNumbers   true   ; Default value: true
-  :readOnly      false} ; Default value: false
+ ;; :editor/extra-codemirror-options
+ ;; {:lineWrapping  false  ; Default value: false
+ ;;  :lineNumbers   true   ; Default value: true
+ ;;  :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
- ;; Default value: false
- :editor/logical-outdenting? false
+ ;; Default value: false 
+ ;; :editor/logical-outdenting? false
 
  ;; Prefer pasting the file when text and a file are in the clipboard.
- ;; Default value: false
- :editor/preferred-pasting-file? false
+ ;; Default value: false 
+ ;; :editor/preferred-pasting-file? false
 
  ;; Quick capture templates for receiving content from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
@@ -376,23 +362,23 @@
  ;; You can also reorder them or use only one or two of them in the template.
  ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
- :quick-capture-templates
- {:text "[[quick capture]] **{time}**: {text} — {url}"
-  :media "[[quick capture]] **{time}**: {url}"}
+ ;; :quick-capture-templates
+ ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
  ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
  ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
  ;; - default-page    The default page to capture to if insert-today? is false (string).
- :quick-capture-options
- {:insert-today? false           ;; Default value: true
-  :redirect-page? false          ;; Default value: false
-  :default-page "quick capture"} ;; Default page: "quick capture"
+ ;; :quick-capture-options
+ ;; {:insert-today? false           ;; Default value: true
+ ;;  :redirect-page? false          ;; Default value: false
+ ;;  :default-page "quick capture"} ;; Default page: "quick capture"
 
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
- :file-sync/ignore-files []
+ ;; :file-sync/ignore-files []
 
  ;; Configure the Enter key behavior for
  ;; context-aware editing with DWIM (Do What I Mean).
@@ -400,13 +386,13 @@
  ;; have different outcomes based on the context.
  ;; For instance, pressing Enter within a list generates a new list item,
  ;; whereas pressing Enter in a block reference opens the referenced block.
- :dwim/settings
- {:admonition&src?  true        ;; Default value: true
-  :markup?          false       ;; Default value: false
-  :block-ref?       true        ;; Default value: true
-  :page-ref?        true        ;; Default value: true
-  :properties?      true        ;; Default value: true
-  :list?            true}       ;; Default value: true
+ ;; :dwim/settings
+ ;; {:admonition&src?  true        ;; Default value: true
+ ;;  :markup?          false       ;; Default value: false
+ ;;  :block-ref?       true        ;; Default value: true
+ ;;  :page-ref?        true        ;; Default value: true
+ ;;  :properties?      true        ;; Default value: true
+ ;;  :list?            true}       ;; Default value: true
 
  ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
