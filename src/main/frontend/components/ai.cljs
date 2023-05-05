@@ -33,7 +33,8 @@
   [^js e q]
   (let [drawing? (string/starts-with? q "/draw ")]
     (when (and (or (nil? e) (= (gobj/get e "key") "Enter"))
-               (not (string/blank? q)))
+               (not (string/blank? q))
+               (not (gobj/get e "shiftKey")))
       (swap! *messages conj
              {:block/properties {:logseq.ai.type "question"}
               :block/content q})
@@ -65,13 +66,14 @@
                              e-type (gobj/getValueByKeys e "type")]
                          (state/set-state! [:ui/chat :q] value)))]
     [:div.input-box
-     [:input.form-input
-      {:auto-focus true
+     (ui/ls-textarea
+      {:id "chat-box-input"
+       :auto-focus true
        :placeholder "Write a message"
        :aria-label "Write a message"
        :value q
        :on-change on-change-fn
-       :on-key-down (fn [e] (new-message! e q))}]]))
+       :on-key-up (fn [e] (new-message! e q))})]))
 
 (rum/defc conversation-message < rum/static
   [block]
@@ -113,7 +115,7 @@
   (let [conversation-id (state/sub :chat/current-conversation)]
     [:div.chat
      (conversations conversation-id)
-     [:div.flex.flex-1.relative
+     [:div.flex.flex-1.flex-col
       (conversation conversation-id)
       (input)]]))
 
@@ -386,4 +388,5 @@
                        :on-input (fn [v] (reset! *input v))
                        :extract-fn :name
                        :close-modal? false
+                       ;; :textarea? true
                        :input-default-placeholder "Ask AI"}))]))

@@ -15,8 +15,7 @@
     }
 
     #conversation {
-        @apply p-2 overflow-y-auto w-full;
-        height: 550px;
+        @apply p-2 overflow-y-auto w-full flex flex-1 overflow-x-hidden;
     }
 
     .conversation-item {
@@ -27,7 +26,16 @@
     }
 
     .input-box {
-        @apply absolute bottom-0 p-2 w-full;
+        @apply p-2 w-full;
+
+        textarea {
+            @apply overflow-y-auto overflow-x-hidden;
+            border: 1px solid var(--ls-border-color);
+            background: transparent;
+            resize: none;
+            box-shadow: none;
+            max-height: 400px;
+        }
     }
 
     input {

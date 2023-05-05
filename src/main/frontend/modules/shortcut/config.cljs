@@ -74,10 +74,10 @@
 
    :whiteboard/select            {:binding ["1" "s"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
-   
+
    :whiteboard/pan               {:binding ["2" "p"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
-   
+
    :whiteboard/portal            {:binding "3"
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
@@ -86,13 +86,13 @@
 
    :whiteboard/highlighter       {:binding ["5" "h"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
-   
+
    :whiteboard/eraser            {:binding ["6" "e"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
-   
+
    :whiteboard/connector         {:binding ["7" "c"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
-   
+
    :whiteboard/text              {:binding ["8" "t"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
 
@@ -332,7 +332,7 @@
                                     :fn      editor-handler/zoom-out!}
 
    :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
-   
+
    :editor/toggle-number-list      {:binding "t n"
                                     :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
@@ -705,9 +705,6 @@
                           :go/search-in-page
                           :go/search
                           :go/ai-chat
-                          :go/electron-find-in-page
-                          :go/electron-jump-to-the-next
-                          :go/electron-jump-to-the-previous
                           :go/backward
                           :go/forward
                           :search/re-index
@@ -717,6 +714,11 @@
                           :command-palette/toggle
                           :ai/ask])
      (with-meta {:before m/prevent-default-behavior}))
+
+    :shortcut.handler/global-not-prevent-default
+    (build-category-map [:go/electron-find-in-page
+                         :go/electron-jump-to-the-next
+                         :go/electron-jump-to-the-previous])
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
@@ -898,7 +900,7 @@
     :whiteboard/group
     :whiteboard/ungroup
     :whiteboard/toggle-grid]
-   
+
    :shortcut.category/others
    [:ai/ask
     :pdf/previous-page

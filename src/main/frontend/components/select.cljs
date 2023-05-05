@@ -46,7 +46,7 @@
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
                  extract-fn host-opts on-input input-opts
-                 item-cp transform-fn tap-*input-val
+                 item-cp transform-fn tap-*input-val textarea?
                  multiple-choices? on-apply _selected-choices]
           :or {limit 100
                prompt-key :select/default-prompt
@@ -57,48 +57,51 @@
         *selected-choices (::selected-choices state)]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
-    [:div.cp__select
-     (merge {:class "cp__select-main"} host-opts)
-     [:div.input-wrap
-      [:input.cp__select-input.w-full
-       (merge {:type        "text"
-               :placeholder (or input-default-placeholder (t prompt-key))
-               :auto-focus  true
-               :value       @input
-               :on-change   (fn [e]
-                              (let [v (util/evalue e)]
-                                (reset! input v)
-                                (and (fn? on-input) (on-input v))))}
-              input-opts)]]
+    (let [opts (merge {:type        "text"
+                       :placeholder (or input-default-placeholder (t prompt-key))
+                       :auto-focus  true
+                       :value       @input
+                       :on-change   (fn [e]
+                                      (let [v (util/evalue e)]
+                                        (reset! input v)
+                                        (and (fn? on-input) (on-input v))))
+                       :class "cp__select-input w-full"}
+                      input-opts)]
+      [:div.cp__select
+       (merge {:class "cp__select-main"} host-opts)
+       [:div.input-wrap
+        (if textarea?
+          (ui/ls-textarea opts)
+          [:input opts])]
 
-     (let [non-matched-items (filter :select/non-matched? items)
-           search-result (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
-           search-result' (if (and (empty? search-result) (seq non-matched-items))
-                            non-matched-items
-                            search-result)]
-       [:div.item-results-wrap
-        (ui/auto-complete
-         (cond-> search-result'
-           (fn? transform-fn)
-           (transform-fn @input))
+       (let [non-matched-items (filter :select/non-matched? items)
+             search-result (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
+             search-result' (if (and (empty? search-result) (seq non-matched-items))
+                              non-matched-items
+                              search-result)]
+         [:div.item-results-wrap
+          (ui/auto-complete
+           (cond-> search-result'
+             (fn? transform-fn)
+             (transform-fn @input))
 
-         {:item-render       (or item-cp (fn [result chosen?]
-                                           (render-item result chosen? multiple-choices? *selected-choices)))
-          :class             "cp__select-results"
-          :on-chosen         (fn [x]
-                               (reset! input "")
-                               (if multiple-choices?
-                                 (if (@*selected-choices x)
-                                   (swap! *selected-choices disj x)
-                                   (swap! *selected-choices conj x))
-                                 (do
-                                   (when close-modal? (state/close-modal!))
-                                   (when on-chosen
-                                     (on-chosen (if multiple-choices? @*selected-choices x))))))
-          :empty-placeholder (empty-placeholder t)})])
+           {:item-render       (or item-cp (fn [result chosen?]
+                                             (render-item result chosen? multiple-choices? *selected-choices)))
+            :class             "cp__select-results"
+            :on-chosen         (fn [x]
+                                 (reset! input "")
+                                 (if multiple-choices?
+                                   (if (@*selected-choices x)
+                                     (swap! *selected-choices disj x)
+                                     (swap! *selected-choices conj x))
+                                   (do
+                                     (when close-modal? (state/close-modal!))
+                                     (when on-chosen
+                                       (on-chosen (if multiple-choices? @*selected-choices x))))))
+            :empty-placeholder (empty-placeholder t)})])
 
-     (when multiple-choices?
-       [:div.p-4 (ui/button "Apply updates" :on-click on-apply)])]))
+       (when multiple-choices?
+         [:div.p-4 (ui/button "Apply updates" :on-click on-apply)])])))
 
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new
