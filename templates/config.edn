@@ -353,18 +353,18 @@
  ;; See https://codemirror.net/5/doc/manual.html#config for possible options
  ;; Example usage:
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
- :editor/extra-codemirror-options
+ :editor/extra-codemirror-options 
  {:lineWrapping  false  ; Default value: false
   :lineNumbers   true   ; Default value: true
   :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
  ;; Default value: false
-  :editor/logical-outdenting? false
+ :editor/logical-outdenting? false
 
  ;; Prefer pasting the file when text and a file are in the clipboard.
  ;; Default value: false
-  :editor/preferred-pasting-file? false
+ :editor/preferred-pasting-file? false
 
  ;; Quick capture templates for receiving content from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
@@ -376,23 +376,23 @@
  ;; You can also reorder them or use only one or two of them in the template.
  ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
-  :quick-capture-templates
-  {:text "[[quick capture]] **{time}**: {text} — {url}"
-   :media "[[quick capture]] **{time}**: {url}"}
+ :quick-capture-templates
+ {:text "[[quick capture]] **{time}**: {text} — {url}"
+  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options.
  ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
  ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
  ;; - default-page    The default page to capture to if insert-today? is false (string).
-  :quick-capture-options
-  {:insert-today? false           ;; Default value: true
-   :redirect-page? false          ;; Default value: false
-   :default-page "quick capture"} ;; Default page: "quick capture"
+ :quick-capture-options
+ {:insert-today? false           ;; Default value: true
+  :redirect-page? false          ;; Default value: false
+  :default-page "quick capture"} ;; Default page: "quick capture"
 
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
-  :file-sync/ignore-files []
+ :file-sync/ignore-files []
 
  ;; Configure the Enter key behavior for
  ;; context-aware editing with DWIM (Do What I Mean).
@@ -400,13 +400,13 @@
  ;; have different outcomes based on the context.
  ;; For instance, pressing Enter within a list generates a new list item,
  ;; whereas pressing Enter in a block reference opens the referenced block.
-  :dwim/settings
-  {:admonition&src?  true        ;; Default value: true
-   :markup?          false       ;; Default value: false
-   :block-ref?       true        ;; Default value: true
-   :page-ref?        true        ;; Default value: true
-   :properties?      true        ;; Default value: true
-   :list?            true}       ;; Default value: true
+ :dwim/settings
+ {:admonition&src?  true        ;; Default value: true
+  :markup?          false       ;; Default value: false
+  :block-ref?       true        ;; Default value: true
+  :page-ref?        true        ;; Default value: true
+  :properties?      true        ;; Default value: true
+  :list?            true}       ;; Default value: true
 
  ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
@@ -419,4 +419,4 @@
  ;;   - :triple-lowbar (default)
  ;;      ;use triple underscore `___` for slash `/` in page title
  ;;      ;use Percent-encoding for other invalid characters
-  :file/name-format :triple-lowbar}
+ :file/name-format :triple-lowbar}
