@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 
@@ -37,6 +37,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const ref = React.useRef<HTMLIFrameElement>(null)
+    const app = useApp<Shape>()
 
     return (
       <HTMLContainer
@@ -50,7 +51,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
         <div
           className="tl-iframe-container"
           style={{
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: isEditing || app.readOnly ? 'all' : 'none',
             userSelect: 'none',
           }}
         >

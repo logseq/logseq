@@ -13,6 +13,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
             [frontend.components.select :as component-select]
@@ -483,7 +484,7 @@
                                    :on-click   (fn []
                                                  (score-and-next-card 1 card card-index finished? phase review-records cb)
                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                   (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+                                                   (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
                (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
                                    :shortcut "t"
