@@ -392,7 +392,7 @@
  ;;  :block-ref?       true        ;; Default value: true
  ;;  :page-ref?        true        ;; Default value: true
  ;;  :properties?      true        ;; Default value: true
- ;;  :list?            true}       ;; Default value: true
+ ;;  :list?            false}      ;; Default value: false
 
  ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
