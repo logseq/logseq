@@ -66,7 +66,7 @@
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
      :logseq.tldraw.page :logseq.tldraw.shape :logseq.ai.service :logseq.ai.type
      :logseq.build.template :logseq.url
-     :logseq.order-list-type :logseq.tldraw.page
+     :logseq.order-list-type
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))
