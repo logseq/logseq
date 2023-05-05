@@ -167,13 +167,9 @@
               [:td.text-right (get rendered name)]])
         list)]]))
 
-(rum/defc shortcut
-  [{:keys [show-title?]
-    :or {show-title? true}}]
-  [:div
-   (when show-title? [:h1.title (t :help/shortcut-page-title)])
-   (trigger-table)
-   (markdown-and-orgmode-syntax)
+(rum/defc keymap-tables
+  []
+  [:div.cp__keymap-tables
    (shortcut-table :shortcut.category/basics true)
    (shortcut-table :shortcut.category/navigating true)
    (shortcut-table :shortcut.category/block-editing true)
@@ -183,3 +179,25 @@
    (shortcut-table :shortcut.category/toggle true)
    (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
    (shortcut-table :shortcut.category/others true)])
+
+(rum/defc keymap-pane
+  []
+  (let [[ready?, set-ready!] (rum/use-state false)]
+    (rum/use-effect!
+      (fn [] (js/setTimeout #(set-ready! true) 32))
+      [])
+
+    [:div.cp__keymap-pane
+     [:h1.pb-2.text-3xl "Keymap"]
+     (if ready?
+       (keymap-tables)
+       [:p.flex.justify-center.py-20 (ui/loading "")])]))
+
+(rum/defc shortcut-page
+  [{:keys [show-title?]
+    :or {show-title? true}}]
+  [:div.cp__shortcut-page
+   (when show-title? [:h1.title (t :help/shortcut-page-title)])
+   (trigger-table)
+   (markdown-and-orgmode-syntax)
+   (keymap-tables)])

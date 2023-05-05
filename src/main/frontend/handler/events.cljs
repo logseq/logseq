@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.shortcut :as shortcut]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -947,6 +948,11 @@
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :modal/keymap-manager [[_]]
+  (state/set-modal!
+    #(shortcut/keymap-pane)
+    {:label "keymap-manager"}))
 
 (defn run!
   []

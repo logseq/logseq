@@ -1,0 +1,13 @@
+.ui__modal {
+  &[label="keymap-manager"] {
+    .panel-content {
+      @apply m-[-8px];
+    }
+
+    @screen lg {
+      .panel-content {
+        width: 920px;
+      }
+    }
+  }
+}
