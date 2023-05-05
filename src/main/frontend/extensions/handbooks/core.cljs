@@ -512,7 +512,10 @@
                                  (when-not in-chapters?
                                    (set-history-state!
                                      (conj (sequence history-state) prev-state))))
-                               (set-active-pane-state! next-state))]
+                               (set-active-pane-state! next-state))
+
+        [scrolled?, set-scrolled!] (rum/use-state false)
+        on-scroll            (rum/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))) [])]
 
     ;; load handbooks
     (rum/use-effect!
@@ -559,7 +562,9 @@
       [handbooks-data])
 
     [:div.cp__handbooks-content
-     {:class (util/classnames [{:search-active (:active? search-state)}])}
+     {:class     (util/classnames [{:search-active (:active? search-state)
+                                    :scrolled      scrolled?}])
+      :on-scroll on-scroll}
      [:div.pane-wrap
       [:div.hd.flex.justify-between.select-none.draggable-handle
 
