@@ -37,14 +37,13 @@
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
-                            old-refs (when db-before
+                            old-refs (if db-before
                                        (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
                                        #{})
                             new-refs (set (util/concat-without-nil
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
                                            parents-refs))
-                            ;; Usually has changed as new-refs has page id while old-refs doesn't
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
                             ;; Builds map of children ids to their parent id and :block/refs ids

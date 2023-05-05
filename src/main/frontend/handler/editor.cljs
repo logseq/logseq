@@ -19,6 +19,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -61,6 +62,41 @@
 
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
+
+(def clear-selection! editor-property/clear-selection!)
+(def edit-block! editor-property/edit-block!)
+
+(defn get-block-own-order-list-type
+  [block]
+  (some-> block :block/properties :logseq.order-list-type))
+
+(defn set-block-own-order-list-type!
+  [block type]
+  (when-let [uuid (:block/uuid block)]
+    (editor-property/set-block-property! uuid :logseq.order-list-type (name type))))
+
+(defn remove-block-own-order-list-type!
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (editor-property/remove-block-property! uuid :logseq.order-list-type)))
+
+(defn own-order-number-list?
+  [block]
+  (= (get-block-own-order-list-type block) "number"))
+
+(defn make-block-as-own-order-list!
+  [block]
+  (some-> block (set-block-own-order-list-type! "number")))
+
+(defn toggle-blocks-as-own-order-list!
+  [blocks]
+  (when (seq blocks)
+    (let [has-ordered?    (some own-order-number-list? blocks)
+          blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
+          order-list-prop :logseq.order-list-type]
+      (if has-ordered?
+        (editor-property/batch-remove-block-property! blocks-uuids order-list-prop)
+        (editor-property/batch-add-block-property! blocks-uuids order-list-prop "number")))))
 
 (defn get-selection-and-format
   []
@@ -197,69 +233,7 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-(defn- get-edit-input-id-with-block-id
-  [block-id]
-  (when-let [first-block (util/get-first-block-by-id block-id)]
-    (string/replace (gobj/get first-block "id")
-                    "ls-block"
-                    "edit-block")))
-
-(defn clear-selection!
-  []
-  (state/clear-selection!))
-
-(defn- text-range-by-lst-fst-line [content [direction pos]]
-  (case direction
-    :up
-    (let [last-new-line (or (string/last-index-of content \newline) -1)
-          end (+ last-new-line pos 1)]
-      (subs content 0 end))
-    :down
-    (-> (string/split-lines content)
-        first
-        (or "")
-        (subs 0 pos))))
-
 ;; id: block dom id, "ls-block-counter-uuid"
-(defn edit-block!
-  ([block pos id]
-   (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len move-cursor? retry-times]
-                  :or {tail-len 0
-                       move-cursor? true
-                       retry-times 0}
-                  :as opts}]
-   (when-not (> retry-times 2)
-     (when-not config/publishing?
-       (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/pull [:block/uuid block-id]) block)
-               edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id)
-                               (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                   (string/replace "ls-block" "edit-block")))
-               content (or custom-content (:block/content block) "")
-               content-length (count content)
-               text-range (cond
-                            (vector? pos)
-                            (text-range-by-lst-fst-line content pos)
-
-                            (and (> tail-len 0) (>= (count content) tail-len))
-                            (subs content 0 (- (count content) tail-len))
-
-                            (or (= :max pos) (<= content-length pos))
-                            content
-
-                            :else
-                            (subs content 0 pos))
-               content (-> (property/remove-built-in-properties (:block/format block)
-                                                                content)
-                           (drawer/remove-logbook))]
-           (clear-selection!)
-           (if edit-input-id
-             (state/set-editing! edit-input-id content block text-range move-cursor?)
-             ;; Block may not be rendered yet
-             (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))
-
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
   (when-let [id (and (string? block-id) (parse-uuid block-id))]
@@ -877,72 +851,6 @@
        :block/properties-order (or (keys properties) [])
        :block/content content})))
 
-(defn- batch-set-block-property!
-  "col: a collection of [block-id property-key property-value]."
-  [col]
-  #_:clj-kondo/ignore
-  (when-let [repo (state/get-current-repo)]
-    (let [col' (group-by first col)]
-      (outliner-tx/transact!
-       {:outliner-op :save-block}
-        (doseq [[block-id items] col']
-          (let [block-id (if (string? block-id) (uuid block-id) block-id)
-                new-properties (zipmap (map second items)
-                                (map last items))]
-            (when-let [block (db/entity [:block/uuid block-id])]
-              (let [format (:block/format block)
-                    content (:block/content block)
-                    properties (:block/properties block)
-                    properties-text-values (:block/properties-text-values block)
-                    properties (-> (merge properties new-properties)
-                                   gp-util/remove-nils-non-nested)
-                    properties-text-values (-> (merge properties-text-values new-properties)
-                                               gp-util/remove-nils-non-nested)
-                    property-ks (->> (concat (:block/properties-order block)
-                                             (map second items))
-                                     (filter (set (keys properties)))
-                                     distinct
-                                     vec)
-                    content (property/remove-properties format content)
-                    kvs (for [key property-ks] [key (or (get properties-text-values key)
-                                                        (get properties key))])
-                    content (property/insert-properties format content kvs)
-                    content (property/remove-empty-properties content)
-                    block {:block/uuid block-id
-                           :block/properties properties
-                           :block/properties-order property-ks
-                           :block/properties-text-values properties-text-values
-                           :block/content content}]
-                (outliner-core/save-block! block)))))))
-
-    (let [block-id (ffirst col)
-          block-id (if (string? block-id) (uuid block-id) block-id)
-          input-pos (or (state/get-edit-pos) :max)]
-      ;; update editing input content
-      (when-let [editing-block (state/get-edit-block)]
-        (when (= (:block/uuid editing-block) block-id)
-          (edit-block! editing-block
-                       input-pos
-                       (state/get-edit-input-id)))))))
-
-(defn batch-add-block-property!
-  [block-ids property-key property-value]
-  (batch-set-block-property! (map #(vector % property-key property-value) block-ids)))
-
-(defn batch-remove-block-property!
-  [block-ids property-key]
-  (batch-set-block-property! (map #(vector % property-key nil) block-ids)))
-
-(defn remove-block-property!
-  [block-id key]
-  (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key nil]])))
-
-(defn set-block-property!
-  [block-id key value]
-  (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key value]])))
-
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
@@ -956,8 +864,8 @@
                              (remove #{key} query-properties))
           query-properties (vec query-properties)]
       (if (seq query-properties)
-        (set-block-property! block-id :query-properties (str query-properties))
-        (remove-block-property! block-id :query-properties)))))
+        (editor-property/set-block-property! block-id :query-properties (str query-properties))
+        (editor-property/remove-block-property! block-id :query-properties)))))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1001,7 +909,7 @@
                        [block-id :id (str block-id)])))
                  block-ids)
         col (remove nil? col)]
-    (batch-set-block-property! col)))
+    (editor-property/batch-set-block-property! col)))
 
 (defn copy-block-ref!
   ([block-id]
@@ -1910,14 +1818,23 @@
 
 (defn handle-last-input []
   (let [input           (state/get-input)
+        input-id        (state/get-edit-input-id)
+        edit-block      (state/get-edit-block)
         pos             (cursor/pos input)
-        last-input-char (util/nth-safe (.-value input) (dec pos))
-        last-prev-input-char (util/nth-safe (.-value input) (dec (dec pos)))
-        prev-prev-input-char (util/nth-safe (.-value input) (- pos 3))]
+        content         (.-value input)
+        last-input-char (util/nth-safe content (dec pos))
+        last-prev-input-char (util/nth-safe content (dec (dec pos)))
+        prev-prev-input-char (util/nth-safe content (- pos 3))]
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
+      (and (= content "1. ") (= last-input-char " ") input-id edit-block
+           (not (own-order-number-list? edit-block)))
+      (do
+        (state/pub-event! [:editor/toggle-own-number-list edit-block])
+        (state/set-edit-content! input-id ""))
+
       (and (= last-input-char (state/get-editor-command-trigger))
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
@@ -1985,9 +1902,9 @@
                         :command :block-ref})
 
       ;; Save it so it'll be parsed correctly in the future
-      (set-block-property! (:block/uuid chosen)
-                           :id
-                           uuid-string)
+      (editor-property/set-block-property! (:block/uuid chosen)
+                                           :id
+                                           uuid-string)
 
       (when-let [input (gdom/getElement id)]
         (.focus input)))))
@@ -2480,6 +2397,7 @@
     (let [{:keys [block config]} (get-state)]
       (when block
         (let [input (state/get-input)
+              config (assoc config :keydown-new-block true)
               content (gobj/get input "value")
               pos (cursor/pos input)
               current-node (outliner-core/block block)
@@ -2521,6 +2439,12 @@
                              (insert-first-page-block-if-not-exists! page-name)))
               "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
+
+            (and (string/blank? content)
+                 (own-order-number-list? block)
+                 (not (some-> (db-model/get-block-parent (:block/uuid block))
+                              (own-order-number-list?))))
+            (remove-block-own-order-list-type! block)
 
             (and
              (string/blank? content)
@@ -2769,7 +2693,11 @@
                    (not root-block?)
                    (not single-block?)
                    (not custom-query?))
-          (delete-block! repo false)))
+          (if (own-order-number-list? block)
+            (do
+              (save-current-block!)
+              (remove-block-own-order-list-type! block))
+            (delete-block! repo false))))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
