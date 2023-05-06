@@ -182,13 +182,6 @@
   (when-let [prev-tx-id (get-previous-tx-id tx-id)]
     (get-in @state/state [:history/tx->editor-cursor prev-tx-id])))
 
-(defn- new-created-block?
-  [txs]
-  (some (fn [[type _e a _v]]
-          (and (= type :db/retract)
-               (= a :block/uuid)))
-        txs))
-
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
