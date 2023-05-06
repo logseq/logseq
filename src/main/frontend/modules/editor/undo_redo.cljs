@@ -160,12 +160,52 @@
     (state/set-edit-content! (state/get-edit-input-id)
                              (:block/content (db/entity (:db/id block))))))
 
+(defn- get-next-tx-editor-cursor
+  [tx-id]
+  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
+                    (split-with #(not= % tx-id))
+                    second)]
+    (when (> (count result) 1)
+      (when-let [next-tx-id (nth result 1)]
+        (get-in @state/state [:history/tx->editor-cursor next-tx-id])))))
+
+(defn- get-previous-tx-id
+  [tx-id]
+  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
+                    (split-with #(not= % tx-id))
+                    first)]
+    (when (>= (count result) 1)
+      (last result))))
+
+(defn- get-previous-tx-editor-cursor
+  [tx-id]
+  (when-let [prev-tx-id (get-previous-tx-id tx-id)]
+    (get-in @state/state [:history/tx->editor-cursor prev-tx-id])))
+
+(defn- new-created-block?
+  [txs]
+  (some (fn [[type _e a _v]]
+          (and (= type :db/retract)
+               (= a :block/uuid)))
+        txs))
+
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
-          editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])]
+          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
+          save-block? (= (:outliner-op tx-meta) :save-block)
+          editor-cursor (cond
+                          (and save-block? (not (new-created-block? new-txs)))
+                          current-editor-cursor
+
+                          save-block?
+                          (or (get-previous-tx-editor-cursor tx-id)
+                              current-editor-cursor)
+
+                          :else
+                          current-editor-cursor)]
       (push-redo e)
       (transact! new-txs (merge {:undo? true}
                                 tx-meta
@@ -177,20 +217,14 @@
              :txs-op new-txs
              :editor-cursor editor-cursor))))
 
-(defn- get-next-tx-editor-cursor
-  [tx-id]
-  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
-                    (split-with #(not= % tx-id))
-                    second)]
-    (when (> (count result) 1)
-      (let [next-tx-id (nth result 1)]
-        (get-in @state/state [:history/tx->editor-cursor next-tx-id])))))
-
 (defn redo
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
     (let [new-txs (get-txs true txs)
-          editor-cursor (get-next-tx-editor-cursor tx-id)]
+          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
+          editor-cursor (if (= (:outliner-op tx-meta) :save-block)
+                          current-editor-cursor
+                          (get-next-tx-editor-cursor tx-id))]
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
                                 tx-meta
