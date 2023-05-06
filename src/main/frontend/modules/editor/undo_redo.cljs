@@ -196,15 +196,11 @@
           new-txs (get-txs false txs)
           current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
           save-block? (= (:outliner-op tx-meta) :save-block)
-          editor-cursor (cond
-                          (and save-block? (not (new-created-block? new-txs)))
-                          current-editor-cursor
-
-                          save-block?
-                          (or (get-previous-tx-editor-cursor tx-id)
-                              current-editor-cursor)
-
-                          :else
+          prev-editor-cursor (get-previous-tx-editor-cursor tx-id)
+          editor-cursor (if (and save-block?
+                                 (= (:block/uuid (:last-edit-block prev-editor-cursor))
+                                    (:block/uuid (state/get-edit-block))))
+                          prev-editor-cursor
                           current-editor-cursor)]
       (push-redo e)
       (transact! new-txs (merge {:undo? true}
