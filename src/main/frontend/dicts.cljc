@@ -4518,6 +4518,7 @@
         :content/open-in-sidebar "Kenar çubuğunda aç"
         :content/click-to-edit "Düzenlemek için tıklayın"
         :context-menu/make-a-flashcard "Bilgi Kartı Oluştur"
+        :context-menu/toggle-number-list "Numaralı liste olarak değiştir"
         :context-menu/preview-flashcard "Bilgi Kartını Önizle"
         :context-menu/make-a-template "Bir Şablon Oluştur"
         :context-menu/input-template-name "Şablonun adı nedir?"
