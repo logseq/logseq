@@ -283,6 +283,13 @@
  ;; Default value: 100
  :ref/linked-references-collapsed-threshold 50
 
+ ;; Graph view configuration.
+ ;; Example usage:
+ ;; :graph/settings
+ ;; {:orphan-pages?  true   ; Default value: true
+ ;;  :builtin-pages? false  ; Default value: false
+ ;;  :journal?       false} ; Default value: false
+
  ;; Favorites to list on the left sidebar
  :favorites []
 
