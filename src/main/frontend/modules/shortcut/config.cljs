@@ -77,7 +77,7 @@
    :whiteboard/pan               {:binding ["2" "a p"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
    
-   :whiteboard/portal            {:binding ["3" "a m"]
+   :whiteboard/portal            {:binding ["3" "a b"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
    :whiteboard/pencil            {:binding ["4" "a d"]
