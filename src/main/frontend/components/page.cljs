@@ -294,10 +294,11 @@
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
-           (assoc state ::title-value (atom (nth (:rum/args state) 3))))}
-  [state page page-name icon title _format fmt-journal?]
+           (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
+  [state page-name icon title _format fmt-journal?]
   (when title
-    (let [*title-value (get state ::title-value)
+    (let [page (when page-name (db/entity [:block/name page-name]))
+          *title-value (get state ::title-value)
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
@@ -448,7 +449,7 @@
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
-                (page-title page page-name icon title format fmt-journal?)])
+                (page-title page-name icon title format fmt-journal?)])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
