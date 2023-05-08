@@ -84,7 +84,9 @@
 ;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
 ;; for a similar example
 (defn get-copied-blocks []
-  (p/let [clipboard-items (when (and js/window (gobj/get js/window "navigator") js/navigator.clipboard)
+  ;; NOTE: Avoid using navigator clipboard API on Android, it will report a permission error
+  (p/let [clipboard-items (when (and (not (mobile-util/native-android?))
+                                     js/window (gobj/get js/window "navigator") js/navigator.clipboard)
                             (js/navigator.clipboard.read))
           blocks-blob ^js (when clipboard-items
                             (let [types (.-types ^js (first clipboard-items))]
