@@ -3118,7 +3118,7 @@
     (state/selection?)
     (shortcut-delete-selection e)
 
-    (whiteboard?)
+    (and (whiteboard?) (not (state/editing?)))
     (.deleteShapes (.-api ^js (state/active-tldraw-app)))
 
     :else
