@@ -288,6 +288,7 @@
  ;; :graph/settings
  ;; {:orphan-pages?  true   ; Default value: true
  ;;  :builtin-pages? false  ; Default value: false
+ ;;  :excluded-pages? false ; Default value: false
  ;;  :journal?       false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
