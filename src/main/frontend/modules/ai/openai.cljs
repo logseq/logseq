@@ -88,7 +88,7 @@
               (fn [failed-resp]
                 failed-resp)))
 
-(defrecord OpenAI [token]
+(defrecord OpenAI [repo token]
   protocol/AI
   (generate-text [_this q opts]
     (-generate-text q opts token))
@@ -96,10 +96,12 @@
     (-chat conversation opts token))
   (generate-image [this description opts]
     (-generate-image description opts token))
-  (speech-to-text [this audio opts]))
+  (speech-to-text [this audio opts])
+
+  )
 
 (comment
-  (def open-ai (->OpenAI (:open-ai/token @frontend.state/state)))
+  (def open-ai (->OpenAI (frontend.state/get-current-repo) (:open-ai/token @frontend.state/state)))
 
   (protocol/generate-text open-ai "What's logseq?" {})
 

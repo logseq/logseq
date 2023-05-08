@@ -44,25 +44,13 @@
   [blocks]
   (map (fn [block]
          {:id (str (:block/uuid block))
-          :payload block}) blocks))
+          :content (:block/content block)
+          :metadata {}}) blocks))
 
 (defn index-graph!
   [graph-id]
-  (p/let [blocks (get-blocks)
-          block-contents (map :block/content blocks)
-          vectors-result (embedding/sentence-transformer block-contents)
-          vectors (zipmap block-contents vectors-result)
-          blocks (map (fn [b] (assoc b :vector (get vectors (get-in b [:payload :block/content]))))
-                   (blocks->points blocks))
-          segments (partition-all 2000 blocks)]
-    (p/loop [segments segments]
-      (when-let [segment (first segments)]
-        (p/let [_ (fetch (str api "collections/" graph-id "/points?wait=true")
-                         {:method "PUT"
-                          :headers {:Content-Type "application/json"}
-                          :body (js/JSON.stringify
-                                 (bean/->js {:points segment}))})]
-          (p/recur (rest segments)))))))
+  (let [blocks (blocks->points (get-blocks))]
+    ))
 
 (defn get-top-k
   [graph-id q {:keys [top]

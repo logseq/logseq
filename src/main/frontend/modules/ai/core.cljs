@@ -5,11 +5,12 @@
 
 (defn- get-record
   [kind]
-  (case kind
-    :openai
-    (openai/->OpenAI (:open-ai/token @state/state))
+  (when-let [repo (state/get-current-repo)]
+    (case kind
+     :openai
+     (openai/->OpenAI repo (:open-ai/token @state/state))
 
-    nil))
+     nil)))
 
 (defn generate-text
   [service q opts]
