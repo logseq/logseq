@@ -83,7 +83,7 @@ test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('r')
+  await page.keyboard.type('ar')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
@@ -130,7 +130,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('c')
+  await page.keyboard.type('ac')
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
@@ -205,11 +205,11 @@ test('create a block', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('s')
+  await page.keyboard.type('as')
   await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
   await page.waitForTimeout(100)
 
-  await page.keyboard.type('a')
+  await page.keyboard.type('some text')
   await page.keyboard.press('Enter')
 
 
@@ -240,7 +240,7 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('at')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -259,7 +259,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('at')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -278,7 +278,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('at')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
