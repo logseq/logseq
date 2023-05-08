@@ -66,7 +66,7 @@
          (doseq [k (dh/shortcut-binding id)]
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
-             (.registerShortcut handler (util/keyname id) (dh/normalize-user-keyname k))
+             (.registerShortcut handler (util/keyname id) (util/normalize-user-keyname k))
              (catch :default e
                (log/error :shortcut/register-shortcut {:id      id
                                                        :binding k
@@ -81,7 +81,7 @@
   (when-let [handler (get-handler-by-id handler-id)]
     (when-let [ks (dh/shortcut-binding shortcut-id)]
       (doseq [k ks]
-        (.unregisterShortcut ^js handler (dh/normalize-user-keyname k))))
+        (.unregisterShortcut ^js handler (util/normalize-user-keyname k))))
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut!

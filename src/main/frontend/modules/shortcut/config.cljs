@@ -113,19 +113,19 @@
    :whiteboard/zoom-out          {:binding "shift+dash"
                                   :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/zoom-in           {:binding "shift+="
+   :whiteboard/zoom-in           {:binding "shift+equals"
                                   :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/send-backward     {:binding "["
+   :whiteboard/send-backward     {:binding "open-square-bracket"
                                   :fn      #(.sendBackward ^js (state/active-tldraw-app))}
 
-   :whiteboard/send-to-back      {:binding "shift+["
+   :whiteboard/send-to-back      {:binding "shift+open-square-bracket"
                                   :fn      #(.sendToBack ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-forward     {:binding "]"
+   :whiteboard/bring-forward     {:binding "close-square-bracket"
                                   :fn      #(.bringForward ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-to-front    {:binding "shift+]"
+   :whiteboard/bring-to-front    {:binding "shift+close-square-bracket"
                                   :fn      #(.bringToFront ^js (state/active-tldraw-app))}
 
    :whiteboard/lock              {:binding "mod+l"

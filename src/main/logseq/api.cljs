@@ -367,7 +367,7 @@
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
                 [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
-            (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
+            (println :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
 
 (defn ^:export unregister_plugin_simple_command
@@ -383,7 +383,7 @@
         (palette-handler/unregister (:id cmd))
         ;; remove keybinding commands
         (when (seq (:shortcut cmd))
-          (js/console.debug :shortcut/unregister-shortcut cmd)
+          (println :shortcut/unregister-shortcut cmd)
           (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
 (defn ^:export register_search_service
