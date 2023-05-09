@@ -1,4 +1,4 @@
-(ns frontend.modules.ai.plugin
+(ns frontend.modules.ai.plugin-example
   (:require [frontend.modules.ai.protocol :as ai-protocol]
             [frontend.search.protocol :as search-protocol]
             [frontend.search.db :as search-db]
@@ -129,7 +129,7 @@
   [repo token]
   (let [blocks-indice (search-db/build-blocks-indice-edn repo)
         ;; pages-indice  (search-db/build-pages-indice-edn repo)
-        segments (partition-all 1000 blocks-indice)]
+        segments (partition-all 2000 blocks-indice)]
     (p/loop [segments segments]
       (when-let [segment (first segments)]
         (p/let [_ (index-blocks! repo segment token)]
