@@ -3,7 +3,8 @@
   (:require [frontend.modules.ai.protocol :as protocol]
             [frontend.modules.ai.openai :as openai]
             [frontend.state :as state]
-            [frontend.modules.ai.plugin-example :as proxy]))
+            [frontend.modules.ai.plugin-example :as proxy]
+            [frontend.db :as db]))
 
 (defn get-service
   []
@@ -25,6 +26,12 @@
         (proxy/->AIProxy repo "")
 
         (openai/->OpenAI repo (:open-ai/token @state/state))))))
+
+(defn get-current-conversation
+  []
+  (when-let [id (state/sub :chat/current-conversation)]
+    (when (db/entity id)
+      id)))
 
 (defn generate-text
   [q opts]

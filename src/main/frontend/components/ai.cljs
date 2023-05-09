@@ -20,7 +20,8 @@
             [frontend.components.select :as select]
             [frontend.modules.ai.prompts :as prompts]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.modules.ai.core :as ai]))
 
 (defonce *messages (atom []))
 
@@ -45,7 +46,7 @@
       (scroll-to-bottom)
       (ai-handler/chat!
        q
-       {:conversation-id (:chat/current-conversation @state/state)
+       {:conversation-id (ai/get-current-conversation)
         :on-message (fn [message]
                       (let [last-message (peek @*messages)
                             answer? (= "answer" (get-in last-message [:block/properties :logseq.ai.type]))]
@@ -115,7 +116,7 @@
 
 (rum/defc chat < rum/reactive
   []
-  (let [conversation-id (state/sub :chat/current-conversation)]
+  (let [conversation-id (ai/get-current-conversation)]
     [:div.chat
      (conversations conversation-id)
      [:div.flex.flex-1.flex-col
