@@ -35,21 +35,26 @@
   (string/replace (config/get-local-dir repo) "/" "-"))
 
 (defn -generate-text [q _opts token]
-  (p/let [result (fetch (str api "openai/generate_text")
-                        {:method "POST"
-                         :headers (headers token)
-                         :body (js/JSON.stringify
-                                (bean/->js {:message q}))})]
-    (:result result)))
+  (util/fetch (str api "openai/generate_text")
+              {:method "POST"
+               :headers (headers token)
+               :body (js/JSON.stringify
+                      (bean/->js {:message q}))}
+              (fn [result]
+                [:success (:result result)])
+              (fn [failed-resp]
+                [:failed failed-resp])))
 
+;; TODO: extract event stream for plugins usage
 (defn- -chat
   [conversation {:keys [model on-message on-finished]
                  :or {model "gpt-3.5-turbo"}
                  :as opts} token]
   (let [messages (->> (butlast conversation)
-                      (map (fn [m] (-> (assoc m :agent (:role m))
-                                       (dissoc :role)))))
-        message (:message (last conversation))
+                      (map (fn [m]
+                             {:agent (if (= "user" (:role m)) "user" "ai")
+                              :message (:content m)})))
+        message (:content (last conversation))
         *buffer (atom "")
         sse ^js (SSE. (str api "openai/chat")
                       (bean/->js
@@ -150,7 +155,7 @@
   [repo token]
   (let [blocks-indice (search-db/build-blocks-indice-edn repo)
         ;; pages-indice  (search-db/build-pages-indice-edn repo)
-        segments (partition-all 2000 blocks-indice)]
+        segments (partition-all 1000 blocks-indice)]
     (p/loop [segments segments]
       (when-let [segment (first segments)]
         (p/let [_ (index-blocks! repo segment token)]
@@ -224,7 +229,7 @@
   (transact-pages! [_this data]))
 
 (plugin-handler/register-plugin-search-service plugin-id plugin-name {})
-
+(plugin-handler/register-plugin-ai-service plugin-id plugin-name {})
 
 (comment
   (def ai-proxy (->AIProxy (frontend.state/get-current-repo) ""))
@@ -257,4 +262,16 @@
   (search-protocol/remove-db! ai-proxy)
   (search-protocol/truncate-blocks! ai-proxy)
   (search-protocol/transact-blocks! ai-proxy {:blocks-to-remove-set #{31 20}})
+
+  ;; get collection information
+  (p/let [result (fetch (str api "db/collection")
+                        {:method "POST"
+                         :headers (headers "")
+                         :body (js/JSON.stringify
+                                (bean/->js
+                                 {:host db-host
+                                  :collection_name (get-collection-name (state/get-current-repo))
+                                  ;; TODO: configurable
+                                  :embedding_model "all-MiniLM-L6-v2"}))})]
+    (prn {:result result}))
   )

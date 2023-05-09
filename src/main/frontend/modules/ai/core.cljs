@@ -1,25 +1,39 @@
 (ns frontend.modules.ai.core
+  "AI service"
   (:require [frontend.modules.ai.protocol :as protocol]
             [frontend.modules.ai.openai :as openai]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.modules.ai.plugin-example :as proxy]))
+
+(defn get-service
+  []
+  (state/sub :ai/current-service))
+
+(defn get-all-services
+  []
+  (concat
+   [{:name "Built-in OpenAI"}]
+   (vals (state/get-all-plugin-ai-engines))))
 
 (defn- get-record
-  [kind]
-  (when-let [repo (state/get-current-repo)]
-    (case kind
-     :openai
-     (openai/->OpenAI repo (:open-ai/token @state/state))
+  []
+  (let [service (get-service)]
+    (when-let [repo (state/get-current-repo)]
+      (case service
+        ;; TODO: debug purpose
+        "AI Proxy"
+        (proxy/->AIProxy repo "")
 
-     nil)))
+        (openai/->OpenAI repo (:open-ai/token @state/state))))))
 
 (defn generate-text
-  [service q opts]
-  (protocol/generate-text (get-record service) q opts))
+  [q opts]
+  (protocol/generate-text (get-record) q opts))
 
 (defn chat
-  [service conversation opts]
-  (protocol/chat (get-record service) conversation opts))
+  [conversation opts]
+  (protocol/chat (get-record) conversation opts))
 
 (defn generate-image
-  [service description opts]
-  (protocol/generate-image (get-record service) description opts))
+  [description opts]
+  (protocol/generate-image (get-record) description opts))

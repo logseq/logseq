@@ -41,27 +41,25 @@
     (str "Chat/" (string/replace result "/" "_"))))
 
 (defn new-conversation!
-  [service q]
-  (let [service (or service default-service)
-        page (if q
+  [q]
+  (let [page (if q
                (get-page-name-from-q q)
                (str "Chat/" (date/date->file-name (t/now)) "/" (random-uuid)))]
     (page-handler/create! page {:redirect? false
                                 :create-first-block? false
                                 :additional-tx {:block/type "chat"
-                                                :block/properties {:logseq.ai.service service}}})
+                                                :block/properties {:logseq.ai.service (ai/get-service)}}})
     (let [id (:db/id (db/entity [:block/name (string/lower-case page)]))]
       (state/set-state! :chat/current-conversation id)
       id)))
 
 (defn chat!
-  [q {:keys [conversation-id service on-message on-finished] :as opts
-      :or {service default-service}}]
+  [q {:keys [conversation-id on-message on-finished] :as opts}]
   (let [conversation-id (if conversation-id
                           conversation-id
                           ;; Create conversation
                           ;; TODO: user-friendly page name, could be summarized by AI
-                          (new-conversation! service q))
+                          (new-conversation! q))
         conversation (->> (db-model/get-chat-conversation conversation-id)
                           (map (fn [id]
                                  (let [b (db/entity id)
@@ -84,7 +82,7 @@
       (let [new-page-name (get-page-name-from-q q)]
         (page-handler/rename! (:block/original-name c-e) new-page-name false)))
     (if draw?
-      (p/let [url (ai/generate-image service (string/replace-first q "/draw " "") {})]
+      (p/let [url (ai/generate-image (string/replace-first q "/draw " "") {})]
         (do
           (editor-handler/insert-page-block-tree conversation-id
                                                 [{:content q
@@ -98,7 +96,7 @@
                                                  :keep-uuid? false
                                                  :edit? false})
           (on-finished)))
-      (ai/chat service conversation'
+      (ai/chat conversation'
               (assoc opts
                      :on-message on-message
                      :on-finished (fn [result]
@@ -114,6 +112,5 @@
                                       (on-finished))))))))
 
 (defn generate-text
-  [content {:keys [service] :as opts
-           :or {service default-service}}]
-  (ai/generate-text service content (dissoc opts :service)))
+  [content opts]
+  (ai/generate-text content opts))

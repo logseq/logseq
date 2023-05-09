@@ -73,6 +73,9 @@
        :aria-label "Write a message"
        :value q
        :on-change on-change-fn
+       :on-key-down (fn [e]
+                      (when (and (= (gobj/get e "key") "Enter") (not (gobj/get e "shiftKey")))
+                        (util/stop e)))
        :on-key-up (fn [e] (new-message! e q))})]))
 
 (rum/defc conversation-message < rum/static
@@ -100,7 +103,7 @@
      :icon "plus"
      :intent "border-link"
      :small? true
-     :on-click (fn [] (ai-handler/new-conversation! nil nil)))
+     :on-click (fn [] (ai-handler/new-conversation! nil)))
    (let [conversations (db-model/get-chat-conversations)]
      (for [c conversations]
        (let [current? (= conversation-id (:db/id c))]

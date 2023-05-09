@@ -357,6 +357,16 @@
   (when-let [pid (keyword pid)]
     (state/uninstall-plugin-service pid :search)))
 
+(defn register-plugin-ai-service
+  [pid name opts]
+  (when-let [pid (and name (keyword pid))]
+    (state/install-plugin-service pid :ai name opts)))
+
+(defn unregister-plugin-ai-services
+  [pid]
+  (when-let [pid (keyword pid)]
+    (state/uninstall-plugin-service pid :ai)))
+
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
   ([pid effect]

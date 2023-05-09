@@ -31,7 +31,8 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.db :as db]
-            [frontend.components.conversion :as conversion-component]))
+            [frontend.components.conversion :as conversion-component]
+            [frontend.modules.ai.core :as ai]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -708,7 +709,8 @@
 
 (rum/defc settings-ai < rum/reactive
   [_current-repo]
-  (let [enable-ai? (state/enable-ai?)]
+  (let [enable-ai? (state/enable-ai?)
+        current-service (ai/get-service)]
     [:div.panel-wrap
      [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
       [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -719,6 +721,20 @@
         (ui/toggle enable-ai?
                    config-handler/toggle-enable-ai!
                    true)]]]
+
+     (when enable-ai?
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "Service"}
+         "Service"]
+        [:div
+         (ui/select (map (fn [{:keys [name]}]
+                           {:label name
+                            :value name
+                            :selected (= name current-service)})
+                      (ai/get-all-services))
+           (fn [_ value]
+             (state/set-state! :ai/current-service value)))]])
      (when enable-ai?
        [:div
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
