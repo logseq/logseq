@@ -94,7 +94,8 @@
 
 (defn- item->block-indice
   [b]
-  {:block/uuid (:id b)
+  {:db/id (:id b)
+   :block/uuid (get-in b [:metadata :uuid])
    :block/content (:content b)
    :block/page (get-in b [:metadata :page])})
 
@@ -121,20 +122,13 @@
 (defn- block-indice->item
   [b]
   (when (and (:uuid b) (not (string/blank? (:content b))))
-    {:id (str (:uuid b))
+    {:id (:id b)
      :content (:content b)
-     :metadata (if (:page b)
-                 {:page (:page b)}
-                 {})}))
-
-(defn- item->block
-  [b]
-  (when (and (:uuid b) (not (string/blank? (:content b))))
-    {:id (str (:uuid b))
-     :content (:content b)
-     :metadata (if (:page b)
-                 {:page (:page b)}
-                 {})}))
+     :metadata (merge
+                {:uuid (:uuid b)}
+                (if (:page b)
+                  {:page (:page b)}
+                  {}))}))
 
 (defn- index-blocks!
   [repo blocks-indice token]
@@ -164,18 +158,18 @@
 (defn -transact-blocks!
   [repo {:keys [blocks-to-remove-set
                 blocks-to-add]} token]
+  (prn {:blocks-to-remove-set blocks-to-remove-set})
   (p/let [_ (when (seq blocks-to-remove-set)
-              (let [remove-ids (map (comp str :block/uuid) (map db/entity blocks-to-remove-set))]
-                (fetch (str api "db/items")
-                       {:method "DELETE"
-                        :headers (headers token)
-                        :body (js/JSON.stringify
-                               (bean/->js
-                                {:db {:host db-host
-                                      :collection_name (get-collection-name repo)
-                                      ;; TODO: configurable
-                                      :embedding_model "all-MiniLM-L6-v2"}
-                                 :item_ids remove-ids}))})))]
+              (fetch (str api "db/items")
+                     {:method "DELETE"
+                      :headers (headers token)
+                      :body (js/JSON.stringify
+                             (bean/->js
+                              {:db {:host db-host
+                                    :collection_name (get-collection-name repo)
+                                    ;; TODO: configurable
+                                    :embedding_model "all-MiniLM-L6-v2"}
+                               :item_ids blocks-to-remove-set}))}))]
     (when (seq blocks-to-add)
       (index-blocks! repo blocks-to-add token))))
 
