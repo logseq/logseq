@@ -955,7 +955,7 @@
                     (mldoc/block-with-title? (ffirst ast)))
              [attributes
               (markup-elements-cp (assoc config :block/format format) ast)]
-             [(assoc attributes :class "inline-block")
+             [(assoc attributes :class "inline")
               (inline-text {:add-margin? false} format macro-content)]))
          [attributes
           [:span.warning {:title (str "Unsupported macro name: " name)}
@@ -3215,7 +3215,7 @@
        (markup-elements-cp config l))
       ["Raw_Html" content]
       (when (not html-export?)
-        [:div.raw_html {:dangerouslySetInnerHTML
+        [:div.raw_html.inline {:dangerouslySetInnerHTML
                         {:__html (security/sanitize-html content)}}])
       ["Export" "html" _options content]
       (when (not html-export?)
@@ -3225,7 +3225,7 @@
       (ui/catch-error
        [:div.warning {:title "Invalid hiccup"}
         content]
-       [:div.hiccup_html {:dangerouslySetInnerHTML
+       [:div.hiccup_html.inline {:dangerouslySetInnerHTML
                           {:__html (hiccup->html content)}}])
 
       ["Export" "latex" _options content]
