@@ -26,8 +26,14 @@
 
 (defn block
   [m]
-  (assert (map? m) (util/format "block data must be map, got: %s %s" (type m) m))
-  (->Block m))
+  (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
+  (if (de/entity? m)
+    (->Block {:db/id (:db/id m)
+              :block/uuid (:block/uuid m)
+              :block/page (:block/page m)
+              :block/left (:block/left m)
+              :block/parent (:block/parent m)})
+    (->Block m)))
 
 (defn get-data
   [block]
@@ -231,11 +237,6 @@
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 
-(defn get-right-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (tree/-get-right node))
-
 (defn get-right-sibling
   [db-id]
   (when db-id
@@ -407,7 +408,7 @@
   (let [level-blocks (blocks-with-level blocks)]
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
-(defn get-right-siblings
+(defn- get-right-siblings
   "Get `node`'s right siblings."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
@@ -477,7 +478,7 @@
                         (:db/id target-block))
         get-new-id (fn [block lookup]
                      (cond
-                       (or (map? lookup) (vector? lookup))
+                       (or (map? lookup) (vector? lookup) (de/entity? lookup))
                        (when-let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
                                          (get uuids (last lookup))
                                          (get id->new-uuid (:db/id lookup)))]
