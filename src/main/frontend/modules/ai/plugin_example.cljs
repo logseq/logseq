@@ -8,12 +8,16 @@
             ["sse.js" :refer [SSE]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.state :as state]
+            [frontend.handler.plugin :as plugin-handler]))
 
 ;; TODO: move this to logseq-ai-plugin
 
 (def api "http://localhost:8000/")
 (def db-host "http://localhost:6333")
+(def plugin-id "ai-proxy")
+(def plugin-name "AI Proxy")
 
 (defn- fetch
   [uri opts]
@@ -83,25 +87,42 @@
                                 (bean/->js {:text description}))})]
     (:url result)))
 
+(defn- item->block-indice
+  [b]
+  {:block/uuid (:id b)
+   :block/content (:content b)
+   :block/page (get-in b [:metadata :page])})
+
 (defn -query
   [repo q {:keys [limit filter]
            :or {limit 10}} token]
-  (fetch (str api "db/search")
-         {:method "POST"
-          :headers (headers token)
-          :body (js/JSON.stringify
-                 (bean/->js
-                  (cond->
-                    {:db {:host db-host
-                          :collection_name (get-collection-name repo)
-                          ;; TODO: configurable
-                          :embedding_model "all-MiniLM-L6-v2"}
-                     :query q
-                     :k limit}
-                    filter
-                    (assoc :filter filter))))}))
+  (p/let [result (fetch (str api "db/search")
+                        {:method "POST"
+                         :headers (headers token)
+                         :body (js/JSON.stringify
+                                (bean/->js
+                                 (cond->
+                                   {:db {:host db-host
+                                         :collection_name (get-collection-name repo)
+                                         ;; TODO: configurable
+                                         :embedding_model "all-MiniLM-L6-v2"}
+                                    :query q
+                                    :k limit}
+                                   filter
+                                   (assoc :filter filter))))})
+          blocks (map item->block-indice result)]
+    (state/update-plugin-search-engine plugin-id plugin-name #(assoc % :result {:blocks blocks}))))
 
 (defn- block-indice->item
+  [b]
+  (when (and (:uuid b) (not (string/blank? (:content b))))
+    {:id (str (:uuid b))
+     :content (:content b)
+     :metadata (if (:page b)
+                 {:page (:page b)}
+                 {})}))
+
+(defn- item->block
   [b]
   (when (and (:uuid b) (not (string/blank? (:content b))))
     {:id (str (:uuid b))
@@ -201,6 +222,8 @@
     (-remove-db! repo token))
   (query-page [_this q opts])
   (transact-pages! [_this data]))
+
+(plugin-handler/register-plugin-search-service plugin-id plugin-name {})
 
 
 (comment
