@@ -209,7 +209,7 @@ test('create a block', async ({ page }) => {
   await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
   await page.waitForTimeout(100)
 
-  await page.keyboard.type('some text')
+  await page.keyboard.type('a')
   await page.keyboard.press('Enter')
 
 
