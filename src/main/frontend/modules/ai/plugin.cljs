@@ -233,7 +233,5 @@
 
   (search-protocol/remove-db! ai-proxy)
   (search-protocol/truncate-blocks! ai-proxy)
-  (search-protocol/transact-blocks! ai-proxy
-                                    {:blocks-to-remove-set #{"6459ea1a-1acc-476c-8df0-1bb20950837d"
-                                                             "6458f16b-a1a8-4ab7-a5e8-fa27e0bf5cc5"}})
+  (search-protocol/transact-blocks! ai-proxy {:blocks-to-remove-set #{31 20}})
   )
