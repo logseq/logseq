@@ -207,6 +207,7 @@
   (generate-image [this description opts]
     (-generate-image description opts token))
   (speech-to-text [this audio opts])
+  (text-to-speech [this text opts])
 
   search-protocol/Engine
   (query [_this q opts]

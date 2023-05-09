@@ -88,6 +88,21 @@
               (fn [failed-resp]
                 failed-resp)))
 
+(defn- -speech-to-text
+  [audio-file opts token]
+  (let [form-data (js/FormData.)
+        _ (.append form-data "model" "whisper-1")
+        _ (.append form-data "file" audio-file)]
+    (util/fetch "https://api.openai.com/v1/audio/transcriptions"
+                {:method "POST"
+                 :headers {:Content-Type "application/json"
+                           :authorization (str "Bearer " token)}
+                 :body form-data}
+                (fn [result]
+                  (prn {:result result}))
+                (fn [failed-resp]
+                  failed-resp))))
+
 (defrecord OpenAI [repo token]
   protocol/AI
   (generate-text [_this q opts]
@@ -96,9 +111,10 @@
     (-chat conversation opts token))
   (generate-image [this description opts]
     (-generate-image description opts token))
-  (speech-to-text [this audio opts])
-
-  )
+  (speech-to-text [this audio opts]
+    (-speech-to-text audio opts token))
+  (text-to-speech [this text opts]
+    ))
 
 (comment
   (def open-ai (->OpenAI (frontend.state/get-current-repo) (:open-ai/token @frontend.state/state)))
@@ -107,6 +123,6 @@
 
   (protocol/chat open-ai [{:role :user
                            :message "What's logseq?"}] {:on-message (fn [message]
-                                                               (prn "received: " message))
-                                                 :on-finished (fn [message]
-                                                                (prn "finished: " message))}))
+                                                                      (prn "received: " message))
+                                                        :on-finished (fn [message]
+                                                                       (prn "finished: " message))}))
