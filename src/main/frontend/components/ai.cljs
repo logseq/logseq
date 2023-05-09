@@ -57,7 +57,9 @@
         :on-finished (fn []
                        (reset! *messages [])
                        (scroll-to-bottom))})
-      (state/set-state! [:ui/chat :q] ""))))
+      (state/set-state! [:ui/chat :q] "")
+      (let [node (gdom/getElement "chat-box-input")]
+        (set! (.-value node) "")))))
 
 (rum/defc input < rum/reactive
   []
@@ -72,7 +74,7 @@
        :auto-focus true
        :placeholder "Write a message"
        :aria-label "Write a message"
-       :value q
+       :default-value q
        :on-change on-change-fn
        :on-key-down (fn [e]
                       (when (and (= (gobj/get e "key") "Enter") (not (gobj/get e "shiftKey")))
