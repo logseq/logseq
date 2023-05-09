@@ -82,3 +82,5 @@ logseq.graph-parser.nbb-test-runner/run-tests
 ;; For debugging
 frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop
+;; Used in macro
+frontend.state/get-current-edit-block-and-position
