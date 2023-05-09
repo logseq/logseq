@@ -71,34 +71,34 @@
    :pdf/find                     {:binding "alt+f"
                                   :fn      pdf-utils/open-finder}
 
-   :whiteboard/select            {:binding ["1" "a s"]
+   :whiteboard/select            {:binding ["1" "w s"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
    
-   :whiteboard/pan               {:binding ["2" "a p"]
+   :whiteboard/pan               {:binding ["2" "w p"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
    
-   :whiteboard/portal            {:binding ["3" "a b"]
+   :whiteboard/portal            {:binding ["3" "w b"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
-   :whiteboard/pencil            {:binding ["4" "a d"]
+   :whiteboard/pencil            {:binding ["4" "w d"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "pencil")}
 
-   :whiteboard/highlighter       {:binding ["5" "a h"]
+   :whiteboard/highlighter       {:binding ["5" "w h"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
    
-   :whiteboard/eraser            {:binding ["6" "a e"]
+   :whiteboard/eraser            {:binding ["6" "w e"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
    
-   :whiteboard/connector         {:binding ["7" "a c"]
+   :whiteboard/connector         {:binding ["7" "w c"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
    
-   :whiteboard/text              {:binding ["8" "a t"]
+   :whiteboard/text              {:binding ["8" "w t"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
 
-   :whiteboard/rectangle         {:binding ["9" "a r"]
+   :whiteboard/rectangle         {:binding ["9" "w r"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "box")}
 
-   :whiteboard/ellipse           {:binding ["o" "a o"]
+   :whiteboard/ellipse           {:binding ["o" "w o"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "ellipse")}
 
    :whiteboard/reset-zoom        {:binding "shift+0"
