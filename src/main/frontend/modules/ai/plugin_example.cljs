@@ -158,7 +158,6 @@
 (defn -transact-blocks!
   [repo {:keys [blocks-to-remove-set
                 blocks-to-add]} token]
-  (prn {:blocks-to-remove-set blocks-to-remove-set})
   (p/let [_ (when (seq blocks-to-remove-set)
               (fetch (str api "db/items")
                      {:method "DELETE"

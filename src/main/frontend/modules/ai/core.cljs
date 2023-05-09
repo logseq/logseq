@@ -44,3 +44,11 @@
 (defn generate-image
   [description opts]
   (protocol/generate-image (get-record) description opts))
+
+(defn speech-to-text
+  [audio-file opts]
+  (protocol/speech-to-text (get-record) audio-file opts))
+
+(defn text-to-speech
+  [text opts]
+  (protocol/text-to-speech (get-record) text opts))

@@ -11,7 +11,8 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.modules.ai.prompts :as prompts]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.common.path :as path]))
 
 (defn- text->segments
   [text]
@@ -114,3 +115,25 @@
 (defn generate-text
   [content opts]
   (ai/generate-text content opts))
+
+(defn transcribe
+  [block audio-path *transcribing?]
+  (let [ext (util/get-file-ext audio-path)]
+    (when (contains? #{"mp3" "mp4" "mpeg" "mpga" "m4a" "wav" "webm"} ext)
+      (p/let [resp (js/fetch audio-path)
+              blob (.blob resp)
+              file (js/File. #js [blob]
+                             (path/filename audio-path)
+                             #js {:type (str "audio/" ext)})]
+        (when file
+          (reset! *transcribing? true)
+          (->
+           (p/let [result (ai/speech-to-text file {})]
+             (reset! *transcribing? false)
+             (let [text result]
+               (editor-handler/api-insert-new-block! text
+                                                     {:block-uuid (:block/uuid block)
+                                                      :sibling? false})))
+           (p/catch (fn [error]
+                      (reset! *transcribing? false)
+                      (prn "Transcribed failed:" error)))))))))

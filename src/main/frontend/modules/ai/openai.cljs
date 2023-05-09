@@ -95,11 +95,10 @@
         _ (.append form-data "file" audio-file)]
     (util/fetch "https://api.openai.com/v1/audio/transcriptions"
                 {:method "POST"
-                 :headers {:Content-Type "application/json"
-                           :authorization (str "Bearer " token)}
+                 :headers {:authorization (str "Bearer " token)}
                  :body form-data}
                 (fn [result]
-                  (prn {:result result}))
+                  (:text result))
                 (fn [failed-resp]
                   failed-resp))))
 

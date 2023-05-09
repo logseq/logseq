@@ -47,6 +47,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.ai :as ai-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
@@ -364,11 +365,22 @@
 
                (ui/icon "maximize")]]])])]))))
 
-(rum/defc audio-cp [src]
+(rum/defcs audio-cp <
+  (rum/local false ::transcribing?)
+  [state config src]
   ;; Change protocol to allow media fragment uris to play
-  [:audio {:src (string/replace-first src gp-config/asset-protocol "file://")
-           :controls true
-           :on-touch-start #(util/stop %)}])
+  (let [*transcribing? (::transcribing? state)
+        src (string/replace-first src gp-config/asset-protocol "file://")]
+    [:div.flex.flex-row.items-center
+     [:audio.mr-2 {:src src
+                   :controls true
+                   :on-touch-start #(util/stop %)}]
+     (if @*transcribing?
+       (ui/loading "Transcribing")
+       (ui/button "Transcribe"
+        :intent "border-link"
+        :small? true
+        :on-click (fn [] (ai-handler/transcribe (:block config) src *transcribing?))))]))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -398,7 +410,7 @@
         (cond
           (contains? config/audio-formats ext)
           (asset-loader @src
-                        #(audio-cp @src))
+                        #(audio-cp config @src))
 
           (contains? (gp-config/img-formats) ext)
           (asset-loader @src
@@ -1028,7 +1040,7 @@
                  (if (assets-handler/check-alias-path? href)
                    (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
                    (get-file-absolute-path config href)))]
-      (audio-cp href))))
+      (audio-cp config href))))
 
 (defn- media-link
   [config url s label metadata full_text]
