@@ -186,7 +186,7 @@
                        [(raw-text "|") (newline* 1)]))
             group))
          groups)]
-    (concatv (when (seq header) [(newline* 1) (indent-with-2-spaces level)])
+    (concatv [(newline* 1) (indent-with-2-spaces level)]
              (when (seq header) header-line)
              (when (seq header) [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)])
              group-lines)))
