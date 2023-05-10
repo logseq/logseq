@@ -46,7 +46,7 @@
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
       [:div.w.full.flex.flex-row.justify-left
-       [:input#repeater-num.form-input.mt-1.w-8.px-1.sm:w-20.sm:px-2.text-center
+       [:input#repeater-num.form-input.w-8.mr-2.px-1.sm:w-20.sm:px-2.text-center
         {:default-value num
          :on-change (fn [event]
                       (let [value (util/evalue event)]
@@ -66,7 +66,7 @@
           (swap! *timestamp assoc-in [:repeater :duration] value))
         nil)
 
-       [:a.ml-1.self-center {:on-click (fn []
+       [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
                                          (swap! *timestamp assoc :repeater {}))}
         svg/close]]

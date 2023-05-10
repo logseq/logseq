@@ -58,6 +58,8 @@
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
+#?(:cljs (defonce convert-to-roman utils/convertToRoman))
+#?(:cljs (defonce convert-to-letters utils/convertToLetters))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
@@ -913,6 +915,9 @@
                  :clj nil))
 
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
+                   :clj nil))
+
+(defonce linux? #?(:cljs goog.userAgent/LINUX
                    :clj nil))
 
 (defn default-content-with-title

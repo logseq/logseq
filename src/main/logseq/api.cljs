@@ -21,6 +21,7 @@
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -687,11 +688,11 @@
                 block (if includeChildren
                         ;; nested children results
                         (first (outliner-tree/blocks->vec-tree
-                                 (db-model/get-block-and-children repo uuid) uuid))
+                                (db-model/get-block-and-children repo uuid) uuid))
                         ;; attached shallow children
                         (assoc block :block/children
-                                     (map #(list :uuid (get-in % [:data :block/uuid]))
-                                          (db/get-block-immediate-children repo uuid))))]
+                               (map #(list :uuid (:block/uuid %))
+                                 (db/get-block-immediate-children repo uuid))))]
             (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_current_block
@@ -714,8 +715,9 @@
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
-        (bean/->js (sdk-utils/normalize-keyword-for-json (:data (first right-siblings))))))))
+      (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
+        (let [block (db/pull (:id right-sibling))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
@@ -733,11 +735,11 @@
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
-    (editor-handler/set-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key value)))
+    (editor-property/set-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key value)))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (editor-handler/remove-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key)))
+    (editor-property/remove-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key)))
 
 (def ^:export get_block_property
   (fn [block-uuid key]
@@ -986,14 +988,14 @@
           exist? (page-handler/template-exists? template-name)]
       (if (or (not exist?) (true? overwrite))
         (do (when-let [old-target (and exist? (db-model/get-template-by-name template-name))]
-              (editor-handler/remove-block-property! (:block/uuid old-target) :template))
-            (editor-handler/set-block-property! target-uuid :template template-name))
+              (editor-property/remove-block-property! (:block/uuid old-target) :template))
+            (editor-property/set-block-property! target-uuid :template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template
   [name]
   (when-let [target (db-model/get-template-by-name name)]
-    (editor-handler/remove-block-property! (:block/uuid target) :template)))
+    (editor-property/remove-block-property! (:block/uuid target) :template)))
 
 ;; search
 (defn ^:export search

@@ -71,6 +71,78 @@
    :pdf/find                     {:binding "alt+f"
                                   :fn      pdf-utils/open-finder}
 
+   :whiteboard/select            {:binding ["1" "w s"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
+   
+   :whiteboard/pan               {:binding ["2" "w p"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
+   
+   :whiteboard/portal            {:binding ["3" "w b"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
+
+   :whiteboard/pencil            {:binding ["4" "w d"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "pencil")}
+
+   :whiteboard/highlighter       {:binding ["5" "w h"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
+   
+   :whiteboard/eraser            {:binding ["6" "w e"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
+   
+   :whiteboard/connector         {:binding ["7" "w c"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
+   
+   :whiteboard/text              {:binding ["8" "w t"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
+
+   :whiteboard/rectangle         {:binding ["9" "w r"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "box")}
+
+   :whiteboard/ellipse           {:binding ["o" "w o"]
+                                  :fn      #(.selectTool ^js (state/active-tldraw-app) "ellipse")}
+
+   :whiteboard/reset-zoom        {:binding "shift+0"
+                                  :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/zoom-to-fit       {:binding "shift+1"
+                                  :fn      #(.zoomToFit (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/zoom-to-selection {:binding "shift+2"
+                                  :fn      #(.zoomToSelection (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/zoom-out          {:binding "shift+dash"
+                                  :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
+
+   :whiteboard/zoom-in           {:binding "shift+="
+                                  :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
+
+   :whiteboard/send-backward     {:binding "["
+                                  :fn      #(.sendBackward ^js (state/active-tldraw-app))}
+
+   :whiteboard/send-to-back      {:binding "shift+["
+                                  :fn      #(.sendToBack ^js (state/active-tldraw-app))}
+
+   :whiteboard/bring-forward     {:binding "]"
+                                  :fn      #(.bringForward ^js (state/active-tldraw-app))}
+
+   :whiteboard/bring-to-front    {:binding "shift+]"
+                                  :fn      #(.bringToFront ^js (state/active-tldraw-app))}
+
+   :whiteboard/lock              {:binding "mod+l"
+                                  :fn      #(.setLocked ^js (state/active-tldraw-app) true)}
+
+   :whiteboard/unlock            {:binding "mod+shift+l"
+                                  :fn      #(.setLocked ^js (state/active-tldraw-app) false)}
+
+   :whiteboard/group             {:binding "mod+g"
+                                  :fn      #(.doGroup (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/ungroup           {:binding "mod+shift+g"
+                                  :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
+
+   :whiteboard/toggle-grid       {:binding "t g"
+                                  :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
+
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
@@ -259,6 +331,9 @@
                                     :fn      editor-handler/zoom-out!}
 
    :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
+   
+   :editor/toggle-number-list      {:binding "t n"
+                                    :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
    :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
@@ -338,7 +413,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                 (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                            (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -348,7 +423,7 @@
                                                 (state/pub-event! [:command/run]))}
 
    :go/home                        {:binding "g h"
-                                    :fn      route-handler/redirect-to-home!}
+                                    :fn      #(route-handler/redirect-to-home!)}
 
    :go/all-pages                   {:binding "g a"
                                     :fn      route-handler/redirect-to-all-pages!}
@@ -418,7 +493,7 @@
 
    :editor/copy-page-url            {:binding false
                                      :inactive (not (util/electron?))
-                                     :fn      page-handler/copy-page-url}
+                                     :fn      #(page-handler/copy-page-url)}
 
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
@@ -507,6 +582,33 @@
                              :pdf/find])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
+    :shortcut.handler/whiteboard
+    (-> (build-category-map [:whiteboard/select
+                             :whiteboard/pan
+                             :whiteboard/portal
+                             :whiteboard/pencil
+                             :whiteboard/highlighter
+                             :whiteboard/eraser
+                             :whiteboard/connector
+                             :whiteboard/text
+                             :whiteboard/rectangle
+                             :whiteboard/ellipse
+                             :whiteboard/reset-zoom
+                             :whiteboard/zoom-to-fit
+                             :whiteboard/zoom-to-selection
+                             :whiteboard/zoom-out
+                             :whiteboard/zoom-in
+                             :whiteboard/send-backward
+                             :whiteboard/send-to-back
+                             :whiteboard/bring-forward
+                             :whiteboard/bring-to-front
+                             :whiteboard/lock
+                             :whiteboard/unlock
+                             :whiteboard/group
+                             :whiteboard/ungroup
+                             :whiteboard/toggle-grid])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
+
     :shortcut.handler/auto-complete
     (build-category-map [:auto-complete/complete
                          :auto-complete/prev
@@ -552,8 +654,7 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [
-                          :graph/export-as-html
+     (build-category-map [:graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -590,6 +691,7 @@
                           :editor/zoom-in
                           :editor/zoom-out
                           :editor/toggle-undo-redo-mode
+                          :editor/toggle-number-list
                           :editor/undo
                           :editor/redo
                           :ui/toggle-brackets
@@ -749,6 +851,7 @@
    [:ui/toggle-help
     :editor/toggle-open-blocks
     :editor/toggle-undo-redo-mode
+    :editor/toggle-number-list
     :ui/toggle-wide-mode
     :ui/toggle-cards
     :ui/toggle-document-mode
@@ -759,6 +862,33 @@
     :ui/toggle-settings
     :ui/toggle-contents]
 
+   :shortcut.category/whiteboard
+   [:editor/new-whiteboard
+    :whiteboard/select
+    :whiteboard/pan
+    :whiteboard/portal
+    :whiteboard/pencil
+    :whiteboard/highlighter
+    :whiteboard/eraser
+    :whiteboard/connector
+    :whiteboard/text
+    :whiteboard/rectangle
+    :whiteboard/ellipse
+    :whiteboard/reset-zoom
+    :whiteboard/zoom-to-fit
+    :whiteboard/zoom-to-selection
+    :whiteboard/zoom-out
+    :whiteboard/zoom-in
+    :whiteboard/send-backward
+    :whiteboard/send-to-back
+    :whiteboard/bring-forward
+    :whiteboard/bring-to-front
+    :whiteboard/lock
+    :whiteboard/unlock
+    :whiteboard/group
+    :whiteboard/ungroup
+    :whiteboard/toggle-grid]
+   
    :shortcut.category/others
    [:pdf/previous-page
     :pdf/next-page
@@ -781,7 +911,6 @@
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
     :editor/copy-page-url
-    :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

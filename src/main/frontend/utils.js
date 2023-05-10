@@ -407,3 +407,27 @@ export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {
     ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
     : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth
 }
+
+export const convertToLetters = (num) => {
+  if (!+num) return false
+  let s = '', t
+
+  while (num > 0) {
+    t = (num - 1) % 26
+    s = String.fromCharCode(65 + t) + s
+    num = ((num - t) / 26) | 0
+  }
+
+  return s
+}
+
+export const convertToRoman = (num) => {
+  if (!+num) return false
+  const digits = String(+num).split('')
+  const key = ['','C','CC','CCC','CD','D','DC','DCC','DCCC','CM',
+    '','X','XX','XXX','XL','L','LX','LXX','LXXX','XC',
+    '','I','II','III','IV','V','VI','VII','VIII','IX']
+  let roman = '', i = 3
+  while (i--) roman = (key[+digits.pop() + i * 10] || '') + roman
+  return Array(+digits.join('') + 1).join('M') + roman
+}
