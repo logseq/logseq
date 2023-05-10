@@ -135,13 +135,14 @@
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
         path (config/get-repo-config-path)]
-    (when-let [content (db/get-file path)]
-      (let [result (config-handler/parse-repo-config content)
-            new-result (rewrite/update
-                        result
-                        :shortcuts
-                        #(dissoc (rewrite/sexpr %) k))
-            new-content (str new-result)]
+    (when-let [result (some-> (db/get-file path)
+                              (config-handler/parse-repo-config))]
+      (when-let [new-content (and (:shortcuts result)
+                                  (-> (rewrite/update
+                                        result
+                                        :shortcuts
+                                        #(dissoc (rewrite/sexpr %) k))
+                                      (str)))]
         (repo-config-handler/set-repo-config-state! repo new-content)
         (file/set-file-content! repo path new-content)))))
 
