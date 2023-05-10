@@ -13,10 +13,13 @@
 
 (rum/defcs customize-shortcut-dialog-inner <
   (rum/local "")
+  (rum/local nil :rum/action)
   (shortcut/record!)
   [state k action-name current-binding]
-  (let [keypress (:rum/local state)
-        keyboard-shortcut (if (= "" @keypress) current-binding @keypress)]
+  (let [*keypress         (:rum/local state)
+        *action           (:rum/action state)
+        keypressed?       (not= "" @*keypress)
+        keyboard-shortcut (if-not keypressed? current-binding @*keypress)]
     [:<>
      [:div.sm:w-lsm
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
@@ -26,19 +29,23 @@
                                         (str/lower-case)
                                         (str/split  #" |\+")))
        " "
-       [:a.text-sm
-        {:style {:margin-left "12px"}
-         :on-click (fn []
-                     (dh/remove-shortcut k)
-                     (shortcut/refresh!)
-                     (swap! keypress (fn [] "")) ;; Clear local state
-                     )}
-        "Reset"]]]
+       (when keypressed?
+         [:a.text-sm
+          {:style    {:margin-left "12px"}
+           :on-click (fn []
+                       (dh/remove-shortcut k)
+                       (shortcut/refresh!)
+                       (swap! *keypress (fn [] ""))          ;; Clear local state
+                       )}
+          "Reset"])]]
      [:div.cancel-save-buttons.text-right.mt-4
-      (ui/button "Save" :on-click state/close-modal!)
+      (ui/button "Save" :on-click (fn []
+                                    (reset! *action :save)
+                                    (state/close-modal!)))
       [:a.ml-4
        {:on-click (fn []
-                    (reset! keypress (dh/binding-for-storage current-binding))
+                    (reset! *keypress (dh/binding-for-storage current-binding))
+                    (reset! *action :cancel)
                     (state/close-modal!))} "Cancel"]]]))
 
 (defn customize-shortcut-dialog [k action-name displayed-binding]

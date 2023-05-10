@@ -226,17 +226,19 @@
        (assoc state ::key-record-handler handler)))
 
    :will-unmount
-   (fn [{:rum/keys [args local] :as state}]
+   (fn [{:rum/keys [args local action] :as state}]
      (let [k (first args)
            keystroke (str/trim @local)]
-       (when-not (empty? keystroke)
-         (config-handler/set-config! :shortcuts (merge
-                                                 (:shortcuts (state/get-config))
-                                                 {k keystroke}))))
+       (when (and (= @action :save)
+                  (not (empty? keystroke)))
+         (config-handler/set-config!
+           :shortcuts
+           (merge
+             (:shortcuts (state/get-config))
+             {k keystroke}))
+         (js/setTimeout #(refresh!) 500)))
 
      (when-let [^js handler (::key-record-handler state)]
        (.dispose handler))
-
-     (js/setTimeout #(refresh!) 500)
 
      (dissoc state ::key-record-handler))})
