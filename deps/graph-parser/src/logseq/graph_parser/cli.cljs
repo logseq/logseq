@@ -1,9 +1,10 @@
-(ns logseq.graph-parser.cli
+(ns ^:node-only logseq.graph-parser.cli
   "Primary ns to parse graphs with node.js based CLIs"
   (:require ["fs" :as fs]
-            ["child_process" :as child-process]
+            ["path" :as path]
             [clojure.edn :as edn]
             [logseq.common.graph :as common-graph]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
@@ -14,13 +15,22 @@
   [file]
   (str (fs/readFileSync file)))
 
+(defn- remove-hidden-files [dir config files]
+  (if (seq (:hidden config))
+    (->> files
+         (map #(assoc % ::rel-path (path/relative dir (:file/path %))))
+         ((fn [files] (common-config/remove-hidden-files files config ::rel-path)))
+         (map #(dissoc % ::rel-path)))
+    files))
+
 (defn- build-graph-files
   "Given a graph directory, return allowed file paths and their contents in preparation
    for parsing"
-  [dir]
+  [dir config]
   (->> (common-graph/get-files dir)
        (map #(hash-map :file/path %))
        graph-parser/filter-files
+       (remove-hidden-files dir config)
        (mapv #(assoc % :file/content (slurp (:file/path %))))))
 
 (defn- read-config
@@ -28,8 +38,8 @@
   [dir]
   (let [config-file (str dir "/" gp-config/app-name "/config.edn")]
     (if (fs/existsSync config-file)
-     (-> config-file fs/readFileSync str edn/read-string)
-     {})))
+      (-> config-file fs/readFileSync str edn/read-string)
+      {})))
 
 (defn- parse-files
   [conn files {:keys [config] :as options}]
@@ -62,10 +72,10 @@
   ([dir]
    (parse-graph dir {}))
   ([dir options]
-   (let [files (or (:files options) (build-graph-files dir))
+   (let [config (read-config dir)
+         files (or (:files options) (build-graph-files dir config))
          conn (or (:conn options) (ldb/start-conn))
-         config (read-config dir)
-        _ (when-not (:files options) (println "Parsing" (count files) "files..."))
+         _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]
      {:conn conn
       :files (map :file/path files)
