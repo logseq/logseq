@@ -957,7 +957,7 @@
                                                                      :filePaths filepaths'
                                                                      :token token})))))))
   (<fetch-remote-files [this graph-uuid base-path filepaths]
-    (js/console.error "unimpl")
+    (js/console.error "mobile <fetch-remote-files")
     (go
       (let [token (<! (<get-token this))
             r (<! (<retry-rsapi
@@ -1484,7 +1484,10 @@
       (let [rpath (relative-path filetxn)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
-            content (<! (p->c (fs/read-file repo-dir rpath)))]
+            content (<! (p->c (-> (fs/file-exists? repo-dir rpath)
+                                  (p/then (fn [exists?]
+                                            (when exists?
+                                              (fs/read-file repo-dir rpath)))))))]
         (and (seq origin-db-content)
              (or (nil? content)
                  (some :removed (diff/diff origin-db-content content))))))))
@@ -1562,6 +1565,41 @@
                            delete-filetxns)]
     (set (concat update-file-items rename-file-items delete-file-items))))
 
+(defn- <apply-remote-deletion
+  "Apply remote deletion, if the file is not deleted locally, delete it locally.
+   if the file is changed locally, leave the changed part.
+
+   To replace <delete-local-files"
+  [graph-uuid base-path relative-paths]
+  (go
+    (p->c (p/all (->> relative-paths
+                      (map (fn [rpath]
+                             (prn ::handle-remote-deletion rpath)
+                             (p/let [base-file (path/path-join "logseq/version-files/base" rpath)
+                                     current-change-file rpath
+                                     format (gp-util/get-format current-change-file)
+                                     repo (state/get-current-repo)
+                                     repo-dir (config/get-repo-dir repo)
+                                     base-exists? (fs/file-exists? repo-dir base-file)]
+                               (if base-exists?
+                                 (p/let [base-content (fs/read-file repo-dir base-file)
+                                         current-content (-> (fs/read-file repo-dir current-change-file)
+                                                             (p/catch (fn [_] nil)))]
+                                   (if (= base-content current-content)
+                                     ;; base-content == current-content, delete current-change-file
+                                     (p/do!
+                                      (<delete-local-files rsapi graph-uuid base-path [rpath])
+                                      (fs/unlink! repo (path/path-join repo-dir base-file) {}))
+                                     ;; base-content != current-content, merge, do not delete
+                                     (p/let [merged-content (diff-merge/three-way-merge base-content "" current-content format)]
+                                       (prn "local changed, merge deletion")
+                                       (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                       (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                         :from-disk? true
+                                                                                                         :fs/event :fs/remote-file-change}))))
+
+                                 ;; no base-version, use legacy approach, delete it
+                                 (<delete-local-files rsapi graph-uuid base-path [rpath]))))))))))
 
 (defn- <fetch-remote-and-update-local-files
   [graph-uuid base-path relative-paths]
@@ -1575,11 +1613,13 @@
                                        format (gp-util/get-format current-change-file)
                                        repo (state/get-current-repo)
                                        repo-dir (config/get-repo-dir repo)
-                                       base-exists? (fs/file-exists? repo-dir base-file)]
+                                       base-exists? (fs/file-exists? repo-dir base-file)
+                                       _ (prn ::base-ex base-exists?)]
                                  (cond
                                    base-exists?
                                    (p/let [base-content (fs/read-file repo-dir base-file)
-                                           current-content (fs/read-file repo-dir current-change-file)]
+                                           current-content (-> (fs/read-file repo-dir current-change-file)
+                                                               (p/catch (fn [_] nil)))]
                                      (if (= base-content current-content)
                                        (do
                                          (prn "base=current, write directly")
@@ -1588,11 +1628,14 @@
                                                     (path/path-join repo-dir incoming-file)
                                                     (path/path-join repo-dir current-change-file))
                                           (fs/copy! repo
-                                                   (path/path-join repo-dir incoming-file)
-                                                   (path/path-join repo-dir base-file))))
+                                                    (path/path-join repo-dir incoming-file)
+                                                    (path/path-join repo-dir base-file))))
                                        (do
                                          (prn "base!=current, should do a 3-way merge")
-                                         (p/let [incoming-content (fs/read-file repo-dir incoming-file)
+                                         (prn ::cur
+                                              current-content)
+                                         (p/let [current-content (or current-content "")
+                                                 incoming-content (fs/read-file repo-dir incoming-file)
                                                  merged-content (diff-merge/three-way-merge base-content incoming-content current-content format)]
                                            (prn ::merged-content merged-content)
                                            (when (seq merged-content)
@@ -1608,16 +1651,27 @@
 
                                    :else
                                    (do
-                                     (prn "no base, use legacy buggy mode")
-                                     (prn ::copy incoming-file current-change-file)
-                                     (fs/copy! repo
-                                               (path/path-join repo-dir incoming-file)
-                                               (path/path-join repo-dir current-change-file))
-                                     (fs/copy! repo
-                                               (path/path-join repo-dir incoming-file)
-                                               (path/path-join repo-dir base-file)))))))))))))
-  
+                                     (prn "no base, use empty content as base, avoid loosing data")
+                                     (p/let [current-content (-> (fs/read-file repo-dir current-change-file)
+                                                                 (p/catch (fn [_] nil)))
+                                             current-content (or current-content "")
+                                             incoming-content (fs/read-file repo-dir incoming-file)
+                                             merged-content (diff-merge/three-way-merge "" current-content incoming-content format)]
+                                       (if (= incoming-content merged-content)
+                                         (p/do!
+                                          (fs/copy! repo
+                                                    (path/path-join repo-dir incoming-file)
+                                                    (path/path-join repo-dir current-change-file))
+                                          (fs/copy! repo
+                                                    (path/path-join repo-dir incoming-file)
+                                                    (path/path-join repo-dir base-file)))
 
+                                         ;; else
+                                         (p/do!
+                                          (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                          (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                            :from-disk? true
+                                                                                                            :fs/event :fs/remote-file-change})))))))))))))))
 
 (defn- apply-filetxns
   [*sync-state graph-uuid base-path filetxns *paused]
@@ -1672,7 +1726,7 @@
         (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
           true
-          (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
+          (let [r (<! (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)]))]
             (if (and (instance? ExceptionInfo r)
                      (string/index-of (str (ex-cause r)) "No such file or directory"))
               true

@@ -107,7 +107,6 @@
          (filter seq)
          (string/join "\n"))))
 
-
 (defn three-way-merge
   [base income current format]
   (let [->ast (fn [text] (if (= format :org)
