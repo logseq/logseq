@@ -124,7 +124,7 @@
      (conversations conversation-id)
      [:div.flex.flex-1.flex-col
       (when conversation-id
-        [:div.p-2.opacity-70.hover:opacity-100.overflow-x-hidden
+        [:div.p-2.overflow-x-hidden
          (block/page-cp {} (db/entity conversation-id))])
       (conversation conversation-id)
       (input)]]))

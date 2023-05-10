@@ -50,11 +50,15 @@
     }
 
     .message.question {
-        @apply mr-8;
     }
 
     .message.answer {
-        @apply ml-8;
+        .ls-block {
+            padding: 0 4px;
+            border-radius: 4px;
+            border-bottom: none;
+            background-color: var(--ls-ai-answer-background-color);
+        }
     }
 }
 
