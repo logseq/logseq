@@ -2299,7 +2299,8 @@
 
     (cond
       (= (:block/type block) "image")
-      [:img {:src (get-in block [:block/properties :logseq.url])}]
+      (let [url (get-in block [:block/properties :logseq.url])]
+        (asset-link config "" url {} url))
 
       :else
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]

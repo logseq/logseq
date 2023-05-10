@@ -1347,7 +1347,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
-  ([_ repo files]
+  ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
                    (fn [index file-stem]
@@ -1476,7 +1476,7 @@
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
     (when (config/local-db? repo)
-      (-> (save-assets! block repo (js->clj files))
+      (-> (save-assets! repo (js->clj files))
           ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]

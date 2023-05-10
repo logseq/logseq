@@ -4,7 +4,12 @@
             [frontend.modules.ai.openai :as openai]
             [frontend.state :as state]
             [frontend.modules.ai.plugin-example :as proxy]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.fs :as fs]
+            [promesa.core :as p]
+            [clojure.string :as string]
+            [logseq.common.path :as path]
+            [frontend.config :as config]))
 
 (defn get-service
   []
@@ -43,7 +48,19 @@
 
 (defn generate-image
   [description opts]
-  (protocol/generate-image (get-record) description opts))
+  (p/let [url (protocol/generate-image (get-record) description opts)]
+    (when (string/starts-with? url "http")
+      (p/let [image (str (js/Date.now) ".png")
+              path (str "assets/ai-generated-" image)
+              resp (js/fetch url)
+              buffer (.arrayBuffer resp)
+              repo (state/get-current-repo)
+              _ (fs/write-file! repo
+                                (config/get-repo-dir repo)
+                                path
+                                buffer
+                                nil)]
+        path))))
 
 (defn speech-to-text
   [audio-file opts]
