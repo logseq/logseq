@@ -16,8 +16,8 @@
 (deftest ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs-0.9.2"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
-        files (gp-cli/build-graph-files graph-dir)
         repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
+        files (#'gp-cli/build-graph-files graph-dir repo-config)
         _ (test-helper/with-config repo-config
             (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]

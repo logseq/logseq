@@ -1,4 +1,4 @@
-(ns logseq.common.graph
+(ns ^:node-only logseq.common.graph
   "This ns provides common fns for a graph directory and only runs in a node environment"
   (:require ["fs" :as fs]
             ["path" :as node-path]
@@ -38,15 +38,6 @@
        (map fix-win-path!)
        (vec)))
 
-(def ^:private allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
-
-(defn- get-ext
-  [p]
-  (-> (node-path/extname p)
-      (subs 1)
-      keyword))
-
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher
@@ -64,6 +55,15 @@
      (let [relpath (node-path/relative dir path)]
        (or (re-find #"/\.[^.]+" relpath)
            (re-find #"^\.[^.]+" relpath))))))
+
+(def ^:private allowed-formats
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
+
+(defn- get-ext
+  [p]
+  (-> (node-path/extname p)
+      (subs 1)
+      keyword))
 
 (defn get-files
   "Given a graph's root dir, returns a list of all files that it recognizes"
