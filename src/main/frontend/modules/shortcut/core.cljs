@@ -84,21 +84,21 @@
         (.unregisterShortcut ^js handler (util/normalize-user-keyname k))))
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
-(defn uninstall-shortcut!
+(defn uninstall-shortcut-handler!
   [install-id]
   (when-let [handler (-> (get @*installed install-id)
                          :handler)]
     (.dispose ^js handler)
     (swap! *installed dissoc install-id)))
 
-(defn install-shortcut!
+(defn install-shortcut-handler!
   [handler-id {:keys [set-global-keys?
                       prevent-default?
                       state]
                :or   {set-global-keys? true
                       prevent-default? false}}]
   (when-let [install-id (get-handler-by-id handler-id)]
-    (uninstall-shortcut! install-id))
+    (uninstall-shortcut-handler! install-id))
 
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
@@ -136,23 +136,23 @@
         :shortcut.handler/editor-global
         :shortcut.handler/global-non-editing-only
         :shortcut.handler/global-prevent-default]
-       (map #(install-shortcut! % {}))
+       (map #(install-shortcut-handler! % {}))
        doall))
 
 (defn mixin [handler-id]
   {:did-mount
    (fn [state]
-     (let [install-id (install-shortcut! handler-id {:state state})]
+     (let [install-id (install-shortcut-handler! handler-id {:state state})]
        (assoc state ::install-id install-id)))
 
    :did-remount (fn [old-state new-state]
-                  (uninstall-shortcut! (::install-id old-state))
-                  (when-let [install-id (install-shortcut! handler-id {:state new-state})]
+                  (uninstall-shortcut-handler! (::install-id old-state))
+                  (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
                     (assoc new-state ::install-id install-id)))
    :will-unmount
    (fn [state]
      (when-let [install-id (::install-id state)]
-       (uninstall-shortcut! install-id))
+       (uninstall-shortcut-handler! install-id))
      state)})
 
 (defn unlisten-all []
@@ -183,7 +183,7 @@
     (state/set-state! :ui/shortcut-handler-refreshing? true)
 
     (doseq [id (keys @*installed)]
-      (uninstall-shortcut! id))
+      (uninstall-shortcut-handler! id))
     (install-shortcuts!)
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
@@ -216,7 +216,7 @@
            keystroke (:rum/local state)]
 
        (doseq [id (keys @*installed)]
-         (uninstall-shortcut! id))
+         (uninstall-shortcut-handler! id))
 
        (events/listen handler "key"
                       (fn [e]
