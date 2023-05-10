@@ -1023,6 +1023,18 @@
      (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
+(defn btn-with-shortcut
+  [{:keys [shortcut id btn-text background on-click class]}]
+  (button
+    [:span btn-text (when-not (util/sm-breakpoint?)
+                      [" " (render-keyboard-shortcut shortcut)])]
+    :id id
+    :class (str id " " class)
+    :background background
+    :on-mouse-down (fn [e] (util/stop-propagation e))
+    :on-click (fn [_e]
+                (js/setTimeout #(on-click) 10))))
+
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))
   ([klass size {:keys [class style] :as opts}]

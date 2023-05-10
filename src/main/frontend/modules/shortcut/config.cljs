@@ -502,6 +502,15 @@
    :ai/ask                          {:binding "mod+;"
                                      :fn      ai-handler/open-ask}
 
+   :ai/regenerate                   {:binding "g"
+                                     :fn      ai-handler/regenerate}
+
+   :ai/replace                      {:binding "r"
+                                     :fn      ai-handler/replace}
+
+   :ai/insert                       {:binding "enter"
+                                     :fn      ai-handler/insert}
+
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
@@ -629,6 +638,12 @@
                              :cards/forgotten
                              :cards/remembered
                              :cards/recall])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
+
+    :shortcut.handler/ai-prompt
+    (-> (build-category-map [:ai/regenerate
+                             :ai/insert
+                             :ai/replace])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/block-editing-only

@@ -21,7 +21,8 @@
             [frontend.modules.ai.prompts :as prompts]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
-            [frontend.modules.ai.core :as ai]))
+            [frontend.modules.ai.core :as ai]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (defonce *messages (atom []))
 
@@ -171,6 +172,7 @@
             (reset! (::result state) result)))))))
 
 (rum/defcs ai-prompt-body < rum/static
+  (shortcut/mixin :shortcut.handler/ai-prompt)
   (rum/local nil ::result)
   (rum/local false ::loading?)
   (rum/local nil ::error)
@@ -187,7 +189,7 @@
         *error (::error state)
         target-block-id (or (:block/uuid editing-block) (last selected-blocks))
         target-block (when target-block-id (db/pull [:block/uuid target-block-id]))]
-    [:div.my-4
+    [:div#ai-prompt-modal.my-4
      [:div.whitespace-pre-wrap.my-2
       (::initial-content state)]
      (when @*loading?
@@ -200,29 +202,37 @@
           [:hr]
           (str @*result)]))
      [:div.flex.flex-row.justify-between.my-4
-      (ui/button "Regenerate" :on-click (fn [] (send-request state)))
+      (ui/btn-with-shortcut {:btn-text "Regenerate"
+                             :shortcut "g"
+                             :id       "ai-regenerate"
+                             :on-click (fn [] (send-request state))})
       [:div.flex.flex-row.justify-between
-       (ui/button "Replace"
-         :on-click (fn []
-                     (let [repo (state/get-current-repo)]
-                       (when target-block
-                         (if (or editing-block (= 1 (count selected-blocks)))
-                           ;; replace the content
-                           (editor-handler/edit-block! target-block :max
-                                                       (:block/uuid target-block)
-                                                       {:custom-content @*result})
-                           (paste-handler/delete-blocks-and-new-block! selected-blocks @*result))
-                         (state/close-modal!))))
-         :class "mr-2")
-       (ui/button "Insert"
-         :on-click (fn []
-                     (when target-block
-                       (paste-handler/paste-text-parseable
-                        (state/get-preferred-format)
-                        @*result
-                        {:target-block target-block
-                         :sibling? (not (or editing-block (= 1 (count selected-blocks))))})
-                       (state/close-modal!))))]]]))
+       (when target-block
+         (ui/btn-with-shortcut {:btn-text "Replace"
+                                :shortcut "r"
+                                :id       "ai-replace"
+                                :class "mr-2"
+                                :on-click (fn []
+                                            (let [repo (state/get-current-repo)]
+                                              (when target-block
+                                                (if (or editing-block (= 1 (count selected-blocks)))
+                                                  ;; replace the content
+                                                  (editor-handler/edit-block! target-block :max
+                                                                              (:block/uuid target-block)
+                                                                              {:custom-content @*result})
+                                                  (paste-handler/delete-blocks-and-new-block! selected-blocks @*result))
+                                                (state/close-modal!))))}))
+       (ui/btn-with-shortcut {:btn-text "Insert"
+                              :shortcut "Enter"
+                              :id       "ai-insert"
+                              :on-click (fn []
+                                          (when target-block
+                                            (paste-handler/paste-text-parseable
+                                             (state/get-preferred-format)
+                                             @*result
+                                             {:target-block target-block
+                                              :sibling? (not (or editing-block (= 1 (count selected-blocks))))})
+                                            (state/close-modal!)))})]]]))
 
 (def langs ["English"
             "中文"

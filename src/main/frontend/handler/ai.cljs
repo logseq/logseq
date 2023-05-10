@@ -12,7 +12,8 @@
             [frontend.db.model :as db-model]
             [frontend.modules.ai.prompts :as prompts]
             [frontend.util :as util]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [dommy.core :refer-macros [sel]]))
 
 (defn- text->segments
   [text]
@@ -137,3 +138,19 @@
            (p/catch (fn [error]
                       (reset! *transcribing? false)
                       (prn "Transcribed failed:" error)))))))))
+
+
+(defn click
+  [id]
+  (let [nodes (sel [:#ai-prompt-modal (str "." id)])]
+    (doseq [node nodes]
+      (.click node))))
+
+(defn regenerate []
+  (click "ai-regenerate"))
+
+(defn insert []
+  (click "ai-insert"))
+
+(defn replace []
+  (click "ai-replace"))
