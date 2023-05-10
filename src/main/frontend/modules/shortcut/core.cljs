@@ -235,10 +235,11 @@
            :shortcuts
            (merge
              (:shortcuts (state/get-config))
-             {k keystroke}))
-         (js/setTimeout #(refresh!) 500)))
+             {k keystroke}))))
 
      (when-let [^js handler (::key-record-handler state)]
        (.dispose handler))
+
+     (js/setTimeout #(refresh!) 500)
 
      (dissoc state ::key-record-handler))})
