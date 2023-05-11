@@ -703,7 +703,7 @@
                                 (gdom/getElement (state/get-editing-block-dom-id)))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))]
-      (get_block (:block/uuid block) opts))))
+      (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
