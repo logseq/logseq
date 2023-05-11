@@ -181,4 +181,5 @@
    (shortcut-table :shortcut.category/block-selection true)
    (shortcut-table :shortcut.category/formatting true)
    (shortcut-table :shortcut.category/toggle true)
+   (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
    (shortcut-table :shortcut.category/others true)])

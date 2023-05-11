@@ -6,6 +6,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
@@ -17,6 +18,7 @@
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :as pdf-windows]
+            [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -78,13 +80,14 @@
   (and hl (not (nil? (get-in hl [:content :image])))))
 
 (defn persist-hl-area-image$
+  "Save pdf highlight area image"
   [^js viewer current new-hl old-hl {:keys [top left width height]}]
   (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page new-hl)))))]
     (let [^js doc     (.-ownerDocument canvas)
           ^js canvas' (.createElement doc "canvas")
           dpr         js/window.devicePixelRatio
-          repo-cur    (state/get-current-repo)
-          repo-dir    (config/get-repo-dir repo-cur)
+          repo-url    (state/get-current-repo)
+          repo-dir    (config/get-repo-dir repo-url)
           dw          (* dpr width)
           dh          (* dpr height)]
 
@@ -109,11 +112,11 @@
                                   old-fstamp (and old-hl (get-in old-hl [:content :image]))
                                   fname      (str (:page new-hl) "_" (:id new-hl))
                                   fdir       (str gp-config/local-assets-dir "/" key)
-                                  _          (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
+                                  _          (fs/mkdir-if-not-exists (path/path-join repo-dir fdir))
                                   new-fpath  (str fdir "/" fname "_" fstamp ".png")
                                   old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
-                                  _          (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
-                                  _          (fs/write-file! repo-cur repo-dir new-fpath png {:skip-compare? true})]
+                                  _          (and old-fpath (fs/rename! repo-url old-fpath new-fpath))
+                                  _          (fs/write-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
 
                             (js/console.timeEnd :write-area-image))
 
@@ -130,7 +133,7 @@
                                (get-in highlight [:content :image])
                                (js/Date.now))
                    :hl-color (get-in highlight [:properties :color])}]
-      (editor-handler/set-block-property! (:block/uuid block) k v))))
+      (editor-property/set-block-property! (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
@@ -213,8 +216,8 @@
   [highlight ^js viewer]
   (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
     (util/copy-to-clipboard!
-     (block-ref/->block-ref (:block/uuid ref-block)) nil
-     (pdf-windows/resolve-own-window viewer))))
+     (block-ref/->block-ref (:block/uuid ref-block))
+     :owner-window (pdf-windows/resolve-own-window viewer))))
 
 (defn open-block-ref!
   [block]

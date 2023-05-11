@@ -123,6 +123,7 @@
    (protocol/read-file (get-fs dir) dir path options)))
 
 (defn rename!
+  "Rename files, incoming relative path, converted to absolute path"
   [repo old-path new-path]
   (let [new-path (gp-util/path-normalize new-path)]
     (cond
@@ -193,14 +194,12 @@
 
 (defn mkdir-if-not-exists
   [dir]
-  (->
-   (when dir
-     (util/p-handle
-      (stat dir)
-      (fn [_stat])
-      (fn [_error]
-        (mkdir! dir))))
-   (p/catch (fn [error] (js/console.error error)))))
+  (when dir
+    (util/p-handle
+     (stat dir)
+     (fn [_stat])
+     (fn [_error]
+       (mkdir! dir)))))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists

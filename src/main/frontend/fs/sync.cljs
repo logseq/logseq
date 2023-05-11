@@ -35,7 +35,7 @@
             [lambdaisland.glogi :as log]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -592,9 +592,15 @@
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
   even local-file's last-modified > remote-file's last-modified.
   because these files will be auto created when the graph created, we dont want them to re-write related remote files."
-  #{"logseq/config.edn" "logseq/custom.css"
-    "pages/contents.md" "pages/contents.org"
+  #{"pages/contents.md" "pages/contents.org"
     "logseq/metadata.edn"})
+
+(def ^:private ignore-default-value-files
+  "when create a new local graph, some files will be created (config.edn, custom.css).
+  And related remote files wins if these files have default template value."
+  #{"logseq/config.edn" "logseq/custom.css"})
+
+(def ^:private empty-custom-css-md5 "d41d8cd98f00b204e9800998ecf8427e")
 
 ;; TODO: use fn some to filter FileMetadata here, it cause too much loop
 (defn diff-file-metadata-sets
@@ -605,29 +611,33 @@
   keep this `FileMetadata` in result"
   [s1 s2]
   (reduce
-     (fn [result item]
-       (let [path (:path item)
-             lower-case-path (some-> path string/lower-case)
-             ;; encrypted-path (:encrypted-path item)
-             checksum (:etag item)
-             last-modified (:last-modified item)]
-         (if (some
-              #(cond
-                 (not= lower-case-path (some-> (:path %) string/lower-case))
-                 false
-                 (= checksum (:etag %))
-                 true
-                 (>= last-modified (:last-modified %))
-                 false
-                 ;; these special files have higher priority in s1
-                 (contains? higher-priority-remote-files path)
-                 false
-                 (< last-modified (:last-modified %))
-                 true)
-              s2)
-           result
-           (conj result item))))
-     #{} s1))
+   (fn [result item]
+     (let [path (:path item)
+           lower-case-path (some-> path string/lower-case)
+           ;; encrypted-path (:encrypted-path item)
+           checksum (:etag item)
+           last-modified (:last-modified item)]
+       (if (some
+            #(cond
+               (not= lower-case-path (some-> (:path %) string/lower-case))
+               false
+               (= checksum (:etag %))
+               true
+               (>= last-modified (:last-modified %))
+               false
+               ;; these special files have higher priority in s1
+               (contains? higher-priority-remote-files path)
+               false
+               ;; higher priority in s1 when config.edn=default value or empty custom.css
+               (and (contains? ignore-default-value-files path)
+                    (#{config/config-default-content-md5 empty-custom-css-md5} (:etag %)))
+               false
+               (< last-modified (:last-modified %))
+               true)
+            s2)
+         result
+         (conj result item))))
+   #{} s1))
 
 (comment
  (defn map->FileMetadata [m]
@@ -662,7 +672,7 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal-dir (path/join (config/get-journals-directory) path/sep)
+            journal-dir (node-path/join (config/get-journals-directory) node-path/sep)
             journal? (string/starts-with? path journal-dir)
             journal-day
             (when journal?
@@ -774,6 +784,8 @@
 (defn- <retry-rsapi [f]
   (go-loop [n 3]
     (let [r (<! (f))]
+      (when (instance? ExceptionInfo r)
+        (js/console.error "rsapi error:" (str (ex-cause r))))
       (if (and (instance? ExceptionInfo r)
                (string/index-of (str (ex-cause r)) "operation timed out")
                (> n 0))
@@ -1429,8 +1441,8 @@
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
-    (or (string/starts-with? rel-path (path/join (config/get-journals-directory) path/sep))
-        (string/starts-with? rel-path (path/join (config/get-pages-directory) path/sep)))))
+    (or (string/starts-with? rel-path (node-path/join (config/get-journals-directory) node-path/sep))
+        (string/starts-with? rel-path (node-path/join (config/get-pages-directory) node-path/sep)))))
 
 (defn- need-add-version-file?
   "when we need to create a new version file:
@@ -1667,6 +1679,10 @@
 (defn- graph-has-been-deleted?
   [r]
   (some->> (ex-cause r) str (re-find #"graph-not-exist")))
+
+(defn- stop-sync-by-rsapi-response?
+  [r]
+  (some->> (ex-cause r) str (re-find #"Request is not yet valid")))
 
 
 ;; type = "change" | "add" | "unlink"
@@ -2582,10 +2598,15 @@
               (do (println :graph-has-been-deleted r*)
                   {:graph-has-been-deleted true})
 
+              (stop-sync-by-rsapi-response? r*)
+              (do (println :stop-sync-caused-by-rsapi-err-response r*)
+                  (notification/show! (t :file-sync/rsapi-cannot-upload-err) :warning false)
+                  {:stop true})
+
               paused?
               {:pause true}
 
-              succ?                   ; succ
+              succ?                     ; succ
               (do
                 (println "sync-local->remote! update txid" r*)
                 ;; persist txid

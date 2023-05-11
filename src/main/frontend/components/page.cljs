@@ -1,6 +1,8 @@
 (ns frontend.components.page
-  (:require [clojure.string :as string]
+  (:require ["/frontend/utils" :as utils]
+            [clojure.string :as string]
             [frontend.components.block :as component-block]
+            [frontend.components.query :as query]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.hierarchy :as hierarchy]
@@ -35,7 +37,9 @@
             [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn- get-page-name
   [state]
@@ -186,9 +190,11 @@
            (rum/with-key
              (ui/catch-error
               (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (component-block/custom-query {:attr {:class "mt-10"}
-                                             :editor-box editor/box
-                                             :page page} query))
+              (query/custom-query (component-block/wrap-query-components
+                                   {:attr {:class "mt-10"}
+                                    :editor-box editor/box
+                                    :page page})
+                                  query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
@@ -291,7 +297,8 @@
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title _format fmt-journal?]
   (when title
-    (let [*title-value (get state ::title-value)
+    (let [page (when page-name (db/entity [:block/name page-name]))
+          *title-value (get state ::title-value)
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
@@ -300,7 +307,9 @@
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
                   [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
-                  (if fmt-journal? (date/journal-title->custom-format title) title))
+                  (if fmt-journal?
+                    (date/journal-title->custom-format title)
+                    title))
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
        {:class (when-not whiteboard-page? "title")
@@ -308,16 +317,16 @@
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
-                    (.preventDefault e)
-                    (if (gobj/get e "shiftKey")
-                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                        (state/sidebar-add-block!
-                         repo
-                         (:db/id page)
-                         :page))
-                      (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
-                        (reset! *input-value (if untitled? "" old-name))
-                        (reset! *edit? true))))}
+                       (.preventDefault e)
+                       (if (gobj/get e "shiftKey")
+                         (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                           (state/sidebar-add-block!
+                            repo
+                            (:db/id page)
+                            :page))
+                         (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
+                           (reset! *input-value (if untitled? "" old-name))
+                           (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
        [:div.page-title-sizer-wrapper.relative
         (when @*edit?
@@ -333,9 +342,13 @@
          {:data-value @*input-value
           :data-ref   page-name
           :style      {:opacity (when @*edit? 0)}}
-         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-               untitled? [:span.opacity-50 (t :untitled)]
-               :else title)]]])))
+         (let [nested? (and (string/includes? title page-ref/left-brackets)
+                            (string/includes? title page-ref/right-brackets))]
+           (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                 untitled? [:span.opacity-50 (t :untitled)]
+                 nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                     (:block/format page))))
+                 :else title))]]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -635,6 +648,16 @@
                  "Clear All"]]
                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
                 "Click to search"])]))
+         {:search-filters search-graph-filters})
+        (graph-filter-section
+         [:span.font-medium "Export"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
+              [:div.p-6
+               ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
+               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))

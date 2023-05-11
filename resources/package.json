@@ -1,7 +1,7 @@
 {
   "name": "Logseq",
   "productName": "Logseq",
-  "version": "0.9.0",
+  "version": "0.9.5",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -37,7 +37,7 @@
     "https-proxy-agent": "5.0.0",
     "@sentry/electron": "2.5.1",
     "posthog-js": "1.10.2",
-    "@logseq/rsapi": "0.0.67",
+    "@logseq/rsapi": "0.0.70",
     "electron-deeplink": "1.0.10",
     "abort-controller": "3.0.0",
     "fastify": "latest",

@@ -1,7 +1,8 @@
 (ns frontend.handler.export.opml
   "export blocks/pages as opml"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
-  (:require [clojure.string :as string]
+  (:require ["/frontend/utils" :as utils]
+            [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
@@ -90,10 +91,11 @@
   (let [[_ _ & body] hiccup]
     (str
      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-     (h/render-html
-      [:opml {:version "2.0"}
-       [:head [:title title]]
-       (concatv [:body] body)]))))
+     (utils/prettifyXml
+      (h/render-html
+       [:opml {:version "2.0"}
+        [:head [:title title]]
+        (concatv [:body] body)])))))
 
 ;;; utils for construct opml hiccup (ends)
 

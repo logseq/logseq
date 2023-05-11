@@ -1,6 +1,7 @@
 (ns frontend.handler.export.html
   "export blocks/pages as html"
-  (:require [clojure.edn :as edn]
+  (:require ["/frontend/utils" :as utils]
+            [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
@@ -87,7 +88,10 @@
 
 (defn- inline-link
   [{:keys [url label full_text]}]
-  (let [href (when (= "Search" (first url)) (second url))]
+  (let [href (case (first url)
+               "Search" (second url)
+               "Complex" (str (:protocol (second url)) "://" (:link (second url)))
+               nil)]
     (cond-> [:a]
       href (conj {:href href})
       href (concatv (mapv inline-ast->hiccup label))
@@ -402,8 +406,10 @@
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                      ast**)
-            hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))]
-        (h/render-html hiccup)))))
+            hiccup (util/profile :block-ast->hiccup  (z/root (reduce block-ast->hiccup empty-ul-hiccup ast***)))
+            ;; remove placeholder tag
+            hiccup* (vec (cons :ul (drop 2 hiccup)))]
+        (-> hiccup* h/render-html utils/prettifyXml)))))
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"

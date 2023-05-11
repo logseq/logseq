@@ -48,6 +48,16 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await block.mustFill("done")
 })
 
+test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.activeEditing(0)
+
+  await page.type('textarea >> nth=0', '#[[', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+})
+
 test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -168,15 +178,14 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   await createRandomPage(page)
 
   await block.mustType('Some random text')
-  // FIXME: https://github.com/logseq/logseq/issues/7541
-  await page.waitForTimeout(1000)
 
   await page.keyboard.press(modKey + '+c')
 
   await page.press('textarea >> nth=0', 'Enter')
   await block.waitForBlocks(2)
-
+  await page.waitForTimeout(100)
   await page.keyboard.press(modKey + '+v')
+  await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
 
   // Check if the newly created block-ref has the same referenced content
@@ -189,10 +198,16 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
 
+  // FIXME: Sometimes the cursor is in the end of the editor
+  for (let i = 0; i < 4; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
+  }
+
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r')
 
   await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+
   await block.escapeEditing()
 
   await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
@@ -245,7 +260,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
 
   // And it should keep what was undone as a redo action
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('text="text2"')).toHaveCount(1)
+  await expect(page.locator('text="text1 text2 [[]]"')).toHaveCount(1)
 })
 
 test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {

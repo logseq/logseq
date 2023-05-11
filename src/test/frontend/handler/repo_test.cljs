@@ -2,22 +2,31 @@
   (:require [cljs.test :refer [deftest use-fixtures testing is]]
             [frontend.handler.repo :as repo-handler]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.state :as state]
             [logseq.graph-parser.cli :as gp-cli]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.db.model :as model]
-            [frontend.db.conn :as conn]))
+            [frontend.db.conn :as conn]
+            [clojure.edn :as edn]
+            ["path" :as node-path]
+            ["fs" :as fs]))
 
-(use-fixtures :each {:before test-helper/start-test-db!
-                     :after test-helper/destroy-test-db!})
+(use-fixtures :each {:before (fn []
+                               ;; Set current-repo explicitly since it's not the default
+                               (state/set-current-repo! test-helper/test-db)
+                               (test-helper/start-test-db!))
+                     :after (fn []
+                              (state/set-current-repo! nil)
+                              (test-helper/destroy-test-db!))})
 
-;; TODO update docs filename rules to the latest version when the namespace PR is released
 (deftest ^:integration parse-and-load-files-to-db
-  (let [graph-dir "src/test/docs"
-        ;; TODO update me to the latest version of doc when namespace is updated
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
+  (let [graph-dir "src/test/docs-0.9.2"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
         files (gp-cli/build-graph-files graph-dir)
-        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
+        repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
+        _ (test-helper/with-config repo-config
+            (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
     (docs-graph-helper/docs-graph-assertions db (map :file/path files))))

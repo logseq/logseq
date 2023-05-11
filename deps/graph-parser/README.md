@@ -18,7 +18,9 @@ CLIs.
 
 ## Usage
 
-See `logseq.graph-parser.cli-test` for now. A real world example is coming soon.
+See `logseq.graph-parser.cli-test` and [nbb-logseq example
+scripts](https://github.com/logseq/nbb-logseq/tree/main/examples) for example
+usage.
 
 ## Dev
 
@@ -34,11 +36,23 @@ To run linters and tests, you'll want to install yarn dependencies once:
 yarn install
 ```
 
-This step is not needed if you're just running the application.
+This step is not needed if you're just running the frontend application.
 
 ### Testing
 
-Since this file is compatible with cljs and nbb-logseq, tests are run against both languages.
+Since this library is compatible with cljs and nbb-logseq, tests are run against both languages.
+
+Nbb tests use [nbb-test-runner](https://github.com/nextjournal/nbb-test-runner).
+Some basic usage:
+
+```
+# Run all tests
+$ yarn test
+# List available options
+$ yarn test -H
+# Run tests with :focus metadata flag
+$ yarn test -i focus
+```
 
 ClojureScript tests use https://github.com/Olical/cljs-test-runner. To run tests:
 ```
@@ -46,11 +60,6 @@ clojure -M:test
 ```
 
 To see available options that can run specific tests or namespaces: `clojure -M:test --help`
-
-To run nbb-logseq tests:
-```
-yarn test
-```
 
 ### Managing dependencies
 

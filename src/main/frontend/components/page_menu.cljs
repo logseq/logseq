@@ -80,15 +80,16 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>
-         [{:title   (if favorited?
-                      (t :page/unfavorite)
-                      (t :page/add-to-favorites))
-           :options {:on-click
-                     (fn []
-                       (if favorited?
-                         (page-handler/unfavorite-page! page-original-name)
-                         (page-handler/favorite-page! page-original-name)))}}
-
+         [(when-not config/publishing?
+            {:title   (if favorited?
+                        (t :page/unfavorite)
+                        (t :page/add-to-favorites))
+             :options {:on-click
+                       (fn []
+                         (if favorited?
+                           (page-handler/unfavorite-page! page-original-name)
+                           (page-handler/favorite-page! page-original-name)))}})
+          
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
              :options {:on-click
@@ -109,7 +110,8 @@
             {:title   (t :page/copy-page-url)
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
-          (when-not contents?
+          (when-not (or contents?
+                        config/publishing?)
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
@@ -134,11 +136,11 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (state/get-current-page)
+          (when (or (state/get-current-page) whiteboard?)
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []
-                                     (export/export-blocks (:block/name page))))}})
+                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?})))}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
@@ -163,12 +165,12 @@
                                      pid (assoc cmd :page page-name) action)}}))
 
           (when developer-mode?
-            {:title   "(Dev) Show page data"
+            {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})
 
           (when developer-mode?
-            {:title   "(Dev) Show page AST"
+            {:title   (t :dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
                                      (dev-common-handler/show-content-ast

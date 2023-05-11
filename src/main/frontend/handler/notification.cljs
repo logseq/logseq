@@ -5,8 +5,10 @@
 
 (defn clear!
   [uid]
-  (let [contents (state/get-notification-contents)]
-    (state/set-state! :notification/contents (dissoc contents uid))))
+  (let [contents (state/get-notification-contents)
+        close-cb (:close-cb (get contents uid))]
+    (state/set-state! :notification/contents (dissoc contents uid))
+    (when (fn? close-cb) (close-cb uid))))
 
 (defn clear-all!
   []
@@ -14,19 +16,20 @@
 
 (defn show!
   ([content]
-   (show! content :info true nil 2000))
+   (show! content :info true nil 2000 nil))
   ([content status]
-   (show! content status true nil 1500))
+   (show! content status true nil 1500 nil))
   ([content status clear?]
-   (show! content status clear? nil 1500))
+   (show! content status clear? nil 1500 nil))
   ([content status clear? uid]
-   (show! content status clear? uid 1500))
-  ([content status clear? uid timeout]
+   (show! content status clear? uid 1500 nil))
+  ([content status clear? uid timeout close-cb]
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
      (state/set-state! :notification/contents (assoc contents
                                                      uid {:content content
-                                                          :status status}))
+                                                          :status status
+                                                          :close-cb close-cb}))
 
      (when (and clear? (not= status :error))
        (js/setTimeout #(clear! uid) (or timeout 1500)))

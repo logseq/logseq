@@ -83,7 +83,7 @@ test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('r')
+  await page.keyboard.type('wr')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
@@ -130,7 +130,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('c')
+  await page.keyboard.type('wc')
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
@@ -157,6 +157,18 @@ test('undo the delete action', async ({ page }) => {
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('locked elements should not be removed', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.keyboard.press(`${modKey}+l`)
+  await page.keyboard.press('Delete')
+  await page.keyboard.press(`${modKey}+Shift+l`)
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+
 })
 
 test('move arrow to back', async ({ page }) => {
@@ -193,7 +205,7 @@ test('create a block', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('s')
+  await page.keyboard.type('ws')
   await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
   await page.waitForTimeout(100)
 
@@ -228,7 +240,7 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -247,7 +259,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -266,7 +278,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -284,7 +296,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}++`)
+  await page.keyboard.press('Shift+=')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
@@ -292,7 +304,7 @@ test('zoom in', async ({ page }) => {
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}+-`)
+  await page.keyboard.press('Shift+-')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })

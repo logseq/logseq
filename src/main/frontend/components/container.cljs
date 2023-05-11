@@ -1,4 +1,4 @@
-(ns frontend.components.sidebar
+(ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.components.find-in-page :as find-in-page]
@@ -506,13 +506,10 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
-
-      (when (util/electron?)
-        (find-in-page/search))
 
       (when show-action-bar?
         (action-bar/action-bar))
@@ -782,6 +779,9 @@
                         :route-match    route-match
                         :default-home   default-home
                         :new-block-mode new-block-mode})
+
+        (when (util/electron?)
+          (find-in-page/search))
 
         (main {:route-match         route-match
                :margin-less-pages?  margin-less-pages?

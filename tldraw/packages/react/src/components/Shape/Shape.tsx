@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLAsset } from '@tldraw/core'
+import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { useShapeEvents } from '../../hooks/useShapeEvents'
 import type { TLReactShape } from '../../lib'
@@ -35,10 +36,16 @@ export const Shape = observer(function Shape({
     props: { rotation, scale },
     ReactComponent,
   } = shape
+  const app = useApp<Shape>()
   const events = useShapeEvents(shape)
+  const parentGroup = app.getParentGroup(shape)
+  const isParentGrpupSelected = app.selectedIds.has(parentGroup?.id)
+  const ignoreExport = !isSelected && !isParentGrpupSelected && app.selectedShapes.size !== 0 || null
+
   return (
     <Container
       data-shape-id={shape.id}
+      data-html2canvas-ignore={ignoreExport}
       zIndex={zIndex}
       data-type="Shape"
       bounds={bounds}

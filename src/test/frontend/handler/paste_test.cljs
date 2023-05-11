@@ -110,8 +110,7 @@
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (test-helper/with-reset
         reset
-        [utils/getClipText (fn [cb] (cb clipboard))
-         state/get-input (constantly #js {:value "block"})
+        [state/get-input (constantly #js {:value "block"})
          ;; paste-copied-blocks-or-text mocks below
          commands/delete-selection! (constantly nil)
          commands/simple-insert! (fn [_input text] (p/resolved text))
@@ -122,14 +121,31 @@
                (is (= expected-paste result))
                (reset))))))
 
+(deftest-async editor-on-paste-with-copied-blocks
+  (let [actual-blocks (atom nil)
+        ;; Simplified version of block attributes that are copied
+        expected-blocks [{:block/content "Test node"}
+                         {:block/content "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
+        clipboard "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
+    (test-helper/with-reset
+      reset
+      [state/get-input (constantly #js {:value "block"})
+       ;; paste-copied-blocks-or-text mocks below
+       util/stop (constantly nil)
+       paste-handler/get-copied-blocks (constantly (p/resolved expected-blocks))
+       editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                      #js {:clipboardData #js {:getData (constantly clipboard)}})]
+             (is (= expected-blocks @actual-blocks))
+             (reset)))))
+
 (deftest-async editor-on-paste-with-selection-in-property
   (let [clipboard "after"
         expected-paste "after"
         block-content "test:: before"]
     (test-helper/with-reset
       reset
-      [utils/getClipText (fn [cb] (cb clipboard))
-       state/get-input (constantly #js {:value block-content})
+      [state/get-input (constantly #js {:value block-content})
        ;; paste-copied-blocks-or-text mocks below
        commands/delete-selection! (constantly nil)
        commands/simple-insert! (fn [_input text] (p/resolved text))
@@ -139,3 +155,43 @@
                       #js {:clipboardData #js {:getData (constantly clipboard)}})]
              (is (= expected-paste result))
              (reset)))))
+
+(deftest-async editor-on-paste-with-file-pasting
+  (let [clipboard "<meta charset='utf-8'><img src=\"https://user-images.githubusercontent.com/38045018/228234385-cbbcc6b2-1168-40da-ab3e-1e506edd5fce.png\"/>"
+        files [{:name "image.png" :type "image/png" :size 11836}]
+        pasted-file (atom nil)]
+    (test-helper/with-reset
+      reset
+      [state/preferred-pasting-file? (constantly true)
+       ;; paste-file-if-exists mocks below
+       editor-handler/upload-asset (fn [_id file & _]
+                                     (reset! pasted-file file))
+       util/stop (constantly nil)
+       state/get-edit-block (constantly {})]
+      (p/let [_ ((paste-handler/editor-on-paste! :fake-id)
+                      #js {:clipboardData #js {:getData (constantly clipboard)
+                                               :files files}})]
+             (is (= files (js->clj @pasted-file)))
+             (reset)))))
+
+(deftest-async editor-on-paste-prefer-text-blocks-to-html
+  (let [actual-blocks (atom nil)
+        ;; Simplified version of block attributes that are copied
+        expected-blocks [{:block/content "Test node"}
+                         {:block/content "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
+        html "<b>bold text</b>"
+        text "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
+    (test-helper/with-reset
+      reset
+      [state/get-input (constantly #js {:value "block"})
+       ;; paste-copied-blocks-or-text mocks below
+       util/stop (constantly nil)
+       html-parser/convert (constantly "**bold text**")
+       paste-handler/get-copied-blocks (constantly (p/resolved nil))
+       state/get-edit-block (constantly {})
+       editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (fn [kind]
+                                                     (if (= kind "text/html") html text))}})]
+        (is (= expected-blocks (map #(select-keys % [:block/content]) @actual-blocks)))
+        (reset)))))

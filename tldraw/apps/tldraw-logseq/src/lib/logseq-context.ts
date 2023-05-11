@@ -37,6 +37,9 @@ export interface LogseqContextValue {
         renderFn?: (open?: boolean, count?: number) => React.ReactNode
       }
     }>
+    KeyboardShortcut: React.FC<{
+      action: string
+    }>
   }
   handlers: {
     search: (
@@ -44,6 +47,7 @@ export interface LogseqContextValue {
       filters: { 'pages?': boolean; 'blocks?': boolean; 'files?': boolean }
     ) => Promise<SearchResult>
     addNewWhiteboard: (pageName: string) => void
+    exportToImage: (pageName: string, options: object) => void
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
     getBlockPageName: (uuid: string) => string

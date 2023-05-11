@@ -92,7 +92,6 @@
      :ui/sidebar-collapsed-blocks           {}
      :ui/root-component                     nil
      :ui/file-component                     nil
-     :ui/show-recent?                       false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -198,6 +197,7 @@
      :plugin/marketplace-stats              nil
      :plugin/installing                     nil
      :plugin/active-readme                  nil
+     :plugin/updates-auto-checking?         false
      :plugin/updates-pending                {}
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
@@ -216,11 +216,6 @@
      :graph/syncing?                        false
      ;; graph -> state
      :graph/parsing-state                   {}
-
-     ;; copied blocks
-     :copy/blocks                           {:copy/content nil
-                                             :copy/graph nil
-                                             :copy/blocks nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -281,7 +276,10 @@
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
      :whiteboard/last-persisted-at          {}
-     :whiteboard/pending-tx-data            {}})))
+     :whiteboard/pending-tx-data            {}
+     :history/page-only-mode?               false
+     ;; db tx-id -> editor cursor
+     :history/tx->editor-cursor             {}})))
 
 ;; Block ast state
 ;; ===============
@@ -501,7 +499,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
+    (or (when (int? days) days) 7)))
 
 (defn get-start-of-week
   []
@@ -637,9 +635,9 @@ Similar to re-frame subscriptions"
        (distinct)))
 
 (defn sub-block-selected?
-  [block-uuid]
+  [container-id block-uuid]
   (rum/react
-   (rum/derived-atom [state] [::select-block block-uuid]
+   (rum/derived-atom [state] [::select-block container-id block-uuid]
      (fn [state]
        (contains? (set (get-selected-block-ids (:selection/blocks state)))
                   block-uuid)))))
@@ -753,7 +751,7 @@ Similar to re-frame subscriptions"
   "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      "local")) 
+      "local"))
 
 (defn get-remote-graphs
   []
@@ -1711,16 +1709,6 @@ Similar to re-frame subscriptions"
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
 
-(defn get-copied-blocks
-  []
-  (:copy/blocks @state))
-
-(defn set-copied-blocks!
-  [content blocks]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
-                            :copy/blocks blocks}))
-
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
@@ -1851,8 +1839,7 @@ Similar to re-frame subscriptions"
 
 (defn feature-http-server-enabled?
   []
-  (and (developer-mode?)
-       (storage/get ::storage-spec/http-server-enabled)))
+  (boolean (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]
@@ -1865,7 +1852,7 @@ Similar to re-frame subscriptions"
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (= (boolean theme?) (:theme %))))
+           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
@@ -1875,17 +1862,18 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
-(defn consume-updates-coming-plugin
+(defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
-    (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
+    (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
+      (println "Updates: consumed pending - " id)
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
           (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
           (swap! state update :plugin/updates-coming dissoc id))
         (swap! state update :plugin/updates-coming assoc id payload))
-      (pub-event! [:plugin/consume-updates id pending? updated?]))))
+      (pub-event! [:plugin/consume-updates id prev-pending? updated?]))))
 
 (defn coming-update-new-version?
   [pkg]
@@ -1897,9 +1885,9 @@ Similar to re-frame subscriptions"
     (coming-update-new-version? pkg)))
 
 (defn all-available-coming-updates
-  []
-  (when-let [updates (vals (:plugin/updates-coming @state))]
-    (filterv #(coming-update-new-version? %) updates)))
+  ([] (all-available-coming-updates (:plugin/updates-coming @state)))
+  ([updates] (when-let [updates (vals updates)]
+               (filterv #(coming-update-new-version? %) updates))))
 
 (defn get-next-selected-coming-update
   []
@@ -1919,6 +1907,7 @@ Similar to re-frame subscriptions"
 (defn reset-all-updates-state
   []
   (swap! state assoc
+         :plugin/updates-auto-checking?         false
          :plugin/updates-pending                {}
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))

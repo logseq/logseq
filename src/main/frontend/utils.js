@@ -249,7 +249,7 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html}, ownerWindow) => {
+export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
     if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
@@ -281,6 +281,19 @@ export const writeClipboard = ({text, html}, ownerWindow) => {
                     ["text/html"]: richBlob
                 })];
             }
+          if (blocks) {
+            let blocksBlob = new Blob([blocks], {
+              type: ["web application/logseq"]
+            })
+            let richBlob = new Blob([html], {
+              type: ["text/html"]
+            })
+            data = [new ClipboardItem({
+              ["text/plain"]: blob,
+              ["text/html"]: richBlob,
+              ["web application/logseq"]: blocksBlob
+            })];
+          }
             promise_written = navigator.clipboard.write(data)
         } else {
             console.debug("Degraded copy without `ClipboardItem` support:", text)
@@ -296,6 +309,25 @@ export const writeClipboard = ({text, html}, ownerWindow) => {
 
 export const toPosixPath = (input) => {
   return input && input.replace(/\\+/g, '/')
+}
+
+export const saveToFile = (data, fileName, format) => {
+  if (!data) return
+  const url = URL.createObjectURL(data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.${format}`
+  link.click()
+}
+
+export const canvasToImage = (canvas, title = 'Untitled', format = 'png') => {
+  canvas.toBlob(
+    (blob) => {
+      console.log(blob)
+      saveToFile(blob, title, format)
+    },
+    `image/.${format}`
+  )
 }
 
 export const nodePath = Object.assign({}, path, {
@@ -340,3 +372,62 @@ export const nodePath = Object.assign({}, path, {
     return (orURI ? (orURI.protocol + '//') : '') + input
   }
 })
+
+// https://stackoverflow.com/questions/376373/pretty-printing-xml-with-javascript
+export const prettifyXml = (sourceXml) => {
+  const xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml')
+  const xsltDoc = new DOMParser().parseFromString([
+    // describes how we want to modify the XML - indent everything
+    '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
+    '  <xsl:strip-space elements="*"/>',
+    '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
+    '    <xsl:value-of select="normalize-space(.)"/>',
+    '  </xsl:template>',
+    '  <xsl:template match="node()|@*">',
+    '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
+    '  </xsl:template>',
+    '  <xsl:output indent="yes"/>',
+    '</xsl:stylesheet>',
+  ].join('\n'), 'application/xml')
+
+  const xsltProcessor = new XSLTProcessor()
+  xsltProcessor.importStylesheet(xsltDoc)
+  const resultDoc = xsltProcessor.transformToDocument(xmlDoc)
+  const resultXml = new XMLSerializer().serializeToString(resultDoc)
+  // if it has parsererror, then return the original text
+  return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml
+}
+
+export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {
+  const { top, left, bottom, right } = el.getBoundingClientRect()
+  const { innerHeight, innerWidth } = window
+  return partiallyVisible
+    ? ((top > 0 && top < innerHeight) ||
+      (bottom > 0 && bottom < innerHeight)) &&
+    ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
+    : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth
+}
+
+export const convertToLetters = (num) => {
+  if (!+num) return false
+  let s = '', t
+
+  while (num > 0) {
+    t = (num - 1) % 26
+    s = String.fromCharCode(65 + t) + s
+    num = ((num - t) / 26) | 0
+  }
+
+  return s
+}
+
+export const convertToRoman = (num) => {
+  if (!+num) return false
+  const digits = String(+num).split('')
+  const key = ['','C','CC','CCC','CD','D','DC','DCC','DCCC','CM',
+    '','X','XX','XXX','XL','L','LX','LXX','LXXX','XC',
+    '','I','II','III','IV','V','VI','VII','VIII','IX']
+  let roman = '', i = 3
+  while (i--) roman = (key[+digits.pop() + i * 10] || '') + roman
+  return Array(+digits.join('') + 1).join('M') + roman
+}

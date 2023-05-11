@@ -7,7 +7,6 @@
 (defn string-join
   [{:keys [node]}]
   (let [[_ sep-v & _args] (:children node)]
-    ;; (prn :string-join)
     (when (and (api/string-node? sep-v)
                (= ["/"] (:lines sep-v)))
       (api/reg-finding! (assoc (meta node)

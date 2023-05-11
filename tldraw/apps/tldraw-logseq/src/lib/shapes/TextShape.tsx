@@ -166,8 +166,6 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             elm.select()
           }
         })
-      } else {
-        onEditingEnd?.()
       }
     }, [isEditing, onEditingEnd])
 
@@ -240,7 +238,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
 
   ReactIndicator = observer(({ isEditing }: TLComponentProps) => {
     const {
-      props: { borderRadius },
+      props: { borderRadius, isLocked },
       bounds,
     } = this
     return isEditing ? null : (
@@ -250,6 +248,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
         rx={borderRadius}
         ry={borderRadius}
         fill="transparent"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
       />
     )
   })

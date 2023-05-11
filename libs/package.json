@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",

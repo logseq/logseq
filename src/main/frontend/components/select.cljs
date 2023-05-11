@@ -32,7 +32,7 @@
         [:code.opacity-20.bg-transparent (:id result)]])]))
 
 (rum/defcs select < rum/reactive
-  (shortcut/disable-all-shortcuts)
+  shortcut/disable-all-shortcuts
   (rum/local "" ::input)
   {:init (fn [state]
            (assoc state ::selected-choices
@@ -47,7 +47,7 @@
                  prompt-key input-default-placeholder close-modal?
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
-                 multiple-choices? _selected-choices]
+                 multiple-choices? on-apply _selected-choices]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
@@ -90,7 +90,10 @@
                                  (when close-modal? (state/close-modal!))
                                  (when on-chosen
                                    (on-chosen (if multiple-choices? @*selected-choices x))))))
-        :empty-placeholder (empty-placeholder t)})]]))
+        :empty-placeholder (empty-placeholder t)})]
+
+     (when multiple-choices?
+       [:div.p-4 (ui/button "Apply updates" :on-click on-apply)])]))
 
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new

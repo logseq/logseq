@@ -45,13 +45,13 @@
   [line]
   (boolean
    (and (string? line)
-        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons " ")) line))))
+        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons)) line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+:" line))))
 
 (defn get-property-key
   [line format]
@@ -353,15 +353,27 @@
   [format content]
   (remove-property format "id" content false))
 
-;; FIXME: only remove from the properties area
+;; FIXME: remove only from the properties area, not other blocks such as
+;; code blocks, quotes, etc.
+;; Currently, this function will do nothing if the content is a code block.
+;; The future plan is to separate those properties from the block' content.
 (defn remove-built-in-properties
   [format content]
-  (let [built-in-properties* (built-in-properties)
-        content (reduce (fn [content key]
-                          (remove-property format key content)) content built-in-properties*)]
-    (if (= format :org)
-      (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
-      content)))
+  (let [trim-content (string/trim content)]
+    (if (or
+         (and (= format :markdown)
+              (string/starts-with? trim-content "```")
+              (string/ends-with? trim-content "```"))
+         (and (= format :org)
+              (string/starts-with? trim-content "#+BEGIN_SRC")
+              (string/ends-with? trim-content "#+END_SRC")))
+      content
+      (let [built-in-properties* (built-in-properties)
+            content (reduce (fn [content key]
+                              (remove-property format key content)) content built-in-properties*)]
+        (if (= format :org)
+          (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
+          content)))))
 
 (defn add-page-properties
   [page-format properties-content properties]

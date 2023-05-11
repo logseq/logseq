@@ -15,6 +15,9 @@ test("Logseq URLs (same graph)", async ({ page, block }) => {
   await createRandomPage(page)
   await block.mustFill("") // to enter editing mode
   await page.keyboard.press(paste_key)
+  // paste returns a promise which is async, so we need give it a little bit
+  // more time
+  await page.waitForTimeout(100)
   let cursor_locator = page.locator('textarea >> nth=0')
   expect(await cursor_locator.inputValue()).toContain("page=" + page_title)
   await cursor_locator.press("Enter")
@@ -32,6 +35,7 @@ test("Logseq URLs (same graph)", async ({ page, block }) => {
   await createRandomPage(page)
   await block.mustFill("") // to enter editing mode
   await page.keyboard.press(paste_key)
+  await page.waitForTimeout(100)
   cursor_locator = page.locator('textarea >> nth=0')
   expect(await cursor_locator.inputValue()).toContain("block-id=")
   await cursor_locator.press("Enter")

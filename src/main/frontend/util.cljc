@@ -57,6 +57,9 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
+#?(:cljs (defonce convert-to-roman utils/convertToRoman))
+#?(:cljs (defonce convert-to-letters utils/convertToLetters))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
@@ -528,13 +531,6 @@
   (if (string? s)
     (string/lower-case s) s))
 
-#?(:cljs
-   (defn safe-path-join [prefix & paths]
-     (let [path (apply node-path.join (cons prefix paths))]
-       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (gp-util/safe-decode-uri-component (subs path 7))
-         path))))
-
 (defn trim-safe
   [s]
   (when s
@@ -770,16 +766,15 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     ([s]
-      (utils/writeClipboard (clj->js {:text s})))
-     ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))
-     ([s html owner-window]
-      (-> (cond-> {:text s}
-            (not (string/blank? html))
-            (assoc :html html))
-          (bean/->js)
-          (utils/writeClipboard owner-window)))))
+     [text & {:keys [html blocks owner-window]}]
+     (let [data (clj->js
+                 (gp-util/remove-nils-non-nested
+                  {:text text
+                   :html html
+                   :blocks (when (seq blocks) (pr-str blocks))}))]
+       (if owner-window
+         (utils/writeClipboard data owner-window)
+         (utils/writeClipboard data)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -920,6 +915,9 @@
                  :clj nil))
 
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
+                   :clj nil))
+
+(defonce linux? #?(:cljs goog.userAgent/LINUX
                    :clj nil))
 
 (defn default-content-with-title
@@ -1063,26 +1061,6 @@
          :time (- (cljs.core/system-time) start#)})))
 
 ;; TODO: profile and profileEnd
-
-;; Copy from hiccup but tweaked for publish usage
-(defn escape-html
-  "Change special characters into HTML character entities."
-  [text]
-  (-> text
-      (string/replace "&"  "logseq____&amp;")
-      (string/replace "<"  "logseq____&lt;")
-      (string/replace ">"  "logseq____&gt;")
-      (string/replace "\"" "logseq____&quot;")
-      (string/replace "'" "logseq____&apos;")))
-
-(defn unescape-html
-  [text]
-  (-> text
-      (string/replace "logseq____&amp;" "&")
-      (string/replace "logseq____&lt;" "<")
-      (string/replace "logseq____&gt;" ">")
-      (string/replace "logseq____&quot;" "\"")
-      (string/replace "logseq____&apos;" "'")))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")

@@ -7,7 +7,7 @@
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [logseq.common.path :as path]
-            [frontend.handler.editor :as editor]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
@@ -23,6 +23,7 @@
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
 (defn- set-missing-block-ids!
+  "For every referred block in the content, fix their block ids in files if missing."
   [content]
   (when (string? content)
     (doseq [block-id (block-ref/get-all-block-ref-ids content)]
@@ -32,7 +33,7 @@
                            nil))]
         (let [id-property (:id (:block/properties block))]
           (when-not (= (str id-property) (str block-id))
-            (editor/set-block-property! block-id "id" block-id)))))))
+            (editor-property/set-block-property! block-id "id" block-id)))))))
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
@@ -43,7 +44,8 @@
                   (p/catch #(js/console.error "❌ Bak Error: " path %))))
 
           _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                        :from-disk? true})]
+                                                        :from-disk? true
+                                                        :fs/event :fs/local-file-change})]
     (set-missing-block-ids! content)
     (db/set-file-last-modified-at! repo path mtime)))
 

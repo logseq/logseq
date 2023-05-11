@@ -257,10 +257,31 @@ We strive to use explicit names that are self explanatory so that our codebase i
 
 ### Babashka tasks
 
-There are a number of bb tasks under `dev:` for developers. There are also some
-tasks under `nbb:` which are useful for inspecting database changes in realtime.
-See [these docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for
-more info.
+There are a number of bb tasks under `dev:` for developers. Some useful ones to
+point out:
+
+* `dev:validate-repo-config-edn` - Validate a repo config.edn
+
+  ```sh
+  bb dev:validate-repo-config-edn templates/config.edn
+  ```
+
+* `dev:publishing` - Build a publishing app for a given graph dir. If the
+  publishing frontend is out of date, it builds that first which takes time.
+  Subsequent runs are quick.
+
+  ```sh
+  # One time setup
+  $ cd scripts && yarn install && cd -
+  # Build the export
+  $ bb dev:publishing /path/to/graph-dir tmp/publish
+  # View the app in a browser
+  $ open tmp/publish/index.html
+  ```
+
+There are also some tasks under `nbb:` which are useful for inspecting database
+changes in realtime. See [these
+docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 
 ### Dev Commands
 

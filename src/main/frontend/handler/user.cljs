@@ -28,13 +28,21 @@
 
 ;;; userinfo, token, login/logout, ...
 
+(defn- decode-username
+  [username]
+  (let [arr (new js/Uint8Array (count username))]
+    (doseq [i (range (count username))]
+      (aset arr i (.charCodeAt username i)))
+    (.decode (new js/TextDecoder "utf-8") arr)))
+
 (defn- parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
           second
-          js/atob
+          (#(.decodeString ^js crypt/base64 % true))
           js/JSON.parse
-          (js->clj :keywordize-keys true)))
+          (js->clj :keywordize-keys true)
+          (update :cognito:username decode-username)))
 
 (defn- expired? [parsed-jwt]
   (some->

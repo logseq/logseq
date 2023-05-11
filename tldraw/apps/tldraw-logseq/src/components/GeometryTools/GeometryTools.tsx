@@ -1,11 +1,22 @@
-import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import * as React from 'react'
+import type { Side } from '@radix-ui/react-popper'
 import { ToolButton } from '../ToolButton'
 import * as Popover from '@radix-ui/react-popover'
 import { TablerIcon } from '../icons'
 
-export const GeometryTools = observer(function GeometryTools() {
+interface GeometryToolsProps extends React.HTMLAttributes<HTMLElement> {
+  popoverSide?: Side
+  activeGeometry?: string
+  setGeometry: (e: React.MouseEvent<HTMLButtonElement>) => void
+  chevron?: boolean
+}
+
+export const GeometryTools = observer(function GeometryTools({
+  popoverSide = "left",
+  setGeometry,
+  activeGeometry,
+  chevron = true,
+  ...rest}: GeometryToolsProps) {
   const geometries = [
     {
       id: 'box',
@@ -24,34 +35,33 @@ export const GeometryTools = observer(function GeometryTools() {
     },
   ]
 
-  const app = useApp()
-  const [activeGeomId, setActiveGeomId] = React.useState(
-    () => (geometries.find(geo => geo.id === app.selectedTool.id) ?? geometries[0]).id
-  )
+  const shapes = {
+    id: 'shapes',
+    icon: 'triangle-square-circle',
+    tooltip: 'Shape',
+  }
 
-  React.useEffect(() => {
-    setActiveGeomId(prevId => {
-      return geometries.find(geo => geo.id === app.selectedTool.id)?.id ?? prevId
-    })
-  }, [app.selectedTool.id])
+  const activeTool = activeGeometry ? geometries.find(geo => geo.id === activeGeometry) : shapes
 
   return (
     <Popover.Root>
-      <Popover.Trigger asChild>
-        <div className="tl-geometry-tools-pane-anchor">
-          <ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />
-          <TablerIcon
-            data-selected={geometries.some(geo => geo.id === app.selectedTool.id)}
-            className="tl-popover-indicator"
-            name="chevron-down-left"
-          />
+      <Popover.Trigger asChild >
+        <div {...rest} className="tl-geometry-tools-pane-anchor">
+          <ToolButton {...activeTool} tooltipSide={popoverSide} />
+          {chevron &&
+            <TablerIcon
+              data-selected={activeGeometry}
+              className="tl-popover-indicator"
+              name="chevron-down-left"
+            />
+          }
         </div>
       </Popover.Trigger>
 
-      <Popover.Content className="tl-popover-content" side="left" sideOffset={15}>
-        <div className="tl-toolbar tl-geometry-toolbar">
+      <Popover.Content className="tl-popover-content" side={popoverSide} sideOffset={15}>
+        <div className={`tl-toolbar tl-geometry-toolbar ${["left", "right"].includes(popoverSide) ? "flex-col" : "flex-row" }`}>
           {geometries.map(props => (
-            <ToolButton key={props.id} {...props} />
+            <ToolButton key={props.id} id={props.id} icon={props.icon} tooltip={activeGeometry ? props.tooltip : ''} handleClick={setGeometry} tooltipSide={popoverSide} />
           ))}
         </div>
 

@@ -63,7 +63,7 @@
 
     (is (= {:title 98
             :alias 6
-            :tags 2 :permalink 2
+            :tags 3 :permalink 2
             :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
            (docs-graph-helper/get-all-page-properties db))
         "Counts for all page properties")
@@ -98,7 +98,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 42312 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42296 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst

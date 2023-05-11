@@ -12,8 +12,7 @@
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [electron.fs-watcher :as fs-watcher]
-            ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
@@ -22,7 +21,8 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as js-utils]))
+            ["/electron/utils" :as js-utils]
+            [logseq.publishing.export :as publish-export]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
@@ -31,7 +31,7 @@
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
-(defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
+(defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
@@ -83,7 +83,7 @@
 
            path' (.-pathname url')
            path' (utils/safe-decode-uri-component path')
-           path' (.join path ROOT path')]
+           path' (.join node-path ROOT path')]
 
        (callback #js {:path path'}))))
 
@@ -91,62 +91,19 @@
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol FILE_ASSETS_SCHEME)))
 
-(defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
+(defn- handle-export-publish-assets [_event html repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
           asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
-    (when root-dir
-      (let [static-dir (path/join root-dir "static")
-            assets-from-dir (path/join repo-path "assets")
-            assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")]
-        (p/let [_ (. fs ensureDir static-dir)
-                _ (. fs ensureDir assets-to-dir)
-                _ (p/all (concat
-                          [(. fs writeFile index-html-path html)
-
-
-                           (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
-
-                          (map
-                           (fn [filename]
-                             (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
-                                 (p/catch
-                                  (fn [e]
-                                    (logger/error "Failed to copy"
-                                            (str {:from (path/join assets-from-dir filename)
-                                                  :to (path/join assets-to-dir filename)})
-                                            e)))))
-                           asset-filenames)
-
-                          (map
-                           (fn [part]
-                             (. fs copy (path/join app-path part) (path/join static-dir part)))
-                           ["css" "fonts" "icons" "img" "js"])))
-                export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
-                _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
-                custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
-                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
-                js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
-                _ (p/all (map (fn [file]
-                                (. fs removeSync (path/join static-dir "js" file)))
-                              js-files))
-                _ (p/all (map (fn [file]
-                                (. fs moveSync
-                                   (path/join static-dir "js" "publishing" file)
-                                   (path/join static-dir "js" file)))
-                              js-files))
-                _ (. fs removeSync (path/join static-dir "js" "publishing"))
-                ;; remove source map files
-                ;; TODO: ugly, replace with ls-files and filter with ".map"
-                _ (p/all (map (fn [file]
-                                (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js"]))]
-
-          (send-to-renderer
-           :notification
-           {:type "success"
-            :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))))
+         (when root-dir
+           (publish-export/create-export
+            html
+            app-path
+            repo-path
+            root-dir
+            {:asset-filenames asset-filenames
+             :log-error-fn logger/error
+             :notification-fn #(send-to-renderer :notification %)}))))
 
 (defn setup-app-manager!
   [^js win]
@@ -200,7 +157,7 @@
 (defn- set-app-menu! []
   (let [about-fn (fn []
                    (.showMessageBox dialog (clj->js {:title "Logseq"
-                                                     :icon (path/join js/__dirname "icons/logseq.png")
+                                                     :icon (node-path/join js/__dirname "icons/logseq.png")
                                                      :message (str "Version " updater/electron-version)})))
         template (if mac?
                    [{:label (.-name app)

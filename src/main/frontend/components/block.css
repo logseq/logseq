@@ -99,6 +99,34 @@
   }
 }
 
+.breadcrumb {
+  .asset-container > img {
+    height: 18px;
+    width: unset !important;
+  }
+
+  .inline-wrap {
+    & > div, & > div > div {
+      display: inherit;
+    }
+  }
+
+  &.block-parents {
+    .ui__icon {
+      position: relative;
+      top: 4px;
+    }
+
+    a {
+      color: var(--ls-primary-text-color);
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+}
+
 .open-block-ref-link {
   background-color: var(--ls-page-properties-background-color);
   padding: 1px 4px;
@@ -175,6 +203,10 @@
 .block-control-wrap {
   height: 24px;
   margin-top: 0;
+
+  &.is-order-list {
+    @apply relative right-0 mr-0;
+  }
 }
 
 .block-control, .block-control:hover {
@@ -337,6 +369,7 @@
 
   &.selected {
     border-bottom-color: var(--ls-primary-background-color);
+    border-radius: 2px;
 
     &:last-child {
       border-bottom-color: transparent;
@@ -497,25 +530,47 @@
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
+  &.as-order-list {
+    @apply w-[28px] whitespace-nowrap justify-start;
+  }
+
   .bullet {
-    border-radius: 50%;
-    width: 6px;
-    height: 6px;
+    @apply rounded-full w-[6px] h-[6px];
+
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
+
+    > * {
+      @apply cursor-pointer;
+    }
   }
 
-  &.bullet-closed {
+  &:not(.typed-list) {
+    &.bullet-closed {
+      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    }
+  }
+
+  &.typed-list:not(:focus-within) {
+    .bullet {
+      background-color: unset;
+      height: unset;
+      width: unset;
+      box-shadow: none;
+    }
+  }
+}
+
+.bullet-link-wrap {
+  color: var(--ls-primary-text-color);
+
+  &:hover > .bullet-container .bullet {
+    transform: scale(1.4);
+  }
+
+  &:hover > .bullet-container:not(.typed-list) {
     background-color: var(--ls-block-bullet-border-color, #ced9e0);
   }
-}
-
-a:hover > .bullet-container .bullet {
-  transform: scale(1.4);
-}
-
-a:hover > .bullet-container {
-  background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
 .content.doc-mode {
@@ -622,14 +677,6 @@ a.cloze-revealed {
 
 .page-property-key:hover {
   background-color: var(--ls-selection-background-color);
-}
-
-.block-parents a {
-  color: var(--ls-primary-text-color);
-}
-
-.block-parents a:hover {
-  opacity: 1;
 }
 
 .cp__fenced-code-block {

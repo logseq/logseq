@@ -226,7 +226,7 @@
         li {
           margin: 0;
         }
-        
+
         a {
           width: 100%;
           padding: 4px 24px;
@@ -621,6 +621,13 @@ html[data-theme='dark'] {
   .title-wrap {
     line-height: 1.2em;
     padding: 1px 0;
+  }
+}
+
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__menubar-repos {
+  #repo-switch, .nav-header .flex-1 {
+    position: relative;
   }
 }
 

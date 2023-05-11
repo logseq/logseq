@@ -46,7 +46,7 @@
   (let [graph-dir      (config/get-repo-dir repo)
         [selected-path set-selected-path] (rum/use-state "")
         selected-path? (and (not (string/blank? selected-path))
-                            (not (mobile-util/iCloud-container-path? selected-path)))
+                            (not (mobile-util/in-iCloud-container-path? selected-path)))
         on-confirm     (fn []
                          (when-let [dest-dir (and selected-path?
                                                   ;; avoid using `util/node-path.join` to join mobile path since it replaces `file:///abc` to `file:/abc`
@@ -84,7 +84,7 @@
 
       (when (not (string/blank? selected-path))
         [:h5.text-xs.pt-1.-mb-1.flex.items-center.leading-none
-         (if (mobile-util/iCloud-container-path? selected-path)
+         (if (mobile-util/in-iCloud-container-path? selected-path)
            [:span.inline-block.pr-1.text-error.scale-75 (ui/icon "alert-circle")]
            [:span.inline-block.pr-1.text-success.scale-75 (ui/icon "circle-check")])
          selected-path])
@@ -128,7 +128,7 @@
         (fn []
           (async/go
             (close-fn)
-            (if (mobile-util/iCloud-container-path? repo)
+            (if (mobile-util/in-iCloud-container-path? repo)
               (open-icloud-graph-clone-picker repo)
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
@@ -588,7 +588,7 @@
          (async/go
            (set-loading? true)
            (try
-             (let [files (async/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
+             (let [files (async/<! (file-sync-handler/<fetch-page-file-versions graph-uuid page-entity))]
                (set-version-files files)
                (set-page-fn (first files))
                (set-list-ready? true))
@@ -810,7 +810,7 @@
 (defn open-icloud-graph-clone-picker
   ([] (open-icloud-graph-clone-picker (state/get-current-repo)))
   ([repo]
-   (when (and repo (mobile-util/iCloud-container-path? repo))
+   (when (and repo (mobile-util/in-iCloud-container-path? repo))
      (state/set-modal!
       (fn [close-fn]
         (clone-local-icloud-graph-panel repo (util/node-path.basename repo) close-fn))

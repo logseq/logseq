@@ -37,9 +37,8 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
-  delete-files delete-pages-by-files
-  filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
+  blocks-count blocks-count-cache delete-blocks get-pre-block
+  delete-files delete-pages-by-files get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-all-referenced-blocks-uuid
   get-block-children-ids get-block-immediate-children get-block-page
@@ -49,8 +48,8 @@
   get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages get-page-unlinked-references
-  get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
-  journal-page? page-alias-set pull-block
+  get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-tag-pages
+  journal-page? page-alias-set sub-block
   set-file-last-modified-at! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition
   get-original-name]

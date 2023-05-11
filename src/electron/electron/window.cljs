@@ -5,7 +5,7 @@
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
             ["electron" :refer [BrowserWindow app session shell] :as electron]
-            ["path" :as path]
+            ["path" :as node-path]
             ["url" :as URL]
             [electron.state :as state]
             [cljs-bean.core :as bean]
@@ -16,8 +16,8 @@
 
 (def MAIN_WINDOW_ENTRY (if dev?
                          ;;"http://localhost:3001"
-                         (str "file://" (path/join js/__dirname "index.html"))
-                         (str "file://" (path/join js/__dirname "electron.html"))))
+                         (str "file://" (node-path/join js/__dirname "index.html"))
+                         (str "file://" (node-path/join js/__dirname "electron.html"))))
 
 (defn create-main-window!
   ([]
@@ -45,13 +45,13 @@
                        ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                        ;; to use `scollbar-gutter` after the feature is implemented in browsers.
                        :enableBlinkFeatures     'OverlayScrollbars'
-                       :preload                 (path/join js/__dirname "js/preload.js")}}
+                       :preload                 (node-path/join js/__dirname "js/preload.js")}}
 
                      (seq opts)
                      (merge opts)
 
                      linux?
-                     (assoc :icon (path/join js/__dirname "icons/logseq.png")))
+                     (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
          win       (BrowserWindow. (clj->js win-opts))]
      (.manage win-state win)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
@@ -136,8 +136,8 @@
                   url (if-not win32? (string/replace url "file://" "") url)]
               (logger/info "new-window" url)
               (if (some #(string/includes?
-                          (.normalize path url)
-                          (.join path (. app getAppPath) %))
+                          (.normalize node-path url)
+                          (.join node-path (. app getAppPath) %))
                         ["index.html" "electron.html"])
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
@@ -173,7 +173,7 @@
                              {:plugins          true
                               :nodeIntegration  false
                               :webSecurity      (not dev?)
-                              :preload          (path/join js/__dirname "js/preload.js")
+                              :preload          (node-path/join js/__dirname "js/preload.js")
                               :nativeWindowOpen true}}}
                            features)
                     (do (open-external! url) {:action "deny"}))

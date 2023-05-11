@@ -16,7 +16,6 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [frontend.storage :as storage]
-            [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]))
 
 (def *beta-unavailable? (volatile! false))
@@ -69,10 +68,10 @@
               nil
 
               (contains? #{400 404} (get-in (ex-data r) [:err :status]))
-              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
+              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000 nil)
 
               :else
-              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000))))))))
+              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000 nil))))))))
 
 (defn <delete-graph
   [graph-uuid]
@@ -163,24 +162,19 @@
               version-file-paths)
              (remove nil?))))))))
 
-(defn fetch-page-file-versions [graph-uuid page]
+(defn <fetch-page-file-versions [graph-uuid page]
   []
   (let [file-id (:db/id (:block/file page))]
-    (when-let [path (:file/path (db/entity file-id))]
-      (let [base-path (config/get-repo-dir (state/get-current-repo))
-            base-path (if (string/starts-with? base-path "file://")
-                        (gp-util/safe-decode-uri-component base-path)
-                        base-path)
-            path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
-        (go
-          (let [version-list       (:VersionList
-                                    (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
-                local-version-list (<! (<list-file-local-versions page))
-                all-version-list   (->> (concat version-list local-version-list)
-                                        (sort-by #(or (:CreateTime %)
-                                                      (:create-time %))
-                                                 >))]
-            all-version-list))))))
+    (go
+      (when-let [path (:file/path (db/entity file-id))]
+        (let [version-list       (:VersionList
+                                  (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path)))
+              local-version-list (<! (<list-file-local-versions page))
+              all-version-list   (->> (concat version-list local-version-list)
+                                      (sort-by #(or (:CreateTime %)
+                                                    (:create-time %))
+                                               >))]
+          all-version-list)))))
 
 
 (defn init-remote-graph

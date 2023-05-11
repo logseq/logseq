@@ -39,9 +39,12 @@
   (when-let [block (state/sub :mobile/actioned-block)]
     (let [{:block/keys [uuid children]} block
           last-child-block-id (when-not (empty? children)
-                                (-> (db/get-block-children (state/get-current-repo) uuid)
-                                    last
-                                    :block/uuid))]
+                                (->> (db/get-block-children (state/get-current-repo) uuid)
+                                     (filter #(not (db/parents-collapsed? (state/get-current-repo) (:block/uuid %1)))) ;; DOM nodes of blocks the have collapsed parents have no bounding client rect
+                                     last
+                                     :block/uuid))]
+
+      ;; scroll to the most bottom element of the selected block
       (let [tag-id (or last-child-block-id uuid)
             bottom-el (gdom/getElement (str "block-content-" tag-id))
             bottom (gobj/get (.getBoundingClientRect bottom-el) "bottom")

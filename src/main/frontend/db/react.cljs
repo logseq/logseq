@@ -16,7 +16,7 @@
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
 ;; pull-block react-query
-(s/def ::block (s/tuple #(= ::block %) uuid?))
+(s/def ::block (s/tuple #(= ::block %) int?))
 ;; ::page-blocks
 ;; get page-blocks react-query
 (s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))
@@ -51,7 +51,11 @@
 
 (defonce query-state (atom {}))
 
+;; Current dynamic component
 (def ^:dynamic *query-component*)
+
+;; Which reactive queries are triggered by the current component
+(def ^:dynamic *reactive-queries*)
 
 ;; component -> query-key
 (defonce query-components (atom {}))
@@ -144,7 +148,11 @@
 
 (defn get-query-cached-result
   [k]
-  (:result (get @query-state k)))
+  (when-let [result (get @query-state k)]
+    (when (satisfies? IWithMeta @(:result result))
+      (set! (.-state (:result result))
+           (with-meta @(:result result) {:query-time (:query-time result)})))
+    (:result result)))
 
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
@@ -152,11 +160,14 @@
                 transform-fn identity}} query & inputs]
   {:pre [(s/valid? ::react-query-keys k)]}
   (let [kv? (and (vector? k) (= :kv (first k)))
+        origin-key k
         k (vec (cons repo k))]
     (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
+        (when-let [queries *reactive-queries*]
+          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
           (let [{:keys [result time]} (util/with-time
@@ -179,7 +190,7 @@
                                             transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
-            (set! (.-state result-atom) (util/safe-with-meta result {:query-time time}))
+            (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
               (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))

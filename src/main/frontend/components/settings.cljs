@@ -751,7 +751,7 @@
      (whiteboards-switcher-row enable-whiteboards?)
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
-     (when (and (util/electron?) (state/developer-mode?))
+     (when (util/electron?)
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
@@ -836,8 +836,7 @@
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
-                                                                                             :style {:margin-left 2}})]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "square-asterisk")]
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]

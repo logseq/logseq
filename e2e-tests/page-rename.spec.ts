@@ -1,19 +1,10 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createPage, randomLowerString, newInnerBlock, randomString, lastBlock } from './utils'
+import { createPage, randomLowerString, randomString, renamePage } from './utils'
 
 /***
  * Test rename feature
  ***/
-
-async function rename_page(page: Page, new_name: string) {
-  await page.click('.ls-page-title .page-title')
-  await page.waitForSelector('input[type="text"]')
-  await page.fill('input[type="text"]', '')
-  await page.type('.title input', new_name)
-  await page.keyboard.press('Enter')
-  await page.click('.ui__confirm-modal button')
-}
 
 async function page_rename_test(page: Page, original_page_name: string, new_page_name: string) {
   const rand = randomString(10)
@@ -23,7 +14,7 @@ async function page_rename_test(page: Page, original_page_name: string, new_page
   await createPage(page, original_name)
 
   // Rename page in UI
-  await rename_page(page, new_name)
+  await renamePage(page, new_name)
 
   expect(await page.innerText('.page-title .title')).toBe(new_name)
 
@@ -53,7 +44,7 @@ async function homepage_rename_test(page: Page, original_page_name: string, new_
 
   expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(original_name);
 
-  await rename_page(page, new_name)
+  await renamePage(page, new_name)
 
   expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(new_name);
 

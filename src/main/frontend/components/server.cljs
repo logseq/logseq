@@ -69,8 +69,8 @@
         *configs     (::configs _state)
         {:keys [host port autostart]} @*configs
         hp-changed?  (or (not= host (:host server-state))
-                         (not= (util/safe-parse-int port)
-                               (util/safe-parse-int (:port server-state))))
+                         (not= (util/safe-parse-int (or port 0))
+                               (util/safe-parse-int (or (:port server-state) 0))))
         changed?     (or hp-changed? (->> [autostart (:autostart server-state)]
                                           (mapv #(cond-> % (nil? %) not))
                                           (apply not=)))]
@@ -87,12 +87,12 @@
                        (swap! *configs assoc :host value))}]]
 
       [:label
-       [:strong "Port (0 ~ 65536)"]
+       [:strong "Port (1 ~ 65535)"]
        [:input.form-input
         {:auto-focus true
          :value      port
          :min        "1"
-         :max        "65536"
+         :max        "65535"
          :type       "number"
          :on-change  #(let [value (.-value (.-target %))]
                         (swap! *configs assoc :port value))}]]]
@@ -126,10 +126,11 @@
 
   (rum/use-effect!
     (fn []
-      (ipc/ipc :server/load-state)
-      (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
-                                (ipc/ipc :server/do :restart)) 1000)]
-        #(js/clearTimeout t)))
+      (p/let [_ (p/delay 1000)
+              _ (ipc/ipc :server/load-state)]
+        (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
+                                  (ipc/ipc :server/do :restart)) 1000)]
+          #(js/clearTimeout t))))
     [])
 
   (let [{:keys [status error]} server-state

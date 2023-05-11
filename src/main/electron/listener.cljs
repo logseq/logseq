@@ -17,10 +17,12 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
+            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [promesa.core :as p]))
 
 (defn- safe-api-call
@@ -75,6 +77,11 @@
                    (let [repo (bean/->clj data)]
                      (repo-handler/remove-repo! repo))))
 
+  (safe-api-call "rebuildSearchIndice"
+                 (fn [_data]
+                   (prn "Rebuild search indices")
+                   (search-handler/rebuild-indices!)))
+
   (safe-api-call "setGitUsernameAndEmail"
                  (fn []
                    (state/pub-event! [:modal/set-git-username-and-email])))
@@ -108,8 +115,10 @@
                            (editor-handler/insert-first-page-block-if-not-exists! db-page-name)))
 
                        block-id
-                       (if (db-model/get-block-by-uuid block-id)
-                         (route-handler/redirect-to-page! block-id)
+                       (if-let [block (db-model/get-block-by-uuid block-id)]
+                         (if (gp-whiteboard/shape-block? block)
+                          (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
+                          (route-handler/redirect-to-page! block-id))
                          (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
 
                        file

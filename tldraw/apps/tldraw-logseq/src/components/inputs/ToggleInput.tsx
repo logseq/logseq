@@ -4,7 +4,7 @@ import * as Toggle from '@radix-ui/react-toggle'
 interface ToggleInputProps extends React.HTMLAttributes<HTMLElement> {
   toggle?: boolean
   pressed: boolean
-  tooltip?: string
+  tooltip?: React.ReactNode
   onPressedChange: (value: boolean) => void
 }
 

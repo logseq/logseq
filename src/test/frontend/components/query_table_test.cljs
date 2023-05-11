@@ -16,11 +16,11 @@
   (when-let [result (query-dsl/query test-helper/test-db s)]
     (map first (deref result))))
 
-(deftest sort-result
+(deftest sort-result-for-standard-columns
   ;; Define since it's not defined
   (state/set-preferred-language! "en")
 
-  (testing "sort by block content"
+  (testing "sort by block column"
     (are [sort-state result sorted-result]
          (= (mapv #(hash-map :block/content %) sorted-result)
             (#'query-table/sort-result (mapv #(hash-map :block/content %) result) sort-state))
@@ -29,6 +29,24 @@
 
          {:sort-desc? false :sort-by-column :block}
          ["abc" "cde"] ["abc" "cde"]))
+
+  (testing "sort by page column"
+    (are [sort-options result sorted-result]
+         (= sorted-result
+            (#'query-table/sort-result result sort-options))
+         ;; on page queries
+         {:sort-desc? true :sort-by-column :page :page? true}
+         (map #(hash-map :block/name %) ["abc" "cde"])
+         (map #(hash-map :block/name %) ["cde" "abc"])
+
+         ;; on block queries
+         {:sort-desc? true :sort-by-column :page :page? false}
+         (map #(hash-map :block/page {:block/name %}) ["abc" "cde"])
+         (map #(hash-map :block/page {:block/name %}) ["cde" "abc"]))))
+
+(deftest sort-result-for-property-columns
+  ;; Define since it's not defined
+  (state/set-preferred-language! "en")
 
   (testing "sort by integer block property"
     (are [sort-state result sorted-result]
@@ -86,17 +104,17 @@
          [{:title 1.1} {:title 1.2} {:title 1.11}]
          [{:title 1.1} {:title 1.11} {:title 1.2}]))
 
-   (testing "sort by semver-style string block property"
-     (are [sort-state result sorted-result]
-          (= (mapv #(hash-map :block/properties %) sorted-result)
-             (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
-          {:sort-desc? true :sort-by-column :title}
-          [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
-          [{:title "1.11.1"} {:title "1.11.0"} {:title "1.2.1"} {:title "1.2.0"} {:title "1.1.1"} {:title "1.1.0"}]
+  (testing "sort by semver-style string block property"
+    (are [sort-state result sorted-result]
+         (= (mapv #(hash-map :block/properties %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
+         {:sort-desc? true :sort-by-column :title}
+         [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
+         [{:title "1.11.1"} {:title "1.11.0"} {:title "1.2.1"} {:title "1.2.0"} {:title "1.1.1"} {:title "1.1.0"}]
 
-          {:sort-desc? false :sort-by-column :title}
-          [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
-          [{:title "1.1.0"} {:title "1.1.1"} {:title "1.2.0"} {:title "1.2.1"} {:title "1.11.0"} {:title "1.11.1"}]))
+         {:sort-desc? false :sort-by-column :title}
+         [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
+         [{:title "1.1.0"} {:title "1.1.1"} {:title "1.2.0"} {:title "1.2.1"} {:title "1.11.0"} {:title "1.11.1"}]))
 
   (testing "sort by string block property for specific locale"
     (state/set-preferred-language! "zh-CN")

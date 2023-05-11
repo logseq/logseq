@@ -34,7 +34,7 @@ RUN yarn config set network-timeout 240000 -g && yarn install
 RUN  yarn release 
 
 # Web App Runner image
-FROM nginx:1.23.3-alpine
+FROM nginx:1.24.0-alpine3.17
 
 COPY --from=builder /data/static /usr/share/nginx/html
 

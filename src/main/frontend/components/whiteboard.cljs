@@ -10,8 +10,8 @@
             [frontend.db.model :as model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
@@ -120,7 +120,7 @@
                                         portal?]
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
-         page (model/pull-block (:db/id page-entity))
+         page (model/sub-block (:db/id page-entity))
          block-uuid (:block/uuid page-entity)
          refs-count (count (:block/_refs page))]
      (when (> refs-count 0)
@@ -264,6 +264,7 @@
               :-webkit-font-smoothing "subpixel-antialiased"}}
 
      [:div.whiteboard-page-title-root
+      {:data-html2canvas-ignore true} ; excludes title component from image export
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
                 :user-select "none"}
@@ -290,7 +291,8 @@
                                                                       {:extension? true})])})]]
      (tldraw-app page-name block-id)]))
 
-(rum/defc whiteboard-route
+(rum/defc whiteboard-route <
+(shortcut/mixin :shortcut.handler/whiteboard)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
@@ -310,7 +312,6 @@
     (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
-                           (config-handler/set-config! :feature/enable-whiteboards? true)
                            (quick-tour/ready
                             (fn []
                               (quick-tour/start-whiteboard)

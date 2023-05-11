@@ -2,6 +2,7 @@
   "Adapters related to tldraw"
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
+            [frontend.components.export :as export]
             [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.db.model :as model]
@@ -9,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -74,13 +76,19 @@
   (apply whiteboard/references-count
          (map (fn [k] (js->clj (gobj/get props k) {:keywordize-keys true})) ["id" "className" "options"])))
 
+(rum/defc keyboard-shortcut
+  [props]
+  (let [shortcut (shortcut-helper/gen-shortcut-seq (keyword (gobj/get props "action")))]
+    (ui/render-keyboard-shortcut shortcut)))
+
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :Tweet tweet
                        :PageName page-name-link
                        :BacklinksCount references-count
-                       :BlockReference block-reference})
+                       :BlockReference block-reference
+                       :KeyboardShortcut keyboard-shortcut})
 
 (def undo (fn [] (history/undo! nil)))
 (def redo (fn [] (history/redo! nil)))
@@ -90,11 +98,12 @@
                        (clj->js
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
+   :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
-   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text html))
+   :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]

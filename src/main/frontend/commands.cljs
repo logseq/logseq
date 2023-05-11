@@ -147,6 +147,7 @@
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
+   "Number list" "LIST TYPE"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -250,9 +251,14 @@
      ["Current time" #(date/get-current-time) "Insert current time"]
      ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
+    ;; order list
+    [["Number list" [[:editor/clear-current-slash]
+                     [:editor/toggle-own-number-list]] "Number list"]
+     ["Number children" [[:editor/clear-current-slash]
+                         [:editor/toggle-children-number-list]] "Number children"]]
+
     ;; task management
     (get-preferred-workflow)
-
     [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
@@ -326,8 +332,9 @@
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (when-not backward-truncate-number
-                         (or last-pattern (state/get-editor-command-trigger)))
+    (let [last-pattern (when-not (= last-pattern :skip-check)
+                         (when-not backward-truncate-number
+                          (or last-pattern (state/get-editor-command-trigger))))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
@@ -652,6 +659,18 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
+
+(defmethod handle-step :editor/toggle-children-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-children-number-list block])))
+
+(defmethod handle-step :editor/toggle-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-own-number-list block])))
+
+(defmethod handle-step :editor/remove-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/remove-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and

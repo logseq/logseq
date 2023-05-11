@@ -15,7 +15,7 @@
    [frontend.mobile.util :as mobile-util]
    [frontend.modules.file.core :as outliner-file]
    [frontend.modules.outliner.tree :as outliner-tree]
-   [frontend.publishing.html :as html]
+   [logseq.publishing.html :as publish-html]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.property :as property]
@@ -77,26 +77,17 @@
   "download public pages as html"
   [repo]
   (when-let [db (db/get-db repo)]
-    (let [[db asset-filenames]           (if (state/all-pages-public?)
-                                           (db/clean-export! db)
-                                           (db/filter-only-public-pages-and-blocks db))
-          asset-filenames (remove nil? asset-filenames)
-          db-str       (db/db->string db)
-          state        (select-keys @state/state
-                                    [:ui/theme
-                                     :ui/sidebar-collapsed-blocks
-                                     :ui/show-recent?
-                                     :config])
-          state        (update state :config (fn [config]
-                                               {"local" (get config repo)}))
-          raw-html-str (html/publishing-html db-str (pr-str state))
+    (let [{:keys [asset-filenames html]}
+          (publish-html/build-html db
+                                   {:app-state (select-keys @state/state
+                                                            [:ui/theme
+                                                             :ui/sidebar-collapsed-blocks])
+                                    :repo-config (get-in @state/state [:config repo])})
           html-str     (str "data:text/html;charset=UTF-8,"
-                            (js/encodeURIComponent raw-html-str))]
+                            (js/encodeURIComponent html))]
       (if (util/electron?)
         (js/window.apis.exportPublishAssets
-         raw-html-str
-         (config/get-custom-css-path)
-         (config/get-export-css-path)
+         html
          (config/get-repo-dir repo)
          (clj->js asset-filenames)
          (util/mocked-open-dir-path))
