@@ -35,7 +35,7 @@
            :on-click (fn []
                        (dh/remove-shortcut k)
                        (shortcut/refresh!)
-                       (swap! *keypress (fn [] ""))          ;; Clear local state
+                       (swap! *keypress (constantly ""))          ;; Clear local state
                        )}
           "Reset"])]]
      [:div.cancel-save-buttons.text-right.mt-4
