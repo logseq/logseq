@@ -19,6 +19,10 @@
     a.fold {
       @apply absolute right-0 top-0 w-full pt-3 pr-3
       flex items-center justify-end select-none;
+
+      &:active {
+        @apply bg-white/50 opacity-60;
+      }
     }
   }
 }
