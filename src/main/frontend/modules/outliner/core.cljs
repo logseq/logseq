@@ -16,8 +16,7 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id]
-                           :opt [:block/page :block/left :block/parent]))
+(s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
                                    :map ::block-map))
@@ -511,6 +510,13 @@
                          (dissoc :db/id)))))
                  blocks)))
 
+(defn- get-target-block
+  [target-block]
+  (if (:db/id target-block)
+    (db/pull (:db/id target-block))
+    (when (:block/uuid target-block)
+      (db/pull [:block/uuid (:block/uuid target-block)]))))
+
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -528,7 +534,7 @@
   [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [target-block' (db/pull (:db/id target-block))
+  (let [target-block' (get-target-block target-block)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -714,7 +720,9 @@
   [blocks target-block {:keys [sibling? outliner-op]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
+  (let [target-block (get-target-block target-block)
+        _ (assert (some? target-block) (str "Invalid target: " target-block))
+        non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
