@@ -91,7 +91,7 @@
                            (map (fn [{:keys [id]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
                                       js->clj-keywordize
-                                      (assoc :index (get id shapes-index)))))
+                                      (assoc :index (get shapes-index id)))))
                            (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
@@ -134,9 +134,11 @@
         shapes (.-shapes ^js tl-page)
         shapes-index (zipmap (mapv #(gobj/get % "id") shapes) (range (.-length shapes)))
         new-id-nonces (set (map (fn [shape]
-                                  (let [id (.-id shape)]
+                                  (let [id (.-id shape)
+                                        _ (js/console.log id)
+                                        _ (js/console.log (get shapes-index id))]
                                     {:id id
-                                     :nonce (if (= shape.id (get id shapes-index))
+                                     :nonce (if (= shape.id (get shapes-index id))
                                               (.-nonce shape)
                                               (js/Date.now))})) shapes))
         repo (state/get-current-repo)
