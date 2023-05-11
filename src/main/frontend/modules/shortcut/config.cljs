@@ -926,7 +926,10 @@
     :dev/show-block-ast
     :dev/show-page-data
     :dev/show-page-ast
-    :ui/clear-all-notifications]})
+    :ui/clear-all-notifications]
+
+   :shortcut.category/plugins
+   []})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]

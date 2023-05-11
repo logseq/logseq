@@ -11,3 +11,14 @@
     }
   }
 }
+
+.cp__shortcut {
+  &-table-wrap {
+    @apply relative;
+
+    a.fold {
+      @apply absolute right-0 top-0 w-full pt-3 pr-3
+      flex items-center justify-end select-none;
+    }
+  }
+}

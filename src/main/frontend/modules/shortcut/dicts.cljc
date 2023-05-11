@@ -171,6 +171,7 @@
    :shortcut.category/block-selection "Block selection (press Esc to quit selection)"
    :shortcut.category/toggle "Toggle"
    :shortcut.category/whiteboard "Whiteboard"
+   :shortcut.category/plugins "Plugins"
    :shortcut.category/others "Others"})
 
 (def ^:large-vars/data-var dicts

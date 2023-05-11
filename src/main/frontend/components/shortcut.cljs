@@ -72,26 +72,28 @@
                        (customize-shortcut-dialog k action-name displayed-binding)
                        {:center? true})))])))
 
-(rum/defc shortcut-table < rum/reactive
-  ([name]
-   (shortcut-table name false))
-  ([name configurable?]
-   (let [shortcut-config (rum/cursor-in
-                          state/state
-                          [:config (state/get-current-repo) :shortcuts])
-         _ (rum/react shortcut-config)]
-     [:div
-      [:table
-       [:thead
-        [:tr
-         [:th.text-left [:b (t name)]]
-         [:th.text-right]]]
-       [:tbody
-        (map (fn [[k {:keys [binding]}]]
-               [:tr {:key (str k)}
-                [:td.text-left (t (dh/decorate-namespace k))]
-                (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
-          (dh/binding-by-category name))]]])))
+(rum/defcs shortcut-table
+  < rum/reactive
+    (rum/local true ::folded?)
+  [state name configurable?]
+  (let [*folded? (::folded? state)
+        _        (state/sub [:config (state/get-current-repo) :shortcuts])]
+    [:div.cp__shortcut-table-wrap
+     [:a.fold
+      {:on-click #(reset! *folded? (not @*folded?))}
+      (ui/icon (if @*folded? "chevron-left" "chevron-down"))]
+     [:table
+      [:thead
+       [:tr
+        [:th.text-left [:b (t name)]]
+        [:th.text-right]]]
+      (when-not @*folded?
+        [:tbody
+         (map (fn [[k {:keys [binding]}]]
+                [:tr {:key (str k)}
+                 [:td.text-left (t (dh/decorate-namespace k))]
+                 (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
+              (dh/binding-by-category name))])]]))
 
 (rum/defc trigger-table []
   [:table
@@ -187,6 +189,7 @@
    (shortcut-table :shortcut.category/formatting true)
    (shortcut-table :shortcut.category/toggle true)
    (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
+   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/others true)])
 
 (rum/defc keymap-pane
