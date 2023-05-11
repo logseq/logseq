@@ -27,7 +27,7 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   const text = msg.text()
   logs += text + '\n'
 
-  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed)/)
 
   // youtube video
   // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.

@@ -770,7 +770,11 @@ independent of format as format specific heading characters are stripped"
                                         :include-start? true
                                         :scoped-block-id scoped-block-id}))
 
-      (contains? #{:save-block :delete-blocks} outliner-op)
+      (and (= :delete-blocks outliner-op)
+           (<= (count @result) initial-blocks-length)) ; load more blocks
+      nil
+
+      (= :save-block outliner-op)
       @result
 
       (contains? #{:insert-blocks :collapse-expand-blocks :move-blocks} outliner-op)
@@ -845,6 +849,7 @@ independent of format as format specific heading characters are stripped"
                                                         (db-utils/pull repo-url pull-keys id))) block-eids)
                                              (db-utils/pull-many repo-url pull-keys block-eids))
                                     blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
+
                                 (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
                  nil)
         react)))))

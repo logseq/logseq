@@ -3,6 +3,7 @@
   #?(:cljs (:require-macros [frontend.modules.outliner.datascript]))
   #?(:cljs (:require [datascript.core :as d]
                      [frontend.db.conn :as conn]
+                     [frontend.db :as db]
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
@@ -73,6 +74,12 @@
                  rs (d/transact! conn txs (assoc opts :outliner/transact? true))
                  tx-id (get-tx-id rs)]
              (swap! state/state assoc-in [:history/tx->editor-cursor tx-id] before-editor-cursor)
+
+             ;; update the current edit block to include full information
+             (when-let [block (state/get-edit-block)]
+               (when (and (:block/uuid block) (not (:db/id block)))
+                 (state/set-state! :editor/block (db/pull [:block/uuid (:block/uuid block)]))))
+
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>
