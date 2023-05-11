@@ -35,7 +35,7 @@
          (string/join))))
 
 (defn- get-page-reference
-  [block supported-formats]
+  [block]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
                (let [typ (first (:url (second block)))
@@ -316,7 +316,7 @@
     nil))
 
 (defn- with-page-refs
-  [{:keys [title body tags refs marker priority] :as block} with-id? supported-formats db date-formatter]
+  [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
@@ -327,7 +327,7 @@
        (when-not (and (vector? form)
                       (= (first form) "Custom")
                       (= (second form) "query"))
-         (when-let [page (get-page-reference form supported-formats)]
+         (when-let [page (get-page-reference form)]
            (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
@@ -418,9 +418,9 @@
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block with-id? supported-formats db date-formatter]
+  [block with-id? db date-formatter]
   (some-> block
-          (with-page-refs with-id? supported-formats db date-formatter)
+          (with-page-refs with-id? db date-formatter)
           with-block-refs
           block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
@@ -494,7 +494,7 @@
     (mapv macro->block @*result)))
 
 (defn with-pre-block-if-exists
-  [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
+  [blocks body pre-block-properties encoded-content {:keys [db date-formatter user-config]}]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
@@ -526,7 +526,7 @@
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
-                         (with-page-block-refs {:body body :refs property-refs} false supported-formats db date-formatter)]
+                         (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
                      (cond-> block
                              tags
                              (assoc :block/tags tags)
@@ -544,7 +544,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
+  [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern db date-formatter]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -581,7 +581,7 @@
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
         block (assoc block :body body)
-        block (with-page-block-refs block with-id? supported-formats db date-formatter)
+        block (with-page-block-refs block with-id? db date-formatter)
         block (update block :refs concat (:block-refs properties))
         {:keys [created-at updated-at]} (:properties properties)
         block (cond-> block
@@ -635,7 +635,7 @@
     `content`: markdown or org-mode text.
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
-    `options`: Options supported are :user-config, :block-pattern :supported-formats,
+    `options`: Options supported are :user-config, :block-pattern,
                :extract-macros, :date-formatter, :page-name and :db"
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
