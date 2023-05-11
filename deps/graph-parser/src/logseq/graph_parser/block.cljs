@@ -55,19 +55,6 @@
                    (text/page-ref-un-brackets! value))
 
                   (and
-                   (= typ "Search")
-                   (not (contains? #{\# \* \/ \[} (first value)))
-                   ;; FIXME: use `gp-util/get-format` instead
-                   (let [ext (some-> (gp-util/get-file-ext value) keyword)]
-                     (when (and (not (string/starts-with? value "http:"))
-                                (not (string/starts-with? value "https:"))
-                                (not (string/starts-with? value "file:"))
-                                (not (gp-config/local-asset? value))
-                                (or (#{:excalidraw :tldr} ext)
-                                    (not (contains? supported-formats ext))))
-                       value)))
-
-                  (and
                    (= typ "File")
                    (second (first (:label (second block)))))))
 
