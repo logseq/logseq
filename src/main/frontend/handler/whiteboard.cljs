@@ -134,9 +134,7 @@
         shapes (.-shapes ^js tl-page)
         shapes-index (zipmap (mapv #(gobj/get % "id") shapes) (range (.-length shapes)))
         new-id-nonces (set (map (fn [shape]
-                                  (let [id (.-id shape)
-                                        _ (js/console.log id)
-                                        _ (js/console.log (get shapes-index id))]
+                                  (let [id (.-id shape)]
                                     {:id id
                                      :nonce (if (= shape.id (get shapes-index id))
                                               (.-nonce shape)
