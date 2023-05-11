@@ -227,10 +227,6 @@
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" (link-steps) "Create a HTTP link"]
      ["Image link" (image-link-steps) "Create a HTTP link to a image"]
-     (when (state/markdown?)
-       ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern (state/get-editor-command-trigger)
-                       :backward-pos 6}]] "Create a underline text decoration"])
      ["Template" [[:editor/input (state/get-editor-command-trigger) nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
