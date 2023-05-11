@@ -588,7 +588,7 @@
          (async/go
            (set-loading? true)
            (try
-             (let [files (async/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
+             (let [files (async/<! (file-sync-handler/<fetch-page-file-versions graph-uuid page-entity))]
                (set-version-files files)
                (set-page-fn (first files))
                (set-list-ready? true))

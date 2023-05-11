@@ -164,33 +164,32 @@
 
 (defn- block-table
   [{:keys [header groups]}]
-  (when (seq header)
-    (let [level    (dec (get *state* :current-level 1))
-          sep-line (raw-text "|" (string/join "|" (repeat (count header) "---")) "|")
-          header-line
-          (concatv (mapcatv
-                    (fn [h] (concatv [space (raw-text "|") space] (mapcatv inline-ast->simple-ast h)))
-                    header)
-                   [space (raw-text "|")])
-          group-lines
-          (mapcatv
-           (fn [group]
-             (mapcatv
-              (fn [row]
-                (concatv [(indent-with-2-spaces level)]
-                         (mapcatv
-                          (fn [col]
-                            (concatv [(raw-text "|") space]
-                                     (mapcatv inline-ast->simple-ast col)
-                                     [space]))
-                          row)
-                         [(raw-text "|") (newline* 1)]))
-              group))
-           groups)]
-      (concatv [(newline* 1) (indent-with-2-spaces level)]
-               header-line
-               [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)]
-               group-lines))))
+  (let [level    (dec (get *state* :current-level 1))
+        sep-line (raw-text "|" (string/join "|" (repeat (count header) "---")) "|")
+        header-line
+        (concatv (mapcatv
+                  (fn [h] (concatv [space (raw-text "|") space] (mapcatv inline-ast->simple-ast h)))
+                  header)
+                 [space (raw-text "|")])
+        group-lines
+        (mapcatv
+         (fn [group]
+           (mapcatv
+            (fn [row]
+              (concatv [(indent-with-2-spaces level)]
+                       (mapcatv
+                        (fn [col]
+                          (concatv [(raw-text "|") space]
+                                   (mapcatv inline-ast->simple-ast col)
+                                   [space]))
+                        row)
+                       [(raw-text "|") (newline* 1)]))
+            group))
+         groups)]
+    (concatv [(newline* 1) (indent-with-2-spaces level)]
+             (when (seq header) header-line)
+             (when (seq header) [(newline* 1) (indent-with-2-spaces level) sep-line (newline* 1)])
+             group-lines)))
 
 (defn- block-comment
   [s]
