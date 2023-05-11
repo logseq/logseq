@@ -428,11 +428,6 @@ should be done through this fn in order to get global config and config defaults
      (:editor/command-trigger (get-config repo-url))        ;; Get from user config
      "/")))                                                 ;; Set the default
 
-(defn markdown?
-  []
-  (= (keyword (get-preferred-format))
-     :markdown))
-
 (defn get-pages-directory
   []
   (or

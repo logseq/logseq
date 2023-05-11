@@ -145,7 +145,6 @@
    selection-prefix selection selection-postfix
    pattern-prefix pattern-postfix
    selection-start selection-end]
-
   (if already-wrapped?
     [(remove-pattern!
       selection-prefix selection selection-postfix
@@ -161,7 +160,6 @@
 (defn- handle-selection!
   [already-wrapped? selection input selection-start
    selection-end pattern-prefix cursor-pos]
-
   (cond
     already-wrapped?
     (cursor/set-selection-to input
