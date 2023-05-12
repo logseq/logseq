@@ -13,10 +13,10 @@ In order to run the commands in this doc, you will need to install
 
 ## Where to Contribute
 
-Language translations are in two files,
-[src/main/frontend/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljc)
+Language translations are in two libraries,
+[src/main/frontend/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts/)
 and
-[src/main/frontend/modules/shortcut/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljc).
+[src/main/frontend/modules/shortcut/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts), in both packages the `core.cljc` file imports the isolated packages for each language.
 
 ## Language Overview
 
@@ -60,10 +60,10 @@ To see what translations are missing for your language use:
 $ bb lang:missing LOCALE
 |                            :translation-key |                        :string-to-translate |               :file |
 |---------------------------------------------+---------------------------------------------+---------------------|
-|                     :content/copy-block-url |                              Copy block URL | frontend/dicts.cljs |
-|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts.cljs |
-|                           :content/copy-ref |                         Copy this reference | frontend/dicts.cljs |
-|                         :content/delete-ref |                       Delete this reference | frontend/dicts.cljs |
+|                     :content/copy-block-url |                              Copy block URL | frontend/dicts/core.cljs |
+|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts/core.cljs |
+|                           :content/copy-ref |                         Copy this reference | frontend/dicts/core.cljs |
+|                         :content/delete-ref |                       Delete this reference | frontend/dicts/core.cljs |
 ...
 ```
 
@@ -108,6 +108,6 @@ and tell you what's wrong.
 
 ## Add a Language
 
-To add a new language, add an entry to `frontend.dicts/languages`. Then add a
-new locale keyword to `frontend.dicts/dicts` and to
-`frontend.modules.shortcut.dicts/dicts` and start translating as described above.
+To add a new language, add an entry to `frontend.dicts.core/languages`. Then add a
+new locale keyword to `frontend.dicts.core/dicts` and to
+`frontend.modules.shortcut.dicts.core/dicts` and start translating as described above.
