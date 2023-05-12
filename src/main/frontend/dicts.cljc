@@ -371,6 +371,8 @@
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
+        :file-sync/rsapi-cannot-upload-err "Unable to start synchronization, please check if the local time is correct."
+
 
         :notification/clear-all "Clear all"}
 
@@ -763,7 +765,7 @@
         :right-side-bar/history "(Dev) Verlauf rückgängig machen / wiederherstellen"
         :select/default-select-multiple "Ein oder mehrere auswählen"
         :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
-        
+
         :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"}
    :nl {
         :all-files "Alle bestanden"
@@ -1683,6 +1685,7 @@
 
            :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
            :file-sync/graph-deleted "当前远程图谱已经删除"
+           :file-sync/rsapi-cannot-upload-err "无法同步，请检查本机时间是否准确"
 
            :notification/clear-all "清除全部通知"}
 
