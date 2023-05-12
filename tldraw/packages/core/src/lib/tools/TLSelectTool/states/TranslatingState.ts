@@ -125,7 +125,6 @@ export class TranslatingState<
   onExit = () => {
     // Resume the history when we exit
     this.app.history.resume()
-    this.app.persist()
 
     // Reset initial data
     this.didClone = false

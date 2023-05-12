@@ -202,6 +202,7 @@
 
 .block-control-wrap {
   height: 24px;
+  min-width: 50px;
   margin-top: 0;
 
   &.is-order-list {
@@ -531,7 +532,7 @@
   }
 
   &.as-order-list {
-    @apply w-[28px] whitespace-nowrap justify-start;
+    @apply w-[28px] whitespace-nowrap justify-start pl-[3px];
   }
 
   .bullet {
