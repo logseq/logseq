@@ -262,7 +262,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.inset-0.edit-input-wrapper
+    [:span.absolute.inset-0.edit-input-wrapper.z-10
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -329,8 +329,8 @@
                           (reset! *input-value (if untitled? "" old-name))
                           (reset! *edit? true)))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper
-        (if @*edit?
+       [:div.page-title-sizer-wrapper.relative
+        (when @*edit?
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
                               :*input-value *input-value
@@ -338,18 +338,18 @@
                               :page-name page-name
                               :old-name old-name
                               :untitled? untitled?
-                              :whiteboard-page? whiteboard-page?})
-          [:span.title.block
-           {:data-value @*input-value
-            :data-ref   page-name
-            :style      {:opacity (when @*edit? 0)}}
-           (let [nested? (and (string/includes? title page-ref/left-brackets)
-                              (string/includes? title page-ref/right-brackets))]
-             (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                   untitled? [:span.opacity-50 (t :untitled)]
-                   nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
-                                                                                       (:block/format page))))
-                   :else title))])]])))
+                              :whiteboard-page? whiteboard-page?}))
+        [:span.title.block
+         {:data-value @*input-value
+          :data-ref   page-name
+          :style      {:opacity (when @*edit? 0)}}
+         (let [nested? (and (string/includes? title page-ref/left-brackets)
+                            (string/includes? title page-ref/right-brackets))]
+           (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                 untitled? [:span.opacity-50 (t :untitled)]
+                 nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                     (:block/format page))))
+                 :else title))]]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
