@@ -836,6 +836,16 @@
     > .injected-ui-item-pagebar {
       @apply pr-3 opacity-30 hover:opacity-100 transition-opacity;
     }
+
+    > .list-wrap {
+      @apply flex items-center flex-nowrap overflow-x-hidden pt-[14px];
+    }
+
+    a.button {
+      @apply flex items-center;
+
+      color: var(--ls-primary-text-color);
+    }
   }
 
   .toolbar-plugins-manager {
