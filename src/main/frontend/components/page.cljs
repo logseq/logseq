@@ -262,7 +262,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0.edit-input-wrapper
+    [:span.inset-0.edit-input-wrapper
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -317,19 +317,20 @@
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
-                       (.preventDefault e)
-                       (if (gobj/get e "shiftKey")
-                         (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                           (state/sidebar-add-block!
-                            repo
-                            (:db/id page)
-                            :page))
-                         (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
-                           (reset! *input-value (if untitled? "" old-name))
-                           (reset! *edit? true))))}
+                    (when-not (= (.-nodeName (.-target e)) "INPUT")
+                      (.preventDefault e)
+                      (if (gobj/get e "shiftKey")
+                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                          (state/sidebar-add-block!
+                           repo
+                           (:db/id page)
+                           :page))
+                        (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
+                          (reset! *input-value (if untitled? "" old-name))
+                          (reset! *edit? true)))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative
-        (when @*edit?
+       [:div.page-title-sizer-wrapper
+        (if @*edit?
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
                               :*input-value *input-value
@@ -337,18 +338,18 @@
                               :page-name page-name
                               :old-name old-name
                               :untitled? untitled?
-                              :whiteboard-page? whiteboard-page?}))
-        [:span.title.block
-         {:data-value @*input-value
-          :data-ref   page-name
-          :style      {:opacity (when @*edit? 0)}}
-         (let [nested? (and (string/includes? title page-ref/left-brackets)
-                            (string/includes? title page-ref/right-brackets))]
-           (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                 untitled? [:span.opacity-50 (t :untitled)]
-                 nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
-                                                                                     (:block/format page))))
-                 :else title))]]])))
+                              :whiteboard-page? whiteboard-page?})
+          [:span.title.block
+           {:data-value @*input-value
+            :data-ref   page-name
+            :style      {:opacity (when @*edit? 0)}}
+           (let [nested? (and (string/includes? title page-ref/left-brackets)
+                              (string/includes? title page-ref/right-brackets))]
+             (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                   untitled? [:span.opacity-50 (t :untitled)]
+                   nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                       (:block/format page))))
+                   :else title))])]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
