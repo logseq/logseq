@@ -753,30 +753,28 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  ([repo sibling-block format id value]
-   (move-to-prev-block repo sibling-block format id value true))
-  ([repo sibling-block format id value edit?]
-   (when (and repo sibling-block)
-     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-         (let [original-content (util/trim-safe (:block/content block))
-               value' (-> (property/remove-built-in-properties format original-content)
-                          (drawer/remove-logbook))
-               new-value (str value' value)
-               tail-len (count value)
-               pos (max
-                    (if original-content
-                      (gobj/get (utf8/encode original-content) "length")
-                      0)
-                    0)]
-           (when edit?
-             (edit-block! block pos id
-                          {:custom-content new-value
-                           :tail-len tail-len
-                           :move-cursor? false}))
-           {:prev-block block
-            :new-content new-value
-            :pos pos}))))))
+  [repo sibling-block format id value move?]
+  (when (and repo sibling-block)
+    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+        (let [original-content (util/trim-safe (:block/content block))
+              value' (-> (property/remove-built-in-properties format original-content)
+                         (drawer/remove-logbook))
+              new-value (str value' value)
+              tail-len (count value)
+              pos (max
+                   (if original-content
+                     (gobj/get (utf8/encode original-content) "length")
+                     0)
+                   0)
+              f (fn [] (edit-block! block pos id
+                                    {:custom-content new-value
+                                     :tail-len tail-len
+                                     :move-cursor? false}))]
+          (when move? (f))
+          {:prev-block block
+           :new-content new-value
+           :move-fn f})))))
 
 (declare save-block!)
 
@@ -802,7 +800,7 @@
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
-                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                       {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
                                        {:outliner-op :delete-block}
@@ -812,7 +810,8 @@
                    (outliner-tx/transact! transact-opts
                      (when concat-prev-block?
                        (save-block! repo prev-block new-content))
-                     (delete-block-aux! block delete-children?))))))))))
+                     (delete-block-aux! block delete-children?))
+                   (move-fn)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -829,7 +828,8 @@
         (move-to-prev-block repo sibling-block
                             (:block/format block)
                             (dom/attr sibling-block "id")
-                            "")))))
+                            ""
+                            true)))))
 
 (defn- set-block-property-aux!
   [block-or-id key value]
@@ -1962,7 +1962,7 @@
                   keep-uuid?]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
-                        (some-> (db/pull (:db/id editing-block))
+                        (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
         has-unsaved-edits (and editing-block
                                (not= (:block/content (db/pull (:db/id editing-block)))
@@ -2425,8 +2425,9 @@
             :else
             (profile
              "Insert block"
-             (do (save-current-block!)
-                 (insert-new-block! state)))))))))
+             (outliner-tx/transact! {:outliner-op :insert-blocks}
+               (save-current-block!)
+               (insert-new-block! state)))))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
@@ -2580,15 +2581,18 @@
         ^js input (state/get-input)
         current-pos (cursor/pos input)
         value (gobj/get input "value")
-        right (outliner-core/get-right-node (outliner-core/block current-block))
+        right (outliner-core/get-right-sibling (:db/id current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
-                     (:data right)
+                     (when right (db/pull (:db/id right)))
                      first-child)]
     (cond
-      (and collapsed? right (db/has-children? (tree/-get-id right)))
+      (nil? next-block)
+      nil
+
+      (and collapsed? right (db/has-children? (:block/uuid right)))
       nil
 
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
@@ -3118,7 +3122,7 @@
     (state/selection?)
     (shortcut-delete-selection e)
 
-    (whiteboard?)
+    (and (whiteboard?) (not (state/editing?)))
     (.deleteShapes (.-api ^js (state/active-tldraw-app)))
 
     :else

@@ -16,8 +16,7 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id]
-                           :opt [:block/page :block/left :block/parent]))
+(s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
                                    :map ::block-map))
@@ -26,8 +25,14 @@
 
 (defn block
   [m]
-  (assert (map? m) (util/format "block data must be map, got: %s %s" (type m) m))
-  (->Block m))
+  (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
+  (if (de/entity? m)
+    (->Block {:db/id (:db/id m)
+              :block/uuid (:block/uuid m)
+              :block/page (:block/page m)
+              :block/left (:block/left m)
+              :block/parent (:block/parent m)})
+    (->Block m)))
 
 (defn get-data
   [block]
@@ -231,11 +236,6 @@
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 
-(defn get-right-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (tree/-get-right node))
-
 (defn get-right-sibling
   [db-id]
   (when db-id
@@ -407,7 +407,7 @@
   (let [level-blocks (blocks-with-level blocks)]
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
-(defn get-right-siblings
+(defn- get-right-siblings
   "Get `node`'s right siblings."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
@@ -477,7 +477,7 @@
                         (:db/id target-block))
         get-new-id (fn [block lookup]
                      (cond
-                       (or (map? lookup) (vector? lookup))
+                       (or (map? lookup) (vector? lookup) (de/entity? lookup))
                        (when-let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
                                          (get uuids (last lookup))
                                          (get id->new-uuid (:db/id lookup)))]
@@ -510,6 +510,13 @@
                          (dissoc :db/id)))))
                  blocks)))
 
+(defn- get-target-block
+  [target-block]
+  (if (:db/id target-block)
+    (db/pull (:db/id target-block))
+    (when (:block/uuid target-block)
+      (db/pull [:block/uuid (:block/uuid target-block)]))))
+
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -527,7 +534,7 @@
   [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [target-block' (db/pull (:db/id target-block))
+  (let [target-block' (get-target-block target-block)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -713,7 +720,9 @@
   [blocks target-block {:keys [sibling? outliner-op]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
+  (let [target-block (get-target-block target-block)
+        _ (assert (some? target-block) (str "Invalid target: " target-block))
+        non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))

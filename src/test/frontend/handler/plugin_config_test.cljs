@@ -1,6 +1,7 @@
 (ns frontend.handler.plugin-config-test
   (:require [clojure.test :refer [is use-fixtures testing deftest]]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [frontend.test.node-helper :as test-node-helper]
             [frontend.test.fixtures :as fixtures]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -17,7 +18,7 @@
 
 (defn- create-global-config-dir
   []
-  (let [dir (test-helper/create-tmp-dir "config")
+  (let [dir (test-node-helper/create-tmp-dir "config")
         root-dir (node-path/dirname dir)]
     (reset! global-config-handler/root-dir root-dir)
     dir))

@@ -371,6 +371,8 @@
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
+        :file-sync/rsapi-cannot-upload-err "Unable to start synchronization, please check if the local time is correct."
+
 
         :notification/clear-all "Clear all"}
 
@@ -763,7 +765,7 @@
         :right-side-bar/history "(Dev) Verlauf rückgängig machen / wiederherstellen"
         :select/default-select-multiple "Ein oder mehrere auswählen"
         :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
-        
+
         :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"}
    :nl {
         :all-files "Alle bestanden"
@@ -1683,6 +1685,7 @@
 
            :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
            :file-sync/graph-deleted "当前远程图谱已经删除"
+           :file-sync/rsapi-cannot-upload-err "无法同步，请检查本机时间是否准确"
 
            :notification/clear-all "清除全部通知"}
 
@@ -2919,6 +2922,7 @@
            :settings-page/spell-checker "Verificador ortográfico"
            :settings-page/disable-sentry "Enviar dados de utilização e diagnósticos para Logseq"
            :settings-page/preferred-outdenting "Ativar dedentação lógica"
+           :settings-page/auto-expand-block-refs "Expandir as referências de bloco automaticamente ao aumentar o zoom"
            :settings-page/custom-date-format "Formato de data preferido"
            :settings-page/preferred-file-format "Formato de Arquivo preferido"
            :settings-page/preferred-workflow "Fluxo de trabalho preferido"
@@ -3246,6 +3250,10 @@
            :left-side-bar/new-whiteboard "Novo quadro branco"
            :left-side-bar/nav-favorites "Favoritos"
            :left-side-bar/nav-recent-pages "Recente"
+           :page/something-went-wrong "Algo deu errado"
+           :page/logseq-is-having-a-problem "Logseq está tendo um problema. Para tentar colocá-lo de volta em um estado de funcionamento, por favor tente os seguintes passos seguros em ordem:"
+           :page/step "Passo {1}"
+           :page/try "Tentar"
            :page/presentation-mode "Modo de apresentação"
            :page/delete-confirmation "Tem a certeza de que quer apagar esta página e o respetivo ficheiro?"
            :page/open-in-finder "Abrir em pasta"
@@ -3314,8 +3322,12 @@
            :color/pink "Rosa"
            :editor/copy "Copiar"
            :editor/cut "Cortar"
+           :content/copy-export-as "Copiar / Exportar como.."
+           :content/copy-block-url "Copiar URL do bloco"
            :content/copy-block-ref "Copiar referência do bloco"
            :content/copy-block-emebed "Copiar bloco para incorporar"
+           :content/copy-ref "Copiar esta referência"
+           :content/delete-ref "Apagar esta referência"
            :content/open-in-sidebar "Abrir na barra lateral"
            :content/click-to-edit "Clicar para editar"
            :settings-page/git-confirm "É necessário reiniciar a aplicação após atualizar as definições do Git."
@@ -3499,12 +3511,14 @@
 
            :command-palette/prompt "Introduza um comando"
            :select/default-prompt "Selecione um"
+           :select/default-select-multiple "Selecione um ou vários"
            :select.graph/prompt "Selecione um grafo"
            :select.graph/empty-placeholder-description "Sem grafos correspondentes. Quer adicionar outro?"
            :select.graph/add-graph "Sim, adicionar outro grafo"
 
            :file-sync/other-user-graph "O grafo local atual está ligado ao grafo remoto de outro utilizador. Portanto, a sincronização não pode ser iniciada."
            :file-sync/graph-deleted "O grafo remoto atual foi apagado"
+           :file-sync/rsapi-cannot-upload-err "Não foi possível iniciar a sincronização, verifique se a hora local está correta."
 
            :notification/clear-all "Limpar tudo"}
 
@@ -4518,6 +4532,7 @@
         :content/open-in-sidebar "Kenar çubuğunda aç"
         :content/click-to-edit "Düzenlemek için tıklayın"
         :context-menu/make-a-flashcard "Bilgi Kartı Oluştur"
+        :context-menu/toggle-number-list "Numaralı liste olarak değiştir"
         :context-menu/preview-flashcard "Bilgi Kartını Önizle"
         :context-menu/make-a-template "Bir Şablon Oluştur"
         :context-menu/input-template-name "Şablonun adı nedir?"

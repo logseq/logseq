@@ -608,10 +608,9 @@
               (plugin/open-waiting-updates-modal!))
             (plugin-handler/set-auto-checking! false))))))
 
-(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
-                          (merge payload {:tx-data (map #(into [] %) tx-data)
-                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
+                          (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 

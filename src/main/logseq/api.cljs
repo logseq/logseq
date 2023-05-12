@@ -43,7 +43,8 @@
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]
             [frontend.handler.code :as code-handler]
-            [frontend.handler.search :as search-handler]))
+            [frontend.handler.search :as search-handler]
+            [logseq.api.block :as api-block]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -676,24 +677,7 @@
           target-block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error target-block-uuid))]
       (editor-dnd-handler/move-blocks nil [src-block] target-block move-to) nil)))
 
-(def ^:export get_block
-  (fn [id-or-uuid ^js opts]
-    (when-let [block (cond
-                       (number? id-or-uuid) (db-utils/pull id-or-uuid)
-                       (string? id-or-uuid) (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid)))]
-      (when-not (contains? block :block/name)
-        (when-let [uuid (:block/uuid block)]
-          (let [{:keys [includeChildren]} (bean/->clj opts)
-                repo  (state/get-current-repo)
-                block (if includeChildren
-                        ;; nested children results
-                        (first (outliner-tree/blocks->vec-tree
-                                 (db-model/get-block-and-children repo uuid) uuid))
-                        ;; attached shallow children
-                        (assoc block :block/children
-                                     (map #(list :uuid (get-in % [:data :block/uuid]))
-                                          (db/get-block-immediate-children repo uuid))))]
-            (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+(def ^:export get_block api-block/get_block)
 
 (def ^:export get_current_block
   (fn [^js opts]
@@ -703,7 +687,7 @@
                                 (gdom/getElement (state/get-editing-block-dom-id)))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))]
-      (get_block (:db/id block) opts))))
+      (get_block (:block/uuid block) opts))))
 
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
@@ -715,8 +699,9 @@
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
-        (bean/->js (sdk-utils/normalize-keyword-for-json (:data (first right-siblings))))))))
+      (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
+        (let [block (db/pull (:id right-sibling))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
