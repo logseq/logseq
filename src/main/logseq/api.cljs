@@ -678,9 +678,9 @@
 
 (def ^:export get_block
   (fn [id-or-uuid ^js opts]
-    (when-let [block (cond
-                       (number? id-or-uuid) (db-utils/pull id-or-uuid)
-                       (string? id-or-uuid) (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid)))]
+    (when-let [block (if (number? id-or-uuid)
+                       (db-utils/pull id-or-uuid)
+                       (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid)))]
       (when-not (contains? block :block/name)
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
