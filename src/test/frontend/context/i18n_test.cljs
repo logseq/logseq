@@ -8,7 +8,7 @@
                       (state/set-state! :preferred-language nil)))
 
 (deftest translations
-  (testing "dict/dicts.cljs translations"
+  (testing "dict/dicts/core.cljs translations"
     (state/set-preferred-language! :en)
     (is (= "About Logseq"
            (i18n/t :help/about)))
