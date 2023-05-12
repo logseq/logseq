@@ -57,3 +57,8 @@ android/app/src/main/assets/capacitor.config.json
 /public/static
 .yarn/
 .yarnrc.yml
+
+deps/shui/.lsp
+deps/shui/.lsp-cache
+deps/shui/.clj-kondo
+deps/shui/shui-graph/logseq/bak
