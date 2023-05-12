@@ -16,7 +16,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [frontend.modules.shortcut.dicts.core :as dicts]
+            [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]

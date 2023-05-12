@@ -7,7 +7,7 @@
    [frontend.handler.web.nfs :as web-nfs]
    [frontend.handler.page :as page-handler]
    [frontend.util :as util]
-   [frontend.modules.shortcut.core :as shortcut]
+   [frontend.modules.shortcut.dicts :as shortcut]
    [frontend.state :as state]
    [frontend.mobile.util :as mobile-util]
    [frontend.fs :as fs]

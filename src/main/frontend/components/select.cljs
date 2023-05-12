@@ -3,7 +3,7 @@
   select-config to add a new use or select-type for this component. To use the
   new select-type, set :ui/open-select to the select-type. See
   :graph/open command for an example."
-  (:require [frontend.modules.shortcut.core :as shortcut]
+  (:require [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.state :as state]

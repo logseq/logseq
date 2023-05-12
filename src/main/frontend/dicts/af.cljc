@@ -1,7 +1,7 @@
 (ns frontend.dicts.af
   "Provides translation to AF")
 
-(def dict
+(def application
   {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
    :on-boarding/add-graph "Add a graph"
    :on-boarding/open-local-dir "Open a local directory"
@@ -86,3 +86,28 @@
 
    :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."
    :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap"})
+
+(def shortcuts
+  {:shortcut.category/formatting           "Formatering"
+   :command.editor/indent                  "Ingekeepte blok oortjie"
+   :command.editor/outdent                 "Oningekeepte blok"
+   :command.editor/move-block-up           "Skuif Blok Boontoe"
+   :command.editor/move-block-down         "Skuif Blok Ondertoe"
+   :command.editor/new-block               "Skep 'n nuwe blok"
+   :command.editor/new-line                "Nuwe lyn in blok"
+   :command.editor/zoom-in                 "Zoem in"
+   :command.editor/zoom-out                "Zoem uit"
+   :command.editor/follow-link             "Volg die skakel onder die wyser"
+   :command.editor/open-link-in-sidebar    "Maak skakel in kantlys oop"
+   :command.editor/expand-block-children   "Brei uit"
+   :command.editor/collapse-block-children "Vou in"
+   :command.editor/select-block-up         "Kies blok bo"
+   :command.editor/select-block-down       "Kies blok onder"
+   :command.editor/select-all-blocks       "Kies alle blokke"
+   :command.ui/toggle-help                 "Wissel help"
+   :command.git/commit                     "Jou git stoor boodskap"
+   :command.go/search                      "Volteks soek"
+   :command.ui/toggle-document-mode        "Wissel dokument modus"
+   :command.go/journals                    "Spring na joernale"
+   :command.ui/toggle-theme                "Wissel tussen donker/lig temas"
+   :command.ui/toggle-right-sidebar        "Wissel regter sybalk"})

@@ -19,7 +19,7 @@
             [frontend.components.page :as page-component]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.handler.events :as events]
             [frontend.handler.command-palette :as command-palette]))
 

@@ -1,6 +1,6 @@
 (ns frontend.components.command-palette
   (:require [frontend.handler.command-palette :as cp]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]

@@ -22,7 +22,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.util.text :as text-util]))
 
 (defn highlight-exact-query
