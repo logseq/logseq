@@ -1738,7 +1738,7 @@
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
-    [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
+    [:div.block-control-wrap.flex.flex-row.items-center
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?}])}
      (when (or (not fold-button-right?) collapsable?)
