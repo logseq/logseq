@@ -390,7 +390,8 @@
                                "foo.org"
                                (str "* [[bar][title]]\n"
                                     ;; all of the uris below do not create pages
-                                    "* [[https://example.com][example]]"))
+                                    "* [[https://example.com][example]]\n"
+                                    "* [[../assets/conga_parrot.gif][conga]]"))
       (is (= #{"foo" "bar"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
