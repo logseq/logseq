@@ -88,7 +88,7 @@
   [^js app ^js tl-page new-id-nonces db-id-nonces page-name replace?]
   (let [assets (js->clj-keywordize (.getCleanUpAssets app))
         new-shapes (.-shapes tl-page)
-        shapes-index (mapv #(gobj/get % "id") new-shapes)
+        shapes-index (map #(gobj/get % "id") new-shapes)
         shape-id->index (zipmap shapes-index (range (.-length new-shapes)))
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
                            (map (fn [{:keys [id]}]
