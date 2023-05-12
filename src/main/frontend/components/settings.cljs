@@ -827,9 +827,7 @@
               [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
-               (when (and
-                      (util/electron?)
-                      (not (file-sync-handler/synced-file-graph? current-repo)))
+               (when (util/electron?)
                  [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)
