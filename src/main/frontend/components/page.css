@@ -249,6 +249,7 @@
     box-shadow: none;
     padding-left: 5px;
     padding-top: 5px;
+    padding-bottom: 4px;
 
     &-wrapper {
       @apply rounded;
