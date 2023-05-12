@@ -276,7 +276,7 @@ a.page-title {
   }
 
   > .title {
-    @apply w-full overflow-hidden overflow-ellipsis;
+    @apply w-full pointer-events-none overflow-hidden overflow-ellipsis;
   }
 
   .edit-input {
