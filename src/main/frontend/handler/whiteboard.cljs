@@ -85,13 +85,16 @@
                            (util/time-ms))}))
 
 (defn- compute-tx
-  [^js app ^js tl-page new-id-nonces db-id-nonces page-name shapes-index replace?]
+  [^js app ^js tl-page new-id-nonces db-id-nonces page-name replace?]
   (let [assets (js->clj-keywordize (.getCleanUpAssets app))
+        new-shapes (.-shapes tl-page)
+        shapes-index (mapv #(gobj/get % "id") new-shapes)
+        shape-id->index (zipmap shapes-index (range (.-length new-shapes)))
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
                            (map (fn [{:keys [id]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
                                       js->clj-keywordize
-                                      (assoc :index (get shapes-index id)))))
+                                      (assoc :index (get shape-id->index id)))))
                            (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
@@ -115,7 +118,7 @@
         prev-changed-blocks (when (seq changed-shapes)
                               (db/pull-many repo '[*] (mapv (fn [shape]
                                                               [:block/uuid (uuid (:id shape))]) changed-shapes)))]
-    {:page-block (build-page-block page-name tl-page assets (keys shapes-index))
+    {:page-block (build-page-block page-name tl-page assets shapes-index)
      :upserted-blocks (->> upsert-shapes
                            (map #(shape->block % page-name))
                            (map with-timestamps))
@@ -132,11 +135,13 @@
 (defn transact-tldr-delta! [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
-        shapes-index (zipmap (mapv #(gobj/get % "id") shapes) (range (.-length shapes)))
-        new-id-nonces (set (map (fn [shape]
+        page-block (model/get-page page-name)
+        prev-shapes-index (get-in page-block [:block/properties :logseq.tldraw.page :shapes-index])
+        shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
+        new-id-nonces (set (map-indexed (fn [idx shape]
                                   (let [id (.-id shape)]
                                     {:id id
-                                     :nonce (if (= shape.id (get shapes-index id))
+                                     :nonce (if (= idx (get shape-id->prev-index id))
                                               (.-nonce shape)
                                               (js/Date.now))})) shapes))
         repo (state/get-current-repo)
@@ -145,7 +150,7 @@
                       (set (->> (model/get-whiteboard-id-nonces repo page-name)
                                 (map #(update % :id str)))))
         {:keys [page-block upserted-blocks delete-blocks metadata]}
-        (compute-tx app tl-page new-id-nonces db-id-nonces page-name shapes-index replace?)
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
         new-shapes (get-in metadata [:data :new-shapes])
         metadata' (cond
