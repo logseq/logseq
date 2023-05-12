@@ -34,7 +34,7 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.outliner.datascript :as outliner-db]
             [frontend.modules.outliner.file :as file]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

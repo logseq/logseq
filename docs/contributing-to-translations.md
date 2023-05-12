@@ -13,10 +13,8 @@ In order to run the commands in this doc, you will need to install
 
 ## Where to Contribute
 
-Language translations are in two libraries,
-[src/main/frontend/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts/)
-and
-[src/main/frontend/modules/shortcut/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts), in both packages the `core.cljc` file imports the isolated packages for each language.
+Language translations in this library,
+[src/main/frontend/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts/), `<LOCALE>.cljc` file the isolated packages for each language.
 
 ## Language Overview
 
@@ -108,6 +106,4 @@ and tell you what's wrong.
 
 ## Add a Language
 
-To add a new language, add an entry to `frontend.dicts.core/languages`. Then add a
-new locale keyword to `frontend.dicts.core/dicts` and to
-`frontend.modules.shortcut.dicts.core/dicts` and start translating as described above.
+To add a new language, add an entry to `frontend.dicts.core/languages`. Then add a new locale keyword to `frontend.dicts.core/dicts`.

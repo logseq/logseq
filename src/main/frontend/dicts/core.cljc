@@ -21,25 +21,25 @@
               [frontend.dicts.uk :as uk]))
 
 (def ^:large-vars/data-var dicts
-  {:en      en/dict
-   :de      de/dict
-   :nl      nl/dict
-   :fr      fr/dict
-   :zh-CN   zh-CN/dict
-   :zh-Hant zh-Hant/dict
-   :af      af/dict
-   :es      es/dict
-   :nb-NO   nb-NO/dict
-   :pt-BR   pt-BR/dict
-   :pt-PT   pt-PT/dict
-   :ru      ru/dict
-   :ja      ja/dict
-   :it      it/dict
-   :tr      tr/dict
-   :ko      ko/dict
-   :pl      pl/dict
-   :sk      sk/dict
-   :uk      uk/dict})
+  {:en      en/application
+   :de      de/application
+   :nl      nl/application
+   :fr      fr/application
+   :zh-CN   zh-CN/application
+   :zh-Hant zh-Hant/application
+   :af      af/application
+   :es      es/application
+   :nb-NO   nb-NO/application
+   :pt-BR   pt-BR/application
+   :pt-PT   pt-PT/application
+   :ru      ru/application
+   :ja      ja/application
+   :it      it/application
+   :tr      tr/application
+   :ko      ko/application
+   :pl      pl/application
+   :sk      sk/application
+   :uk      uk/application})
    
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}

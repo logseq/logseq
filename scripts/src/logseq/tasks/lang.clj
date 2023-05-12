@@ -3,7 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.dicts.core :as dicts]
-            [frontend.modules.shortcut.dicts.core :as shortcut-dicts]
+            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [logseq.tasks.util :as task-util]
             [babashka.cli :as cli]
             [babashka.process :refer [shell]]))
