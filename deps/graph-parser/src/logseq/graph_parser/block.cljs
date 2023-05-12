@@ -56,6 +56,7 @@
 
                   (and (= url-type "Search")
                        (= format :org)
+                       (not (gp-config/local-asset? value))
                        value)
 
                   (and
