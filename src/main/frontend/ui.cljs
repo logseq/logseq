@@ -20,7 +20,7 @@
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.state :as state]

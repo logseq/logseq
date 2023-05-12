@@ -10,7 +10,7 @@
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
             [frontend.config :as config]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]

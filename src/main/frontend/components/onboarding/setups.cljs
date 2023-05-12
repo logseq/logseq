@@ -14,7 +14,7 @@
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.handler.notification :as notification]
             [frontend.handler.external :as external-handler]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.dicts :as shortcut]
             [frontend.handler.user :as user-handler]
             [clojure.string :as string]
             [goog.object :as gobj]))
