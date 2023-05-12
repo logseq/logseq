@@ -2,8 +2,8 @@
   "Tasks related to language translations"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [frontend.dicts :as dicts]
-            [frontend.modules.shortcut.dicts :as shortcut-dicts]
+            [frontend.dicts.core :as dicts]
+            [frontend.modules.shortcut.dicts.core :as shortcut-dicts]
             [logseq.tasks.util :as task-util]
             [babashka.cli :as cli]
             [babashka.process :refer [shell]]))
@@ -50,9 +50,9 @@
                  (task-util/print-usage "LOCALE [--copy]"))
         options (cli/parse-opts (rest args) {:coerce {:copy :boolean}})
         _ (when-not (contains? (get-languages) lang)
-            (println "Language" lang "does not have an entry in dicts.cljs")
+            (println "Language" lang "does not have an entry in dicts/core.cljs")
             (System/exit 1))
-        all-dicts [[(get-dicts) "frontend/dicts.cljs"]
+        all-dicts [[(get-dicts) "frontend/dicts/core.cljs"]
                    [shortcut-dicts/dicts "shortcut/dicts.cljs"]]
         all-missing (map (fn [[dicts file]]
                            [(select-keys (dicts :en)
