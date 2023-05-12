@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [use-fixtures deftest is]]
             [frontend.test.helper :as test-helper]
             [frontend.db :as db]
-            [logseq.api :as api]
+            [logseq.api.block :as api-block]
             [frontend.state :as state]
             [cljs-bean.core :as bean]))
 
@@ -29,11 +29,12 @@
         :block/left 10002
         :block/content "4"}])
 
-    (is (= (:content (bean/->clj (api/get_block 10000 #js {}))) "1"))
-    (is (= (:content (bean/->clj (api/get_block "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {}))) "2"))
-    (is (= (:content (bean/->clj (api/get_block #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {}))) "2"))
-    (is (= {:id 10001, :content "2", :uuid "d9b7b45f-267f-4794-9569-f43d1ce77172", :children [["uuid" "adae3006-f03e-4814-a1f5-f17f15b86556"]]} (bean/->clj (api/get_block 10001 #js {:includeChildren false}))))
+    (is (= (:content (bean/->clj (api-block/get_block 10000 #js {}))) "1"))
+    (is (= (:content (bean/->clj (api-block/get_block "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {}))) "2"))
+    (is (= (:content (bean/->clj (api-block/get_block #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {}))) "2"))
+    (is (= {:id 10001, :content "2", :uuid "d9b7b45f-267f-4794-9569-f43d1ce77172", :children [["uuid" "adae3006-f03e-4814-a1f5-f17f15b86556"]]}
+           (bean/->clj (api-block/get_block 10001 #js {:includeChildren false}))))
     (is (= {:content "2", :uuid "d9b7b45f-267f-4794-9569-f43d1ce77172", :id 10001, :children [{:content "3", :left {:id 10001}, :parent {:id 10001}, :uuid "adae3006-f03e-4814-a1f5-f17f15b86556", :id 10002, :level 1, :children [{:content "4", :left {:id 10002}, :parent {:id 10002}, :uuid "0c3053c3-2dab-4769-badd-14ce16d8ba8d", :id 10003, :level 2, :children []}]}]}
-           (bean/->clj (api/get_block 10001 #js {:includeChildren true}))))))
+           (bean/->clj (api-block/get_block 10001 #js {:includeChildren true}))))))
 
 #_(cljs.test/run-tests)
