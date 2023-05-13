@@ -203,7 +203,7 @@
       :org
       "/%s/"
       :markdown
-      "*%s*"
+      "_%s_"
       "")))
 
 (defn get-strikethrough
