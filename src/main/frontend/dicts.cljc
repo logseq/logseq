@@ -2471,7 +2471,10 @@
         :settings-page/sync "Sincronizar"
         :settings-page/tab-assets "Recursos"
         :settings-page/tab-features "Características"
-        :whiteboard/link-whiteboard-or-block "Enlazar pizarra/página/bloque"}
+        :whiteboard/link-whiteboard-or-block "Enlazar pizarra/página/bloque"
+        :context-menu/toggle-number-list "Alternar lista de números"
+        :file-sync/rsapi-cannot-upload-err "Incapaz de comenzar la sincronización, favor de checar si..."}
+
 
    :nb-NO {:tutorial/text #?(:cljs (rc/inline "tutorial-no.md")
                              :default "tutorial-no.md")
