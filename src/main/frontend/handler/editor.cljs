@@ -1647,8 +1647,7 @@
     "^"
     "="
     "/"
-    "+"
-    "~"})
+    "+"})
 
 (def delete-map
   (assoc autopair-map
