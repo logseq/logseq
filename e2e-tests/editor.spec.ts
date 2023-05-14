@@ -1010,7 +1010,7 @@ test('backtick auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test.fixme('single quote auto-pairing', async ({ page }) => {
+test('single quote auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open single quote
@@ -1024,7 +1024,7 @@ test.fixme('single quote auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test.fixme('double quote auto-pairing', async ({ page }) => {
+test('double quote auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open double quote
@@ -1038,7 +1038,7 @@ test.fixme('double quote auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test.fixme('autopair pipe symbol', async ({ page }) => {
+test('autopair pipe symbol', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open pipe
@@ -1052,7 +1052,7 @@ test.fixme('autopair pipe symbol', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test.fixme('only autopair tilda with text selection', async ({ page }) => {
+test('only autopair tilda with text selection', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open tilda
@@ -1076,9 +1076,9 @@ test.fixme('only autopair tilda with text selection', async ({ page }) => {
   // Verify that an additional tilda was automatically added around 'ipsum'
   await expect(page.locator('textarea >> nth=0')).toHaveText('~Lorem~')
 
-  // Verify that the cursor is at the end of 'ipsum'
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe('~Lorem~'.length)
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
 })
 
 test('Only auto-pair asterisk with text selection', async ({

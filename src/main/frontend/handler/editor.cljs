@@ -1513,14 +1513,14 @@
    "`" "`"
    "\"" "\""
    "'" "'"
-   "~" "~"
    "*" "*"
    "_" "_"
    "^" "^"
    "=" "="
-   "/" "/"
-   "%" "%"
-   "+" "+"})
+   "/" "/" 
+   "+" "+"
+   "~" "~"
+   "|" "|"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 (def reversed-autopair-map
@@ -1534,7 +1534,8 @@
     "^"
     "="
     "/"
-    "+"})
+    "+"
+    "~"})
 
 (def delete-map
   (assoc autopair-map
