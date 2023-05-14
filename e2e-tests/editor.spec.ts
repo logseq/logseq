@@ -715,7 +715,7 @@ test('apply italic formatting with empty selection', async ({
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem **')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem __')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -737,7 +737,7 @@ test('apply italic formatting to the entire block', async ({ page, block }) => {
   await page.keyboard.press(modKey + '+i')
 
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    '*Lorem ipsum-dolor sit.*'
+    '_Lorem ipsum-dolor sit._'
   )
 
   // Verify cursor position
@@ -761,7 +761,7 @@ test('apply and remove italic formatting to a word connected with a special char
 
   // Verify that 'ipsum' is italic
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *ipsum*-dolor sit.'
+    'Lorem _ipsum_-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -789,7 +789,7 @@ test('apply strikethrough formatting with empty selection', async ({
 
   await block.mustFill('Lorem ')
 
-  // Apply italic formatting
+  // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
 
   await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ~~~~')
@@ -909,7 +909,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *ipsum*-dolor sit.'
+    'Lorem _ipsum_-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -918,7 +918,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ~~*ipsum*~~-dolor sit.'
+    'Lorem ~~_ipsum_~~-dolor sit.'
   )
   // select '~~ipsum~~'
   await selectText(page, 9, 11)
@@ -926,7 +926,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **~~*ipsum*~~**-dolor sit.'
+    'Lorem **~~_ipsum_~~**-dolor sit.'
   )
 
   await selectText(page, 8, 5)
@@ -996,6 +996,20 @@ test('parentheses auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
+test('angle brackets auto-pair', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open pipe
+  page.type('textarea >> nth=0', '<', { delay: 100 })
+
+  // Verify that a closing > was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('<>')
+
+  // Verify that the cursor is between the <>
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
 test('backtick auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
@@ -1034,20 +1048,6 @@ test('double quote auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('""')
 
   // Verify that the cursor is between the double quotes
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
-})
-
-test('autopair pipe symbol', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open pipe
-  page.type('textarea >> nth=0', '|', { delay: 100 })
-
-  // Verify that a closing pipe was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('||')
-
-  // Verify that the cursor is between the pipes
   const cursorPosition = await getCursorPos(page)
   expect(cursorPosition).toBe(1)
 })

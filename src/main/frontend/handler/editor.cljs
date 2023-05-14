@@ -166,10 +166,9 @@
                              (- selection-start (count pattern-prefix))
                              (- selection-end (count pattern-prefix)))
     (empty? selection)
-    (cursor/move-cursor-to input
-                           (+ selection-start (count pattern-prefix)))
+    (cursor/move-cursor-to input (- cursor-pos (count pattern-prefix)))
     :else
-    (do (cursor/move-cursor-to input cursor-pos)
+    (do (cursor/move-cursor-to input (+ selection-end (count pattern-prefix)))
         (clear-selection!))))
 
 (defn- format-text! [pattern-fn]
@@ -1556,6 +1555,7 @@
   {"[" "]"
    "{" "}"
    "(" ")"
+   "<" ">"
    "`" "`"
    "\"" "\""
    "'" "'"
@@ -1565,8 +1565,7 @@
    "=" "="
    "/" "/" 
    "+" "+"
-   "~" "~"
-   "|" "|"})
+   "~" "~"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 (def reversed-autopair-map
