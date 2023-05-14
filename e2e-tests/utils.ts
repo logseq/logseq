@@ -213,3 +213,57 @@ export async function navigateToStartOfBlock(page: Page, block: Block) {
     await page.keyboard.press('ArrowLeft')
   }
 }
+
+/**
+ * Selects a certain length of text in a textarea,
+ * starting from a specified number of characters from the end of the text.
+ * @param {Page} page - The Page object.
+ * @param {number} shiftBackward - The number of characters from the end of the text to start the selection.
+ * @param {number} selectionLength - The number of characters to select.
+ * @return {Promise<void>} - Promise which resolves when the text selection is done.
+ */
+export async function selectText(
+  page: Page,
+  shiftBackward: number,
+  selectionLength: number
+): Promise<void> {
+  // Move to the start of the text to select
+  for (let i = 0; i < shiftBackward; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+
+  // Select the text
+  await page.keyboard.down('Shift')
+  for (let i = 0; i < selectionLength; i++) {
+    await page.keyboard.press('ArrowRight')
+  }
+  await page.keyboard.up('Shift')
+}
+
+/**
+ * Retrieves the selected text in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<string | null>} - Promise which resolves to the selected text or null.
+ */
+export async function getSelection(page: Page): Promise<string | null> {
+  const selection = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea')
+    return textarea?.value.substring(textarea.selectionStart, textarea.selectionEnd) || null
+  })
+
+  return selection
+}
+
+/**
+ * Retrieves the current cursor position in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<number | null>} - Promise which resolves to the cursor position or null.
+ */
+export async function getCursorPos(page: Page): Promise<number | null> {
+  const cursorPosition = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea');
+    return textarea ? textarea.selectionStart : null;
+  });
+
+  return cursorPosition;
+}
