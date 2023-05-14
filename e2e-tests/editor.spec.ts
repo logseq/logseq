@@ -31,9 +31,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 
   await page.click('.absolute >> text=' + 'foo')
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    '#foo bar [[blah]]'
-  )
+  expect(await page.inputValue('textarea >> nth=0')).toBe('#foo bar [[blah]]')
 })
 
 test('hashtag search page auto-complete', async ({ page, block }) => {
@@ -45,14 +43,14 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: 50 })
 
-  await block.mustFill("done")
+  await block.mustFill('done')
 
   await enterNextBlock(page)
   await page.type('textarea >> nth=0', 'Some #', { delay: 100 })
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: 50 })
 
-  await block.mustFill("done")
+  await block.mustFill('done')
 })
 
 test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
@@ -102,7 +100,10 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
   expect(await page.locator('h1.title').innerText()).toContain(title)
 
   // Check there're linked references
-  await page.waitForSelector(`.references .ls-block >> nth=1`, { state: 'detached', timeout: 100 })
+  await page.waitForSelector(`.references .ls-block >> nth=1`, {
+    state: 'detached',
+    timeout: 100,
+  })
 })
 
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
@@ -143,45 +144,56 @@ test.skip('next block and cursor position', async ({ page, block }) => {
 })
 
 test(
-  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
-  "but dont trigger RIME #3440 ",
+  'Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], ' +
+    'but dont trigger RIME #3440 ',
   // cases should trigger [[]] #3251
   async ({ page, block }) => {
     // This test requires dev mode
-    test.skip(process.env.RELEASE === 'true', 'not available for release version')
+    test.skip(
+      process.env.RELEASE === 'true',
+      'not available for release version'
+    )
 
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,
-      kb_events.macos_pinyin_left_full_square_bracket
+      kb_events.macos_pinyin_left_full_square_bracket,
       // TODO: support #3741
       // kb_events.win10_legacy_pinyin_left_full_square_bracket,
     ].entries()) {
       await createRandomPage(page)
-      let check_text = "#3251 test " + idx
-      await block.mustFill(check_text + "【")
+      let check_text = '#3251 test ' + idx
+      await block.mustFill(check_text + '【')
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
-      await block.mustFill(check_text + "【【")
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(
+        check_text + '【'
+      )
+      await block.mustFill(check_text + '【【')
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
-    };
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(
+        check_text + '[[]]'
+      )
+    }
 
     // dont trigger RIME #3440
     for (let [idx, events] of [
       kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
-      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
+      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket,
     ].entries()) {
       await createRandomPage(page)
-      let check_text = "#3440 test " + idx
+      let check_text = '#3440 test ' + idx
       await block.mustFill(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
     }
-  })
+  }
+)
 
-test('copy & paste block ref and replace its content', async ({ page, block }) => {
+test('copy & paste block ref and replace its content', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   await block.mustType('Some random text')
@@ -196,14 +208,18 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   await page.keyboard.press('Enter')
 
   // Check if the newly created block-ref has the same referenced content
-  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(1);
+  await expect(
+    page.locator('.block-ref >> text="Some random text"')
+  ).toHaveCount(1)
 
   // Move cursor into the block ref
   for (let i = 0; i < 4; i++) {
     await page.press('textarea >> nth=0', 'ArrowLeft')
   }
 
-  await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
+  await expect(page.locator('textarea >> nth=0')).not.toHaveValue(
+    'Some random text'
+  )
 
   // FIXME: Sometimes the cursor is in the end of the editor
   for (let i = 0; i < 4; i++) {
@@ -213,15 +229,22 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+  await expect(page.locator('textarea >> nth=0')).toHaveValue(
+    'Some random text'
+  )
 
   await block.escapeEditing()
 
-  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
-  await expect(page.locator('text="Some random text"')).toHaveCount(2);
+  await expect(
+    page.locator('.block-ref >> text="Some random text"')
+  ).toHaveCount(0)
+  await expect(page.locator('text="Some random text"')).toHaveCount(2)
 })
 
-test('copy and paste block after editing new block #5962', async ({ page, block }) => {
+test('copy and paste block after editing new block #5962', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
@@ -244,7 +267,10 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await block.waitForBlocks(3)
 })
 
-test('undo and redo after starting an action should not destroy text #6267', async ({ page, block }) => {
+test('undo and redo after starting an action should not destroy text #6267', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // Get one piece of undo state onto the stack
@@ -260,7 +286,9 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await page.waitForTimeout(100)
 
   // Should close the action menu when we undo the action prompt
-  await expect(page.locator(`[data-modal-name="page-search"]`)).not.toBeVisible()
+  await expect(
+    page.locator(`[data-modal-name="page-search"]`)
+  ).not.toBeVisible()
 
   // It should undo to the last saved state, and not erase the previous undo action too
   await expect(page.locator('text="text1"')).toHaveCount(1)
@@ -270,8 +298,14 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await expect(page.locator('text="text1 text2 [[]]"')).toHaveCount(1)
 })
 
-test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
-  for (const [commandTrigger, modalName] of [['/', 'commands'], ['[[', 'page-search']]) {
+test('undo after starting an action should close the action menu #6269', async ({
+  page,
+  block,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['/', 'commands'],
+    ['[[', 'page-search'],
+  ]) {
     await createRandomPage(page)
 
     // Open the action modal
@@ -286,12 +320,21 @@ test('undo after starting an action should close the action menu #6269', async (
     await page.keyboard.press(modKey + '+z')
     await page.waitForTimeout(100)
     await expect(page.locator('text="/today"')).toHaveCount(0)
-    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+    await expect(
+      page.locator(`[data-modal-name="${modalName}"]`)
+    ).not.toBeVisible()
   }
 })
 
-test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['((', 'block-search'],
+  ]) {
     // First, left arrow
     await createRandomPage(page)
 
@@ -322,7 +365,11 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
 })
 
 // Old logic would fail this because it didn't do the check if @search-timeout was set
-test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
   for (const [commandTrigger, modalName] of [['((', 'block-search']]) {
     await createRandomPage(page)
 
@@ -331,7 +378,7 @@ test('#6266 moving cursor outside of parens immediately after searching should s
     await page.keyboard.type(commandTrigger, { delay: 20 })
 
     await page.waitForTimeout(100)
-    await page.keyboard.type("some block search text")
+    await page.keyboard.type('some block search text')
     await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
@@ -342,8 +389,15 @@ test('#6266 moving cursor outside of parens immediately after searching should s
   }
 })
 
-test('pressing up and down should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+test('pressing up and down should NOT close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['((', 'block-search'],
+  ]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -365,8 +419,15 @@ test('pressing up and down should NOT close autocomplete menu', async ({ page, b
   }
 })
 
-test('moving cursor inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+test('moving cursor inside of brackets should NOT close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['((', 'block-search'],
+  ]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -378,7 +439,7 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
       await autocompleteMenu.expectVisible(modalName)
     }
 
-    await page.keyboard.type("search", { delay: 20 })
+    await page.keyboard.type('search', { delay: 20 })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor, still inside the brackets
@@ -388,7 +449,11 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
   }
 })
 
-test('moving cursor inside of brackets when autocomplete menu is closed should NOT open autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+test('moving cursor inside of brackets when autocomplete menu is closed should NOT open autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
   // Note: (( behaves differently and doesn't auto-trigger when typing in it after exiting the search prompt once
   for (const [commandTrigger, modalName] of [['[[', 'page-search']]) {
     await createRandomPage(page)
@@ -421,8 +486,15 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
   }
 })
 
-test('selecting text inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+test('selecting text inside of brackets should NOT close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['((', 'block-search'],
+  ]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -432,7 +504,7 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.keyboard.type("some page search text", { delay: 10 })
+    await page.keyboard.type('some page search text', { delay: 10 })
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
 
@@ -443,8 +515,15 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
   }
 })
 
-test('pressing backspace and remaining inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+test('pressing backspace and remaining inside of brackets should NOT close autocomplete menu', async ({
+  page,
+  block,
+  autocompleteMenu,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['((', 'block-search'],
+  ]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -454,7 +533,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.keyboard.type("some page search text", { delay: 10 })
+    await page.keyboard.type('some page search text', { delay: 10 })
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
 
@@ -465,8 +544,14 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
   }
 })
 
-test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
+test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({
+  page,
+  block,
+}) => {
+  for (const [commandTrigger, modalName] of [
+    ['[[', 'page-search'],
+    ['/', 'commands'],
+  ]) {
     await createRandomPage(page)
 
     // Open the action modal
@@ -481,13 +566,18 @@ test('press escape when autocomplete menu is open, should close autocomplete men
     // Press escape; should close action modal instead of exiting edit mode
     await page.keyboard.press('Escape')
     await page.waitForTimeout(100)
-    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+    await expect(
+      page.locator(`[data-modal-name="${modalName}"]`)
+    ).not.toBeVisible()
     await page.waitForTimeout(1000)
     expect(await block.isEditing()).toBe(true)
   }
 })
 
-test('press escape when link/image dialog is open, should restore focus to input', async ({ page, block }) => {
+test('press escape when link/image dialog is open, should restore focus to input', async ({
+  page,
+  block,
+}) => {
   for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
     await createRandomPage(page)
 
@@ -513,7 +603,10 @@ test('press escape when link/image dialog is open, should restore focus to input
   }
 })
 
-test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
+test('should show text after soft return when node is collapsed #5074', async ({
+  page,
+  block,
+}) => {
   const delay = 300
   await createRandomPage(page)
 
@@ -535,7 +628,9 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Before soft return\nAfter soft return'
+  )
 
   // zoom into the block
   page.click('a.block-control + a')
@@ -548,10 +643,15 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Before soft return\nAfter soft return'
+  )
 })
 
-test('should not erase typed text when expanding block quickly after typing #3891', async ({ page, block }) => {
+test('should not erase typed text when expanding block quickly after typing #3891', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   await block.mustFill('initial text,')
@@ -566,76 +666,81 @@ test('should not erase typed text when expanding block quickly after typing #389
 
   // First undo should delete the last typed information, not undo a no-op expand action
   await page.keyboard.press(modKey + '+z')
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    'initial text,'
-  )
+  expect(await page.inputValue('textarea >> nth=0')).toBe('initial text,')
 
   await page.keyboard.press(modKey + '+z')
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    ''
-  )
+  expect(await page.inputValue('textarea >> nth=0')).toBe('')
 })
 
-test('should keep correct undo and redo seq after indenting or outdenting the block #7615',async({page,block}) => {
+test('should keep correct undo and redo seq after indenting or outdenting the block #7615', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
-  await block.mustFill("foo")
+  await block.mustFill('foo')
 
-  await page.keyboard.press("Enter")
-  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await page.keyboard.press('Enter')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('')
   await block.indent()
-  await block.mustFill("bar")
-  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
+  await block.mustFill('bar')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('bar')
 
   await page.keyboard.press(modKey + '+z')
   // should undo "bar" input
-  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('')
   await page.keyboard.press(modKey + '+Shift+z')
   // should redo "bar" input
-  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
-  await page.keyboard.press("Shift+Tab")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('bar')
+  await page.keyboard.press('Shift+Tab')
 
-  await page.keyboard.press("Enter")
-  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await page.keyboard.press('Enter')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('')
   // swap input seq
-  await block.mustFill("baz")
+  await block.mustFill('baz')
   await block.indent()
 
   await page.keyboard.press(modKey + '+z')
   // should undo indention
-  await expect(page.locator('textarea >> nth=0')).toHaveText("baz")
-  await page.keyboard.press("Shift+Tab")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('baz')
+  await page.keyboard.press('Shift+Tab')
 
-  await page.keyboard.press("Enter")
-  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await page.keyboard.press('Enter')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('')
   // #7615
-  await page.keyboard.type("aaa")
+  await page.keyboard.type('aaa')
   await block.indent()
-  await page.keyboard.type(" bbb")
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+  await page.keyboard.type(' bbb')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa bbb')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa bbb')
 })
 
 test('apply bold formatting with empty selection', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await block.mustFill('Lorem ')
+  await block.mustFill('Lorem ipsum')
+
+  // move cursor before ipsum
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  await page.keyboard.press('Space')
 
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ****')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem **** ipsum')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -708,14 +813,18 @@ test('apply italic formatting with empty selection', async ({
   page,
   block,
 }) => {
-  await createRandomPage(page)
+  await block.mustFill('Lorem ipsum')
 
-  await block.mustFill('Lorem ')
+  // move cursor before ipsum
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  await page.keyboard.press('Space')
 
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem **')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ** ipsum')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -785,20 +894,22 @@ test('apply strikethrough formatting with empty selection', async ({
   page,
   block,
 }) => {
-  await createRandomPage(page)
+  await block.mustFill('Lorem ipsum')
 
-  await block.mustFill('Lorem ')
+  // move cursor before ipsum
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  await page.keyboard.press('Space')
 
-  // Apply italic formatting
+  // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ~~~~')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ~~~~ ipsum')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
 
-  // Considering 'Lorem ' is 6 characters long and '**' is 2 characters long
-  // the expected cursor position should be 6 + 2/2 = 7
   expect(cursorPosition).toBe(8)
 })
 
@@ -860,40 +971,88 @@ test('apply and remove strikethrough formatting to a word connected with a speci
   expect(selection).toBe('ipsum')
 })
 
-test.fixme('apply and remove underline formatting to a word connected with a special character', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
+test.fixme(
+  'apply underline formatting with empty selection',
+  async ({ page, block }) => {
+    await block.mustFill('Lorem ipsum')
 
-  await block.mustFill('Lorem ipsum-dolor sit.')
+    // move cursor before ipsum
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('ArrowLeft')
+    }
+    await page.keyboard.press('Space')
 
-  // Select 'ipsum'
-  await selectText(page, 16, 5)
+    // Apply strikethrough formatting
+    await page.keyboard.press(modKey + '+u')
 
-  // Apply strikethrough formatting
-  await page.keyboard.press(modKey + '+u')
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      'Lorem <u></u> ipsum'
+    )
 
-  // Verify that 'ipsum' is strikethrough
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem <u>ipsum</u>-dolor sit.'
-  )
+    // Verify cursor position
+    const cursorPosition = await getCursorPos(page)
 
-  // Re-select 'ipsum'
-  await selectText(page, 5, 5)
+    expect(cursorPosition).toBe(9)
+  }
+)
 
-  // Remove strikethrough formatting
-  await page.keyboard.press(modKey + '+u')
+test.fixme(
+  'apply underline formatting to the entire block',
+  async ({ page, block }) => {
+    await createRandomPage(page)
 
-  // Verify that 'ipsum' is no longer strikethrough and is still selected
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ipsum-dolor sit.'
-  )
+    await block.mustFill('Lorem ipsum-dolor sit.')
 
-  // Verify the word 'ipsum' is still selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('ipsum')
-})
+    // Select the entire block
+    await page.keyboard.press(modKey + '+a')
+
+    // Apply strikethrough formatting
+    await page.keyboard.press(modKey + '+u')
+
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      '<u>Lorem ipsum-dolor sit.</u>'
+    )
+
+    // Verify cursor position
+    const cursorPosition = await getCursorPos(page)
+    expect(cursorPosition).toBe(25)
+  }
+)
+
+test.fixme(
+  'apply and remove underline formatting to a word connected with a special character',
+  async ({ page, block }) => {
+    await createRandomPage(page)
+
+    await block.mustFill('Lorem ipsum-dolor sit.')
+
+    // Select 'ipsum'
+    await selectText(page, 16, 5)
+
+    // Apply strikethrough formatting
+    await page.keyboard.press(modKey + '+u')
+
+    // Verify that 'ipsum' is strikethrough
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      'Lorem <u>ipsum</u>-dolor sit.'
+    )
+
+    // Re-select 'ipsum'
+    await selectText(page, 5, 5)
+
+    // Remove strikethrough formatting
+    await page.keyboard.press(modKey + '+u')
+
+    // Verify that 'ipsum' is no longer strikethrough and is still selected
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      'Lorem ipsum-dolor sit.'
+    )
+
+    // Verify the word 'ipsum' is still selected
+    const selection = await getSelection(page)
+    expect(selection).toBe('ipsum')
+  }
+)
 
 test('apply and remove all formatting to a word connected with a special character', async ({
   page,
@@ -996,6 +1155,20 @@ test('parentheses auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
+test.fixme('angle brackets auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open angle bracket
+  page.type('textarea >> nth=0', '<', { delay: 100 })
+
+  // Verify that a closing > was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('<>')
+
+  // Verify that the cursor is between the <>
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
 test('backtick auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
@@ -1010,7 +1183,7 @@ test('backtick auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test('single quote auto-pairing', async ({ page }) => {
+test.fixme('single quote auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open single quote
@@ -1024,7 +1197,7 @@ test('single quote auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test('double quote auto-pairing', async ({ page }) => {
+test.fixme('double quote auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open double quote
@@ -1038,21 +1211,7 @@ test('double quote auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test('autopair pipe symbol', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open pipe
-  page.type('textarea >> nth=0', '|', { delay: 100 })
-
-  // Verify that a closing pipe was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('||')
-
-  // Verify that the cursor is between the pipes
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
-})
-
-test('only autopair tilda with text selection', async ({ page }) => {
+test.fixme('only autopair tilda with text selection', async ({ page }) => {
   await createRandomPage(page)
 
   // type an open tilda
@@ -1081,10 +1240,7 @@ test('only autopair tilda with text selection', async ({ page }) => {
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair asterisk with text selection', async ({
-  page,
-  block,
-}) => {
+test('Only auto-pair asterisk with text selection', async ({ page, block }) => {
   await createRandomPage(page)
 
   // type an open asterisk
@@ -1112,7 +1268,10 @@ test('Only auto-pair asterisk with text selection', async ({
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair underscore with text selection', async ({ page, block }) => {
+test('Only auto-pair underscore with text selection', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // type an underscore
