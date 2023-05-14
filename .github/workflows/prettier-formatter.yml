@@ -1,0 +1,30 @@
+name: Prettify JS/TS 🧽
+
+on:
+  pull_request_target:
+    branches: [master]
+
+jobs:
+  prettier:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          # Make sure the actual branch is checked out when running on PRs
+          ref: ${{ github.event.pull_request.head.ref }}
+          # Specify repository to checkout from
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          # This is important to fetch the changes to the previous commit
+          fetch-depth: 0
+          # Ensure that GITHUB_TOKEN will not be persisted in repo's config
+          persist-credentials: false
+
+      - name: Prettify code
+        uses: creyD/prettier_action@v4.3
+        with:
+          # This part is also where you can pass other options, for example:
+          prettier_options: --write **/*.{js,ts}
+          only_changed: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
