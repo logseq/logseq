@@ -1,6 +1,13 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, modKey } from './utils'
+import {
+  createRandomPage,
+  enterNextBlock,
+  modKey,
+  selectText,
+  getSelection,
+  getCursorPos,
+} from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -618,4 +625,629 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
   await page.keyboard.press(modKey + '+Shift+z')
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+})
+
+test('apply bold formatting with empty selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ')
+
+  // Apply bold formatting
+  await page.keyboard.press(modKey + '+b')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ****')
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+
+  // Considering 'Lorem ' is 6 characters long and '****' is 4 characters long
+  // the expected cursor position should be 6 + 4/2 = 8
+  expect(cursorPosition).toBe(8)
+})
+
+test('apply bold formatting to the entire block', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select the entire block
+  await page.keyboard.press(modKey + '+a')
+
+  // Apply bold formatting
+  await page.keyboard.press(modKey + '+b')
+
+  // Verify that the text is now bold
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    '**Lorem ipsum-dolor sit.**'
+  )
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+
+  // Considering 'Lorem ipsum-dolor sit.' is 22 characters long
+  // Cursor should be at the end of the text and before the end of the formatting characters
+  expect(cursorPosition).toBe(24)
+})
+
+test('apply and remove bold formatting to a word connected with a special character', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select 'ipsum'
+  await selectText(page, 16, 5)
+
+  // Apply bold formatting
+  await page.keyboard.press(modKey + '+b')
+
+  // Verify that 'ipsum' is bold
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem **ipsum**-dolor sit.'
+  )
+
+  // Re-select 'ipsum'
+  await selectText(page, 5, 5)
+
+  // Remove bold formatting
+  await page.keyboard.press(modKey + '+b')
+
+  // Verify that 'ipsum' is no longer bold and is still selected
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ipsum-dolor sit.'
+  )
+
+  // Verify the word 'ipsum' is still selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('ipsum')
+})
+
+test('apply italic formatting with empty selection', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ')
+
+  // Apply italic formatting
+  await page.keyboard.press(modKey + '+i')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem **')
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+
+  // Considering 'Lorem ' is 6 characters long and '**' is 2 characters long
+  // the expected cursor position should be 6 + 2/2 = 7
+  expect(cursorPosition).toBe(7)
+})
+
+test('apply italic formatting to the entire block', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select the entire block
+  await page.keyboard.press(modKey + '+a')
+
+  // Apply italic formatting
+  await page.keyboard.press(modKey + '+i')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    '*Lorem ipsum-dolor sit.*'
+  )
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(23)
+})
+
+test('apply and remove italic formatting to a word connected with a special character', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select 'ipsum'
+  await selectText(page, 16, 5)
+
+  // Apply italic formatting
+  await page.keyboard.press(modKey + '+i')
+
+  // Verify that 'ipsum' is italic
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem *ipsum*-dolor sit.'
+  )
+
+  // Re-select 'ipsum'
+  await selectText(page, 5, 5)
+
+  // Remove italic formatting
+  await page.keyboard.press(modKey + '+i')
+
+  // Verify that 'ipsum' is no longer italic and is still selected
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ipsum-dolor sit.'
+  )
+
+  // Verify the word 'ipsum' is still selected
+  const selection = await getSelection(page)
+
+  expect(selection).toBe('ipsum')
+})
+
+test('apply strikethrough formatting with empty selection', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ')
+
+  // Apply italic formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ~~~~')
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+
+  // Considering 'Lorem ' is 6 characters long and '**' is 2 characters long
+  // the expected cursor position should be 6 + 2/2 = 7
+  expect(cursorPosition).toBe(8)
+})
+
+test('apply strikethrough formatting to the entire block', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select the entire block
+  await page.keyboard.press(modKey + '+a')
+
+  // Apply strikethrough formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    '~~Lorem ipsum-dolor sit.~~'
+  )
+
+  // Verify cursor position
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(24)
+})
+
+test('apply and remove strikethrough formatting to a word connected with a special character', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select 'ipsum'
+  await selectText(page, 16, 5)
+
+  // Apply strikethrough formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+
+  // Verify that 'ipsum' is strikethrough
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ~~ipsum~~-dolor sit.'
+  )
+
+  // Re-select 'ipsum'
+  await selectText(page, 5, 5)
+
+  // Remove strikethrough formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+
+  // Verify that 'ipsum' is no longer strikethrough and is still selected
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ipsum-dolor sit.'
+  )
+
+  // Verify the word 'ipsum' is still selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('ipsum')
+})
+
+test.fixme('apply and remove underline formatting to a word connected with a special character', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select 'ipsum'
+  await selectText(page, 16, 5)
+
+  // Apply strikethrough formatting
+  await page.keyboard.press(modKey + '+u')
+
+  // Verify that 'ipsum' is strikethrough
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem <u>ipsum</u>-dolor sit.'
+  )
+
+  // Re-select 'ipsum'
+  await selectText(page, 5, 5)
+
+  // Remove strikethrough formatting
+  await page.keyboard.press(modKey + '+u')
+
+  // Verify that 'ipsum' is no longer strikethrough and is still selected
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ipsum-dolor sit.'
+  )
+
+  // Verify the word 'ipsum' is still selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('ipsum')
+})
+
+test('apply and remove all formatting to a word connected with a special character', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  await block.mustFill('Lorem ipsum-dolor sit.')
+
+  // Select 'ipsum'
+  await selectText(page, 16, 5)
+
+  // Apply italic formatting
+  await page.keyboard.press(modKey + '+i')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem *ipsum*-dolor sit.'
+  )
+
+  // Re-select 'ipsum'
+  await selectText(page, 6, 7)
+
+  // Apply strikethrough formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ~~*ipsum*~~-dolor sit.'
+  )
+  // select '~~ipsum~~'
+  await selectText(page, 9, 11)
+
+  // Apply bold formatting
+  await page.keyboard.press(modKey + '+b')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem **~~*ipsum*~~**-dolor sit.'
+  )
+
+  await selectText(page, 8, 5)
+
+  // Remove italic formatting
+  await page.keyboard.press(modKey + '+i')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem **~~ipsum~~**-dolor sit.'
+  )
+
+  // Remove strikethrough formatting
+  await page.keyboard.press(modKey + '+Shift+s')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem **ipsum**-dolor sit.'
+  )
+
+  // Remove bold formatting
+  await page.keyboard.press(modKey + '+b')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem ipsum-dolor sit.'
+  )
+
+  const selection = await getSelection(page)
+
+  expect(selection).toBe('ipsum')
+})
+
+test('square brackets auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open square bracket
+  page.type('textarea >> nth=0', '[', { delay: 100 })
+
+  // Verify that a closing square bracket was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('[]')
+
+  // Verify that the cursor is between the square brackets
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('curly brackets auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open curly bracket
+  page.type('textarea >> nth=0', '{', { delay: 100 })
+
+  // Verify that a closing curly bracket was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('{}')
+
+  // Verify that the cursor is between the curly brackets
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('parentheses auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open parenthesis
+  page.type('textarea >> nth=0', '(', { delay: 100 })
+
+  // Verify that a closing parenthesis was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('()')
+
+  // Verify that the cursor is between the parentheses
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('backtick auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open square bracket
+  page.type('textarea >> nth=0', '`', { delay: 100 })
+
+  // Verify that a closing backtick was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('``')
+
+  // Verify that the cursor is between the backticks
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('single quote auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open single quote
+  page.type('textarea >> nth=0', "'", { delay: 100 })
+
+  // Verify that a closing single quote was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText("''")
+
+  // Verify that the cursor is between the single quotes
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('double quote auto-pairing', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open double quote
+  page.type('textarea >> nth=0', '"', { delay: 100 })
+
+  // Verify that a closing double quote was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('""')
+
+  // Verify that the cursor is between the double quotes
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('autopair pipe symbol', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open pipe
+  page.type('textarea >> nth=0', '|', { delay: 100 })
+
+  // Verify that a closing pipe was automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('||')
+
+  // Verify that the cursor is between the pipes
+  const cursorPosition = await getCursorPos(page)
+  expect(cursorPosition).toBe(1)
+})
+
+test('only autopair tilda with text selection', async ({ page }) => {
+  await createRandomPage(page)
+
+  // type an open tilda
+  page.type('textarea >> nth=0', '~', { delay: 100 })
+
+  // Verify that an additional tilda was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('~')
+
+  // remove tilda
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await page.type('textarea >> nth=0', 'Lorem')
+
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type a tilda
+  await page.type('textarea >> nth=0', '~', { delay: 100 })
+
+  // Verify that an additional tilda was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('~Lorem~')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair asterisk with text selection', async ({
+  page,
+  block,
+}) => {
+  await createRandomPage(page)
+
+  // type an open asterisk
+  page.type('textarea >> nth=0', '*', { delay: 100 })
+
+  // Verify that an additional asterisk was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('*')
+
+  // remove asterisk
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type an asterisk
+  await page.type('textarea >> nth=0', '*', { delay: 100 })
+
+  // Verify that an additional asterisk was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('*Lorem*')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair underscore with text selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // type an underscore
+  page.type('textarea >> nth=0', '_', { delay: 100 })
+
+  // Verify that an additional asterisk was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('_')
+
+  // remove underscore
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type an underscore
+  await page.type('textarea >> nth=0', '_', { delay: 100 })
+
+  // Verify that an additional asterisk was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('_Lorem_')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair ^ symbol with text selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // type the symbol
+  page.type('textarea >> nth=0', '^', { delay: 100 })
+
+  // Verify that an additional sybmol was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('^')
+
+  // remove symbol
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type the symbol
+  await page.type('textarea >> nth=0', '^', { delay: 100 })
+
+  // Verify that an additional symbol was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('^Lorem^')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair = symbol with text selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // type the symbol
+  page.type('textarea >> nth=0', '=', { delay: 100 })
+
+  // Verify that an additional sybmol was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('=')
+
+  // remove symbol
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type the symbol
+  await page.type('textarea >> nth=0', '=', { delay: 100 })
+
+  // Verify that an additional symbol was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('=Lorem=')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair / symbol with text selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // type the symbol
+  page.type('textarea >> nth=0', '/', { delay: 100 })
+
+  // Verify that an additional sybmol was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('/')
+
+  // remove symbol
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type the symbol
+  await page.type('textarea >> nth=0', '/', { delay: 100 })
+
+  // Verify that an additional symbol was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('/Lorem/')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
+})
+
+test('Only auto-pair + symbol with text selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // type the symbol
+  page.type('textarea >> nth=0', '+', { delay: 100 })
+
+  // Verify that an additional sybmol was not automatically added
+  await expect(page.locator('textarea >> nth=0')).toHaveText('+')
+
+  // remove symbol
+  await page.keyboard.press('Backspace')
+
+  // add text
+  await block.mustType('Lorem')
+  // select text
+  await page.keyboard.press(modKey + '+a')
+
+  // Type the symbol
+  await page.type('textarea >> nth=0', '+', { delay: 100 })
+
+  // Verify that an additional symbol was automatically added around 'ipsum'
+  await expect(page.locator('textarea >> nth=0')).toHaveText('+Lorem+')
+
+  // Verify 'Lorem' is selected
+  const selection = await getSelection(page)
+  expect(selection).toBe('Lorem')
 })
