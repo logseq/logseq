@@ -876,7 +876,7 @@ test('apply underline formatting with empty selection', async ({
   page,
   block,
 }) => {
-  await block.mustFill('Lorem ipsum')
+  await block.mustFill('Lorem  ipsum')
 
   // move cursor before ipsum
   for (let i = 0; i < 6; i++) {
@@ -894,7 +894,7 @@ test('apply underline formatting with empty selection', async ({
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
 
-  expect(cursorPosition).toBe(9)
+  expect(cursorPosition).toBe(10)
 })
 
 test(
@@ -1000,7 +1000,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Remove strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *_ipsum_*-dolor sit.'
+    'Lorem **ipsum**-dolor sit.'
   )
 
   // Remove bold formatting
