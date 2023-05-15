@@ -2634,9 +2634,8 @@
         (outliner-tx/transact! transact-opts
           (delete-block-aux! next-block false)
           (save-block! repo edit-block' new-content))
-
-        (state/set-edit-content! input-id new-content)
-        (cursor/move-cursor-to input current-pos)))))
+        (let [block (if next-block-has-refs? next-block edit-block)]
+          (edit-block! block current-pos (:block/uuid block)))))))
 
 (defn keydown-delete-handler
   [_e]
