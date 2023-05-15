@@ -399,17 +399,23 @@
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
+        surfix (subs edit-content current-pos)
         new-value (str prefix
                        value
-                       (subs edit-content current-pos))
+                       surfix)
         new-pos (- (+ (count prefix)
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when check-fn
-      (check-fn new-value (dec (count prefix)) new-pos))))
+    (state/set-edit-content! (state/get-edit-input-id)
+                             (str prefix value))
+    ;; HACK: save scroll-pos of current pos, then add trailing content
+    (let [scroll-pos (.-scrollTop (gdom/getElement "main-content-container"))]
+      (state/set-block-content-and-last-pos! id new-value new-pos)
+      (cursor/move-cursor-to input new-pos)
+      (set! (.-scrollTop (gdom/getElement "main-content-container")) scroll-pos)
+      (when check-fn
+        (check-fn new-value (dec (count prefix)) new-pos)))))
 
 (defn simple-replace!
   [id value selected
