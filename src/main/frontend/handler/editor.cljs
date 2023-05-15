@@ -361,8 +361,8 @@
                       (assoc :block/uuid (:block/uuid block)))
            opts' (merge opts (cond-> {:outliner-op :save-block}
                                uuid-changed?
-                               (assoc :uuid-changed {:from (:block/uuid block)
-                                                     :to original-uuid})))]
+                               (assoc :uuid-changed {:kept (:block/uuid block)
+                                                     :deleted original-uuid})))]
        (outliner-tx/transact!
         opts'
         (outliner-core/save-block! block'))
@@ -390,17 +390,8 @@
          block-id (when (map? properties) (get properties :id))
          content (-> (property/remove-built-in-properties format content)
                      (drawer/remove-logbook))]
-     (cond
-       (another-block-with-same-id-exists? uuid block-id)
-       (notification/show!
-        [:p.content
-         (util/format "Block with the id %s already exists!" block-id)]
-        :error)
-
-       force?
+     (if force?
        (save-block-inner! block value opts)
-
-       :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when (and content-changed? page)
            (save-block-inner! block value opts)))))))
@@ -778,10 +769,13 @@
                      (gobj/get (utf8/encode original-content) "length")
                      0)
                    0)
-              f (fn [] (edit-block! block pos id
-                                    {:custom-content new-value
-                                     :tail-len tail-len
-                                     :move-cursor? false}))]
+              f (fn []
+                  (prn {:pos pos})
+                  (edit-block! (db/pull (:db/id block))
+                               pos
+                               id
+                               {:custom-content new-value
+                                :tail-len tail-len}))]
           (when move? (f))
           {:prev-block block
            :new-content new-value

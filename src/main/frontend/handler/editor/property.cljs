@@ -38,9 +38,8 @@
 (defn edit-block!
   ([block pos id]
    (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len move-cursor? retry-times]
+  ([block pos id {:keys [custom-content tail-len retry-times]
                   :or {tail-len 0
-                       move-cursor? true
                        retry-times 0}
                   :as opts}]
    (when-not (> retry-times 2)
@@ -70,7 +69,7 @@
                            (drawer/remove-logbook))]
            (clear-selection!)
            (if edit-input-id
-             (state/set-editing! edit-input-id content block text-range move-cursor?)
+             (state/set-editing! edit-input-id content block text-range)
              ;; Block may not be rendered yet
              (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))
 

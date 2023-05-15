@@ -10,7 +10,8 @@
                      [frontend.config :as config]
                      [logseq.graph-parser.util :as gp-util]
                      [lambdaisland.glogi :as log]
-                     [frontend.search :as search])))
+                     [frontend.search :as search]
+                     [clojure.string :as string])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -55,22 +56,27 @@
    (defn update-block-refs
      [txs opts]
      (if-let [changed (:uuid-changed opts)]
-       (let [{:keys [from to]} changed
-             from-e (db/entity [:block/uuid from])
-             to-e (db/entity [:block/uuid to])
-             from-id (:db/id from-e)
-             to-id (:db/id to-e)
-             refs (:block/_refs from-e)
-             path-refs (:block/_path-refs from-e)
-             refs-txs (mapcat (fn [ref refs]
-                             (let [id (:db/id ref)]
-                               [[:db/retract id :block/refs from-id]
-                                [:db/add id :block/refs to-id]])) refs)
-             path-refs-txs (mapcat (fn [ref refs]
+       (let [{:keys [kept deleted]} changed
+             kept-e (db/entity [:block/uuid kept])
+             deleted-e (db/entity [:block/uuid deleted])
+             kept-id (:db/id kept-e)
+             deleted-id (:db/id deleted-e)
+             kept-refs (:block/_refs kept-e)
+             kept-path-refs (:block/_path-refs kept-e)
+             deleted-refs (:block/_refs deleted-e)
+             kept-refs-txs (mapcat (fn [ref refs]
                                      (let [id (:db/id ref)]
-                                       [[:db/retract id :block/path-refs from-id]
-                                        [:db/add id :block/path-refs to-id]])) path-refs)]
-         (concat txs refs-txs path-refs-txs))
+                                       [[:db/retract id :block/refs kept-id]
+                                        [:db/add id :block/refs deleted-id]])) kept-refs)
+             kept-path-refs-txs (mapcat (fn [ref refs]
+                                          (let [id (:db/id ref)]
+                                            [[:db/retract id :block/path-refs kept-id]
+                                             [:db/add id :block/path-refs deleted-id]])) kept-path-refs)
+             deleted-refs-txs (mapcat (fn [ref refs]
+                                     (let [id (:db/id ref)]
+                                       (let [new-content (string/replace (:block/content ref) (str deleted) (str kept))]
+                                         [[:db/add id :block/content new-content]]))) deleted-refs)]
+         (concat txs kept-refs-txs kept-path-refs-txs deleted-refs-txs))
        txs)))
 
 #?(:cljs
@@ -90,8 +96,8 @@
                   (not (contains? (:file/unlinked-dirs @state/state)
                                   (config/get-repo-dir (state/get-current-repo)))))
 
-         ;; (prn "[DEBUG] Outliner transact:")
-         ;; (frontend.util/pprint txs)
+         (prn "[DEBUG] Outliner transact:")
+         (frontend.util/pprint txs)
 
          (try
            (let [repo (get opts :repo (state/get-current-repo))
