@@ -2000,7 +2000,8 @@
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         revert-cut-txs (get-revert-cut-tx blocks)
-        keep-uuid? (if (seq revert-cut-txs) true keep-uuid?)
+        cut-paste? (seq revert-cut-txs)
+        keep-uuid? (if cut-paste? true keep-uuid?)
         replace-empty-target? (if (and paste-nested-blocks? empty-target? target-block-has-children?)
                                 false
                                 true)
@@ -2019,8 +2020,7 @@
                    false
 
                    :else
-                   true)
-]
+                   true)]
 
     (when has-unsaved-edits
       (outliner-tx/transact!
@@ -2036,6 +2036,7 @@
                              (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :cut-paste? cut-paste?
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
