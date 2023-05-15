@@ -52,11 +52,11 @@
            [:div.flex.flex-col.items-start
             [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "1")]
             [:div [:span.highlighted.font-bold "Rebuild"] [:span.toned-down " search index"]]]
-             [:div
-              (ui/button (t :page/try)
-                         :small? true
-                         :on-click (fn []
-                                     (search-handler/rebuild-indices! true)))]]
+           [:div
+            (ui/button (t :page/try)
+                       :small? true
+                       :on-click (fn []
+                                   (search-handler/rebuild-indices! true)))]]
           [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.separator-top.py-4
            [:div.flex.flex-col.items-start
             [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
@@ -92,7 +92,7 @@
                    (ui/inject-dynamic-style-node!)
                    (quick-tour/init)
                    (plugin-handler/host-mounted!)
-                   (assoc state ::teardown (setup-fns!) ))
+                   (assoc state ::teardown (setup-fns!)))
    :will-unmount (fn [state]
                    (when-let [teardown (::teardown state)]
                      (teardown)))}

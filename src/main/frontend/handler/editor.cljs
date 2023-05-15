@@ -426,7 +426,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-      (save-current-block! {:current-block current-block})
+     (save-current-block! {:current-block current-block})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -1244,8 +1244,8 @@
   [blocks]
   (outliner-tx/transact!
    {:outliner-op :save-block}
-    (doseq [[block value] blocks]
-      (save-block-if-changed! block value))))
+   (doseq [[block value] blocks]
+     (save-block-if-changed! block value))))
 
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
@@ -1832,8 +1832,9 @@
       (and (= content "1. ") (= last-input-char " ") input-id edit-block
            (not (own-order-number-list? edit-block)))
       (do
-        (state/pub-event! [:editor/toggle-own-number-list edit-block])
-        (state/set-edit-content! input-id ""))
+        (state/set-edit-content! input-id "")
+        (-> (p/delay 10)
+            (p/then #(state/pub-event! [:editor/toggle-own-number-list edit-block]))))
 
       (and (= last-input-char (state/get-editor-command-trigger))
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
@@ -2734,7 +2735,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-        (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -3177,9 +3178,9 @@
           ;; if the move is to cross block boundary, select the whole block
          (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
              (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
-          (select-block-up-down direction)
+         (select-block-up-down direction)
           ;; simulate text selection
-          (cursor/select-up-down input direction anchor cursor-rect)))
+         (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
 
 (defn open-selected-block!

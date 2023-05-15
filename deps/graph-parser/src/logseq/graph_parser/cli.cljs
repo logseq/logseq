@@ -48,7 +48,6 @@ TODO: Fail fast when process exits 1"
   [conn files {:keys [config] :as options}]
   (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)
                                 :user-config config
-                                :supported-formats (gp-config/supported-formats)
                                 :filename-format (or (:file/name-format config) :legacy)
                                 :extracted-block-ids (atom #{})}
                                (select-keys options [:verbose]))]
