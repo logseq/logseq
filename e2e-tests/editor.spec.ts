@@ -4,7 +4,8 @@ import {
   createRandomPage,
   enterNextBlock,
   modKey,
-  selectText,
+  moveCursor,
+  selectCharacters,
   getSelection,
   getCursorPos,
 } from './utils'
@@ -693,7 +694,11 @@ test.describe('Bold Formatting', () => {
     await block.mustFill('Lorem ipsum-dolor sit.')
 
     // Select 'ipsum'
-    await selectText(page, 16, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -16) // moves the cursor 16 characters to the left
+
+    // Select the desired length of text
+    await selectCharacters(page, 5) // selects the next 5 characters to the right of the cursor
 
     // Apply bold formatting
     await page.keyboard.press(modKey + '+b')
@@ -702,7 +707,11 @@ test.describe('Bold Formatting', () => {
     )
 
     // Re-select 'ipsum'
-    await selectText(page, 5, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -5)
+
+    // Select the desired length of text
+    await selectCharacters(page, 5)
 
     // Remove bold formatting
     await page.keyboard.press(modKey + '+b')
@@ -783,7 +792,11 @@ test.describe('Italic Formatting', () => {
     await block.mustFill('Lorem ipsum-dolor sit.')
 
     // Select 'ipsum'
-    await selectText(page, 16, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -16)
+
+    // Select the desired length of text
+    await selectCharacters(page, 5)
 
     // Apply italic formatting
     await page.keyboard.press(modKey + '+i')
@@ -794,7 +807,11 @@ test.describe('Italic Formatting', () => {
     )
 
     // Re-select 'ipsum'
-    await selectText(page, 5, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -5)
+
+    // Select the desired length of text
+    await selectCharacters(page, 5)
 
     // Remove italic formatting
     await page.keyboard.press(modKey + '+i')
@@ -874,7 +891,11 @@ test.describe('Strikethrough Formatting', () => {
     await block.mustFill('Lorem ipsum-dolor sit.')
 
     // Select 'ipsum'
-    await selectText(page, 16, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -16)
+
+    // Select the desired length of text
+    await selectCharacters(page, 5)
 
     // Apply strikethrough formatting
     await page.keyboard.press(modKey + '+Shift+s')
@@ -885,7 +906,11 @@ test.describe('Strikethrough Formatting', () => {
     )
 
     // Re-select 'ipsum'
-    await selectText(page, 5, 5)
+    // Move the cursor to the desired position
+    await moveCursor(page, -5)
+
+    // Select the desired length of text
+    await selectCharacters(page, 5)
 
     // Remove strikethrough formatting
     await page.keyboard.press(modKey + '+Shift+s')
@@ -966,7 +991,11 @@ test.describe('Underline Formatting', () => {
       await block.mustFill('Lorem ipsum-dolor sit.')
 
       // Select 'ipsum'
-      await selectText(page, 16, 5)
+      // Move the cursor to the desired position
+      await moveCursor(page, -16)
+
+      // Select the desired length of text
+      await selectCharacters(page, 5)
 
       // Apply formatting
       await page.keyboard.press(modKey + '+u')
@@ -975,7 +1004,11 @@ test.describe('Underline Formatting', () => {
       )
 
       // Re-select 'ipsum'
-      await selectText(page, 5, 5)
+      // Move the cursor to the desired position
+      await moveCursor(page, -5)
+
+      // Select the desired length of text
+      await selectCharacters(page, 5)
 
       // Remove underline formatting
       await page.keyboard.press(modKey + '+u')
@@ -999,7 +1032,11 @@ test('apply and remove all formatting to a word connected with a special charact
   await block.mustFill('Lorem ipsum-dolor sit.')
 
   // Select 'ipsum'
-  await selectText(page, 16, 5)
+  // Move the cursor to the desired position
+  await moveCursor(page, -16)
+
+  // Select the desired length of text
+  await selectCharacters(page, 5)
 
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
@@ -1007,8 +1044,12 @@ test('apply and remove all formatting to a word connected with a special charact
     'Lorem *ipsum*-dolor sit.'
   )
 
-  // Re-select 'ipsum'
-  await selectText(page, 6, 7)
+  // select '*ipsum*'
+  // Move the cursor to the desired position
+  await moveCursor(page, -6)
+
+  // Select the desired length of text
+  await selectCharacters(page, 7)
 
   // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
@@ -1016,7 +1057,11 @@ test('apply and remove all formatting to a word connected with a special charact
     'Lorem ~~*ipsum*~~-dolor sit.'
   )
   // select '~~ipsum~~'
-  await selectText(page, 9, 11)
+  // Move the cursor to the desired position
+  await moveCursor(page, -9)
+
+  // Select the desired length of text
+  await selectCharacters(page, 11)
 
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
@@ -1024,7 +1069,11 @@ test('apply and remove all formatting to a word connected with a special charact
     'Lorem **~~*ipsum*~~**-dolor sit.'
   )
 
-  await selectText(page, 8, 5)
+  // Move the cursor to the desired position
+  await moveCursor(page, -7)
+
+  // Select the desired length of text
+  await selectCharacters(page, 5)
 
   // Remove italic formatting
   await page.keyboard.press(modKey + '+i')

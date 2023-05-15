@@ -215,29 +215,40 @@ export async function navigateToStartOfBlock(page: Page, block: Block) {
 }
 
 /**
- * Selects a certain length of text in a textarea,
- * starting from a specified number of characters from the end of the text.
+ * Repeats a key press a certain number of times.
  * @param {Page} page - The Page object.
- * @param {number} shiftBackward - The number of characters from the end of the text to start the selection.
- * @param {number} selectionLength - The number of characters to select.
+ * @param {string} key - The key to press.
+ * @param {number} times - The number of times to press the key.
+ * @return {Promise<void>} - Promise which resolves when the key press repetition is done.
+ */
+async function repeatKeyPress(page: Page, key: string, times: number): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await page.keyboard.press(key);
+  }
+}
+
+/**
+ * Moves the cursor a certain number of characters to the right (positive value) or left (negative value).
+ * @param {Page} page - The Page object.
+ * @param {number} shift - The number of characters to move the cursor. Positive moves to the right, negative to the left.
+ * @return {Promise<void>} - Promise which resolves when the cursor has moved.
+ */
+export async function moveCursor(page: Page, shift: number): Promise<void> {
+  const direction = shift < 0 ? 'ArrowLeft' : 'ArrowRight';
+  const absShift = Math.abs(shift);
+  await repeatKeyPress(page, direction, absShift);
+}
+
+/**
+ * Selects a certain length of text in a textarea to the right of the cursor.
+ * @param {Page} page - The Page object.
+ * @param {number} length - The number of characters to select.
  * @return {Promise<void>} - Promise which resolves when the text selection is done.
  */
-export async function selectText(
-  page: Page,
-  shiftBackward: number,
-  selectionLength: number
-): Promise<void> {
-  // Move to the start of the text to select
-  for (let i = 0; i < shiftBackward; i++) {
-    await page.keyboard.press('ArrowLeft')
-  }
-
-  // Select the text
-  await page.keyboard.down('Shift')
-  for (let i = 0; i < selectionLength; i++) {
-    await page.keyboard.press('ArrowRight')
-  }
-  await page.keyboard.up('Shift')
+export async function selectCharacters(page: Page, length: number): Promise<void> {
+  await page.keyboard.down('Shift');
+  await repeatKeyPress(page, 'ArrowRight', length);
+  await page.keyboard.up('Shift');
 }
 
 /**
