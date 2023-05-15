@@ -634,27 +634,28 @@ test.describe('Bold Formatting', () => {
   }) => {
     await createRandomPage(page)
 
-    await block.mustFill('Lorem ipsum')
+    const text = 'Lorem ipsum'
+    await block.mustFill(text)
 
+    const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
 
-    // Apply bold formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+b')
 
+    const formatting = '****'
     await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem **** ipsum'
+      `Lorem ${formatting} ipsum`
     )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
 
-    // Considering 'Lorem ' is 6 characters long and '****' is 4 characters long
-    // the expected cursor position should be 6 + 4/2 = 8
-    expect(cursorPosition).toBe(8)
+    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in bold formatting and places cursor correctly', async ({
@@ -721,25 +722,30 @@ test.describe('Italic Formatting', () => {
     page,
     block,
   }) => {
-    await block.mustFill('Lorem ipsum')
+    await createRandomPage(page)
 
+    const text = 'Lorem ipsum'
+    await block.mustFill(text)
+
+    const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
 
-    // Apply italic formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+i')
 
-    await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ** ipsum')
+    const formatting = '**'
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      `Lorem ${formatting} ipsum`
+    )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
 
-    // Considering 'Lorem ' is 6 characters long and '**' is 2 characters long
-    // the expected cursor position should be 6 + 2/2 = 7
-    expect(cursorPosition).toBe(7)
+    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in italic formatting and places cursor correctly', async ({
@@ -805,25 +811,30 @@ test.describe('Strikethrough Formatting', () => {
     page,
     block,
   }) => {
-    await block.mustFill('Lorem ipsum')
+    await createRandomPage(page)
 
+    const text = 'Lorem ipsum'
+    await block.mustFill(text)
+
+    const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
 
-    // Apply strikethrough formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+Shift+s')
 
+    const formatting = '~~~~'
     await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem ~~~~ ipsum'
+      `Lorem ${formatting} ipsum`
     )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
 
-    expect(cursorPosition).toBe(8)
+    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in strikethrough formatting and places cursor correctly', async ({
@@ -887,25 +898,30 @@ test.describe('Underline Formatting', () => {
   test.fixme(
     'Applying to an empty selection inserts placeholder formatting and places cursor correctly',
     async ({ page, block }) => {
-      await block.mustFill('Lorem ipsum')
+    await createRandomPage(page)
 
-      // move cursor before ipsum
-      for (let i = 0; i < 6; i++) {
-        await page.keyboard.press('ArrowLeft')
-      }
-      await page.keyboard.press('Space')
+    const text = 'Lorem ipsum'
+    await block.mustFill(text)
 
-      // Apply strikethrough formatting
-      await page.keyboard.press(modKey + '+u')
+    const prevCursorPos = text.indexOf('ipsum')
+    // move cursor before ipsum
+    for (let i = 0; i < text.length - prevCursorPos; i++) {
+      await page.keyboard.press('ArrowLeft')
+    }
+    await page.keyboard.press('Space')
 
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
-        'Lorem <u></u> ipsum'
-      )
+    // Apply formatting
+    await page.keyboard.press(modKey + '+u')
 
-      // Verify cursor position
-      const cursorPosition = await getCursorPos(page)
+    const formatting = '<u></u>'
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      `Lorem ${formatting} ipsum`
+    )
 
-      expect(cursorPosition).toBe(9)
+    // Verify cursor position
+    const cursorPosition = await getCursorPos(page)
+
+    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
     }
   )
 
