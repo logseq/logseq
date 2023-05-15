@@ -2309,7 +2309,8 @@
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [{:block/keys [title body] :as block} (if (:block/title block) block
+  (let [content (property/remove-built-in-properties format content)
+        {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))

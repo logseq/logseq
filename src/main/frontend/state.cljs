@@ -261,7 +261,7 @@
      ;;                :file-sync/last-synced-at {}}
      :file-sync/graph-state                 {:current-graph-uuid nil}
                                              ;; graph-uuid -> ...
-                                             
+
      :user/info                             {:UserGroups (storage/get :user-groups)}
      :encryption/graph-parsing?             false
 
