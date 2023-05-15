@@ -102,7 +102,7 @@
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
 
  ;; Set a custom Arweave gateway
- ;; Default gateway: https://arweave.net
+ ;; Default value: https://arweave.net
  ;; :arweave/gateway "https://arweave.net"
 
  ;; Set bullet indentation when exporting
@@ -110,22 +110,21 @@
  ;;  - `:eight-spaces` as eight spaces
  ;;  - `:four-spaces` as four spaces
  ;;  - `:two-spaces` as two spaces
- ;; - `:tab` as a tab character (default)
+ ;;  - `:tab` as a tab character (default)
  ;; :export/bullet-indentation :tab
 
  ;; Publish all pages within the Graph
- ;; regardless of whether individual pages have been marked as public.
+ ;; Regardless of whether individual pages have been marked as public.
  ;; Default value: false
  ;; :publishing/all-pages-public? false
 
- ;; Set the default home page and sidebar status.
- ;; Define the default home page and sidebar status. 
- ;; If unspecified, Logseq will load the journal page by default on startup. 
- ;; The `:page` value represents the name of the page displayed at startup. 
- ;; Available options for `:sidebar` are: 
- ;; - "Contents" to display the Contents page in the right sidebar. 
- ;; - A specific page name to display in the right sidebar. 
- ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"]. 
+ ;; Define the default home page and sidebar status.
+ ;; If unspecified, the journal page will be loaded on startup and the right sidebar will stay hidden.
+ ;; The `:page` value represents the name of the page displayed at startup.
+ ;; Available options for `:sidebar` are:
+ ;; - "Contents" to display the Contents page in the right sidebar.
+ ;; - A specific page name to display in the right sidebar.
+ ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"].
  ;; If `:sidebar` remains unset, the right sidebar will stay hidden.
  ;; Examples:
  ;; 1. Set "Changelog" as the home page and display "Contents" in the right sidebar:
@@ -144,7 +143,7 @@
  ;; :journals-directory "journals"
 
  ;; Set the default location for storing whiteboards.
- ;; If not specified, whiteboards will be stored in the 'whiteboards' subdirectory.
+ ;; Default value: "whiteboards"
  ;; :whiteboards-directory "whiteboards"
 
  ;; Enabling this option converts
@@ -190,6 +189,7 @@
  :ui/show-command-doc? true
 
  ;; Display empty bullet points.
+ ;; Default value: false
  :ui/show-empty-bullets? false
 
  ;; Pre-defined :view function to use with advanced queries.
@@ -280,16 +280,16 @@
  :ref/default-open-blocks-level 2
 
  ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 100
+ ;; Default value: 50
  :ref/linked-references-collapsed-threshold 50
 
  ;; Graph view configuration.
  ;; Example usage:
  ;; :graph/settings
- ;; {:orphan-pages?  true   ; Default value: true
- ;;  :builtin-pages? false  ; Default value: false
- ;;  :excluded-pages? false ; Default value: false
- ;;  :journal?       false} ; Default value: false
+ ;; {:orphan-pages?   true   ; Default value: true
+ ;;  :builtin-pages?  false  ; Default value: false
+ ;;  :excluded-pages? false  ; Default value: false
+ ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
  :favorites []
@@ -310,7 +310,7 @@
  ;; :block-hidden-properties #{:public :icon}
 
  ;; Create a page for all properties.
- ;; Default value: false
+ ;; Default value: true
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
@@ -325,7 +325,7 @@
  ;; Properties that are ignored when parsing property values for references
  ;; Example usage:
  ;; :ignored-page-references-keywords #{:author :website}
-
+ 
  ;; logbook configuration.
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
@@ -404,7 +404,7 @@
  ;; Warning:
  ;;   This is a dangerous operation. To modify the setting,
  ;;   access the 'Filename format' setting and follow the instructions.
- ;;   Othwerwise, You may need to manually rename all affected files and
+ ;;   Otherwise, You may need to manually rename all affected files and
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:

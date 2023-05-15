@@ -2212,7 +2212,10 @@
                 (editor-handler/clear-selection!)
                 (editor-handler/unhighlight-blocks!)
                 (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                               cursor-range (util/caret-range (gdom/getElement block-id))
+                               cursor-range (some-> (gdom/getElement block-id)
+                                                    (dom/by-class "block-content-wrapper")
+                                                    first
+                                                    util/caret-range)
                                {:block/keys [content format]} block
                                content (->> content
                                             (property/remove-built-in-properties format)
@@ -2316,7 +2319,7 @@
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
-                         
+
         attrs (cond->
                {:blockid       (str uuid)
                 :data-type (name block-type)
@@ -3024,8 +3027,8 @@
 
 (defn table
   [config {:keys [header groups col_groups]}]
-  (case (get-shui-component-version :table config) 
-    2 (shui/table-v2 {:data (concat [[header]] groups)} 
+  (case (get-shui-component-version :table config)
+    2 (shui/table-v2 {:data (concat [[header]] groups)}
                      (make-shui-context config inline))
     1 (let [tr (fn [elm cols]
                  (->elem
@@ -3072,7 +3075,7 @@
         clocks (reverse (sort-by str clocks))]
         ;; TODO: display states change log
         ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-        
+
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
