@@ -221,7 +221,7 @@ export async function navigateToStartOfBlock(page: Page, block: Block) {
  * @param {number} times - The number of times to press the key.
  * @return {Promise<void>} - Promise which resolves when the key press repetition is done.
  */
-async function repeatKeyPress(page: Page, key: string, times: number): Promise<void> {
+export async function repeatKeyPress(page: Page, key: string, times: number): Promise<void> {
   for (let i = 0; i < times; i++) {
     await page.keyboard.press(key);
   }
