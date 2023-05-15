@@ -808,7 +808,7 @@
                        {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-block}
+                                       {:outliner-op :delete-blocks}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
@@ -2615,7 +2615,7 @@
 
       :else
       (let [edit-block (state/get-edit-block)
-            transact-opts {:outliner-op :delete-block
+            transact-opts {:outliner-op :delete-blocks
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}}
             next-block-has-refs? (some? (:block/_refs (db/entity (:db/id next-block))))

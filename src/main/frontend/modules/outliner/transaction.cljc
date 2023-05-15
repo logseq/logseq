@@ -23,18 +23,21 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  (assert (or (map? opts) (symbol? opts)) (str "opts is not a map or symbol, type: " (type opts) ))
+  (assert (or (map? opts) (symbol? opts)) (str "opts is not a map or symbol, type: " (type opts)))
   `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
          transaction-opts# frontend.modules.outliner.core/*transaction-opts*
          opts# (if transact-data#
                  (assoc ~opts :nested-transaction? true)
                  ~opts)
          before-editor-cursor# (frontend.state/get-current-edit-block-and-position)]
-     (when transaction-opts# (conj! transaction-opts# opts#))
      (if transact-data#
-       (do ~@body)
+       (do
+         (when transaction-opts#
+           (conj! transaction-opts# opts#))
+         ~@body)
        (binding [frontend.modules.outliner.core/*transaction-data* (transient [])
                  frontend.modules.outliner.core/*transaction-opts* (transient [])]
+         (conj! frontend.modules.outliner.core/*transaction-opts* transaction-opts# opts#)
          ~@body
          (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
                tx# (mapcat :tx-data r#)
@@ -44,6 +47,7 @@
                o# (persistent! frontend.modules.outliner.core/*transaction-opts*)
                full-opts# (apply merge (reverse o#))
                opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
+
            (when (seq all-tx#) ;; If it's empty, do nothing
              (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
                (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts## before-editor-cursor#)]
