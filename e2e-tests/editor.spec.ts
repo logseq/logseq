@@ -725,7 +725,7 @@ test('apply italic formatting with empty selection', async ({
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ** ipsum')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem __ ipsum')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -747,7 +747,7 @@ test('apply italic formatting to the entire block', async ({ page, block }) => {
   await page.keyboard.press(modKey + '+i')
 
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    '*Lorem ipsum-dolor sit.*'
+    '_Lorem ipsum-dolor sit._'
   )
 
   // Verify cursor position
@@ -771,7 +771,7 @@ test('apply and remove italic formatting to a word connected with a special char
 
   // Verify that 'ipsum' is italic
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *ipsum*-dolor sit.'
+    'Lorem _ipsum_-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -969,7 +969,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *ipsum*-dolor sit.'
+    'Lorem _ipsum_-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -978,7 +978,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ~~*ipsum*~~-dolor sit.'
+    'Lorem ~~_ipsum_~~-dolor sit.'
   )
   // select '~~ipsum~~'
   await selectText(page, 9, 11)
@@ -986,7 +986,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **~~*ipsum*~~**-dolor sit.'
+    'Lorem **~~_ipsum_~~**-dolor sit.'
   )
 
   await selectText(page, 8, 5)
@@ -1000,7 +1000,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Remove strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **ipsum**-dolor sit.'
+    'Lorem *_ipsum_*-dolor sit.'
   )
 
   // Remove bold formatting
