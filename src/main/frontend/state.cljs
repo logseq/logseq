@@ -122,6 +122,9 @@
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
 
+     ;; delete refed blocks
+     :editor/last-replace-ref-content-tx    nil
+
      ;; for audio record
      :editor/record-status                  "NONE"
 
