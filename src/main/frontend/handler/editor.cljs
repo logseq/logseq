@@ -2281,10 +2281,16 @@
            s1 (subs value 0 selected-start)
            s2 (subs value selected-end)]
        (state/set-edit-content! (state/get-edit-input-id)
-                                (str s1 insertion s2))
-       (cursor/move-cursor-to input (+ selected-start (count insertion)))))))
+                                (str s1 insertion))
+       ;; HACK: save scroll-pos of current pos, then add trailing content
+       (let [scroll-pos (.-scrollTop (gdom/getElement "main-content-container"))]
+         (state/set-edit-content! (state/get-edit-input-id)
+                                  (str s1 insertion s2))
+         (cursor/move-cursor-to input (+ selected-start (count insertion)))
+         (set! (.-scrollTop (gdom/getElement "main-content-container")) scroll-pos))))))
 
 (defn- keydown-new-line
+  "Insert newline to current cursor position"
   []
   (insert "\n"))
 
