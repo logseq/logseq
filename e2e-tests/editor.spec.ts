@@ -824,7 +824,7 @@ test('apply italic formatting with empty selection', async ({
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem __ ipsum')
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem ** ipsum')
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -846,7 +846,7 @@ test('apply italic formatting to the entire block', async ({ page, block }) => {
   await page.keyboard.press(modKey + '+i')
 
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    '_Lorem ipsum-dolor sit._'
+    '*Lorem ipsum-dolor sit.*'
   )
 
   // Verify cursor position
@@ -870,7 +870,7 @@ test('apply and remove italic formatting to a word connected with a special char
 
   // Verify that 'ipsum' is italic
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem _ipsum_-dolor sit.'
+    'Lorem *ipsum*-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -984,9 +984,11 @@ test('apply underline formatting with empty selection', async ({
   await page.keyboard.press('Space')
 
   // Apply strikethrough formatting
-  await page.keyboard.press(modKey + 'u')
+  await page.keyboard.press(modKey + '+u')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText('Lorem <u></u> ipsum')
+  await expect(page.locator('textarea >> nth=0')).toHaveText(
+    'Lorem <u></u> ipsum'
+  )
 
   // Verify cursor position
   const cursorPosition = await getCursorPos(page)
@@ -994,28 +996,28 @@ test('apply underline formatting with empty selection', async ({
   expect(cursorPosition).toBe(9)
 })
 
-test('apply underline formatting to the entire block', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
+test(
+  'apply underline formatting to the entire block',
+  async ({ page, block }) => {
+    await createRandomPage(page)
 
-  await block.mustFill('Lorem ipsum-dolor sit.')
+    await block.mustFill('Lorem ipsum-dolor sit.')
 
-  // Select the entire block
-  await page.keyboard.press(modKey + '+a')
+    // Select the entire block
+    await page.keyboard.press(modKey + '+a')
 
-  // Apply strikethrough formatting
-  await page.keyboard.press(modKey + 'u')
+    // Apply strikethrough formatting
+    await page.keyboard.press(modKey + '+u')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    '<u>Lorem ipsum-dolor sit.</u>'
-  )
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      '<u>Lorem ipsum-dolor sit.</u>'
+    )
 
-  // Verify cursor position
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(25)
-})
+    // Verify cursor position
+    const cursorPosition = await getCursorPos(page)
+    expect(cursorPosition).toBe(25)
+  }
+)
 
 test(
   'apply and remove underline formatting to a word connected with a special character',
@@ -1066,7 +1068,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply italic formatting
   await page.keyboard.press(modKey + '+i')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem _ipsum_-dolor sit.'
+    'Lorem *ipsum*-dolor sit.'
   )
 
   // Re-select 'ipsum'
@@ -1075,7 +1077,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ~~_ipsum_~~-dolor sit.'
+    'Lorem ~~*ipsum*~~-dolor sit.'
   )
   // select '~~ipsum~~'
   await selectText(page, 9, 11)
@@ -1083,7 +1085,7 @@ test('apply and remove all formatting to a word connected with a special charact
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
   await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **~~_ipsum_~~**-dolor sit.'
+    'Lorem **~~*ipsum*~~**-dolor sit.'
   )
 
   await selectText(page, 8, 5)
@@ -1153,10 +1155,10 @@ test('parentheses auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test('angle brackets auto-pair', async ({ page }) => {
+test('angle brackets auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
-  // type an open pipe
+  // type an open angle bracket
   page.type('textarea >> nth=0', '<', { delay: 100 })
 
   // Verify that a closing > was automatically added
