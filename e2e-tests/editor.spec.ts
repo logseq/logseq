@@ -688,8 +688,6 @@ test('apply and remove bold formatting to a word connected with a special charac
 
   // Apply bold formatting
   await page.keyboard.press(modKey + '+b')
-
-  // Verify that 'ipsum' is bold
   await expect(page.locator('textarea >> nth=0')).toHaveText(
     'Lorem **ipsum**-dolor sit.'
   )
@@ -699,8 +697,6 @@ test('apply and remove bold formatting to a word connected with a special charac
 
   // Remove bold formatting
   await page.keyboard.press(modKey + '+b')
-
-  // Verify that 'ipsum' is no longer bold and is still selected
   await expect(page.locator('textarea >> nth=0')).toHaveText(
     'Lorem ipsum-dolor sit.'
   )
@@ -779,8 +775,6 @@ test('apply and remove italic formatting to a word connected with a special char
 
   // Remove italic formatting
   await page.keyboard.press(modKey + '+i')
-
-  // Verify that 'ipsum' is no longer italic and is still selected
   await expect(page.locator('textarea >> nth=0')).toHaveText(
     'Lorem ipsum-dolor sit.'
   )
@@ -861,8 +855,6 @@ test('apply and remove strikethrough formatting to a word connected with a speci
 
   // Remove strikethrough formatting
   await page.keyboard.press(modKey + '+Shift+s')
-
-  // Verify that 'ipsum' is no longer strikethrough and is still selected
   await expect(page.locator('textarea >> nth=0')).toHaveText(
     'Lorem ipsum-dolor sit.'
   )
@@ -930,10 +922,8 @@ test.fixme(
     // Select 'ipsum'
     await selectText(page, 16, 5)
 
-    // Apply strikethrough formatting
+    // Apply underline formatting
     await page.keyboard.press(modKey + '+u')
-
-    // Verify that 'ipsum' is strikethrough
     await expect(page.locator('textarea >> nth=0')).toHaveText(
       'Lorem <u>ipsum</u>-dolor sit.'
     )
@@ -941,10 +931,8 @@ test.fixme(
     // Re-select 'ipsum'
     await selectText(page, 5, 5)
 
-    // Remove strikethrough formatting
+    // Remove underline formatting
     await page.keyboard.press(modKey + '+u')
-
-    // Verify that 'ipsum' is no longer strikethrough and is still selected
     await expect(page.locator('textarea >> nth=0')).toHaveText(
       'Lorem ipsum-dolor sit.'
     )
@@ -1062,10 +1050,10 @@ test.fixme('angle brackets auto-pairing', async ({ page }) => {
   // type an open angle bracket
   page.type('textarea >> nth=0', '<', { delay: 100 })
 
-  // Verify that a closing > was automatically added
+  // Verify that a closing angle bracket was automatically added
   await expect(page.locator('textarea >> nth=0')).toHaveText('<>')
 
-  // Verify that the cursor is between the <>
+  // Verify that the cursor is between the angle brackets
   const cursorPosition = await getCursorPos(page)
   expect(cursorPosition).toBe(1)
 })
@@ -1073,7 +1061,7 @@ test.fixme('angle brackets auto-pairing', async ({ page }) => {
 test('backtick auto-pairing', async ({ page }) => {
   await createRandomPage(page)
 
-  // type an open square bracket
+  // type an open backtick
   page.type('textarea >> nth=0', '`', { delay: 100 })
 
   // Verify that a closing backtick was automatically added
@@ -1112,16 +1100,16 @@ test.fixme('double quote auto-pairing', async ({ page }) => {
   expect(cursorPosition).toBe(1)
 })
 
-test.fixme('only autopair tilda with text selection', async ({ page }) => {
+test.fixme('only autopair tilde with text selection', async ({ page }) => {
   await createRandomPage(page)
 
-  // type an open tilda
+  // type an open tilde
   page.type('textarea >> nth=0', '~', { delay: 100 })
 
   // Verify that an additional tilda was not automatically added
   await expect(page.locator('textarea >> nth=0')).toHaveText('~')
 
-  // remove tilda
+  // remove tilde
   await page.keyboard.press('Backspace')
 
   // add text
@@ -1133,7 +1121,7 @@ test.fixme('only autopair tilda with text selection', async ({ page }) => {
   // Type a tilda
   await page.type('textarea >> nth=0', '~', { delay: 100 })
 
-  // Verify that an additional tilda was automatically added around 'ipsum'
+  // Verify that an additional tilde was automatically added around 'ipsum'
   await expect(page.locator('textarea >> nth=0')).toHaveText('~Lorem~')
 
   // Verify 'Lorem' is selected
@@ -1200,7 +1188,10 @@ test('Only auto-pair underscore with text selection', async ({
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair ^ symbol with text selection', async ({ page, block }) => {
+test('Only auto-pair caret symbol with text selection', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // type the symbol
@@ -1228,7 +1219,10 @@ test('Only auto-pair ^ symbol with text selection', async ({ page, block }) => {
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair = symbol with text selection', async ({ page, block }) => {
+test('Only auto-pair equal symbol with text selection', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // type the symbol
@@ -1256,7 +1250,10 @@ test('Only auto-pair = symbol with text selection', async ({ page, block }) => {
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair / symbol with text selection', async ({ page, block }) => {
+test('Only auto-pair slash symbol with text selection', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // type the symbol
@@ -1284,7 +1281,10 @@ test('Only auto-pair / symbol with text selection', async ({ page, block }) => {
   expect(selection).toBe('Lorem')
 })
 
-test('Only auto-pair + symbol with text selection', async ({ page, block }) => {
+test('Only auto-pair plus symbol with text selection', async ({
+  page,
+  block,
+}) => {
   await createRandomPage(page)
 
   // type the symbol
