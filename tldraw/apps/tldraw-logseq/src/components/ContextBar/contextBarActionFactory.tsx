@@ -103,7 +103,7 @@ const AutoResizingAction = observer(() => {
       className="tl-button"
       pressed={pressed}
       onPressedChange={v => {
-        app.selectedShapesArray.forEach(s => {
+        shapes.forEach(s => {
           if (s.props.type === 'logseq-portal') {
             s.update({
               isAutoResizing: v,
