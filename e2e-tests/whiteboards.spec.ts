@@ -159,6 +159,25 @@ test('undo the delete action', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
 })
 
+test('convert the first rectangle to ellipse', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.click('.tl-context-bar .tl-geometry-tools-pane-anchor')
+  await page.click('.tl-context-bar .tl-geometry-toolbar [data-tool=ellipse]')
+
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+})
+
+test('undo the conversion', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(0)
+})
+
+
 test('locked elements should not be removed', async ({ page }) => {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(1000)
