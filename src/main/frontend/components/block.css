@@ -538,6 +538,8 @@
   .bullet {
     @apply rounded-full w-[6px] h-[6px];
 
+    font-size: 14px;
+
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
 
