@@ -46,7 +46,7 @@
   (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
     (restore-cursor! editor-cursor)
     (restore-app-state! app-state))
-  (state/set-editor-op! nil))
+  (js/setTimeout #(state/set-editor-op! nil) 100))
 
 (defn redo!
   [e]
