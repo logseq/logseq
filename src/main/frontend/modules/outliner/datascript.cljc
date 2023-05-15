@@ -85,7 +85,8 @@
                                       :block/title :block/body :block/level :block/container :db/other-tx
                                       :block/additional-properties)
                               m)) txs)
-           txs (update-block-refs txs opts)]
+           txs (-> (update-block-refs txs opts)
+                   (distinct))]
        (when (and (seq txs)
                   (not (:skip-transact? opts))
                   (if (react/db-graph? repo)

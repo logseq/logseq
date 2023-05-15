@@ -45,7 +45,7 @@
                full-opts# (apply merge (reverse o#))
                opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
            (when (seq all-tx#) ;; If it's empty, do nothing
-             (when-not (:nested-transaction? opts##) ; transact only for the whole transaction
+             (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
                (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts## before-editor-cursor#)]
                  {:tx-report result#
                   :tx-data all-tx#
