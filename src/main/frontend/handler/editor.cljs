@@ -2448,7 +2448,6 @@
             (profile
              "Insert block"
              (outliner-tx/transact! {:outliner-op :insert-blocks}
-               (save-current-block!)
                (insert-new-block! state)))))))))
 
 (defn- inside-of-single-block
