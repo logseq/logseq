@@ -32,8 +32,10 @@
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties]} level {:keys [heading-to-list?]}]
-  (let [heading (:heading properties)
+  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties] :as b} level {:keys [heading-to-list?]}]
+  (let [block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
+                                  (not (string/includes? content (str (:block/uuid b)))))
+        heading (:heading properties)
         markdown? (= :markdown format)
         content (or content "")
         pre-block? (or pre-block?
@@ -80,7 +82,10 @@
                                     (string/blank? new-content))
                               ""
                               " ")]
-                    (str prefix sep new-content)))]
+                    (str prefix sep new-content)))
+        content (if block-ref-not-saved?
+                  (property/insert-property format content :id (str (:block/uuid b)))
+                  content)]
     content))
 
 
