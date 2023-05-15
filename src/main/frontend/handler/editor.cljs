@@ -2020,7 +2020,7 @@
   [blocks]
   (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
         recent-cut-block-ids (->> retracted-block-ids (map second) (set))]
-    ;; (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
+    (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
     (when (and (= (set (map :block/uuid blocks)) recent-cut-block-ids)
                (seq revert-tx))
       revert-tx)))
