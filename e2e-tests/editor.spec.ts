@@ -637,9 +637,9 @@ test.describe('Bold Formatting', () => {
     const text = 'Lorem ipsum'
     await block.mustFill(text)
 
-    const prevCursorPos = text.indexOf('ipsum')
+    const CursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i <= text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - CursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -653,9 +653,8 @@ test.describe('Bold Formatting', () => {
     )
 
     // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
+    const updatedCursorPos = await getCursorPos(page)
+    expect(updatedCursorPos).toBe(CursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in bold formatting and places cursor correctly', async ({
@@ -664,25 +663,25 @@ test.describe('Bold Formatting', () => {
   }) => {
     await createRandomPage(page)
 
-    await block.mustFill('Lorem ipsum-dolor sit.')
+    const text = 'Lorem ipsum-dolor sit.'
+    await block.mustFill(text)
 
     // Select the entire block
     await page.keyboard.press(modKey + '+a')
 
-    // Apply bold formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+b')
 
-    // Verify that the text is now bold
+    const prefix = '**'
+    const postfix = '**'
     await expect(page.locator('textarea >> nth=0')).toHaveText(
-      '**Lorem ipsum-dolor sit.**'
+      `${prefix}${text}${postfix}`
     )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
 
-    // Considering 'Lorem ipsum-dolor sit.' is 22 characters long
-    // Cursor should be at the end of the text and before the end of the formatting characters
-    expect(cursorPosition).toBe(24)
+    expect(cursorPosition).toBe(prefix.length + text.length)
   })
 
   test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
@@ -727,9 +726,9 @@ test.describe('Italic Formatting', () => {
     const text = 'Lorem ipsum'
     await block.mustFill(text)
 
-    const prevCursorPos = text.indexOf('ipsum')
+    const CursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i <= text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - CursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -743,9 +742,8 @@ test.describe('Italic Formatting', () => {
     )
 
     // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
+    const updatedCursorPos = await getCursorPos(page)
+    expect(updatedCursorPos).toBe(CursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in italic formatting and places cursor correctly', async ({
@@ -754,21 +752,26 @@ test.describe('Italic Formatting', () => {
   }) => {
     await createRandomPage(page)
 
-    await block.mustFill('Lorem ipsum-dolor sit.')
+    const text = 'Lorem ipsum-dolor sit.'
+    await block.mustFill(text)
 
     // Select the entire block
     await page.keyboard.press(modKey + '+a')
 
-    // Apply italic formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+i')
 
+    const prefix = '*'
+    const postfix = '*'
     await expect(page.locator('textarea >> nth=0')).toHaveText(
-      '*Lorem ipsum-dolor sit.*'
+      `${prefix}${text}${postfix}`
     )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
-    expect(cursorPosition).toBe(23)
+
+
+    expect(cursorPosition).toBe(prefix.length + text.length)
   })
 
   test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
@@ -801,7 +804,6 @@ test.describe('Italic Formatting', () => {
 
     // Verify the word 'ipsum' is still selected
     const selection = await getSelection(page)
-
     expect(selection).toBe('ipsum')
   })
 })
@@ -816,9 +818,9 @@ test.describe('Strikethrough Formatting', () => {
     const text = 'Lorem ipsum'
     await block.mustFill(text)
 
-    const prevCursorPos = text.indexOf('ipsum')
+    const CursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i <= text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - CursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -832,9 +834,8 @@ test.describe('Strikethrough Formatting', () => {
     )
 
     // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
+    const updatedCursorPos = await getCursorPos(page)
+    expect(updatedCursorPos).toBe(CursorPos + formatting.length / 2)
   })
 
   test('Applying to an entire block encloses the block in strikethrough formatting and places cursor correctly', async ({
@@ -843,21 +844,25 @@ test.describe('Strikethrough Formatting', () => {
   }) => {
     await createRandomPage(page)
 
-    await block.mustFill('Lorem ipsum-dolor sit.')
+    const text = 'Lorem ipsum-dolor sit.'
+    await block.mustFill(text)
 
     // Select the entire block
     await page.keyboard.press(modKey + '+a')
 
-    // Apply strikethrough formatting
+    // Apply formatting
     await page.keyboard.press(modKey + '+Shift+s')
 
+    const prefix = '~~'
+    const postfix = '~~'
     await expect(page.locator('textarea >> nth=0')).toHaveText(
-      '~~Lorem ipsum-dolor sit.~~'
+      `${prefix}${text}${postfix}`
     )
 
     // Verify cursor position
     const cursorPosition = await getCursorPos(page)
-    expect(cursorPosition).toBe(24)
+
+    expect(cursorPosition).toBe(prefix.length + text.length)
   })
 
   test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
@@ -903,9 +908,9 @@ test.describe('Underline Formatting', () => {
     const text = 'Lorem ipsum'
     await block.mustFill(text)
 
-    const prevCursorPos = text.indexOf('ipsum')
+    const CursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i <= text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - CursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -919,34 +924,39 @@ test.describe('Underline Formatting', () => {
     )
 
     // Verify cursor position
+    const updatedCursorPos = await getCursorPos(page)
+    expect(updatedCursorPos).toBe(CursorPos + formatting.length / 2)
+    }
+  )
+
+  test.fixme('Applying to an entire block encloses the block in underline formatting and places cursor correctly', async ({
+    page,
+    block,
+  }) => {
+    await createRandomPage(page)
+
+    const text = 'Lorem ipsum-dolor sit.'
+    await block.mustFill(text)
+
+    // Select the entire block
+    await page.keyboard.press(modKey + '+a')
+
+    // Apply formatting
+    await page.keyboard.press(modKey + '+u')
+
+    const prefix = '<u>'
+    const postfix = '</u>'
+    await expect(page.locator('textarea >> nth=0')).toHaveText(
+      `${prefix}${text}${postfix}`
+    )
+
+    // Verify cursor position
     const cursorPosition = await getCursorPos(page)
 
-    expect(cursorPosition).toBe(prevCursorPos + formatting.length / 2)
-    }
-  )
-
-  test.fixme(
-    'Applying to an entire block encloses the block in underline formatting and places cursor correctly',
-    async ({ page, block }) => {
-      await createRandomPage(page)
-
-      await block.mustFill('Lorem ipsum-dolor sit.')
-
-      // Select the entire block
-      await page.keyboard.press(modKey + '+a')
-
-      // Apply strikethrough formatting
-      await page.keyboard.press(modKey + '+u')
-
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
-        '<u>Lorem ipsum-dolor sit.</u>'
-      )
-
-      // Verify cursor position
-      const cursorPosition = await getCursorPos(page)
-      expect(cursorPosition).toBe(25)
-    }
-  )
+    expect(cursorPosition).toBe(
+      prefix.length + text.length
+    )
+  })
 
   test.fixme(
     'Applying and then removing from a word connected with a special character correctly formats and then reverts',
@@ -958,7 +968,7 @@ test.describe('Underline Formatting', () => {
       // Select 'ipsum'
       await selectText(page, 16, 5)
 
-      // Apply underline formatting
+      // Apply formatting
       await page.keyboard.press(modKey + '+u')
       await expect(page.locator('textarea >> nth=0')).toHaveText(
         'Lorem <u>ipsum</u>-dolor sit.'
@@ -1049,8 +1059,8 @@ test('square brackets auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('[]')
 
   // Verify that the cursor is between the square brackets
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test('curly brackets auto-pairing', async ({ page }) => {
@@ -1063,8 +1073,8 @@ test('curly brackets auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('{}')
 
   // Verify that the cursor is between the curly brackets
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test('parentheses auto-pairing', async ({ page }) => {
@@ -1077,8 +1087,8 @@ test('parentheses auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('()')
 
   // Verify that the cursor is between the parentheses
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test.fixme('angle brackets auto-pairing', async ({ page }) => {
@@ -1091,8 +1101,8 @@ test.fixme('angle brackets auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('<>')
 
   // Verify that the cursor is between the angle brackets
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test('backtick auto-pairing', async ({ page }) => {
@@ -1105,8 +1115,8 @@ test('backtick auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('``')
 
   // Verify that the cursor is between the backticks
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test.fixme('single quote auto-pairing', async ({ page }) => {
@@ -1119,8 +1129,8 @@ test.fixme('single quote auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText("''")
 
   // Verify that the cursor is between the single quotes
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test.fixme('double quote auto-pairing', async ({ page }) => {
@@ -1133,8 +1143,8 @@ test.fixme('double quote auto-pairing', async ({ page }) => {
   await expect(page.locator('textarea >> nth=0')).toHaveText('""')
 
   // Verify that the cursor is between the double quotes
-  const cursorPosition = await getCursorPos(page)
-  expect(cursorPosition).toBe(1)
+  const updatedCursorPos = await getCursorPos(page)
+  expect(updatedCursorPos).toBe(1)
 })
 
 test.fixme('only autopair tilde with text selection', async ({ page }) => {
