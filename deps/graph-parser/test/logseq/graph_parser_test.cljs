@@ -360,15 +360,21 @@
                   (remove built-in-pages)
                   set)))))
 
-  (testing "for file and web uris"
+  (testing "for file, mailto, web and other uris"
     (let [conn (ldb/start-conn)
           built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
       (graph-parser/parse-file conn
                                "foo.md"
-                               (str "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                               (str "- [foo]([[bar]])\n"
+                                    ;; all of the uris below do not create pages
+                                    "- ![image.png](../assets/image_1630480711363_0.png)\n"
+                                    "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                                    "- [mail](mailto:test@test.com?subject=TestSubject)\n"
+                                    "- [onenote link](onenote:https://d.docs.live.net/b2127346582e6386a/blablabla/blablabla/blablabla%20blablabla.one#Etat%202019&section-id={133DDF16-9A1F-4815-9A05-44303784442E6F94}&page-id={3AAB677F0B-328F-41D0-AFF5-66408819C085}&end)\n"
+                                    "- [lock file](deps/graph-parser/yarn.lock)"
                                     "- [example](https://example.com)")
                                {})
-      (is (= #{"foo"}
+      (is (= #{"foo" "bar"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
                          :where [?b :block/name]]

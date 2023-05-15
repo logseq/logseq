@@ -147,6 +147,7 @@
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
+   "Number list" "LIST TYPE"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -235,10 +236,10 @@
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
+       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       )]
+       
 
     (headings)
 
@@ -250,9 +251,14 @@
      ["Current time" #(date/get-current-time) "Insert current time"]
      ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
+    ;; order list
+    [["Number list" [[:editor/clear-current-slash]
+                     [:editor/toggle-own-number-list]] "Number list"]
+     ["Number children" [[:editor/clear-current-slash]
+                         [:editor/toggle-children-number-list]] "Number children"]]
+
     ;; task management
     (get-preferred-workflow)
-
     [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
@@ -653,6 +659,18 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
+
+(defmethod handle-step :editor/toggle-children-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-children-number-list block])))
+
+(defmethod handle-step :editor/toggle-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-own-number-list block])))
+
+(defmethod handle-step :editor/remove-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/remove-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, useApp} from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { withClampedStyles } from './style-props'
@@ -45,6 +45,8 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing, isSelected }: TLComponentProps) => {
+    const app = useApp<Shape>()
+
     return (
       <HTMLContainer
         style={{
@@ -57,7 +59,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         <div
           className="rounded-lg w-full h-full relative overflow-hidden shadow-xl tl-youtube-container"
           style={{
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: isEditing || app.readOnly ? 'all' : 'none',
             userSelect: 'none',
             background: `url('https://img.youtube.com/vi/${this.embedId}/mqdefault.jpg') no-repeat center/cover`,
           }}

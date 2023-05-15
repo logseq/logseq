@@ -5,7 +5,6 @@
             [frontend.db :as db]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
             [frontend.fs.diff-merge :as diff-merge]
             [frontend.fs :as fs]
             [frontend.context.i18n :refer [t]]
@@ -107,7 +106,6 @@
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)
                                             :block-pattern (config/get-block-pattern (gp-util/get-format file-path))
-                                            :supported-formats (gp-config/supported-formats)
                                             :filename-format (state/get-filename-format repo-url)}
                                            ;; To avoid skipping the `:or` bounds for keyword destructuring
                                            (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})

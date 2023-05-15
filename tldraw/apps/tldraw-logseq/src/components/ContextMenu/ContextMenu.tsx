@@ -262,7 +262,7 @@ export const ContextMenu = observer(function ContextMenu({
               Deselect all
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+          {!app.readOnly && app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
             <ReactContextMenu.Item
               className="tl-menu-item"
               onClick={() => runAndTransition(() => app.setLocked(true))}
@@ -272,7 +272,7 @@ export const ContextMenu = observer(function ContextMenu({
               <KeyboardShortcut action="whiteboard/lock" />
             </ReactContextMenu.Item>
           )}
-          {app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
+          {!app.readOnly && app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
             <ReactContextMenu.Item
               className="tl-menu-item"
               onClick={() => runAndTransition(() => app.setLocked(false))}

@@ -64,6 +64,7 @@
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.common.developer dev-common-handler
              frontend.handler.config config-handler
+             frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
              frontend.handler.ui ui-handler
