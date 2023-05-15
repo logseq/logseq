@@ -639,7 +639,7 @@ test.describe('Bold Formatting', () => {
 
     const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -729,7 +729,7 @@ test.describe('Italic Formatting', () => {
 
     const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -818,7 +818,7 @@ test.describe('Strikethrough Formatting', () => {
 
     const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
@@ -905,7 +905,7 @@ test.describe('Underline Formatting', () => {
 
     const prevCursorPos = text.indexOf('ipsum')
     // move cursor before ipsum
-    for (let i = 0; i < text.length - prevCursorPos; i++) {
+    for (let i = 0; i <= text.length - prevCursorPos; i++) {
       await page.keyboard.press('ArrowLeft')
     }
     await page.keyboard.press('Space')
