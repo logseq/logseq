@@ -367,7 +367,7 @@
                                (if palette?
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
-                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
+                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd :cmd palette-cmd)]
             (println :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
 

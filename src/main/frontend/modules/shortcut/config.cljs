@@ -944,10 +944,14 @@
    (fn [v]
      (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))))
 
+(def *shortcut-cmds (atom {}))
+
 (defn add-shortcut!
   [handler-id id shortcut-map]
-  (swap! config assoc-in [handler-id id] shortcut-map))
+  (swap! config assoc-in [handler-id id] shortcut-map)
+  (swap! *shortcut-cmds assoc id (:cmd shortcut-map)))
 
 (defn remove-shortcut!
   [handler-id id]
-  (swap! config medley/dissoc-in [handler-id id]))
+  (swap! config medley/dissoc-in [handler-id id])
+  (swap! *shortcut-cmds dissoc id))

@@ -52,6 +52,10 @@
          shortcut)
        (mapv mod-key)))))
 
+(defn shortcut-cmd
+  [id]
+  (get @shortcut-config/*shortcut-cmds id))
+
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
   (let [dict    (->> (vals @shortcut-config/config)

@@ -98,9 +98,17 @@
       (when-not @*folded?
         [:tbody
          (map (fn [[k {:keys [binding]}]]
-                [:tr {:key (str k)}
-                 [:td.text-left (str (cond-> k (not plugin?) (-> (dh/decorate-namespace) (t))))]
-                 (shortcut-col category k binding configurable? (t (dh/decorate-namespace k)))])
+                (let [cmd (dh/shortcut-cmd k)]
+                  [:tr {:key (str k)}
+                   [:td.text-left (cond
+                                    (string? (:desc cmd))
+                                    [:span.flex.items-center
+                                     [:code.text-xs (namespace k)]
+                                     [:small.pl-1 (:desc cmd)]]
+
+                                    (not plugin?) (-> k (dh/decorate-namespace) (t))
+                                    :else (str k))]
+                   (shortcut-col category k binding configurable? (t (dh/decorate-namespace k)))]))
               (dh/binding-by-category category))])]]))
 
 (rum/defc trigger-table []
