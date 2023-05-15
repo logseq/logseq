@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [deftest use-fixtures testing is]]
             [frontend.handler.repo :as repo-handler]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [frontend.state :as state]
             [logseq.graph-parser.cli :as gp-cli]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -12,13 +11,7 @@
             ["path" :as node-path]
             ["fs" :as fs]))
 
-(use-fixtures :each {:before (fn []
-                               ;; Set current-repo explicitly since it's not the default
-                               (state/set-current-repo! test-helper/test-db)
-                               (test-helper/start-test-db!))
-                     :after (fn []
-                              (state/set-current-repo! nil)
-                              (test-helper/destroy-test-db!))})
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs-0.9.2"
