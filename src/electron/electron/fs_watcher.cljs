@@ -8,7 +8,8 @@
             [electron.utils :as utils]
             [electron.logger :as logger]
             ["electron" :refer [app]]
-            [electron.window :as window]))
+            [electron.window :as window]
+            [logseq.common.graph :as common-graph]))
 
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw
@@ -61,7 +62,7 @@
   [dir options]
   (let [watcher-opts (clj->js
                       {:ignored (fn [path]
-                                  (utils/ignored-path? dir path))
+                                  (common-graph/ignored-path? dir path))
                        :ignoreInitial true
                        :ignorePermissionErrors true
                        :interval polling-interval
