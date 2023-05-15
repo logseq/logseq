@@ -87,25 +87,33 @@
      [txs opts]
      (if (and (= :delete-blocks (:outliner-op opts))
               (not (:uuid-changed opts)))
-       (let [retracted-blocks (->> (keep (fn [tx]
-                                           (when (and (vector? tx)
-                                                      (= :db.fn/retractEntity (first tx)))
-                                             (second tx))) txs)
-                                   (map db/entity))
+       (let [retracted-block-ids (->> (keep (fn [tx]
+                                              (when (and (vector? tx)
+                                                         (= :db.fn/retractEntity (first tx)))
+                                                (second tx))) txs))
+             retracted-blocks (map db/entity retracted-block-ids)
              retracted-tx (->> (for [block retracted-blocks]
                                  (let [refs (:block/_refs block)]
-                                   (mapcat (fn [ref]
-                                             (let [id (:db/id ref)
-                                                   block-content (property/remove-properties (:block/format block) (:block/content block))
-                                                   new-content (-> (:block/content ref)
-                                                                   (string/replace (re-pattern (util/format "{{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
-                                                                                   block-content)
-                                                                   (string/replace (util/format "((%s))" (str (:block/uuid block)))
-                                                                                   block-content))]
-                                               [[:db/retract (:db/id ref) :block/refs (:db/id block)]
-                                                [:db/add id :block/content new-content]])) refs)))
-                               (apply concat))]
-         (concat txs retracted-tx))
+                                   (map (fn [ref]
+                                          (let [id (:db/id ref)
+                                                block-content (property/remove-properties (:block/format block) (:block/content block))
+                                                new-content (-> (:block/content ref)
+                                                                (string/replace (re-pattern (util/format "{{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                                                                block-content)
+                                                                (string/replace (util/format "((%s))" (str (:block/uuid block)))
+                                                                                block-content))]
+                                            {:tx [[:db/retract (:db/id ref) :block/refs (:db/id block)]
+                                                  [:db/add id :block/content new-content]]
+                                             :revert-tx [[:db/add (:db/id ref) :block/refs (:db/id block)]
+                                                         [:db/add id :block/content (:block/content ref)]]})) refs)))
+                               (apply concat))
+             retracted-tx' (mapcat :tx retracted-tx)
+             revert-tx (mapcat :revert-tx retracted-tx)]
+         (when (seq retracted-tx')
+           (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)]
+                             {:retracted-block-ids retracted-block-ids
+                              :revert-tx revert-tx}))
+         (concat txs retracted-tx'))
        txs)))
 
 #?(:cljs
