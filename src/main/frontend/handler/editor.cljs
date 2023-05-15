@@ -158,15 +158,16 @@
         (count pattern-prefix) (count selection) (count pattern-postfix))]))
 
 (defn- handle-selection!
-  [already-wrapped? selection input selection-start
-   selection-end pattern-prefix cursor-pos]
+  [already-wrapped? selection input cursor-pos
+   selection-start selection-end
+   pattern-prefix pattern-postfix]
   (cond
     already-wrapped?
     (cursor/set-selection-to input
                              (- selection-start (count pattern-prefix))
                              (- selection-end (count pattern-prefix)))
     (empty? selection)
-    (cursor/move-cursor-to input (- cursor-pos (count pattern-prefix)))
+    (cursor/move-cursor-to input (- cursor-pos (count pattern-postfix)))
     :else
     (do (cursor/move-cursor-to input (+ selection-end (count pattern-prefix)))
         (clear-selection!))))
@@ -191,8 +192,9 @@
                                    pattern-prefix pattern-postfix
                                    selection-start selection-end)]
       (state/set-edit-content! edit-id updated-text)
-      (handle-selection! already-wrapped? selection input selection-start
-                         selection-end pattern-prefix cursor-pos)
+      (handle-selection! already-wrapped? selection input cursor-pos
+                         selection-start selection-end 
+                         pattern-prefix pattern-postfix)
       (reset-cursor-range! input))))
 
 (defn bold-format! []
