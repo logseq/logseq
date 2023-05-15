@@ -105,7 +105,6 @@
 (def retract-attributes
   #{
     :block/refs
-    :block/path-refs
     :block/tags
     :block/alias
     :block/marker
