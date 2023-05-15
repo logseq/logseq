@@ -12,7 +12,9 @@
                      [logseq.graph-parser.util :as gp-util]
                      [lambdaisland.glogi :as log]
                      [frontend.search :as search]
-                     [clojure.string :as string])))
+                     [clojure.string :as string]
+                     [frontend.util :as util]
+                     [frontend.util.property :as property])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -65,19 +67,45 @@
              kept-refs (:block/_refs kept-e)
              kept-path-refs (:block/_path-refs kept-e)
              deleted-refs (:block/_refs deleted-e)
-             kept-refs-txs (mapcat (fn [ref refs]
+             kept-refs-txs (mapcat (fn [ref]
                                      (let [id (:db/id ref)]
                                        [[:db/retract id :block/refs kept-id]
                                         [:db/add id :block/refs deleted-id]])) kept-refs)
-             kept-path-refs-txs (mapcat (fn [ref refs]
+             kept-path-refs-txs (mapcat (fn [ref]
                                           (let [id (:db/id ref)]
                                             [[:db/retract id :block/path-refs kept-id]
                                              [:db/add id :block/path-refs deleted-id]])) kept-path-refs)
-             deleted-refs-txs (mapcat (fn [ref refs]
-                                     (let [id (:db/id ref)]
-                                       (let [new-content (string/replace (:block/content ref) (str deleted) (str kept))]
-                                         [[:db/add id :block/content new-content]]))) deleted-refs)]
+             deleted-refs-txs (mapcat (fn [ref]
+                                        (let [id (:db/id ref)
+                                              new-content (string/replace (:block/content ref) (str deleted) (str kept))]
+                                          [[:db/add id :block/content new-content]])) deleted-refs)]
          (concat txs kept-refs-txs kept-path-refs-txs deleted-refs-txs))
+       txs)))
+
+#?(:cljs
+   (defn replace-ref-with-content
+     [txs opts]
+     (if (and (= :delete-blocks (:outliner-op opts))
+              (not (:uuid-changed opts)))
+       (let [retracted-blocks (->> (keep (fn [tx]
+                                           (when (and (vector? tx)
+                                                      (= :db.fn/retractEntity (first tx)))
+                                             (second tx))) txs)
+                                   (map db/entity))
+             retracted-tx (->> (for [block retracted-blocks]
+                                 (let [refs (:block/_refs block)]
+                                   (mapcat (fn [ref]
+                                             (let [id (:db/id ref)
+                                                   block-content (property/remove-properties (:block/format block) (:block/content block))
+                                                   new-content (-> (:block/content ref)
+                                                                   (string/replace (re-pattern (util/format "{{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                                                                   block-content)
+                                                                   (string/replace (util/format "((%s))" (str (:block/uuid block)))
+                                                                                   block-content))]
+                                               [[:db/retract (:db/id ref) :block/refs (:db/id block)]
+                                                [:db/add id :block/content new-content]])) refs)))
+                               (apply concat))]
+         (concat txs retracted-tx))
        txs)))
 
 #?(:cljs
@@ -92,6 +120,7 @@
                                       :block/additional-properties)
                               m)) txs)
            txs (-> (update-block-refs txs opts)
+                   (replace-ref-with-content opts)
                    (distinct))]
        (when (and (seq txs)
                   (not (:skip-transact? opts))
@@ -101,7 +130,7 @@
                                     (config/get-repo-dir repo)))))
 
          (prn "[DEBUG] Outliner transact:")
-         (frontend.util/pprint txs)
+         (frontend.util/pprint {:txs txs :opts opts})
 
          (try
            (let [repo (get opts :repo (state/get-current-repo))
