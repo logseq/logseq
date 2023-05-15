@@ -204,7 +204,11 @@
   @apply h-[24px] mt-0 pr-[6px];
 
   &.is-order-list {
-    @apply relative right-[3px] mr-0 pr-0;
+    @apply mr-0 pr-0;
+
+    .bullet-link-wrap {
+      @apply relative left-[-3px];
+    }
   }
 }
 
