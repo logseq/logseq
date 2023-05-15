@@ -206,7 +206,7 @@
   margin-top: 0;
 
   &.is-order-list {
-    @apply relative right-0 mr-0;
+    @apply relative right-[6px] mr-0;
   }
 }
 
@@ -532,7 +532,7 @@
   }
 
   &.as-order-list {
-    @apply w-[28px] whitespace-nowrap justify-start pl-[3px];
+    @apply w-[28px] whitespace-nowrap justify-center pl-[3px];
   }
 
   .bullet {
