@@ -202,11 +202,11 @@
 
 .block-control-wrap {
   height: 24px;
-  min-width: 50px;
+  min-width: 44px;
   margin-top: 0;
 
   &.is-order-list {
-    @apply relative right-[6px] mr-0;
+    @apply relative right-[3px] mr-0;
   }
 }
 
@@ -532,7 +532,7 @@
   }
 
   &.as-order-list {
-    @apply w-[28px] whitespace-nowrap justify-center pl-[3px];
+    @apply w-[22px] whitespace-nowrap justify-center pl-[3px];
   }
 
   .bullet {
