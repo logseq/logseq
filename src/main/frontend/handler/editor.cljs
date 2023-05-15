@@ -233,13 +233,6 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-;; id: block dom id, "ls-block-counter-uuid"
-(defn- another-block-with-same-id-exists?
-  [current-id block-id]
-  (when-let [id (and (string? block-id) (parse-uuid block-id))]
-    (and (not= current-id id)
-         (db/entity [:block/uuid id]))))
-
 (defn- remove-non-existed-refs!
   [refs]
   (remove (fn [x] (or
@@ -383,11 +376,10 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid page format repo content properties]} block
+   (let [{:block/keys [page format repo content]} block
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         block-id (when (map? properties) (get properties :id))
          content (-> (property/remove-built-in-properties format content)
                      (drawer/remove-logbook))]
      (if force?
@@ -770,7 +762,6 @@
                      0)
                    0)
               f (fn []
-                  (prn {:pos pos})
                   (edit-block! (db/pull (:db/id block))
                                pos
                                id
@@ -2605,8 +2596,7 @@
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
 (defn- delete-concat [current-block]
-  (let [input-id (state/get-edit-input-id)
-        ^js input (state/get-input)
+  (let [^js input (state/get-input)
         current-pos (cursor/pos input)
         value (gobj/get input "value")
         right (outliner-core/get-right-sibling (:db/id current-block))
