@@ -400,8 +400,16 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block' (wrap-parse-block block)
-           opts' (merge opts {:outliner-op :save-block})]
+     (let [original-uuid (:block/uuid (db/entity (:db/id block)))
+           uuid-changed? (not= (:block/uuid block) original-uuid)
+           block' (-> (wrap-parse-block block)
+                      ;; :block/uuid might be changed when backspace/delete
+                      ;; a block that has been refed
+                      (assoc :block/uuid (:block/uuid block)))
+           opts' (merge opts (cond-> {:outliner-op :save-block}
+                               uuid-changed?
+                               (assoc :uuid-changed {:from (:block/uuid block)
+                                                     :to original-uuid})))]
        (outliner-tx/transact!
         opts'
         (outliner-core/save-block! block'))
@@ -807,6 +815,9 @@
         (let [original-content (util/trim-safe (:block/content block))
               value' (-> (property/remove-built-in-properties format original-content)
                          (drawer/remove-logbook))
+              value (->> value
+                         (property/remove-properties format)
+                         (drawer/remove-logbook))
               new-value (str value' value)
               tail-len (count value)
               pos (max
@@ -835,9 +846,9 @@
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
          (when (> page-blocks-count 1)
-           (let [block (db/entity [:block/uuid block-id])
-                 has-children? (seq (:block/_parent block))
-                 block (db/pull (:db/id block))
+           (let [block-e (db/entity [:block/uuid block-id])
+                 has-children? (seq (:block/_parent block-e))
+                 block (db/pull (:db/id block-e))
                  left (tree/-get-left (outliner-core/block block))
                  left-has-children? (and left
                                          (when-let [block-id (:block/uuid (:data left))]
@@ -855,9 +866,15 @@
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
-                     (when concat-prev-block?
-                       (save-block! repo prev-block new-content))
-                     (delete-block-aux! block delete-children?))
+                     (if concat-prev-block?
+                       (let [prev-block' (if (seq (:block/_refs block-e))
+                                           (assoc prev-block
+                                                  :block/uuid (:block/uuid block)
+                                                  :block/additional-properties (:block/properties block))
+                                           prev-block)]
+                         (delete-block-aux! block delete-children?)
+                         (save-block! repo prev-block' new-content))
+                       (delete-block-aux! block delete-children?)))
                    (move-fn)))))))))
    (state/set-editor-op! nil)))
 
@@ -1271,10 +1288,7 @@
   (let [value (string/trim value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
-    (save-block-if-changed! block value
-                            (merge
-                             {:init-properties (:block/properties block)}
-                             opts))))
+    (save-block-if-changed! block value opts)))
 
 (defn save-block!
   ([repo block-or-uuid content]
@@ -2668,11 +2682,22 @@
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}}
-            new-content (str value "" (:block/content next-block))
-            repo (state/get-current-repo)]
+            next-block-has-refs? (some? (:block/_refs (db/entity (:db/id next-block))))
+            new-content (if next-block-has-refs?
+                          (str value ""
+                               (->> (:block/content next-block)
+                                    (property/remove-properties (:block/format next-block))
+                                    (drawer/remove-logbook)))
+                          (str value "" (:block/content next-block)))
+            repo (state/get-current-repo)
+            edit-block' (if next-block-has-refs?
+                          (assoc edit-block
+                                 :block/uuid (:block/uuid next-block)
+                                 :block/additional-properties (dissoc (:block/properties next-block) :block/uuid))
+                          edit-block)]
         (outliner-tx/transact! transact-opts
-          (save-block! repo edit-block new-content)
-          (delete-block-aux! next-block false))
+          (delete-block-aux! next-block false)
+          (save-block! repo edit-block' new-content))
 
         (state/set-edit-content! input-id new-content)
         (cursor/move-cursor-to input current-pos)))))

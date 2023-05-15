@@ -52,14 +52,38 @@
      (get-in tx-report [:tempids :db/current-tx])))
 
 #?(:cljs
+   (defn update-block-refs
+     [txs opts]
+     (if-let [changed (:uuid-changed opts)]
+       (let [{:keys [from to]} changed
+             from-e (db/entity [:block/uuid from])
+             to-e (db/entity [:block/uuid to])
+             from-id (:db/id from-e)
+             to-id (:db/id to-e)
+             refs (:block/_refs from-e)
+             path-refs (:block/_path-refs from-e)
+             refs-txs (mapcat (fn [ref refs]
+                             (let [id (:db/id ref)]
+                               [[:db/retract id :block/refs from-id]
+                                [:db/add id :block/refs to-id]])) refs)
+             path-refs-txs (mapcat (fn [ref refs]
+                                     (let [id (:db/id ref)]
+                                       [[:db/retract id :block/path-refs from-id]
+                                        [:db/add id :block/path-refs to-id]])) path-refs)]
+         (concat txs refs-txs path-refs-txs))
+       txs)))
+
+#?(:cljs
    (defn transact!
      [txs opts before-editor-cursor]
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container :db/other-tx)
-                              m)) txs)]
+                                      :block/title :block/body :block/level :block/container :db/other-tx
+                                      :block/additional-properties)
+                              m)) txs)
+           txs (update-block-refs txs opts)]
        (when (and (seq txs)
                   (not (:skip-transact? opts))
                   (not (contains? (:file/unlinked-dirs @state/state)
