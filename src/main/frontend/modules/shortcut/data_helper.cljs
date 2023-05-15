@@ -54,12 +54,15 @@
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict (->> (vals @shortcut-config/config)
-                  (apply merge)
-                  (map (fn [[k _]]
-                         {k {:binding (shortcut-binding k)}}))
-                  (into {}))]
-    (->> (shortcut-config/category name)
+  (let [dict    (->> (vals @shortcut-config/config)
+                     (apply merge)
+                     (map (fn [[k _]]
+                            {k {:binding (shortcut-binding k)}}))
+                     (into {}))
+        plugin? (= name :shortcut.category/plugins)]
+    (->> (if plugin?
+           (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
+           (shortcut-config/category name))
          (mapv (fn [k] [k (k dict)])))))
 
 (defn shortcut-map

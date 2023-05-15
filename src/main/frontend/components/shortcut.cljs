@@ -52,7 +52,7 @@
   (fn [_]
     (customize-shortcut-dialog-inner k action-name displayed-binding)))
 
-(rum/defc shortcut-col [k binding configurable? action-name]
+(rum/defc shortcut-col [_category k binding configurable? action-name]
   (let [conflict?         (dh/potential-conflict? k)
         displayed-binding (dh/binding-for-display k binding)
         disabled?         (str/includes? displayed-binding "system default")]
@@ -75,8 +75,16 @@
 (rum/defcs shortcut-table
   < rum/reactive
     (rum/local true ::folded?)
-  [state name configurable?]
+    {:will-mount (fn [state]
+                   (let [name (first (:rum/args state))]
+                     (cond-> state
+                             (contains? #{:shortcut.category/basics
+                                          :shortcut.category/plugins}
+                                        name)
+                             (-> ::folded? (reset! false) (do state)))))}
+  [state category configurable?]
   (let [*folded? (::folded? state)
+        plugin?  (= category :shortcut.category/plugins)
         _        (state/sub [:config (state/get-current-repo) :shortcuts])]
     [:div.cp__shortcut-table-wrap
      [:a.fold
@@ -85,15 +93,15 @@
      [:table
       [:thead
        [:tr
-        [:th.text-left [:b (t name)]]
+        [:th.text-left [:b (t category)]]
         [:th.text-right]]]
       (when-not @*folded?
         [:tbody
          (map (fn [[k {:keys [binding]}]]
                 [:tr {:key (str k)}
-                 [:td.text-left (t (dh/decorate-namespace k))]
-                 (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
-              (dh/binding-by-category name))])]]))
+                 [:td.text-left (str (cond-> k (not plugin?) (-> (dh/decorate-namespace) (t))))]
+                 (shortcut-col category k binding configurable? (t (dh/decorate-namespace k)))])
+              (dh/binding-by-category category))])]]))
 
 (rum/defc trigger-table []
   [:table
@@ -181,6 +189,7 @@
 (rum/defc keymap-tables
   []
   [:div.cp__keymap-tables
+   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/basics true)
    (shortcut-table :shortcut.category/navigating true)
    (shortcut-table :shortcut.category/block-editing true)
@@ -189,7 +198,6 @@
    (shortcut-table :shortcut.category/formatting true)
    (shortcut-table :shortcut.category/toggle true)
    (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
-   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/others true)])
 
 (rum/defc keymap-pane
