@@ -48,6 +48,7 @@ frontend.mixins/perf-measure-mixin
 frontend.mobile.util/get-idevice-statusbar-height
 ;; Used in macro
 frontend.modules.outliner.datascript/transact!
+frontend.modules.outliner.core/*transaction-opts*
 ;; Referenced in comment
 frontend.page/route-view
 ;; placeholder fn
