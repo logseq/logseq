@@ -97,8 +97,8 @@
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
-    (is (= 211 (count files)) "Correct file count")
-    (is (= 42304 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 212 (count files)) "Correct file count")
+    (is (= 42315 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
