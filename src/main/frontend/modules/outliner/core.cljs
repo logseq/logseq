@@ -532,10 +532,11 @@
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for drag & drop.
       `outliner-op`: what's the current outliner operation.
+      `cut-paste?`: whether it's pasted from cut blocks
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target? cut-paste?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (get-target-block target-block)
@@ -591,7 +592,10 @@
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                         [{:block/uuid (tree/-get-id next)
                           :block/left (:db/id left)}]))
-            full-tx (util/concat-without-nil uuids-tx tx next-tx)]
+            cut-target-tx (when (and cut-paste? replace-empty-target?)
+                            [{:db/id (:db/id target-block')
+                              :block/uuid (:block/uuid (first blocks'))}])
+            full-tx (util/concat-without-nil uuids-tx tx next-tx cut-target-tx)]
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
         {:tx-data full-tx
