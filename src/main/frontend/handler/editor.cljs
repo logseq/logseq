@@ -1968,6 +1968,15 @@
   (let [ids (set (map :db/id blocks))]
     (some? (some #(ids (:db/id (:block/parent %))) blocks))))
 
+(defn- get-revert-cut-tx
+  [blocks]
+  (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
+        recent-cut-block-ids (->> retracted-block-ids (map second) (set))]
+    ;; (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
+    (when (and (= (set (map :block/uuid blocks)) recent-cut-block-ids)
+               (seq revert-tx))
+      revert-tx)))
+
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -1990,8 +1999,9 @@
         empty-target? (string/blank? (:block/content target-block))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
-        replace-empty-target? (if (and paste-nested-blocks? empty-target?
-                                       target-block-has-children?)
+        revert-cut-txs (get-revert-cut-tx blocks)
+        keep-uuid? (if (seq revert-cut-txs) true keep-uuid?)
+        replace-empty-target? (if (and paste-nested-blocks? empty-target? target-block-has-children?)
                                 false
                                 true)
         target-block' (if replace-empty-target? target-block
@@ -2009,7 +2019,8 @@
                    false
 
                    :else
-                   true)]
+                   true)
+]
 
     (when has-unsaved-edits
       (outliner-tx/transact!
@@ -2017,7 +2028,8 @@
         (outliner-core/save-block! editing-block)))
 
     (outliner-tx/transact!
-      {:outliner-op :insert-blocks}
+      {:outliner-op :insert-blocks
+       :additional-tx revert-cut-txs}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
