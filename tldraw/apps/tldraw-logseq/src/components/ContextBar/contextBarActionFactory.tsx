@@ -103,7 +103,7 @@ const AutoResizingAction = observer(() => {
       className="tl-button"
       pressed={pressed}
       onPressedChange={v => {
-        shapes.forEach(s => {
+        app.selectedShapesArray.forEach(s => {
           if (s.props.type === 'logseq-portal') {
             s.update({
               isAutoResizing: v,
@@ -253,7 +253,7 @@ const NoFillAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>('NoFill')
   const handleChange = React.useCallback((v: boolean) => {
-    shapes.forEach(s => s.update({ noFill: v }))
+    app.selectedShapesArray.forEach(s => s.update({ noFill: v }))
     app.persist()
   }, [])
 
@@ -279,14 +279,14 @@ const SwatchAction = observer(() => {
   >('Swatch')
 
   const handleSetColor = React.useCallback((color: string) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ fill: color, stroke: color })
     })
     app.persist()
   }, [])
 
   const handleSetOpacity = React.useCallback((opacity: number) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ opacity: opacity })
     })
     app.persist()
