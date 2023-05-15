@@ -159,10 +159,10 @@
   "Prevent block auto-save during undo/redo."
   []
   (when-let [block (state/get-edit-block)]
-    (let [content (:block/content (db/entity (:db/id block)))
-          content' (-> (property/remove-built-in-properties (:block/format block) content)
-                       (drawer/remove-logbook))]
-      (state/set-edit-content! (state/get-edit-input-id) content'))))
+    (when-let [content (:block/content (db/entity (:db/id block)))]
+      (let [content' (-> (property/remove-built-in-properties (:block/format block) content)
+                         (drawer/remove-logbook))]
+        (state/set-edit-content! (state/get-edit-input-id) content')))))
 
 (defn- get-next-tx-editor-cursor
   [tx-id]
