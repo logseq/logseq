@@ -102,7 +102,7 @@
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
 
  ;; Set a custom Arweave gateway
- ;; Default value: https://arweave.net
+ ;; Default gateway: https://arweave.net
  ;; :arweave/gateway "https://arweave.net"
 
  ;; Set bullet indentation when exporting
@@ -189,7 +189,7 @@
  :ui/show-command-doc? true
 
  ;; Display empty bullet points.
- ;; Default value: false
+ ;; Default value: true
  :ui/show-empty-bullets? false
 
  ;; Pre-defined :view function to use with advanced queries.
@@ -280,7 +280,7 @@
  :ref/default-open-blocks-level 2
 
  ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 50
+ ;; Default value: 100
  :ref/linked-references-collapsed-threshold 50
 
  ;; Graph view configuration.
