@@ -35,27 +35,32 @@
          (string/join))))
 
 (defn- get-page-reference
-  [block]
+  [block format]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
-               (let [typ (first (:url (second block)))
+               (let [url-type (first (:url (second block)))
                      value (second (:url (second block)))]
                  ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
                   (and
-                   (= typ "Page_ref")
+                   (= url-type "Page_ref")
                    (and (string? value)
                         (not (or (gp-config/local-asset? value)
                                  (gp-config/draw? value))))
                    value)
 
                   (and
-                   (= typ "Search")
+                   (= url-type "Search")
                    (page-ref/page-ref? value)
                    (text/page-ref-un-brackets! value))
 
+                  (and (= url-type "Search")
+                       (= format :org)
+                       (not (gp-config/local-asset? value))
+                       value)
+
                   (and
-                   (= typ "File")
+                   (= url-type "File")
                    (second (first (:label (second block)))))))
 
                (and (vector? block) (= "Nested_link" (first block)))
@@ -327,7 +332,7 @@
        (when-not (and (vector? form)
                       (= (first form) "Custom")
                       (= (second form) "query"))
-         (when-let [page (get-page-reference form)]
+         (when-let [page (get-page-reference form (:format block))]
            (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
