@@ -399,6 +399,13 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
+   (defn nearest-scrollable-container [^js/HTMLElement element]
+     (some #(when-let [overflow-y (.-overflowY (js/window.getComputedStyle %))]
+              (when (contains? #{"auto" "scroll" "overlay"} overflow-y)
+                %))
+           (take-while (complement nil?) (iterate #(.-parentElement %) element)))))
+
+#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
