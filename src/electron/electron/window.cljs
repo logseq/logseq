@@ -187,7 +187,9 @@
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
+        (.on "maximize" #(if win32? (.send web-contents "maximize" true) ()))
+        (.on "unmaximize" #(if win32? (.send web-contents "maximize" false) ())))
 
       ;; clear
       (fn []

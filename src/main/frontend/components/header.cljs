@@ -29,7 +29,7 @@
   []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:title "Home"
+     {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))

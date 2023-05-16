@@ -629,6 +629,17 @@
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
 
+(defmethod handle :window-minimize [^js win]
+  (.minimize win))
+
+(defmethod handle :window-maximize-restore [^js win]
+  (if (.isMaximized win)
+    (.unmaximize win)
+    (.maximize win)))
+
+(defmethod handle :window-close [^js win]
+  (.close win))
+
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;

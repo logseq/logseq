@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.win32-title-bar :as win32-title-bar]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -33,14 +34,14 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
+            [frontend.util :as util :refer [win32?]]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
@@ -284,8 +285,8 @@
                               (when (< touching-x-offset 0)
                                 (max touching-x-offset (- 0 (:width el-rect))))))
         offset-ratio (and (number? touching-x-offset)
-                            (some->> (:width el-rect)
-                                     (/ touching-x-offset)))]
+                          (some->> (:width el-rect)
+                                   (/ touching-x-offset)))]
 
     (rum/use-effect!
      #(js/setTimeout
@@ -725,6 +726,7 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
+        fullscreen? (state/sub :win32-title-bar/window-is-fullscreen?)
         margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
@@ -771,6 +773,12 @@
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+
+        (if win32?
+          (if fullscreen?
+            ()
+            (win32-title-bar/container)) ())
+
         (header/header {:open-fn        open-fn
                         :light?         light?
                         :current-repo   current-repo

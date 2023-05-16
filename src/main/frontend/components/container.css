@@ -93,6 +93,7 @@
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 30px;
     width: 100%;
+    padding-top: var(--ls-win32-title-bar-height);
 
     > .fake-bar {
       @apply w-full px-5 pt-1 sm:hidden;
