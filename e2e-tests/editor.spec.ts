@@ -1091,312 +1091,78 @@ test('apply and remove all formatting to a word connected with a special charact
   expect(selection).toBe('ipsum')
 })
 
-test('square brackets auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
+test.describe('Always auto-pair symbols', () => {
+  // Define the symbols that should be auto-paired
+  const autoPairSymbols = [
+    { name: 'square brackets', prefix: '[', postfix: ']' },
+    { name: 'curly brackets', prefix: '{', postfix: '}' },
+    { name: 'parentheses', prefix: '(', postfix: ')' },
+    // { name: 'angle brackets', prefix: '<', postfix: '>' },
+    { name: 'backtick', prefix: '`', postfix: '`' },
+    // { name: 'single quote', prefix: "'", postfix: "'" },
+    // { name: 'double quote', prefix: '"', postfix: '"' },
+  ]
 
-  // type an open square bracket
-  page.type('textarea >> nth=0', '[', { delay: 100 })
+  for (const symbol of autoPairSymbols) {
+    test(`${symbol.name} auto-pairing`, async ({ page }) => {
+      await createRandomPage(page)
 
-  // Verify that a closing square bracket was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('[]')
+      // Type prefix and check that the postfix is automatically added
+      page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+      await expect(page.locator('textarea >> nth=0')).toHaveText(
+        `${symbol.prefix}${symbol.postfix}`
+      )
 
-  // Verify that the cursor is between the square brackets
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
+      // Check that the cursor is positioned correctly between the prefix and postfix
+      const CursorPos = await getCursorPos(page)
+      expect(CursorPos).toBe(symbol.prefix.length)
+    })
+  }
 })
 
-test('curly brackets auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open curly bracket
-  page.type('textarea >> nth=0', '{', { delay: 100 })
-
-  // Verify that a closing curly bracket was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('{}')
-
-  // Verify that the cursor is between the curly brackets
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test('parentheses auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open parenthesis
-  page.type('textarea >> nth=0', '(', { delay: 100 })
-
-  // Verify that a closing parenthesis was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('()')
-
-  // Verify that the cursor is between the parentheses
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test.fixme('angle brackets auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open angle bracket
-  page.type('textarea >> nth=0', '<', { delay: 100 })
-
-  // Verify that a closing angle bracket was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('<>')
-
-  // Verify that the cursor is between the angle brackets
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test('backtick auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open backtick
-  page.type('textarea >> nth=0', '`', { delay: 100 })
-
-  // Verify that a closing backtick was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('``')
-
-  // Verify that the cursor is between the backticks
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test.fixme('single quote auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open single quote
-  page.type('textarea >> nth=0', "'", { delay: 100 })
-
-  // Verify that a closing single quote was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText("''")
-
-  // Verify that the cursor is between the single quotes
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test.fixme('double quote auto-pairing', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open double quote
-  page.type('textarea >> nth=0', '"', { delay: 100 })
-
-  // Verify that a closing double quote was automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('""')
-
-  // Verify that the cursor is between the double quotes
-  const CursorPos = await getCursorPos(page)
-  expect(CursorPos).toBe(1)
-})
-
-test.fixme('only autopair tilde with text selection', async ({ page }) => {
-  await createRandomPage(page)
-
-  // type an open tilde
-  page.type('textarea >> nth=0', '~', { delay: 100 })
-
-  // Verify that an additional tilda was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('~')
-
-  // remove tilde
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await page.type('textarea >> nth=0', 'Lorem')
-
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type a tilda
-  await page.type('textarea >> nth=0', '~', { delay: 100 })
-
-  // Verify that an additional tilde was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('~Lorem~')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair asterisk with text selection', async ({ page, block }) => {
-  await createRandomPage(page)
-
-  // type an open asterisk
-  page.type('textarea >> nth=0', '*', { delay: 100 })
-
-  // Verify that an additional asterisk was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('*')
-
-  // remove asterisk
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type an asterisk
-  await page.type('textarea >> nth=0', '*', { delay: 100 })
-
-  // Verify that an additional asterisk was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('*Lorem*')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair underscore with text selection', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  // type an underscore
-  page.type('textarea >> nth=0', '_', { delay: 100 })
-
-  // Verify that an additional asterisk was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('_')
-
-  // remove underscore
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type an underscore
-  await page.type('textarea >> nth=0', '_', { delay: 100 })
-
-  // Verify that an additional asterisk was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('_Lorem_')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair caret symbol with text selection', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  // type the symbol
-  page.type('textarea >> nth=0', '^', { delay: 100 })
-
-  // Verify that an additional sybmol was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('^')
-
-  // remove symbol
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type the symbol
-  await page.type('textarea >> nth=0', '^', { delay: 100 })
-
-  // Verify that an additional symbol was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('^Lorem^')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair equal symbol with text selection', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  // type the symbol
-  page.type('textarea >> nth=0', '=', { delay: 100 })
-
-  // Verify that an additional sybmol was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('=')
-
-  // remove symbol
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type the symbol
-  await page.type('textarea >> nth=0', '=', { delay: 100 })
-
-  // Verify that an additional symbol was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('=Lorem=')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair slash symbol with text selection', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  // type the symbol
-  page.type('textarea >> nth=0', '/', { delay: 100 })
-
-  // Verify that an additional sybmol was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('/')
-
-  // remove symbol
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type the symbol
-  await page.type('textarea >> nth=0', '/', { delay: 100 })
-
-  // Verify that an additional symbol was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('/Lorem/')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
-})
-
-test('Only auto-pair plus symbol with text selection', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  // type the symbol
-  page.type('textarea >> nth=0', '+', { delay: 100 })
-
-  // Verify that an additional sybmol was not automatically added
-  await expect(page.locator('textarea >> nth=0')).toHaveText('+')
-
-  // remove symbol
-  await page.keyboard.press('Backspace')
-
-  // add text
-  await block.mustType('Lorem')
-  // select text
-  await page.keyboard.press(modKey + '+a')
-
-  // Type the symbol
-  await page.type('textarea >> nth=0', '+', { delay: 100 })
-
-  // Verify that an additional symbol was automatically added around 'ipsum'
-  await expect(page.locator('textarea >> nth=0')).toHaveText('+Lorem+')
-
-  // Verify 'Lorem' is selected
-  const selection = await getSelection(page)
-  expect(selection).toBe('Lorem')
+test.describe('Auto-pair symbols only with text selection', () => {
+  const autoPairSymbols = [
+    // { name: 'tilde', prefix: '~', postfix: '~' },
+    { name: 'asterisk', prefix: '*', postfix: '*' },
+    { name: 'underscore', prefix: '_', postfix: '_' },
+    { name: 'caret', prefix: '^', postfix: '^' },
+    { name: 'equal', prefix: '=', postfix: '=' },
+    { name: 'slash', prefix: '/', postfix: '/' },
+    { name: 'plus', prefix: '+', postfix: '+' },
+  ]
+
+  for (const symbol of autoPairSymbols) {
+    test(`Only auto-pair ${symbol.name} with text selection`, async ({
+      page,
+      block,
+    }) => {
+      await createRandomPage(page)
+
+      // type the symbol
+      page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+
+      // Verify that there is no auto-pairing
+      await expect(page.locator('textarea >> nth=0')).toHaveText(symbol.prefix)
+
+      // remove prefix
+      await page.keyboard.press('Backspace')
+
+      // add text
+      await block.mustType('Lorem')
+      // select text
+      await page.keyboard.press(modKey + '+a')
+
+      // Type the prefix
+      await page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+
+      // Verify that an additional postfix was automatically added around 'Lorem'
+      await expect(page.locator('textarea >> nth=0')).toHaveText(
+        `${symbol.prefix}Lorem${symbol.postfix}`
+      )
+
+      // Verify 'Lorem' is selected
+      const selection = await getSelection(page)
+      expect(selection).toBe('Lorem')
+    })
+  }
 })
