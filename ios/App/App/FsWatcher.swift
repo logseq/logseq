@@ -46,12 +46,16 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
     }
 
     public func receivedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?) {
+        guard let baseUrl = baseUrl else {
+            // unwatch, ignore incoming
+            return
+        }
         // NOTE: Event in js {dir path content stat{mtime}}
         switch event {
         case .Unlink:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.notifyListeners("watcher", data: ["event": "unlink",
-                                                       "dir": self.baseUrl?.description as Any,
+                                                       "dir": baseUrl.description as Any,
                                                        "path": url.description
                 ])
             }
@@ -61,8 +65,8 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
                 content = try? String(contentsOf: url, encoding: .utf8)
             }
             self.notifyListeners("watcher", data: ["event": event.description,
-                                                   "dir": baseUrl?.description as Any,
-                                                   "path": url.description,
+                                                   "dir": baseUrl.description as Any,
+                                                   "path": url.relativePath(from: baseUrl)?.precomposedStringWithCanonicalMapping as Any,
                                                    "content": content as Any,
                                                    "stat": ["mtime": metadata?.contentModificationTimestamp ?? 0,
                                                             "ctime": metadata?.creationTimestamp ?? 0,
@@ -263,5 +267,31 @@ public class PollingWatcher {
             self.delegate?.receivedNotification(url, .Unlink, nil)
         }
         self.metaDb = newMetaDb
+    }
+}
+
+
+extension URL {
+    func relativePath(from base: URL) -> String? {
+        // Ensure that both URLs represent files:
+        guard self.isFileURL && base.isFileURL else {
+            return nil
+        }
+
+        // Remove/replace "." and "..", make paths absolute:
+        let destComponents = self.standardizedFileURL.pathComponents
+        let baseComponents = base.standardizedFileURL.pathComponents
+
+        // Find number of common path components:
+        var i = 0
+        while i < destComponents.count && i < baseComponents.count
+                && destComponents[i] == baseComponents[i] {
+            i += 1
+        }
+
+        // Build relative path:
+        var relComponents = Array(repeating: "..", count: baseComponents.count - i)
+        relComponents.append(contentsOf: destComponents[i...])
+        return relComponents.joined(separator: "/")
     }
 }
