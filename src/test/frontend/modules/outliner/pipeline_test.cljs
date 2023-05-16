@@ -1,18 +1,11 @@
 (ns frontend.modules.outliner.pipeline-test
   (:require [cljs.test :refer [deftest is use-fixtures testing]]
             [datascript.core :as d]
-            [frontend.state :as state]
             [frontend.db :as db]
             [frontend.modules.outliner.pipeline :as pipeline]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
-(use-fixtures :each {:before (fn []
-                               ;; Set current-repo explicitly since it's not the default
-                               (state/set-current-repo! test-helper/test-db)
-                               (test-helper/start-test-db!))
-                     :after (fn []
-                              (state/set-current-repo! nil)
-                              (test-helper/destroy-test-db!))})
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])

@@ -1269,7 +1269,7 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) mobile?))
+     (when (and el (or (mobile-util/native-platform?) (mobile?)))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
