@@ -100,7 +100,7 @@
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
-   :isMobile (util/mobile?)
+   :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
