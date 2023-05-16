@@ -184,7 +184,7 @@ test('undo the color switch', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-ellipse-container ellipse:last-of-type')).toHaveAttribute('fill', 'var(--ls-wb-background-color-default)')
 })
 
-test('undo the conversion', async ({ page }) => {
+test('undo the shape conversion', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
