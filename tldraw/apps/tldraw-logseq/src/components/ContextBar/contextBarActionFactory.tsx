@@ -133,9 +133,7 @@ const LogseqPortalViewModeAction = observer(() => {
     <div className="flex">
       {collapsed ? 'Expand' : 'Collapse'}
       <KeyboardShortcut
-        action={
-          collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'
-        }
+        action={collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'}
       />
     </div>
   )
