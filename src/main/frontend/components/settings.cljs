@@ -680,7 +680,7 @@
     [:span.text-sm.opacity-50.my-4
      " for version control."]
     [:span.text-sm.opacity-50.my-4
-     "General issues about Git usage is not supported by the Logseq team and should be used at own risk"]]
+     "Use Git at your own risk as general Git issues are not supported by the Logseq team"]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
