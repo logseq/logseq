@@ -414,10 +414,11 @@
     (state/set-edit-content! (state/get-edit-input-id)
                              (str prefix value))
     ;; HACK: save scroll-pos of current pos, then add trailing content
-    (let [scroll-pos (.-scrollTop (gdom/getElement "main-content-container"))]
+    (let [scroll-container (util/nearest-scrollable-container input)
+          scroll-pos (.-scrollTop scroll-container)]
       (state/set-block-content-and-last-pos! id new-value new-pos)
       (cursor/move-cursor-to input new-pos)
-      (set! (.-scrollTop (gdom/getElement "main-content-container")) scroll-pos)
+      (set! (.-scrollTop scroll-container) scroll-pos)
       (when check-fn
         (check-fn new-value (dec (count prefix)) new-pos)))))
 
