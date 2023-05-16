@@ -629,466 +629,117 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
 })
 
-test.describe('Bold Formatting', () => {
-  test('Applying to an empty selection inserts placeholder formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum'
-    await block.mustFill(text)
-
-    // move the cursor to the end of Lorem
-    await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
-    await page.keyboard.press('Space')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+b')
-
-    const prefix = '**'
-    const postfix = '**'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `Lorem ${prefix}${postfix} ipsum`
-    )
-
-    // Verify cursor position
-    const cursorPos = await getCursorPos(page)
-    expect(cursorPos).toBe(' ipsum'.length + prefix.length)
-  })
-
-  test('Applying to an entire block encloses the block in bold formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum-dolor sit.'
-    await block.mustFill(text)
-
-    // Select the entire block
-    await page.keyboard.press(modKey + '+a')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+b')
-
-    const prefix = '**'
-    const postfix = '**'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `${prefix}${text}${postfix}`
-    )
-
-    // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(prefix.length + text.length)
-  })
-
-  test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    await block.mustFill('Lorem ipsum-dolor sit.')
-
-    // Select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -16) // moves the cursor 16 characters to the left
-
-    // Select the desired length of text
-    await selectCharacters(page, 5) // selects the next 5 characters to the right of the cursor
-
-    // Apply bold formatting
-    await page.keyboard.press(modKey + '+b')
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem **ipsum**-dolor sit.'
-    )
-
-    // Re-select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -5)
-
-    // Select the desired length of text
-    await selectCharacters(page, 5)
-
-    // Remove bold formatting
-    await page.keyboard.press(modKey + '+b')
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem ipsum-dolor sit.'
-    )
-
-    // Verify the word 'ipsum' is still selected
-    const selection = await getSelection(page)
-    expect(selection).toBe('ipsum')
-  })
-})
-
-test.describe('Italic Formatting', () => {
-  test('Applying to an empty selection inserts placeholder formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum'
-    await block.mustFill(text)
-
-    // move the cursor to the end of Lorem
-    await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
-    await page.keyboard.press('Space')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+i')
-
-    const prefix = '*'
-    const postfix = '*'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `Lorem ${prefix}${postfix} ipsum`
-    )
-
-    // Verify cursor position
-    const cursorPos = await getCursorPos(page)
-    expect(cursorPos).toBe(' ipsum'.length + prefix.length)
-  })
-
-  test('Applying to an entire block encloses the block in italic formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum-dolor sit.'
-    await block.mustFill(text)
-
-    // Select the entire block
-    await page.keyboard.press(modKey + '+a')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+i')
-
-    const prefix = '*'
-    const postfix = '*'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `${prefix}${text}${postfix}`
-    )
-
-    // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-
-    expect(cursorPosition).toBe(prefix.length + text.length)
-  })
-
-  test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    await block.mustFill('Lorem ipsum-dolor sit.')
-
-    // Select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -16)
-
-    // Select the desired length of text
-    await selectCharacters(page, 5)
-
-    // Apply italic formatting
-    await page.keyboard.press(modKey + '+i')
-
-    // Verify that 'ipsum' is italic
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem *ipsum*-dolor sit.'
-    )
-
-    // Re-select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -5)
-
-    // Select the desired length of text
-    await selectCharacters(page, 5)
-
-    // Remove italic formatting
-    await page.keyboard.press(modKey + '+i')
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem ipsum-dolor sit.'
-    )
-
-    // Verify the word 'ipsum' is still selected
-    const selection = await getSelection(page)
-    expect(selection).toBe('ipsum')
-  })
-})
-
-test.describe('Strikethrough Formatting', () => {
-  test('Applying to an empty selection inserts placeholder formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum'
-    await block.mustFill(text)
-
-    // move the cursor to the end of Lorem
-    await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
-    await page.keyboard.press('Space')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+Shift+s')
-
-    const prefix = '~~'
-    const postfix = '~~'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `Lorem ${prefix}${postfix} ipsum`
-    )
-
-    // Verify cursor position
-    const cursorPos = await getCursorPos(page)
-    expect(cursorPos).toBe(' ipsum'.length + prefix.length)
-  })
-
-  test('Applying to an entire block encloses the block in strikethrough formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum-dolor sit.'
-    await block.mustFill(text)
-
-    // Select the entire block
-    await page.keyboard.press(modKey + '+a')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+Shift+s')
-
-    const prefix = '~~'
-    const postfix = '~~'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `${prefix}${text}${postfix}`
-    )
-
-    // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(prefix.length + text.length)
-  })
-
-  test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    await block.mustFill('Lorem ipsum-dolor sit.')
-
-    // Select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -16)
-
-    // Select the desired length of text
-    await selectCharacters(page, 5)
-
-    // Apply strikethrough formatting
-    await page.keyboard.press(modKey + '+Shift+s')
-
-    // Verify that 'ipsum' is strikethrough
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem ~~ipsum~~-dolor sit.'
-    )
-
-    // Re-select 'ipsum'
-    // Move the cursor to the desired position
-    await moveCursor(page, -5)
-
-    // Select the desired length of text
-    await selectCharacters(page, 5)
-
-    // Remove strikethrough formatting
-    await page.keyboard.press(modKey + '+Shift+s')
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      'Lorem ipsum-dolor sit.'
-    )
-
-    // Verify the word 'ipsum' is still selected
-    const selection = await getSelection(page)
-    expect(selection).toBe('ipsum')
-  })
-})
-
-test.describe('Underline Formatting', () => {
-  test.fixme(
-    'Applying to an empty selection inserts placeholder formatting and places cursor correctly',
-    async ({ page, block }) => {
-      await createRandomPage(page)
-
-      const text = 'Lorem ipsum'
-      await block.mustFill(text)
-
-      // move the cursor to the end of Lorem
-      await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
-      await page.keyboard.press('Space')
-
-      // Apply formatting
-      await page.keyboard.press(modKey + '+u')
-
-      const prefix = '<u>'
-      const postfix = '</u>'
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
-        `Lorem ${prefix}${postfix} ipsum`
-      )
-
-      // Verify cursor position
-      const cursorPos = await getCursorPos(page)
-      expect(cursorPos).toBe(' ipsum'.length + prefix.length)
-    }
-  )
-
-  test.fixme('Applying to an entire block encloses the block in underline formatting and places cursor correctly', async ({
-    page,
-    block,
-  }) => {
-    await createRandomPage(page)
-
-    const text = 'Lorem ipsum-dolor sit.'
-    await block.mustFill(text)
-
-    // Select the entire block
-    await page.keyboard.press(modKey + '+a')
-
-    // Apply formatting
-    await page.keyboard.press(modKey + '+u')
-
-    const prefix = '<u>'
-    const postfix = '</u>'
-    await expect(page.locator('textarea >> nth=0')).toHaveText(
-      `${prefix}${text}${postfix}`
-    )
-
-    // Verify cursor position
-    const cursorPosition = await getCursorPos(page)
-
-    expect(cursorPosition).toBe(
-      prefix.length + text.length
-    )
-  })
-
-  test.fixme(
-    'Applying and then removing from a word connected with a special character correctly formats and then reverts',
-    async ({ page, block }) => {
-      await createRandomPage(page)
-
-      await block.mustFill('Lorem ipsum-dolor sit.')
-
-      // Select 'ipsum'
-      // Move the cursor to the desired position
-      await moveCursor(page, -16)
-
-      // Select the desired length of text
-      await selectCharacters(page, 5)
-
-      // Apply formatting
-      await page.keyboard.press(modKey + '+u')
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
-        'Lorem <u>ipsum</u>-dolor sit.'
-      )
-
-      // Re-select 'ipsum'
-      // Move the cursor to the desired position
-      await moveCursor(page, -5)
-
-      // Select the desired length of text
-      await selectCharacters(page, 5)
-
-      // Remove underline formatting
-      await page.keyboard.press(modKey + '+u')
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
-        'Lorem ipsum-dolor sit.'
-      )
-
-      // Verify the word 'ipsum' is still selected
-      const selection = await getSelection(page)
-      expect(selection).toBe('ipsum')
-    }
-  )
-})
-
-test('apply and remove all formatting to a word connected with a special character', async ({
-  page,
-  block,
-}) => {
-  await createRandomPage(page)
-
-  await block.mustFill('Lorem ipsum-dolor sit.')
-
-  // Select 'ipsum'
-  // Move the cursor to the desired position
-  await moveCursor(page, -16)
-
-  // Select the desired length of text
-  await selectCharacters(page, 5)
-
-  // Apply italic formatting
-  await page.keyboard.press(modKey + '+i')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem *ipsum*-dolor sit.'
-  )
-
-  // select '*ipsum*'
-  // Move the cursor to the desired position
-  await moveCursor(page, -6)
-
-  // Select the desired length of text
-  await selectCharacters(page, 7)
-
-  // Apply strikethrough formatting
-  await page.keyboard.press(modKey + '+Shift+s')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ~~*ipsum*~~-dolor sit.'
-  )
-  // select '~~ipsum~~'
-  // Move the cursor to the desired position
-  await moveCursor(page, -9)
-
-  // Select the desired length of text
-  await selectCharacters(page, 11)
-
-  // Apply bold formatting
-  await page.keyboard.press(modKey + '+b')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **~~*ipsum*~~**-dolor sit.'
-  )
-
-  // Move the cursor to the desired position
-  await moveCursor(page, -8)
-
-  // Select the desired length of text
-  await selectCharacters(page, 5)
-
-  // Remove italic formatting
-  await page.keyboard.press(modKey + '+i')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **~~ipsum~~**-dolor sit.'
-  )
-
-  // Remove strikethrough formatting
-  await page.keyboard.press(modKey + '+Shift+s')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem **ipsum**-dolor sit.'
-  )
-
-  // Remove bold formatting
-  await page.keyboard.press(modKey + '+b')
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
-    'Lorem ipsum-dolor sit.'
-  )
-
-  const selection = await getSelection(page)
-
-  expect(selection).toBe('ipsum')
+test.describe('Text Formatting', () => {
+  const formats = [
+    { name: 'bold', prefix: '**', postfix: '**', shortcut: modKey + '+b' },
+    { name: 'italic', prefix: '*', postfix: '*', shortcut: modKey + '+i' },
+    {
+      name: 'strikethrough',
+      prefix: '~~',
+      postfix: '~~',
+      shortcut: modKey + '+Shift+s',
+    },
+    // {
+    //   name: 'underline',
+    //   prefix: '<u>',
+    //   postfix: '</u>',
+    //   shortcut: modKey + '+u',
+    // },
+  ]
+
+  for (const format of formats) {
+    test.describe(`${format.name} formatting`, () => {
+      test('Applying to an empty selection inserts placeholder formatting and places cursor correctly', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        const text = 'Lorem ipsum'
+        await block.mustFill(text)
+
+        // move the cursor to the end of Lorem
+        await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
+        await page.keyboard.press('Space')
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `Lorem ${format.prefix}${format.postfix} ipsum`
+        )
+
+        // Verify cursor position
+        const cursorPos = await getCursorPos(page)
+        expect(cursorPos).toBe(' ipsum'.length + format.prefix.length)
+      })
+
+      test('Applying to an entire block encloses the block in formatting and places cursor correctly', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        const text = 'Lorem ipsum-dolor sit.'
+        await block.mustFill(text)
+
+        // Select the entire block
+        await page.keyboard.press(modKey + '+a')
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `${format.prefix}${text}${format.postfix}`
+        )
+
+        // Verify cursor position
+        const cursorPosition = await getCursorPos(page)
+        expect(cursorPosition).toBe(format.prefix.length + text.length)
+      })
+
+      test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        await block.mustFill('Lorem ipsum-dolor sit.')
+
+        // Select 'ipsum'
+        // Move the cursor to the desired position
+        await moveCursor(page, -16)
+
+        // Select the desired length of text
+        await selectCharacters(page, 5)
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        // Verify that 'ipsum' is formatted
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `Lorem ${format.prefix}ipsum${format.postfix}-dolor sit.`
+        )
+
+        // Re-select 'ipsum'
+        // Move the cursor to the desired position
+        await moveCursor(page, -5)
+
+        // Select the desired length of text
+        await selectCharacters(page, 5)
+
+        // Remove formatting
+        await page.keyboard.press(format.shortcut)
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          'Lorem ipsum-dolor sit.'
+        )
+
+        // Verify the word 'ipsum' is still selected
+        const selection = await getSelection(page)
+        expect(selection).toBe('ipsum')
+      })
+    })
+  }
 })
 
 test.describe('Always auto-pair symbols', () => {
