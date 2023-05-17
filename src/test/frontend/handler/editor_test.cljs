@@ -8,13 +8,7 @@
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]))
 
-(use-fixtures :each {:before (fn []
-                               ;; Set current-repo explicitly since it's not the default
-                               (state/set-current-repo! test-helper/test-db)
-                               (test-helper/start-test-db!))
-                     :after (fn []
-                              (state/set-current-repo! nil)
-                              (test-helper/destroy-test-db!))})
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -247,18 +241,17 @@
             (set (map :block/name (:block/path-refs updated-block))))
          "Path-refs remain the same"))))
 
-(deftest save-block
+(deftest save-block!
   (testing "Saving blocks with and without properties"
     (test-helper/load-test-files [{:file/path "foo.md"
                                    :file/content "# foo"}])
     (let [repo test-helper/test-db
-          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo "foo" "foo"))
-          _ (let [_ (editor/save-block! repo block-uuid "# bar")
-                  block (model/query-block-by-uuid block-uuid)
-                  _ (is (= "# bar" (:block/content block)))])
-          _ (let [_ (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
-                  block (model/query-block-by-uuid block-uuid)
-                  _ (is (= "# foo\nfoo:: bar" (:block/content block)))])
-          _ (let [_ (editor/save-block! repo block-uuid "# bar")
-                  block (model/query-block-by-uuid block-uuid)
-                  _ (is (= "# bar" (:block/content block)))])])))
+          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo "foo" "foo"))]
+      (editor/save-block! repo block-uuid "# bar")
+      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid))))
+
+      (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
+      (is (= "# foo\nfoo:: bar" (:block/content (model/query-block-by-uuid block-uuid))))
+
+      (editor/save-block! repo block-uuid "# bar")
+      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid)))))))
