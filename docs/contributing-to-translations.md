@@ -106,4 +106,11 @@ and tell you what's wrong.
 
 ## Add a Language
 
-To add a new language, add an entry to `frontend.dicts.core/languages`. Then add a new locale keyword to `frontend.dicts.core/dicts`.
+To add a new language you must create a new file in the `frontend.dicts` namespace containing two variables:
+
+- **application `(def application ...)`:** translation of the application into the idiom
+- **shortcuts `(def shortcuts ...)`:** shortcut translation
+
+Use as base the main language file `frontend/dicts/en.cljs`.
+
+After creating the language pack you should add the `application` variable to `frontend.dicts.core` and the `shortcuts` variable to `frontend.modules.shortcut.dicts`.
