@@ -17,6 +17,7 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.modules.shortcut.dicts :as dicts]
+            [frontend.dicts.en :as en]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
@@ -543,10 +544,10 @@
 
 (let [keyboard-shortcuts
       {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
-       ::dicts/keyboard-shortcuts (set (keys dicts/all-default-keyboard-shortcuts))}]
-  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts))
+       ::en/shortcuts (set (keys en/shortcuts))}]
+  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::en/shortcuts keyboard-shortcuts))
           (str "Keys for keyboard shortcuts must be the same "
-               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
+               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::en/shortcuts keyboard-shortcuts)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
