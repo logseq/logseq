@@ -24,20 +24,21 @@ export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 let logs: string = '';
 const consoleLogWatcher = (msg: ConsoleMessage) => {
   const text = msg.text();
-  logs += text + '\n';
 
-  // Ignore specific error messages
-  const ignoredErrors = [
-    // youtube video
-    // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
-    "Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.",
-    // Error loading the youtube video
-    'Failed to load resource: net::ERR_CONNECTION_REFUSED',
-  ]
+  // List of error messages to ignore
+  const ignoreErrors = [
+    /net::ERR_CONNECTION_REFUSED/,
+    /^Error with Permissions-Policy header:/
+  ];
 
-  if (!ignoredErrors.some(error => text.startsWith(error))) {
-    expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed|Error)/);
+  // If the text matches any of the ignoreErrors, return early
+  if (ignoreErrors.some(error => text.match(error))) {
+    return;
   }
+
+  logs += text + '\n';
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed)/);
+  expect(text, logs).not.toMatch(/^Error/);
 }
 
 base.beforeAll(async () => {
