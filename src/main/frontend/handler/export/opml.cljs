@@ -391,7 +391,7 @@
 
 ;;; export fns
 (defn- export-helper
-  [content format options]
+  [content format options & {:keys [title] :or {title "untitled"}}]
   (let [remove-options (set (:remove-options options))
         other-options (:other-options options)]
     (binding [*state* (merge *state*
@@ -425,7 +425,7 @@
                      (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
             hiccup (z/root (reduce block-ast->hiccup init-opml-body-hiccup ast***))]
-        (zip-loc->opml hiccup "untitled")))))
+        (zip-loc->opml hiccup title)))))
 
 (defn export-blocks-as-opml
   "options: see also `export-blocks-as-markdown`"
@@ -439,9 +439,12 @@
            ;; page
            (common/get-page-content root-block-uuids-or-page-name)
            (common/root-block-uuids->content repo root-block-uuids-or-page-name))
+         title (if (string? root-block-uuids-or-page-name)
+                 root-block-uuids-or-page-name
+                 "untitled")
          first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
          format (or (:block/format first-block) (state/get-preferred-format))]
-     (export-helper content format options))))
+     (export-helper content format options :title title))))
 
 (defn export-files-as-opml
   "options see also `export-blocks-as-opml`"
@@ -450,7 +453,7 @@
    (fn [{:keys [path content names format]}]
      (when (first names)
        (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options)])))
+                     [path (export-helper content format options :title (first names))])))
    files))
 
 (defn export-repo-as-opml!
