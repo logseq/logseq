@@ -42,22 +42,29 @@
          ;; Add page name to the index
          :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
 
-(defn build-blocks-indice
-  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
+(defn build-blocks-indice-edn
   #_:clj-kondo/ignore
   [repo]
   (->> (db/get-all-block-contents)
        (map block->index)
-       (remove nil?)
-       (bean/->js)))
+       (remove nil?)))
 
-(defn build-pages-indice
+(defn build-blocks-indice
+  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
+  #_:clj-kondo/ignore
+  [repo]
+  (bean/->js (build-blocks-indice-edn repo)))
+
+(defn build-pages-indice-edn
   [repo]
   (->> (db/get-all-pages repo)
        (map #(db/entity (:db/id %))) ;; get full file-content
        (map page->index)
-       (remove nil?)
-       (bean/->js)))
+       (remove nil?)))
+
+(defn build-pages-indice
+  [repo]
+  (bean/->js (build-pages-indice-edn repo)))
 
 (defn make-blocks-indice!
   [repo]

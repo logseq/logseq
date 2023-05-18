@@ -47,6 +47,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.ai :as ai-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
@@ -366,11 +367,22 @@
 
                (ui/icon "maximize")]]])])]))))
 
-(rum/defc audio-cp [src]
+(rum/defcs audio-cp <
+  (rum/local false ::transcribing?)
+  [state config src]
   ;; Change protocol to allow media fragment uris to play
-  [:audio {:src (string/replace-first src gp-config/asset-protocol "file://")
-           :controls true
-           :on-touch-start #(util/stop %)}])
+  (let [*transcribing? (::transcribing? state)
+        src (string/replace-first src gp-config/asset-protocol "file://")]
+    [:div.flex.flex-row.items-center
+     [:audio.mr-2 {:src src
+                   :controls true
+                   :on-touch-start #(util/stop %)}]
+     (if @*transcribing?
+       (ui/loading "Transcribing")
+       (ui/button "Transcribe"
+        :intent "border-link"
+        :small? true
+        :on-click (fn [] (ai-handler/transcribe (:block config) src *transcribing?))))]))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -400,7 +412,7 @@
         (cond
           (contains? config/audio-formats ext)
           (asset-loader @src
-                        #(audio-cp @src))
+                        #(audio-cp config @src))
 
           (contains? (gp-config/img-formats) ext)
           (asset-loader @src
@@ -1029,7 +1041,7 @@
                  (if (assets-handler/check-alias-path? href)
                    (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
                    (get-file-absolute-path config href)))]
-      (audio-cp href))))
+      (audio-cp config href))))
 
 (defn- media-link
   [config url s label metadata full_text]
@@ -2292,20 +2304,26 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-      (when (and (not block-ref-with-title?)
-                 (seq body)
-                 (or (not title-collapse-enabled?)
-                     (and title-collapse-enabled?
-                          (or (not collapsed?)
-                              (some? (mldoc/extract-first-query-from-ast body))))))
-        [:div.block-body
-         ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
-           (for [[idx child] (medley/indexed body)]
-             (when-let [block (markup-element-cp config child)]
-               (rum/with-key (block-child block)
-                 (str uuid "-" idx)))))]))))
+    (cond
+      (= (:block/type block) "image")
+      (let [url (get-in block [:block/properties :logseq.url])]
+        (asset-link config "" url {} url))
+
+      :else
+      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+       (when (and (not block-ref-with-title?)
+                  (seq body)
+                  (or (not title-collapse-enabled?)
+                      (and title-collapse-enabled?
+                           (or (not collapsed?)
+                               (some? (mldoc/extract-first-query-from-ast body))))))
+         [:div.block-body
+          ;; TODO: consistent id instead of the idx (since it could be changed later)
+          (let [body (block/trim-break-lines! (:block/body block))]
+            (for [[idx child] (medley/indexed body)]
+              (when-let [block (markup-element-cp config child)]
+                (rum/with-key (block-child block)
+                  (str uuid "-" idx)))))])))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -2499,7 +2517,7 @@
              (refs-cp uuid)))]))))
 
 ;; FIXME: not updating when block content is updated outbound
-(rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
+(rum/defcs single-block-cp < rum/reactive db-mixins/query
   ;; todo: mixin for init-blocks-container-id?
   {:init (fn [state]
            (assoc state
@@ -2509,12 +2527,14 @@
         *init-blocks-container-id (::init-blocks-container-id state)
         block-entity (db/entity [:block/uuid uuid])
         block-id (:db/id block-entity)
+        ;; TODO: perf
         block (first (model/get-paginated-blocks (state/get-current-repo) block-id))
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
                               (let [id' (swap! *blocks-container-id inc)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
+        selected? (state/sub-block-selected? blocks-container-id uuid)
         block-el-id (str "ls-block-" blocks-container-id "-" uuid)
         config {:id (str uuid)
                 :db/id (:db/id block-entity)
@@ -2526,13 +2546,10 @@
         block (block/parse-title-and-body block)]
     (when (:block/content block)
       [:div.single-block.ls-block
-       {:class (str block-uuid)
+       {:class (str block-uuid (when selected? " selected noselect"))
+        :blockid (str uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
        (block-content-or-editor config block edit-input-id block-el-id edit? true)])))
-
-(rum/defc single-block-cp
-  [block-uuid]
-  (single-block-cp-inner block-uuid))
 
 (defn non-dragging?
   [e]

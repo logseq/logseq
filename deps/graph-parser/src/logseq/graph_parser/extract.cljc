@@ -145,9 +145,9 @@
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   "uri-encoded? - if is true, apply URL decode on the file path
-   options - 
+   options -
      :extracted-block-ids - An atom that contains all block ids that have been extracted in the current page (not yet saved to db)
-     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge 
+     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge
        (2 ways diff) based uuid resolution upon external editing.
        returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
        Implemented in file-common-handler/diff-merge-uuids for IoC
@@ -278,6 +278,29 @@
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
      :blocks blocks}))
+
+(defn extract-chat-edn
+  "Extracts chat page from given edn file
+   Chat page edn is a subset of page schema
+   - it will only contain a single page (for now). "
+  [file content {:keys [verbose] :or {verbose true}}]
+  (let [_ (when verbose (println "Parsing start: " file))
+        {:keys [pages blocks]} (gp-util/safe-read-string content)
+        serialized-page (first pages)
+        page-name (-> (or (:block/name serialized-page)
+                          (filepath->page-name file))
+                      (gp-util/page-name-sanity-lc))
+        original-name (or (:block/original-name serialized-page)
+                          page-name)
+        page-block (merge {:block/name page-name
+                           :block/original-name original-name
+                           :block/type "chat"
+                           :block/file {:file/path (gp-util/path-normalize file)}}
+                          serialized-page)
+        blocks' (map (fn [b] (assoc b :block/page {:block/uuid (:block/uuid page-block)})) blocks)
+        _ (when verbose (println "Parsing finished: " file))]
+    {:pages (list page-block)
+     :blocks blocks'}))
 
 (defn- with-block-uuid
   [pages]

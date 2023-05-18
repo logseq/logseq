@@ -10,10 +10,11 @@
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.whiteboard :as whiteboard] 
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
-            [frontend.components.user.login :as login]))
+            [frontend.components.user.login :as login]
+            [frontend.components.ai :as ai]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -80,11 +81,11 @@
    ["/import"
     {:name :import
      :view setups/importer}]
-   
+
    ["/bug-report"
     {:name :bug-report
      :view bug-report/bug-report}]
-   
+
     ["/bug-report-tool/:tool"
      {:name :bug-report-tools
       :view bug-report/bug-report-tool-route}]
@@ -99,4 +100,8 @@
 
    ["/login"
     {:name :user-login
-     :view login/page}]])
+     :view login/page}]
+
+   ["/chat"
+    {:name :chat
+     :view ai/chat-main}]])

@@ -130,7 +130,8 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?
+                  additional-tx]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
@@ -163,6 +164,9 @@
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
+             last-txs (if additional-tx
+                        (update last-txs 0 merge additional-tx)
+                        last-txs)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! txs)))
@@ -549,7 +553,7 @@
 
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"
-  [repo old-name new-name]
+  [repo old-name new-name redirect?]
   (let [pages (db/get-namespace-pages repo old-name)
         page (db/pull [:block/name (util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
@@ -560,7 +564,7 @@
             ;; we want to rename [[work/worklog]] to [[work1/worklog]] when rename [[work]] to [[work1]],
             ;; but don't rename [[work/worklog]] to [[work1/work1log]]
             new-page-title (string/replace-first old-page-title old-name new-name)
-            redirect? (= name (:block/name page))]
+            redirect? (if (some? redirect?) redirect? (= name (:block/name page)))]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
@@ -638,7 +642,7 @@
             (merge-pages! old-page-name new-page-name)
 
             :else
-            (rename-namespace-pages! repo old-name new-name))
+            (rename-namespace-pages! repo old-name new-name redirect?))
           (rename-nested-pages old-name new-name))
         (when (string/blank? new-name)
           (notification/show! "Please use a valid name, empty name is not allowed!" :error)))

@@ -5,7 +5,8 @@
             [frontend.search.node :as search-node]
             [frontend.search.plugin :as search-plugin]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.modules.ai.plugin-example :as ai]))
 
 (defn get-registered-engines
   [repo]
@@ -14,7 +15,9 @@
      (search-browser/->Browser repo))
    (when state/lsp-enabled?
      (for [s (state/get-all-plugin-services-with-type :search)]
-       (search-plugin/->Plugin s repo)))])
+       (if (= "AI Proxy" (:name s))     ; TODO: debugging only
+         (ai/->AIProxy repo "")
+         (search-plugin/->Plugin s repo))))])
 
 (defn- get-flatten-registered-engines
   [repo]

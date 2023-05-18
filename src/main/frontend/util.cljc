@@ -449,6 +449,11 @@
       (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
+   (defn scroll-to-bottom
+     [node]
+     (scroll-to node (.-scrollHeight node) false)))
+
+#?(:cljs
    (defn link?
      [node]
      (contains?

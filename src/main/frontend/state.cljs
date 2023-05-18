@@ -261,7 +261,7 @@
      ;;                :file-sync/last-synced-at {}}
      :file-sync/graph-state                 {:current-graph-uuid nil}
                                              ;; graph-uuid -> ...
-                                             
+
      :user/info                             {:UserGroups (storage/get :user-groups)}
      :encryption/graph-parsing?             false
 
@@ -278,6 +278,15 @@
      :whiteboard/last-persisted-at          {}
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
+
+     ;; AI related
+     :feature/enable-ai?                    (or (storage/get :feature/enable-ai?) false)
+     :open-ai/token                         (storage/get :open-ai-token)
+     :chat/current-conversation             nil
+     :ai/preferred-translate-target-lang    (storage/get :ai/preferred-translate-target-lang)
+     :ai/engines                            {}
+     :ai/current-service                    "Built-in OpenAI"
+
      ;; db tx-id -> editor cursor
      :history/tx->editor-cursor             {}})))
 
@@ -617,6 +626,11 @@ Similar to re-frame subscriptions"
 (defn show-brackets?
   []
   (not (false? (:ui/show-brackets? (sub-config)))))
+
+;; Disabled by default
+(defn enable-ai?
+  []
+  (:feature/enable-ai? (sub-config)))
 
 (defn sub-default-home-page
   []
@@ -1494,7 +1508,10 @@ Similar to re-frame subscriptions"
 
          ;; search engines state for results
          (when (= type :search)
-           (set-state! [:search/engines (str pid name)] service)))))))
+           (set-state! [:search/engines (str pid name)] service))
+
+         (when (= type :ai)
+           (set-state! [:ai/engines (str pid name)] service)))))))
 
 (defn uninstall-plugin-service
   [pid type-or-all]
@@ -1507,7 +1524,10 @@ Similar to re-frame subscriptions"
 
         ;; search engines state for results
         (when-let [removed' (seq (filter #(= :search (:type %)) removed))]
-          (update-state! :search/engines #(apply dissoc % (mapv (fn [{:keys [pid name]}] (str pid name)) removed'))))))))
+          (update-state! :search/engines #(apply dissoc % (mapv (fn [{:keys [pid name]}] (str pid name)) removed'))))
+
+        (when-let [removed' (seq (filter #(= :ai (:type %)) removed))]
+          (update-state! :ai/engines #(apply dissoc % (mapv (fn [{:keys [pid name]}] (str pid name)) removed'))))))))
 
 (defn get-all-plugin-services-with-type
   [type]
@@ -1530,6 +1550,24 @@ Similar to re-frame subscriptions"
   []
   (when-let [engines (get-all-plugin-search-engines)]
     (set-state! :search/engines
+                (update-vals engines #(assoc % :result nil)))))
+
+(defn get-all-plugin-ai-engines
+  []
+  (:ai/engines @state))
+
+(defn update-plugin-ai-engine
+  [pid name f]
+  (when-let [pid (keyword pid)]
+    (set-state! :ai/engines
+                (update-vals (get-all-plugin-ai-engines)
+                             #(if (and (= pid (:pid %)) (= name (:name %)))
+                                (f %) %)))))
+
+(defn reset-plugin-ai-engines
+  []
+  (when-let [engines (get-all-plugin-ai-engines)]
+    (set-state! :ai/engines
                 (update-vals engines #(assoc % :result nil)))))
 
 (defn install-plugin-hook
@@ -2098,3 +2136,8 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn set-preferred-translate-target-lang!
+  [lang]
+  (storage/set :ai/preferred-translate-target-lang lang)
+  (set-state! :ai/preferred-translate-target-lang lang))

@@ -18,18 +18,21 @@
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.core :as outliner-core]))
 
 (defn- paste-text-parseable
-  [format text]
-  (when-let [editing-block (state/get-edit-block)]
-    (let [page-id (:db/id (:block/page editing-block))
-          blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format))
-                  text format
-                  {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
+  [format text paste-opts]
+  (let [editing-block (state/get-edit-block)]
+    (when (or (:target-block paste-opts) editing-block)
+      (let [page-id (:db/id (:block/page editing-block))
+           blocks (block/extract-blocks
+                   (mldoc/->edn text (gp-mldoc/default-config format))
+                   text format
+                   {:page-name (:block/name (db/entity page-id))})
+           blocks' (gp-block/with-parent-and-left page-id blocks)]
+        (editor-handler/paste-blocks blocks' (merge {:keep-uuid? true} paste-opts))))))
 
 (defn- paste-segmented-text
   [format text]
@@ -44,7 +47,7 @@
                                              p
                                              (str (if (= format :org) "* " "- ") p))))))
                            paragraphs))]
-    (paste-text-parseable format updated-paragraphs)))
+    (paste-text-parseable format updated-paragraphs {})))
 
 (defn- wrap-macro-url
   [url]
@@ -161,7 +164,7 @@
                    text' (or html-text text)]
                (cond
                  blocks?
-                 (paste-text-parseable format text)
+                 (paste-text-parseable format text {})
 
                  (util/safe-re-find #"(?:\r?\n){2,}" text')
                  (paste-segmented-text format text')
@@ -242,3 +245,19 @@
        (editor-handler/insert clipboard-data true)))
    (fn [error]
      (js/console.error error))))
+
+(defn delete-blocks-and-new-block!
+  [delete-block-uuids new-block-content]
+  (when (seq delete-block-uuids)
+    (let [first-block (db/entity [:block/uuid (first delete-block-uuids)])
+          left (:block/left first-block)
+          blocks (map (fn [id] (db/pull [:block/uuid id])) delete-block-uuids)]
+      (paste-text-parseable
+       (state/get-preferred-format)
+       new-block-content
+       {:target-block left
+        :sibling? (not= (:db/id (:block/parent first-block))
+                        (:db/id left))})
+      (outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (outliner-core/delete-blocks! blocks {})))))

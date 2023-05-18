@@ -312,6 +312,7 @@
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
 (defonce default-whiteboards-directory "whiteboards")
+(defonce default-chats-directory "chats")
 
 (defn get-pages-directory
   []
@@ -324,6 +325,10 @@
 (defn get-whiteboards-directory
   []
   (or (state/get-whiteboards-directory) default-whiteboards-directory))
+
+(defn get-chats-directory
+  []
+  default-chats-directory)
 
 (defonce local-repo "local")
 

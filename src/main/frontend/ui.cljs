@@ -1001,8 +1001,13 @@
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
         klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)
+        klass (cond
+                small?
+                (str klass ".px-2.py-1")
+                large?
+                (str klass ".text-base.px-3.py-2")
+                :else
+                (str klass ".px-3.py-2"))
         klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
@@ -1017,6 +1022,18 @@
                      (when (fn? on-click) (on-click)))}))
      (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
+
+(defn btn-with-shortcut
+  [{:keys [shortcut id btn-text background on-click class]}]
+  (button
+    [:span btn-text (when-not (util/sm-breakpoint?)
+                      [" " (render-keyboard-shortcut shortcut)])]
+    :id id
+    :class (str id " " class)
+    :background background
+    :on-mouse-down (fn [e] (util/stop-propagation e))
+    :on-click (fn [_e]
+                (js/setTimeout #(on-click) 10))))
 
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))

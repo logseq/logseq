@@ -411,17 +411,6 @@
 (def review-finished
   [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
-  (ui/button
-   [:span btn-text (when-not (util/sm-breakpoint?)
-                     [" " (ui/render-keyboard-shortcut shortcut)])]
-   :id id
-   :class (str id " " class)
-   :background background
-   :on-mouse-down (fn [e] (util/stop-propagation e))
-   :on-click (fn [_e]
-               (js/setTimeout #(on-click) 10))))
-
 (rum/defcs view < rum/reactive db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
@@ -456,46 +445,46 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
-              (btn-with-shortcut {:btn-text (case next-phase
-                                              1 "Hide answers"
-                                              2 "Show answers"
-                                              3 "Show clozes")
-                                  :shortcut  "s"
-                                  :id "card-answers"
-                                  :class "mr-2"
-                                  :on-click #(reset! phase next-phase)}))
+              (ui/btn-with-shortcut {:btn-text (case next-phase
+                                                 1 "Hide answers"
+                                                 2 "Show answers"
+                                                 3 "Show clozes")
+                                     :shortcut  "s"
+                                     :id "card-answers"
+                                     :class "mr-2"
+                                     :on-click #(reset! phase next-phase)}))
             (when (and (not= @card-index (count blocks))
                        cards?
                        preview?)
-              (btn-with-shortcut {:btn-text "Next"
-                                  :shortcut "n"
-                                  :id       "card-next"
-                                  :class    "mr-2"
-                                  :on-click (fn [e]
-                                              (util/stop e)
-                                              (skip-card card card-index finished? phase review-records cb))}))
+              (ui/btn-with-shortcut {:btn-text "Next"
+                                     :shortcut "n"
+                                     :id       "card-next"
+                                     :class    "mr-2"
+                                     :on-click (fn [e]
+                                                 (util/stop e)
+                                                 (skip-card card card-index finished? phase review-records cb))}))
 
             (when (and (not preview?) (= 1 next-phase))
               [:<>
-               (btn-with-shortcut {:btn-text   "Forgotten"
-                                   :shortcut   "f"
-                                   :id         "card-forgotten"
-                                   :background "red"
-                                   :on-click   (fn []
-                                                 (score-and-next-card 1 card card-index finished? phase review-records cb)
-                                                 (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                   (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+               (ui/btn-with-shortcut {:btn-text   "Forgotten"
+                                      :shortcut   "f"
+                                      :id         "card-forgotten"
+                                      :background "red"
+                                      :on-click   (fn []
+                                                    (score-and-next-card 1 card card-index finished? phase review-records cb)
+                                                    (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                                      (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
-                                   :shortcut "t"
-                                   :id       "card-recall"
-                                   :on-click #(score-and-next-card 3 card card-index finished? phase review-records cb)})
+               (ui/btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+                                      :shortcut "t"
+                                      :id       "card-recall"
+                                      :on-click #(score-and-next-card 3 card card-index finished? phase review-records cb)})
 
-               (btn-with-shortcut {:btn-text   "Remembered"
-                                   :shortcut   "r"
-                                   :id         "card-remembered"
-                                   :background "green"
-                                   :on-click   #(score-and-next-card 5 card card-index finished? phase review-records cb)})])
+               (ui/btn-with-shortcut {:btn-text   "Remembered"
+                                      :shortcut   "r"
+                                      :id         "card-remembered"
+                                      :background "green"
+                                      :on-click   #(score-and-next-card 5 card card-index finished? phase review-records cb)})])
 
             (when preview?
               (ui/tippy {:html [:div.text-sm

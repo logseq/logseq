@@ -114,6 +114,7 @@
                             (state/get-preferred-format)))
           title (string/capitalize (:block/name page-block))
           whiteboard-page? (model/whiteboard-page? page-block)
+          chat-page? (model/chat-page? page-block)
           format (if whiteboard-page? "edn" format)
           journal-page? (date/valid-journal-title? title)
           journal-title (date/normalize-journal-title title)
@@ -124,8 +125,17 @@
           sub-dir (cond
                     journal-page?    (config/get-journals-directory)
                     whiteboard-page? (config/get-whiteboards-directory)
+                    chat-page?       (config/get-chats-directory)
                     :else            (config/get-pages-directory))
-          ext (if (= format "markdown") "md" format)
+          ext (cond
+                (or whiteboard-page? chat-page?)
+                "edn"
+
+                (= format "markdown")
+                "md"
+
+                :else
+                format)
           file-rpath (path/path-join sub-dir (str filename "." ext))
           file {:file/path file-rpath}
           tx [{:file/path file-rpath}
@@ -142,11 +152,20 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
-      (let [new-content (if (= "whiteboard" (:block/type page-block))
+      (let [new-content (cond
+                          (= "whiteboard" (:block/type page-block))
                           (->
                            (up/ugly-pr-str {:blocks tree
                                             :pages (list (remove-transit-ids page-block))})
                            (string/triml))
+
+                          (= "chat" (:block/type page-block))
+                          (->
+                           (up/ugly-pr-str {:blocks tree
+                                            :pages [(remove-transit-ids page-block)]})
+                           (string/triml))
+
+                          :else
                           (tree->file-content tree {:init-level init-level}))]
         (if (and (string/blank? new-content)
                  (not blocks-just-deleted?))

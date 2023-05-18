@@ -143,7 +143,11 @@
                 (dissoc :block/children :block/meta :block/top? :block/bottom?
                         :block/title :block/body :block/level)
                 (gp-util/remove-nils))
-          m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
+          m (if (or (state/enable-block-timestamps?)
+                    (= (:block/type m) "chat")
+                    (some? (get-in m [:block/properties :logseq.ai.type])))
+              (block-with-timestamps m)
+              m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)]

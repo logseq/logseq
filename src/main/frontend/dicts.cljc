@@ -177,6 +177,7 @@
         :context-menu/input-template-name "What's the template's name?"
         :context-menu/template-include-parent-block "Including the parent block in the template?"
         :context-menu/template-exists-warning "Template already exists!"
+        :settings-page/enable-ai "Enable AI"
         :settings-page/git-confirm "You need to restart the app after updating the Git settings."
         :settings-page/git-switcher-label "Enable Git auto commit"
         :settings-page/git-commit-delay "Git auto commit seconds"

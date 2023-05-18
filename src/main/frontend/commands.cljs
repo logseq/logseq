@@ -238,9 +238,6 @@
 
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
-       ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       
-
     (headings)
 
     ;; time & date

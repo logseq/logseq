@@ -103,6 +103,9 @@ Options available:
                  (gp-config/whiteboard? file)
                  (extract/extract-whiteboard-edn file content extract-options')
 
+                 (gp-config/chat? file)
+                 (extract/extract-chat-edn file content extract-options')
+
                  :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)

@@ -135,7 +135,8 @@
   (->> [:shortcut.handler/misc
         :shortcut.handler/editor-global
         :shortcut.handler/global-non-editing-only
-        :shortcut.handler/global-prevent-default]
+        :shortcut.handler/global-prevent-default
+        :shortcut.handler/global-not-prevent-default]
        (map #(install-shortcut! % {}))
        doall))
 

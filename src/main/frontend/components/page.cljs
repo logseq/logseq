@@ -26,6 +26,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ai :as ai-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
@@ -448,9 +449,21 @@
                  :on-mouse-leave (fn [e]
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
                 (page-title page-name icon title format fmt-journal?)])
+
+             (when (= "chat" (:block/type page))
+               [:div.px-2
+                (ui/button
+                  (ui/icon "wand")
+                  :small? true
+                  :intent "link"
+                  :on-click (fn []
+                              (ai-handler/open-chat)
+                              (state/set-state! :chat/current-conversation (:db/id page))))])
+
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

@@ -6,6 +6,7 @@
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
+            [frontend.components.ai :as ai]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -13,10 +14,11 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]            
+            [frontend.util :as util]
             [frontend.config :as config]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.object :as gobj]
@@ -118,6 +120,22 @@
 
     :help
     [(t :right-side-bar/help) (onboarding/help)]
+
+    :chat
+    (let [redirect-to-chat (fn []
+                             (state/sidebar-remove-block! "chat")
+                             (route-handler/redirect! {:to :chat}))]
+      [[:div.flex.flex-row.items-center
+        (ui/button
+          (ui/icon "arrow-move-left")
+          :title "Open Chat in the left"
+          :on-click redirect-to-chat
+          :small? true
+          :intent "link")
+        [:a.ml-1 {:on-click redirect-to-chat
+                  :title "Open Chat in the left"}
+         "Chat"]]
+       (ai/chat)])
 
     :page-graph
     [(str (t :right-side-bar/page-graph))

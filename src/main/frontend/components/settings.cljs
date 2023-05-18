@@ -31,7 +31,8 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.db :as db]
-            [frontend.components.conversion :as conversion-component]))
+            [frontend.components.conversion :as conversion-component]
+            [frontend.modules.ai.core :as ai]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -670,7 +671,7 @@
     (ui/admonition
      :tip
      [:p "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."])
-    [:span.text-sm.opacity-50.my-4 
+    [:span.text-sm.opacity-50.my-4
      "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
     [:br][:br]
     [:span.text-sm.opacity-50.my-4
@@ -705,6 +706,56 @@
      (ui/admonition
        :warning
        [:p (t :settings-page/clear-cache-warning)])]))
+
+(defn- set-openai-token!
+  [value]
+  (when-not (string/blank? value)
+    (state/set-state! :open-ai/token value)
+    (storage/set :open-ai-token value)))
+
+(rum/defc settings-ai < rum/reactive
+  [_current-repo]
+  (let [enable-ai? (state/enable-ai?)
+        current-service (ai/get-service)]
+    [:div.panel-wrap
+     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+      [:label.block.text-sm.font-medium.leading-5.opacity-70
+       {:for "Enable AI"}
+       (t :settings-page/enable-ai)]
+      [:div
+       [:div.rounded-md.sm:max-w-xs
+        (ui/toggle enable-ai?
+                   config-handler/toggle-enable-ai!
+                   true)]]]
+
+     (when enable-ai?
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "Service"}
+         "Service"]
+        [:div
+         (ui/select (map (fn [{:keys [name]}]
+                           {:label name
+                            :value name
+                            :selected (= name current-service)})
+                      (ai/get-all-services))
+           (fn [_ value]
+             (state/set-state! :ai/current-service value)))]])
+     (when enable-ai?
+       [:div
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "OpenAI token"}
+          "OpenAI token"]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+            {:default-value (or (:open-ai/token @state/state) "")
+             :on-blur       (fn [e]
+                              (set-openai-token! (util/evalue e)))
+             :on-key-press  (fn [e]
+                              (when (= "Enter" (util/ekey e))
+                                (set-openai-token! (util/evalue e))))}]]]]])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -840,6 +891,9 @@
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
+
+               [:ai "ai" "AI" (ui/icon "wand")]
+
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
 
                (when plugins-of-settings
@@ -880,6 +934,9 @@
 
          :advanced
          (settings-advanced current-repo)
+
+         :ai
+         (settings-ai current-repo)
 
          :features
          (settings-features)

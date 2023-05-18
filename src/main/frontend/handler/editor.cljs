@@ -922,7 +922,7 @@
   [block-uuid]
   (block-handler/select-block! block-uuid))
 
-(defn- compose-copied-blocks-contents
+(defn compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
@@ -1354,7 +1354,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
-  ([_ repo files]
+  ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
                    (fn [index file-stem]
@@ -1483,7 +1483,7 @@
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
     (when (config/local-db? repo)
-      (-> (save-assets! block repo (js->clj files))
+      (-> (save-assets! repo (js->clj files))
           ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]
@@ -1967,8 +1967,10 @@
                   exclude-properties
                   target-block
                   sibling?
-                  keep-uuid?]
-           :or {exclude-properties []}}]
+                  keep-uuid?
+                  edit?]
+           :or {exclude-properties []
+                edit? true}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
@@ -2019,7 +2021,7 @@
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
-          (edit-last-block-after-inserted! result))))))
+          (when edit? (edit-last-block-after-inserted! result)))))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2035,6 +2037,9 @@
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
+                                fst-block)
+                    fst-block (if (:type block)
+                                (assoc fst-block :block/type (:type block))
                                 fst-block)]
                 (assert fst-block "fst-block shouldn't be nil")
                 (assoc fst-block :block/level (:block/level block)))))))
@@ -2043,7 +2048,8 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [page-id (:db/id (:block/page target-block))
+  (let [page-id (or (:db/id (:block/page target-block))
+                    (:db/id target-block))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-left page-id blocks)
@@ -2064,6 +2070,30 @@
                      {:target-block (db/pull target-block-id)
                       :keep-uuid?   keep-uuid?
                       :sibling?     sibling?}))
+
+(defn- get-page-last-block
+  [page-id]
+  (let [page-block (db/entity page-id)
+        children (:block/_parent page-block)
+        blocks (db/sort-by-left children page-block)
+        last-block-id (:db/id (last blocks))]
+    (if last-block-id
+      (db/entity last-block-id)
+      page-block)))
+
+(defn insert-page-block-tree
+  "`tree-vec`: a vector of blocks.
+   A block element: {:content :properties :children [block-1, block-2, ...]}"
+  [page-id tree-vec format {:keys [sibling? keep-uuid? edit?]}]
+  (let [target-block (get-page-last-block page-id)
+        sibling? (if (= page-id (:db/id target-block))
+                   false
+                   sibling?)]
+    (insert-block-tree tree-vec format
+                      {:target-block target-block
+                       :keep-uuid?   keep-uuid?
+                       :sibling?     sibling?
+                       :edit?        edit?})))
 
 (defn insert-template!
   ([element-id db-id]

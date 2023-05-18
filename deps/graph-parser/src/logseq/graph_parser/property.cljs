@@ -7,11 +7,11 @@
             [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
-(defn colons-org 
+(defn colons-org
   "Property delimiter for org mode"
   [property]
   (str ":" property ":"))
- 
+
 (defn ->block-content
   "Creates a block content string from properties map"
   [properties]
@@ -69,7 +69,9 @@
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
-     :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
+     :logseq.tldraw.page :logseq.tldraw.shape :logseq.ai.service :logseq.ai.type
+     :logseq.build.template :logseq.url
+     :logseq.order-list-type
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))

@@ -1467,6 +1467,19 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
+(defn get-template-instances
+  [name]
+  (when (string? name)
+    (d/q
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?name
+        :where
+        [?b :block/properties ?p]
+        [(get ?p :logseq.build.template) ?t]
+        [(= ?t ?name)]]
+      (conn/get-db)
+      name)))
+
 (defonce blocks-count-cache (atom nil))
 
 (defn blocks-count
@@ -1621,6 +1634,10 @@ independent of format as format specific heading characters are stripped"
 
     :else false))
 
+(defn chat-page?
+  [page]
+  (= "chat" (:block/type page)))
+
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
     :or {repo (state/get-current-repo)
@@ -1700,3 +1717,22 @@ independent of format as format specific heading characters are stripped"
        (map (fn [{:block/keys [uuid properties]}]
               {:id (str uuid)
                :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))
+
+(defn get-chat-conversations
+  "Get latest chat conversations."
+  []
+  (when-let [repo (state/get-current-repo)]
+    (->>
+     (d/q
+       '[:find [(pull ?page [*]) ...]
+         :where
+         [?page :block/type "chat"]]
+       (conn/get-db repo))
+     (sort-by :block/created-at)
+    (reverse)
+    (take 50))))
+
+(defn get-chat-conversation
+  "Get conversation messages."
+  [conversation-id]
+  (get-sorted-page-block-ids conversation-id))

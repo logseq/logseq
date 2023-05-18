@@ -10,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.ai :as ai-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.export :as export-handler]
@@ -73,10 +74,10 @@
 
    :whiteboard/select            {:binding ["1" "w s"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
-   
+
    :whiteboard/pan               {:binding ["2" "w p"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
-   
+
    :whiteboard/portal            {:binding ["3" "w b"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
@@ -85,13 +86,13 @@
 
    :whiteboard/highlighter       {:binding ["5" "w h"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
-   
+
    :whiteboard/eraser            {:binding ["6" "w e"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
-   
+
    :whiteboard/connector         {:binding ["7" "w c"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
-   
+
    :whiteboard/text              {:binding ["8" "w t"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
 
@@ -331,7 +332,7 @@
                                     :fn      editor-handler/zoom-out!}
 
    :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
-   
+
    :editor/toggle-number-list      {:binding "t n"
                                     :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
@@ -359,6 +360,9 @@
    :go/electron-jump-to-the-previous {:binding ["shift+enter" "mod+shift+g"]
                                       :inactive (not (util/electron?))
                                       :fn      #(search-handler/loop-find-in-page! true)}
+
+   :go/ai-chat                     {:binding "mod+j"
+                                    :fn      ai-handler/open-chat}
 
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
@@ -495,6 +499,18 @@
                                      :inactive (not (util/electron?))
                                      :fn      #(page-handler/copy-page-url)}
 
+   :ai/ask                          {:binding "mod+;"
+                                     :fn      ai-handler/open-ask}
+
+   :ai/regenerate                   {:binding "g"
+                                     :fn      ai-handler/regenerate}
+
+   :ai/replace                      {:binding "r"
+                                     :fn      ai-handler/replace}
+
+   :ai/insert                       {:binding "enter"
+                                     :fn      ai-handler/insert}
+
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
@@ -624,6 +640,12 @@
                              :cards/recall])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
+    :shortcut.handler/ai-prompt
+    (-> (build-category-map [:ai/regenerate
+                             :ai/insert
+                             :ai/replace])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
+
     :shortcut.handler/block-editing-only
     (->
      (build-category-map [:editor/escape-editing
@@ -697,17 +719,21 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
-                          :go/electron-find-in-page
-                          :go/electron-jump-to-the-next
-                          :go/electron-jump-to-the-previous
+                          :go/ai-chat
                           :go/backward
                           :go/forward
                           :search/re-index
                           :sidebar/open-today-page
                           :sidebar/clear
                           :command/run
-                          :command-palette/toggle])
+                          :command-palette/toggle
+                          :ai/ask])
      (with-meta {:before m/prevent-default-behavior}))
+
+    :shortcut.handler/global-not-prevent-default
+    (build-category-map [:go/electron-find-in-page
+                         :go/electron-jump-to-the-next
+                         :go/electron-jump-to-the-previous])
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
@@ -766,6 +792,7 @@
     :editor/select-parent
     :go/search
     :go/search-in-page
+    :go/ai-chat
     :go/electron-find-in-page
     :go/electron-jump-to-the-next
     :go/electron-jump-to-the-previous
@@ -888,9 +915,10 @@
     :whiteboard/group
     :whiteboard/ungroup
     :whiteboard/toggle-grid]
-   
+
    :shortcut.category/others
-   [:pdf/previous-page
+   [:ai/ask
+    :pdf/previous-page
     :pdf/next-page
     :pdf/close
     :pdf/find

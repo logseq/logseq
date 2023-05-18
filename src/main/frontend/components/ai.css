@@ -1,0 +1,73 @@
+#chat-main {
+    margin: 0 auto;
+    max-width: 1024px;
+}
+
+.chat {
+    @apply flex flex-row transition rounded m-2;
+    height: 600px;
+    border: 1px solid var(--ls-border-color);
+
+    .conversations {
+        @apply w-64 px-2 py-4 overflow-y-auto;
+        border-right-width: 1px;
+        border-color: var(--ls-border-color);
+    }
+
+    #conversation {
+        @apply p-2 overflow-y-auto w-full flex flex-1 overflow-x-hidden;
+    }
+
+    .conversation-item {
+        @apply my-2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .input-box {
+        @apply p-2 w-full;
+
+        textarea {
+            @apply overflow-y-auto overflow-x-hidden;
+            border: 1px solid var(--ls-border-color);
+            background: transparent;
+            resize: none;
+            box-shadow: none;
+            max-height: 400px;
+        }
+    }
+
+    input {
+        @apply block sm:text-sm sm:leading-5;
+    }
+
+    .message {
+        @apply p-1 mb-1;
+        .single-block > :is(.block-content-wrapper, .editor-wrapper) {
+            padding: 0;
+        }
+    }
+
+    .message.question {
+    }
+
+    .message.answer {
+        .ls-block {
+            padding: 0 4px;
+            border-radius: 4px;
+            border-bottom: none;
+            background-color: var(--ls-ai-answer-background-color);
+        }
+    }
+}
+
+.ask-ai input {
+    border: none;
+}
+
+@media (min-width: 1024px) {
+  .ask-ai .prompt, .ask-ai .cp__select-main {
+    width: var(--ls-main-content-max-width);
+  }
+}
