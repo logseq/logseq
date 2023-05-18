@@ -2515,7 +2515,7 @@
              (refs-cp uuid)))]))))
 
 ;; FIXME: not updating when block content is updated outbound
-(rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
+(rum/defcs single-block-cp < rum/reactive db-mixins/query
   ;; todo: mixin for init-blocks-container-id?
   {:init (fn [state]
            (assoc state
@@ -2525,12 +2525,14 @@
         *init-blocks-container-id (::init-blocks-container-id state)
         block-entity (db/entity [:block/uuid uuid])
         block-id (:db/id block-entity)
+        ;; TODO: perf
         block (first (model/get-paginated-blocks (state/get-current-repo) block-id))
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
                               (let [id' (swap! *blocks-container-id inc)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
+        selected? (state/sub-block-selected? blocks-container-id uuid)
         block-el-id (str "ls-block-" blocks-container-id "-" uuid)
         config {:id (str uuid)
                 :db/id (:db/id block-entity)
@@ -2542,13 +2544,10 @@
         block (block/parse-title-and-body block)]
     (when (:block/content block)
       [:div.single-block.ls-block
-       {:class (str block-uuid)
+       {:class (str block-uuid (when selected? " selected noselect"))
+        :blockid (str uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
        (block-content-or-editor config block edit-input-id block-el-id edit? true)])))
-
-(rum/defc single-block-cp
-  [block-uuid]
-  (single-block-cp-inner block-uuid))
 
 (defn non-dragging?
   [e]
