@@ -2,7 +2,7 @@
   "Provides translation to KO"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                      :default "tutorial-ko.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ko.md")
@@ -339,10 +339,9 @@
    :settings-page/sync "동기화"
    :settings-page/tab-assets "에셋"
    :settings-page/tab-features "기능"
-   :whiteboard/link-whiteboard-or-block "화이트보드/페이지/블록 연결"})
+   :whiteboard/link-whiteboard-or-block "화이트보드/페이지/블록 연결"
 
-(def shortcuts
-  {:shortcut.category/formatting             "포맷"
+   :shortcut.category/formatting             "포맷"
    :shortcut.category/basics                "기본 동작"
    :shortcut.category/navigating            "내비게이션"
    :shortcut.category/block-editing         "블록 편집"

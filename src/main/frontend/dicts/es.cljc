@@ -2,7 +2,7 @@
   "Provides translation to ES"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-es.md")
                      :default "tutorial-es.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-es.md")
@@ -360,10 +360,9 @@
    :settings-page/sync "Sincronizar"
    :settings-page/tab-assets "Recursos"
    :settings-page/tab-features "Características"
-   :whiteboard/link-whiteboard-or-block "Enlazar pizarra/página/bloque"})
-
-(def shortcuts
-  {:shortcut.category/formatting                      "Formato"
+   :whiteboard/link-whiteboard-or-block "Enlazar pizarra/página/bloque"
+   
+   :shortcut.category/formatting                      "Formato"
    :shortcut.category/basics                          "Básico"
    :shortcut.category/navigating                      "Navegación"
    :shortcut.category/block-editing                   "Edición de bloque general"

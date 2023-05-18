@@ -8,7 +8,7 @@
             [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
-            [frontend.dicts.core :as dicts]
+            [frontend.dicts :as dicts]
             [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]

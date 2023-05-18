@@ -2,7 +2,7 @@
   "Provides translation to nb-NO"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-no.md")
                      :default "tutorial-no.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-no.md")
@@ -369,10 +369,9 @@
    :settings-page/preferred-pasting-file "Foretrekk innliming av fil"
    :settings-page/show-full-blocks "Vis alle linjer av en blokkreferanse"
    :settings-page/tab-assets "Ressurser"
-   :whiteboard/link-whiteboard-or-block "Lenk whiteboard/side/blokk"})
+   :whiteboard/link-whiteboard-or-block "Lenk whiteboard/side/blokk"
 
-(def shortcuts
-  {:shortcut.category/formatting            "Formatering"
+   :shortcut.category/formatting            "Formatering"
    :shortcut.category/basics                "Basis"
    :shortcut.category/navigating            "Navigasjon"
    :shortcut.category/block-editing         "Blokkredigering generelt"
