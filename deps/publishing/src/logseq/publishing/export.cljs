@@ -1,4 +1,4 @@
-(ns logseq.publishing.export
+(ns ^:node-only logseq.publishing.export
   "This electron only ns (for the main process) exports files from multiple
   locations to provide a complete publishing app"
   (:require ["fs-extra" :as fse]

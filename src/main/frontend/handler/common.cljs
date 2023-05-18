@@ -2,7 +2,6 @@
   "Common fns for handlers"
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [clojure.string :as string]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -27,27 +26,6 @@
       (.add pattern)
       (.filter (bean/->js paths))
       (bean/->clj)))
-
-(defn- hidden?
-  [path patterns]
-  (let [path (if (and (string? path)
-                      (= \/ (first path)))
-               (subs path 1)
-               path)]
-    (some (fn [pattern]
-            (let [pattern (if (and (string? pattern)
-                                   (not= \/ (first pattern)))
-                            (str "/" pattern)
-                            pattern)]
-              (string/starts-with? (str "/" path) pattern))) patterns)))
-
-(defn remove-hidden-files
-  [files config get-path-fn]
-  (if-let [patterns (seq (:hidden config))]
-    (remove (fn [file]
-              (let [path (get-path-fn file)]
-                (hidden? path patterns))) files)
-    files))
 
 (defn safe-read-string
   [content error-message-or-handler]

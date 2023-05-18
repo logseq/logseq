@@ -137,7 +137,7 @@
 (deftest ^:integration convert-v067-filenames-parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
-        files (gp-cli/build-graph-files graph-dir)
+        files (#'gp-cli/build-graph-files graph-dir {})
         ;; Converting the v0.6.7 ver docs graph under the old namespace naming rule to the new one (:repo/dir-version 0->3)
         files (convert-graph-files-path files convert-to-triple-lowbar)
         _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
