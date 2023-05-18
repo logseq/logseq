@@ -16,6 +16,7 @@
 @import "resources/css/codemirror.solarized.css";
 @import "resources/css/show-hint.css";
 
+@import "resources/css/radix.css";
 @import "resources/css/animation.css";
 @import "resources/css/table.css";
 @import "resources/css/datepicker.css";
