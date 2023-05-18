@@ -354,8 +354,8 @@
                       (assoc :block/uuid (:block/uuid block)))
            opts' (merge opts (cond-> {:outliner-op :save-block}
                                uuid-changed?
-                               (assoc :uuid-changed {:kept (:block/uuid block)
-                                                     :deleted original-uuid})))]
+                               (assoc :uuid-changed {:from (:block/uuid block)
+                                                     :to original-uuid})))]
        (outliner-tx/transact!
         opts'
         (outliner-core/save-block! block'))

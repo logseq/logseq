@@ -13,7 +13,8 @@
                      [frontend.search :as search]
                      [clojure.string :as string]
                      [frontend.util :as util]
-                     [frontend.util.property :as property])))
+                     [frontend.util.property :as property]
+                     [logseq.graph-parser.util.block-ref :as block-ref])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -58,34 +59,36 @@
    (defn update-block-refs
      [txs opts]
      (if-let [changed (:uuid-changed opts)]
-       (let [{:keys [kept deleted]} changed
-             kept-e (db/entity [:block/uuid kept])
-             deleted-e (db/entity [:block/uuid deleted])
-             kept-id (:db/id kept-e)
-             deleted-id (:db/id deleted-e)
-             kept-refs (:block/_refs kept-e)
-             kept-path-refs (:block/_path-refs kept-e)
-             deleted-refs (:block/_refs deleted-e)
-             kept-refs-txs (mapcat (fn [ref]
+       (let [{:keys [from to]} changed
+             from-e (db/entity [:block/uuid from])
+             to-e (db/entity [:block/uuid to])
+             from-id (:db/id from-e)
+             to-id (:db/id to-e)
+             from-refs (:block/_refs from-e)
+             from-path-refs (:block/_path-refs from-e)
+             to-refs (:block/_refs to-e)
+             from-refs-txs (mapcat (fn [ref]
                                      (let [id (:db/id ref)]
-                                       [[:db/retract id :block/refs kept-id]
-                                        [:db/add id :block/refs deleted-id]])) kept-refs)
-             kept-path-refs-txs (mapcat (fn [ref]
+                                       [[:db/retract id :block/refs from-id]
+                                        [:db/add id :block/refs to-id]])) from-refs)
+             from-path-refs-txs (mapcat (fn [ref]
                                           (let [id (:db/id ref)]
-                                            [[:db/retract id :block/path-refs kept-id]
-                                             [:db/add id :block/path-refs deleted-id]])) kept-path-refs)
-             deleted-refs-txs (mapcat (fn [ref]
+                                            [[:db/retract id :block/path-refs from-id]
+                                             [:db/add id :block/path-refs to-id]])) from-path-refs)
+             to-refs-txs (mapcat (fn [ref]
                                         (let [id (:db/id ref)
-                                              new-content (string/replace (:block/content ref) (str deleted) (str kept))]
-                                          [[:db/add id :block/content new-content]])) deleted-refs)]
-         (concat txs kept-refs-txs kept-path-refs-txs deleted-refs-txs))
+                                              new-content (string/replace (:block/content ref)
+                                                                          (block-ref/->block-ref to)
+                                                                          (block-ref/->block-ref from))]
+                                          [[:db/add id :block/content new-content]])) to-refs)]
+         (concat txs from-refs-txs from-path-refs-txs to-refs-txs))
        txs)))
 
 #?(:cljs
    (defn replace-ref-with-content
      [txs opts]
      (if (and (= :delete-blocks (:outliner-op opts))
-              (not (:uuid-changed opts)))
+              (empty? (:uuid-changed opts)))
        (let [retracted-block-ids (->> (keep (fn [tx]
                                               (when (and (vector? tx)
                                                          (= :db.fn/retractEntity (first tx)))
@@ -97,13 +100,15 @@
                                           (let [id (:db/id ref)
                                                 block-content (property/remove-properties (:block/format block) (:block/content block))
                                                 new-content (-> (:block/content ref)
-                                                                (string/replace (re-pattern (util/format "{{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                                                (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                                 block-content)
                                                                 (string/replace (util/format "((%s))" (str (:block/uuid block)))
                                                                                 block-content))]
                                             {:tx [[:db/retract (:db/id ref) :block/refs (:db/id block)]
+                                                  [:db/retract (:db/id ref) :block/path-refs (:db/id block)]
                                                   [:db/add id :block/content new-content]]
                                              :revert-tx [[:db/add (:db/id ref) :block/refs (:db/id block)]
+                                                         [:db/add (:db/id ref) :block/path-refs (:db/id block)]
                                                          [:db/add id :block/content (:block/content ref)]]})) refs)))
                                (apply concat))
              retracted-tx' (mapcat :tx retracted-tx)
@@ -125,9 +130,16 @@
                                       :block/title :block/body :block/level :block/container :db/other-tx
                                       :block/additional-properties)
                               m)) txs)
-           txs (-> (update-block-refs txs opts)
-                   (replace-ref-with-content opts)
-                   (distinct))]
+           txs (cond-> txs
+                 (:uuid-changed opts)
+                 (update-block-refs opts)
+
+                 (and (= :delete-blocks (:outliner-op opts))
+                      (empty? (:uuid-changed opts)))
+                 (replace-ref-with-content opts)
+
+                 true
+                 (distinct))]
        (when (and (seq txs)
                   (not (:skip-transact? opts))
                   (not (contains? (:file/unlinked-dirs @state/state)
