@@ -201,11 +201,14 @@
 }
 
 .block-control-wrap {
-  height: 24px;
-  margin-top: 0;
+  @apply h-[24px] mt-0 pr-[6px];
 
   &.is-order-list {
-    @apply relative right-0 mr-0;
+    @apply mr-0 pr-0;
+
+    .bullet-link-wrap {
+      @apply relative left-[-3px];
+    }
   }
 }
 
@@ -531,11 +534,13 @@
   }
 
   &.as-order-list {
-    @apply w-[28px] whitespace-nowrap justify-start;
+    @apply w-[22px] whitespace-nowrap justify-center pl-[3px];
   }
 
   .bullet {
     @apply rounded-full w-[6px] h-[6px];
+
+    font-size: 14px;
 
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform 0.2s;

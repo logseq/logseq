@@ -206,3 +206,10 @@ export async function getIsWebAPIClipboardSupported(page: Page): Promise<boolean
   // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
   return await queryPermission(page, "clipboard-write") && await doesClipboardItemExists(page)
 }
+
+export async function navigateToStartOfBlock(page: Page, block: Block) {
+  const selectionStart = await block.selectionStart()
+  for (let i = 0; i < selectionStart; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+}

@@ -6,7 +6,6 @@
    [frontend.db :as db]
    [frontend.db.model :as db-model]
    [frontend.db.react :as react]
-   [frontend.db.utils :as db-utils]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
@@ -70,14 +69,9 @@
                                    (util/distinct-by :db/id))))))
 
 (defn indentable?
-  [{:block/keys [parent] :as block}]
+  [{:block/keys [parent left]}]
   (when parent
-    (let [parent-block (db-utils/pull (:db/id parent))
-          first-child (first
-                       (db-model/get-block-immediate-children
-                        (state/get-current-repo)
-                        (:block/uuid parent-block)))]
-      (not= (:db/id block) (:db/id first-child)))))
+    (not= parent left)))
 
 (defn outdentable?
   [{:block/keys [level] :as _block}]

@@ -70,8 +70,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -609,10 +608,9 @@
               (plugin/open-waiting-updates-modal!))
             (plugin-handler/set-auto-checking! false))))))
 
-(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
-                          (merge payload {:tx-data (map #(into [] %) tx-data)
-                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
+                          (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
@@ -624,13 +622,7 @@
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)
-        dir (:dir payload)
-        payload (-> payload
-                    (update :path
-                           (fn [path]
-                             (when (string? path)
-                               (path/relative-path dir path)))))]
+        payload (js->clj event :keywordize-keys true)]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))

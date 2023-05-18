@@ -3,6 +3,7 @@
   #?(:cljs (:require-macros [frontend.modules.outliner.datascript]))
   #?(:cljs (:require [datascript.core :as d]
                      [frontend.db.conn :as conn]
+                     [frontend.db :as db]
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
@@ -46,8 +47,13 @@
                        x))))))
 
 #?(:cljs
+   (defn get-tx-id
+     [tx-report]
+     (get-in tx-report [:tempids :db/current-tx])))
+
+#?(:cljs
    (defn transact!
-     [txs opts]
+     [txs opts before-editor-cursor]
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
@@ -65,9 +71,15 @@
          (try
            (let [repo (get opts :repo (state/get-current-repo))
                  conn (conn/get-db repo false)
-                 editor-cursor (state/get-current-edit-block-and-position)
-                 meta (merge opts {:editor-cursor editor-cursor})
-                 rs (d/transact! conn txs (assoc meta :outliner/transact? true))]
+                 rs (d/transact! conn txs (assoc opts :outliner/transact? true))
+                 tx-id (get-tx-id rs)]
+             (swap! state/state assoc-in [:history/tx->editor-cursor tx-id] before-editor-cursor)
+
+             ;; update the current edit block to include full information
+             (when-let [block (state/get-edit-block)]
+               (when (and (:block/uuid block) (not (:db/id block)))
+                 (state/set-state! :editor/block (db/pull [:block/uuid (:block/uuid block)]))))
+
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>

@@ -259,9 +259,9 @@
      ;;                :file-sync/progress {}
      ;;                :file-sync/start-time {}
      ;;                :file-sync/last-synced-at {}}
-     :file-sync/graph-state                 {:current-graph-uuid nil
+     :file-sync/graph-state                 {:current-graph-uuid nil}
                                              ;; graph-uuid -> ...
-                                             }
+
      :user/info                             {:UserGroups (storage/get :user-groups)}
      :encryption/graph-parsing?             false
 
@@ -285,7 +285,10 @@
      :chat/current-conversation             nil
      :ai/preferred-translate-target-lang    (storage/get :ai/preferred-translate-target-lang)
      :ai/engines                            {}
-     :ai/current-service                    "Built-in OpenAI"})))
+     :ai/current-service                    "Built-in OpenAI"
+
+     ;; db tx-id -> editor cursor
+     :history/tx->editor-cursor             {}})))
 
 ;; Block ast state
 ;; ===============

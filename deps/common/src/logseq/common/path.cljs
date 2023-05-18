@@ -6,7 +6,7 @@
 (defn- safe-decode-uri-component
   [uri]
   (try
-    (js/decodeURIComponent uri)
+    (.normalize (js/decodeURIComponent uri) "NFC")
     (catch :default _
       (js/console.error "decode-uri-component-failed" uri)
       uri)))
@@ -157,7 +157,6 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-
   (cond
     ;; For debugging
     ; (nil? base)
@@ -190,9 +189,10 @@
 (defn path-normalize
   "Normalize path or URL"
   [path]
-  (if (is-file-url? path)
-    (url-normalize path)
-    (path-normalize-internal path)))
+  (-> (if (is-file-url? path)
+        (url-normalize path)
+        (path-normalize-internal path))
+      (.normalize "NFC")))
 
 (defn url-to-path
   "Extract path part of a URL, decoded.

@@ -92,7 +92,7 @@
       (fn []
          (rum/set-ref! *mounted true)
          #(rum/set-ref! *mounted false))
-       [])
+      [])
     #(rum/deref *mounted)))
 
 (defn use-bounding-client-rect

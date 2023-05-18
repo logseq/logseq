@@ -3,7 +3,8 @@
   a good ns to be in yet"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.common.path :as path]))
 
 (defonce between-re #"\(between ([^\)]+)\)")
 
@@ -142,10 +143,11 @@
 ;; FIXME: distinguish from get-repo-name
 (defn get-graph-name-from-path
   [path]
-  (when (string? path)
-    (let [parts (->> (string/split path #"/")
-                     (take-last 2))]
-      (-> (if (not= (first parts) "0")
-            (util/string-join-path parts)
-            (last parts))
-          js/decodeURIComponent))))
+  (let [path (if (path/is-file-url? path)
+               (path/url-to-path path)
+               path)
+        parts (->> (string/split path #"/")
+                   (take-last 2))]
+    (if (not= (first parts) "0")
+      (util/string-join-path parts)
+      (last parts))))

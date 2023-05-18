@@ -46,3 +46,7 @@ logseq.graph-parser.text/get-file-basename
 logseq.graph-parser.mldoc/mldoc-link?
 ;; public var
 logseq.graph-parser.schema.mldoc/block-ast-coll-schema
+;; API
+logseq.graph-parser.config/img-formats
+;; API
+logseq.graph-parser.config/text-formats

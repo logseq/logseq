@@ -260,7 +260,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
 
   // And it should keep what was undone as a redo action
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('text="text2"')).toHaveCount(1)
+  await expect(page.locator('text="text1 text2 [[]]"')).toHaveCount(1)
 })
 
 test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {

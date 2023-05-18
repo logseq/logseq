@@ -1,0 +1,3 @@
+table-example:: true
+
+-

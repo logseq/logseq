@@ -133,9 +133,7 @@ const LogseqPortalViewModeAction = observer(() => {
     <div className="flex">
       {collapsed ? 'Expand' : 'Collapse'}
       <KeyboardShortcut
-        action={
-          collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'
-        }
+        action={collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'}
       />
     </div>
   )
@@ -253,7 +251,7 @@ const NoFillAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>('NoFill')
   const handleChange = React.useCallback((v: boolean) => {
-    shapes.forEach(s => s.update({ noFill: v }))
+    app.selectedShapesArray.forEach(s => s.update({ noFill: v }))
     app.persist()
   }, [])
 
@@ -279,14 +277,14 @@ const SwatchAction = observer(() => {
   >('Swatch')
 
   const handleSetColor = React.useCallback((color: string) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ fill: color, stroke: color })
     })
     app.persist()
   }, [])
 
   const handleSetOpacity = React.useCallback((opacity: number) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ opacity: opacity })
     })
     app.persist()
