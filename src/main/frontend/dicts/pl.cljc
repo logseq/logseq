@@ -2,7 +2,7 @@
   "Provides translation to PL"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-pl.md")
                      :default "tutorial-pl.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-pl.md")
@@ -246,10 +246,9 @@
    :select.graph/add-graph "Tak, dodaj nowy graf"
 
    :file-sync/other-user-graph "Obecny lokalny graf jest przypisany do zdalnego grafu innego użytkownika. Nie można rozpocząć synchronizacji."
-   :file-sync/graph-deleted "Obecny zdalny graf został usunięty"})
+   :file-sync/graph-deleted "Obecny zdalny graf został usunięty"
 
-(def shortcuts
-  {:shortcut.category/basics                        "Podstawy"
+   :shortcut.category/basics                        "Podstawy"
    :shortcut.category/formatting                    "Formatowanie"
    :shortcut.category/navigating                    "Nawigacja"
    :shortcut.category/block-editing                 "Edycja bloków (ogólne)"

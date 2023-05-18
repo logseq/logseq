@@ -2,7 +2,7 @@
   "Provides translation to RU"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "Перейти к основному содержимому"
    :tutorial/text #?(:cljs (rc/inline "tutorial-ru.md")
                      :default "tutorial-ru.md")
@@ -346,10 +346,9 @@
    :file-sync/other-user-graph "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
    :file-sync/graph-deleted "Текущий удаленный граф был удален"
 
-   :notification/clear-all "Очистить всё"})
-
-(def shortcuts
-  {:shortcut.category/basics                "Базовые"
+   :notification/clear-all "Очистить всё"
+   
+   :shortcut.category/basics                "Базовые"
    :shortcut.category/formatting            "Форматирование"
    :shortcut.category/navigating            "Навигация"
    :shortcut.category/block-editing         "Общее редактирование блока"

@@ -2,7 +2,7 @@
   "Provides translation to NL"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:all-files "Alle bestanden"
    :all-graphs "Alle grafieken"
    :all-journals "Alle Journalen"
@@ -262,10 +262,9 @@
                      :default "tutorial-en.md")
 
    :updater/new-version-install "Een nieuwe versie is gedownload."
-   :updater/quit-and-install "Herstart om te installeren"})
+   :updater/quit-and-install "Herstart om te installeren"
 
-(def shortcuts
-  {:command.auto-complete/complete         "Automatisch aanvullen: Kies geselecteerd item"
+   :command.auto-complete/complete         "Automatisch aanvullen: Kies geselecteerd item"
    :command.auto-complete/next             "Automatisch aanvullen: Selecteer volgend item"
    :command.auto-complete/open-link        "Automatisch aanvullen: Open geselecteerd item in browser"
    :command.auto-complete/prev             "Automatisch aanvullen: Selecteer vorig item"

@@ -2,7 +2,7 @@
   "Provides translation to IT"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
                      :default "tutorial-en.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
@@ -246,10 +246,9 @@
    :file-sync/graph-deleted "Il grafo attuale è stato eliminato"
    :settings-page/edit-export-css "Modificare export.css"
    :settings-page/enable-flashcards "Flashcard"
-   :settings-page/export-theme "Esporta tema"})
+   :settings-page/export-theme "Esporta tema"
 
-(def shortcuts
-  {:command.date-picker/complete         "Selettore data: scegli il giorno selezionato"
+   :command.date-picker/complete         "Selettore data: scegli il giorno selezionato"
    :command.date-picker/prev-day         "Selettore data: Seleziona il giorno precedente"
    :command.date-picker/next-day         "Selettore data: Seleziona il giorno successivo"
    :command.date-picker/prev-week        "Selettore data: Seleziona la settimana precedente"

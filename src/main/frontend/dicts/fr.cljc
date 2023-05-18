@@ -2,7 +2,7 @@
   "Provides translation to FR"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-fr.md")
                      :default "tutorial-fr.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-fr.md")
@@ -330,10 +330,9 @@
    :on-boarding/welcome-whiteboard-modal-start "Démarrer le tableau blanc"
    :on-boarding/welcome-whiteboard-modal-title "Un nouveau cadre pour vos pensées."
    :settings-page/clear-cache-warning "Vider le cache supprimera les graphiques ouverts. Vous perdrez les modifications non enregistrées."
-   :settings-page/disable-sentry-desc "Logseq ne collectera jamais votre base de données de graphes locale ni ne vendra vos données."})
+   :settings-page/disable-sentry-desc "Logseq ne collectera jamais votre base de données de graphes locale ni ne vendra vos données."
 
-(def shortcuts
-  {:shortcut.category/formatting           "Formats"
+   :shortcut.category/formatting           "Formats"
    :command.editor/indent                  "Indenter un Bloc vers la droite"
    :command.editor/outdent                 "Indenter un Bloc vers la gauche"
    :command.editor/move-block-up           "Déplacer un bloc au dessus"

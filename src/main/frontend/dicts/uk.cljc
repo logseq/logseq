@@ -2,7 +2,7 @@
   "Provides translation to UK"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "Перейти до головної"
    :tutorial/text #?(:cljs (rc/inline "tutorial-uk.md")
                      :default "tutorial-uk.md")
@@ -346,10 +346,9 @@
    :file-sync/other-user-graph "Поточний локальний графік зв'язаний з графіком іншого користувача. Тому неможливо почати синхронізацію."
    :file-sync/graph-deleted "Поточний дистанційний графік був видалений"
 
-   :notification/clear-all "Очистити все"})
+   :notification/clear-all "Очистити все"
 
-(def shortcuts
-  {:shortcut.category/formatting                             "Форматування"
+   :shortcut.category/formatting                             "Форматування"
    :shortcut.category/basics                                 "Основи"
    :shortcut.category/navigating                             "Навігація"
    :shortcut.category/block-editing                          "Загальне редагування блоку"

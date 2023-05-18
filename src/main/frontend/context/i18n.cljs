@@ -2,13 +2,11 @@
   "This ns is a system component that handles translation for the entire
   application. The ns dependencies for this ns must be small since it is used
   throughout the application."
-  (:require [frontend.dicts.core :as dicts]
-            [frontend.modules.shortcut.dicts :as shortcut-dicts]
+  (:require [frontend.dicts :as dicts]
             [tongue.core :as tongue]
             [frontend.state :as state]))
 
-(def dicts
-  (merge-with merge dicts/dicts shortcut-dicts/dicts))
+(def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
 (def translate
   (tongue/build-translate dicts))

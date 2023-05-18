@@ -2,7 +2,7 @@
   "Provides translation to zh-CN"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "跳转到主内容"
    :on-boarding/demo-graph "这是一份图谱的示例，在上面做的修改不会被保存，除非打开本地文件夹"
    :on-boarding/add-graph "添加图谱"
@@ -331,10 +331,9 @@
    :file-sync/graph-deleted "当前远程图谱已经删除"
    :file-sync/rsapi-cannot-upload-err "无法同步，请检查本机时间是否准确"
 
-   :notification/clear-all "清除全部通知"})
+   :notification/clear-all "清除全部通知"
 
-(def shortcuts
-  {:shortcut.category/formatting            "格式化"
+   :shortcut.category/formatting            "格式化"
    :shortcut.category/basics                "基础操作"
    :shortcut.category/navigating            "移动"
    :shortcut.category/block-editing         "块编辑基本"

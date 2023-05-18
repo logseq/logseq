@@ -1,7 +1,7 @@
 (ns frontend.dicts.af
   "Provides translation to AF")
 
-(def application
+(def ^:large-vars/data-var dicts
   {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
    :on-boarding/add-graph "Add a graph"
    :on-boarding/open-local-dir "Open a local directory"
@@ -85,10 +85,9 @@
    :language "Taal"
 
    :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."
-   :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap"})
+   :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap" 
 
-(def shortcuts
-  {:shortcut.category/formatting           "Formatering"
+   :shortcut.category/formatting           "Formatering"
    :command.editor/indent                  "Ingekeepte blok oortjie"
    :command.editor/outdent                 "Oningekeepte blok"
    :command.editor/move-block-up           "Skuif Blok Boontoe"
