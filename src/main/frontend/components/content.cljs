@@ -19,7 +19,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]

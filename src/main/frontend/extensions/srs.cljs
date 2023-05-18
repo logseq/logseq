@@ -27,7 +27,7 @@
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [rum.core :as rum]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [medley.core :as medley]))
 
 ;;; ================================================================

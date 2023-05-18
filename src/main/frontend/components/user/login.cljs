@@ -1,7 +1,7 @@
 (ns frontend.components.user.login
   (:require [rum.core :as rum]
             [frontend.rum :refer [adapt-class]]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
