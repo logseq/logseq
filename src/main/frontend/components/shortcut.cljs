@@ -78,8 +78,7 @@
     {:will-mount (fn [state]
                    (let [name (first (:rum/args state))]
                      (cond-> state
-                             (contains? #{:shortcut.category/basics
-                                          :shortcut.category/plugins}
+                             (contains? #{:shortcut.category/basics}
                                         name)
                              (-> ::folded? (reset! false) (do state)))))}
   [state category configurable?]
@@ -198,7 +197,6 @@
 (rum/defc keymap-tables
   []
   [:div.cp__keymap-tables
-   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/basics true)
    (shortcut-table :shortcut.category/navigating true)
    (shortcut-table :shortcut.category/block-editing true)
@@ -207,6 +205,7 @@
    (shortcut-table :shortcut.category/formatting true)
    (shortcut-table :shortcut.category/toggle true)
    (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
+   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/others true)])
 
 (rum/defc keymap-pane
