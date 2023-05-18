@@ -2,7 +2,7 @@
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.config :as config]

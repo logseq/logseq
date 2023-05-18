@@ -58,7 +58,7 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.modules.outliner.file :as outliner-file]
-            [frontend.modules.shortcut.dicts :as st]
+            [frontend.modules.shortcut.core :as st]
             [frontend.quick-capture :as quick-capture]
             [frontend.search :as search]
             [frontend.state :as state]

@@ -15,7 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

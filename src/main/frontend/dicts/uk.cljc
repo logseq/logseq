@@ -346,9 +346,7 @@
    :file-sync/other-user-graph "Поточний локальний графік зв'язаний з графіком іншого користувача. Тому неможливо почати синхронізацію."
    :file-sync/graph-deleted "Поточний дистанційний графік був видалений"
 
-   :notification/clear-all "Очистити все"
-
-   :tongue/fallback :en})
+   :notification/clear-all "Очистити все"})
 
 (def shortcuts
   {:shortcut.category/formatting                             "Форматування"
