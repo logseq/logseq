@@ -323,6 +323,7 @@
       pointer-events: none;
     }
   }
+
 }
 
 .cp__assets {
@@ -475,4 +476,29 @@ svg.git {
 
 svg.cmd {
   margin-left: -1px;
+}
+
+.cp__settings-main .theme-row--color {
+  @apply flex flex-col items-center; 
+  width: 2rem; 
+  padding-top: 1rem;
+}
+
+.cp__settings-main .theme-row--color-swatch {
+  @apply rounded-full;
+  width: 2rem;
+  height: 2rem;
+  background: var(--background);
+  border: 3px solid var(--border);
+  /* border: 3px solid orange; */
+}
+
+.cp__settings-main .theme-row--color-swatch:hover {
+  background: var(--background-hover);
+  border-color: var(--border-hover);
+}
+
+.cp__settings-main .selected .theme-row--color-swatch,
+.cp__settings-main .selected .theme-row--color-swatch:hover {
+  background: var(--background-active);
 }

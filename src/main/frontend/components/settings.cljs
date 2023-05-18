@@ -1,6 +1,8 @@
 (ns frontend.components.settings
-  (:require [clojure.string :as string]
+  (:require [frontend.colors :as colors]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.colors :as color]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
@@ -147,7 +149,7 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label action button-label href on-click desc -for]}]
+  [{:keys [left-label action button-label href on-click desc -for stretch]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
 
    ;; left column
@@ -158,11 +160,12 @@
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
-    [:div (if action action (ui/button
-                              button-label
-                              :class    "text-sm p-1"
-                              :href     href
-                              :on-click on-click))]
+    [:div {:style (when stretch {:width "100%"})} 
+     (if action action (ui/button
+                          button-label
+                          :class    "text-sm p-1"
+                          :href     href
+                          :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm desc])]])
@@ -294,17 +297,52 @@
                              :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  (let [pick-theme [:ul.theme-modes-options
-                    [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-                    [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-                    [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
+  (let [pick-theme-mode [:ul.theme-modes-options
+                         [:li {:on-click (partial state/use-theme-mode! "light")
+                               :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+                         [:li {:on-click (partial state/use-theme-mode! "dark")
+                               :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+                         [:li {:on-click (partial state/use-theme-mode! "system")
+                               :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
-                             :action     pick-theme
+                             :action     pick-theme-mode
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
+
+(defn theme-row [t dark?]
+  (let [color-accent (state/sub :color/accent)
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(15, 1fr)" 
+                                       :gap "0.75rem"
+                                       :overflow :scroll 
+                                       :width "100%"
+                                       :padding-left "0.25rem"}}
+                    (for [color colors/color-list]
+                      [:div.theme-row--color {:on-click #(state/toggle-color-accent! color) 
+                                              :class (when (= color-accent color) "selected")}
+                       [:div.theme-row--color-swatch {:style {"--background"        (str "var(--rx-" (name color) "-03)")
+                                                              "--background-hover"  (str "var(--rx-" (name color) "-04)")
+                                                              "--background-active" (str "var(--rx-" (name color) "-05)")
+                                                              "--border"            (str "var(--rx-" (name color) "-07)")
+                                                              "--border-hover"      (str "var(--rx-" (name color) "-08)")}}]
+                                                              ; "--border-hover"     (str "var(--rx-" (name color) "-08)")}}]
+                       [:div.text-xs {:style {:margin "0 -0.5rem" 
+                                              :opacity 0.5 
+                                              :height "1rem"}} 
+                        (name color)]])]
+        display-theme [:button {:style {:background "var(--lx-accent-03)" 
+                                        :border "1px solid var(--lx-accent-07)"
+                                        :color "var(--lx-accent-11)"}}
+                        (if color-accent (name color-accent) "default")]]
+    [:<>
+     (row-with-button-action {:left-label "Radix color theme"
+                              :-for       "toggle_radix_theme"
+                              :stretch    true
+                              :action     pick-theme}) 
+     (row-with-button-action {:left-label "Preview color theme"
+                              :-for       "display_radix_theme"
+                              :stretch    true
+                              :action     display-theme})])) 
+                             
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -637,6 +675,7 @@
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
+     (theme-row t dark?)
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
@@ -683,20 +722,14 @@
   []
   [:div.panel-wrap
    [:div.text-sm.my-4
-    (ui/admonition
-     :tip
-     [:p "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."])
-    [:span.text-sm.opacity-50.my-4 
-     "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
-    [:br][:br]
     [:span.text-sm.opacity-50.my-4
-     "For professional users, Logseq also supports using "]
+     "You can view a page's edit history by clicking the three horizontal dots "
+     "in the top-right corner and selecting \"View page history\". "
+     "Logseq uses "]
     [:a {:href "https://git-scm.com/" :target "_blank"}
      "Git"]
     [:span.text-sm.opacity-50.my-4
-     " for version control."]
-    [:span.text-sm.opacity-50.my-4
-     "Use Git at your own risk as general Git issues are not supported by the Logseq team"]]
+     " for version control."]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
@@ -1044,14 +1077,16 @@
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
-               (when (util/electron?)
+               (when (and
+                      (util/electron?)
+                      (not (file-sync-handler/synced-file-graph? current-repo)))
                  [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "square-asterisk")]
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
