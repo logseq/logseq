@@ -1,12 +1,12 @@
 .ui__modal {
   &[label="keymap-manager"] {
     .panel-content {
-      @apply m-[-8px];
+      @apply m-[-16px];
     }
 
     @screen lg {
       .panel-content {
-        width: 920px;
+        width: 980px;
       }
     }
   }
@@ -18,7 +18,7 @@
 
     a.fold {
       @apply absolute right-0 top-0 w-full pt-3 pr-3
-      flex items-center justify-end select-none;
+      pb-3 flex items-center justify-end select-none;
 
       &:active {
         @apply bg-white/50 opacity-60;

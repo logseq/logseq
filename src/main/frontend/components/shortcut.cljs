@@ -217,7 +217,7 @@
       [])
 
     [:div.cp__keymap-pane
-     [:h1.pb-2.text-3xl "Keymap"]
+     [:h1.pb-2.text-3xl.pt-2 "Keymap"]
      (if ready?
        (keymap-tables)
        [:p.flex.justify-center.py-20 (ui/loading "")])]))
