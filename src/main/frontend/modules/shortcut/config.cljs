@@ -16,8 +16,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [frontend.modules.shortcut.dicts :as dicts]
-            [frontend.dicts.en :as en]
+            [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
@@ -34,7 +33,7 @@
 ;; with other config keys
 
 ;; To add a new entry to this map, first add it here and then a description for
-;; it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; it under :commands keys of frontend.dicts.en/dicts
 ;; A shortcut is a map with the following keys:
 ;;  * :binding - A string representing a keybinding. Avoid using single letter
 ;;    shortcuts to allow chords that start with those characters
@@ -334,7 +333,8 @@
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
+   :editor/toggle-undo-redo-mode   {:binding false
+                                    :fn      undo-redo/toggle-undo-redo-mode!}
    
    :editor/toggle-number-list      {:binding "t n"
                                     :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
@@ -542,12 +542,12 @@
                                     :inactive (not (state/developer-mode?))
                                     :fn :frontend.handler.common.developer/show-page-ast}})
 
-(let [keyboard-shortcuts
-      {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
-       ::en/shortcuts (set (keys en/shortcuts))}]
-  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::en/shortcuts keyboard-shortcuts))
-          (str "Keys for keyboard shortcuts must be the same "
-               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::en/shortcuts keyboard-shortcuts)))))
+(let [keyboard-commands
+      {::commands (set (keys all-default-keyboard-shortcuts))
+       ::dicts/commands dicts/abbreviated-commands}]
+  (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
+          (str "Keyboard commands must have an english label"
+               (data/diff (::commands keyboard-commands) (::commands keyboard-commands)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
@@ -759,7 +759,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dicts/category
+;; a description for it in frontend.dicts.en/dicts
 (def ^:large-vars/data-var category*
   "Full list of categories for docs purpose"
   {:shortcut.category/basics
@@ -935,9 +935,9 @@
     :ui/clear-all-notifications]})
 
 (let [category-maps {::category (set (keys category*))
-                     ::dicts/category (set (keys dicts/category))}]
+                     ::dicts/category dicts/categories}]
   (assert (= (::category category-maps) (::dicts/category category-maps))
-          (str "Keys for category maps must be the same "
+          (str "Keys for category maps must have an english label "
                (data/diff (::category category-maps) (::dicts/category category-maps)))))
 
 (def category

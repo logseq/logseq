@@ -2,7 +2,7 @@
   "Provides translation to pt-BR"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:on-boarding/demo-graph "Esse é um grafo de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
    :on-boarding/add-graph "Adicionar grafo"
    :on-boarding/open-local-dir "Abrir pasta local"
@@ -29,7 +29,6 @@
    :help/block-content-autocomplete "Auto-completar conteúdo de bloco (Src, Quote, Query, etc)"
    :help/reference-autocomplete "Auto-completar referência de páginas"
    :help/block-reference "Referência de bloco"
-   :command.editor/open-link-in-sidebar "Abrir ligação na barra lateral"
    :more "Mais"
    :search/result-for "Resultado da pesquisa para "
    :help/context-menu "Menu contextual"
@@ -335,10 +334,9 @@
    :settings-page/login-prompt "Para acessar novos recursos antes de qualquer outra pessoa, você deve ser um Patrocinador Coletivo Aberto ou Apoiador do Logseq e, portanto, fazer o login primeiro."
    :settings-page/preferred-pasting-file "Arquivo preferência para colar"
    :settings-page/tab-assets "Recursos"
-   :whiteboard/link-whiteboard-or-block "Vincular quadro branco/página/bloco"})
+   :whiteboard/link-whiteboard-or-block "Vincular quadro branco/página/bloco"
 
-(def shortcuts
-  {:shortcut.category/formatting            "Formatação"
+   :shortcut.category/formatting            "Formatação"
    :shortcut.category/basics                "Básico"
    :shortcut.category/navigating            "Navegação"
    :shortcut.category/block-editing         "Edição geral de blocos"

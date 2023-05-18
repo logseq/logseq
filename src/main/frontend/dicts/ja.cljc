@@ -2,7 +2,7 @@
   "Provides translation to JA"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
                      :default "tutorial-ja.md")
    :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ja.md")
@@ -253,10 +253,9 @@
    :select.graph/add-graph "はい、新規グラフを追加します。"
 
    :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"
-   :file-sync/graph-deleted "現在のリモートグラフが削除されました"})
+   :file-sync/graph-deleted "現在のリモートグラフが削除されました"
 
-(def shortcuts
-  {:shortcut.category/formatting            "フォーマット"
+   :shortcut.category/formatting            "フォーマット"
    :shortcut.category/basics                "基本操作"
    :shortcut.category/navigating            "ナビゲーション"
    :shortcut.category/block-editing         "ブロック単位の編集"

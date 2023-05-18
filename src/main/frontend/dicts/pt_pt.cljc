@@ -2,7 +2,7 @@
   "Provides translation to pt-PT"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "Ir para o conteúdo principal"
    :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
                      :default "tutorial-en.md")
@@ -348,10 +348,9 @@
    :file-sync/graph-deleted "O grafo remoto atual foi apagado"
    :file-sync/rsapi-cannot-upload-err "Não foi possível iniciar a sincronização, verifique se a hora local está correta."
 
-   :notification/clear-all "Limpar tudo"})
-
-(def shortcuts
-  {:shortcut.category/formatting            "Formatação"
+   :notification/clear-all "Limpar tudo"
+   
+   :shortcut.category/formatting            "Formatação"
    :shortcut.category/basics                "Básico"
    :shortcut.category/navigating            "Navegação"
    :shortcut.category/block-editing         "Edição geral de blocos"

@@ -2,7 +2,7 @@
   "Provides translation to SK"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content               "Preskočiť na hlavný obsah"
    :tutorial/text                                    #?(:cljs    (rc/inline "tutorial-sk.md")
                                                         :default "tutorial-sk.md")
@@ -330,10 +330,9 @@
    :file-sync/other-user-graph                       "Aktuálny lokálny graf je prepojený so vzdialeným grafom iného používateľa. Nie je možné spustiť synchronizáciu.."
    :file-sync/graph-deleted                          "Aktuálny vzdialený graf bol odstránený."
 
-   :notification/clear-all                           "Zmazať všetko"})
+   :notification/clear-all                           "Zmazať všetko"
 
-(def shortcuts
-  {:shortcut.category/formatting                             "Formátovanie"
+   :shortcut.category/formatting                             "Formátovanie"
    :shortcut.category/basics                                 "Základy"
    :shortcut.category/navigating                             "Navigácia"
    :shortcut.category/block-editing                          "Úprava bloku (všeobecné)"

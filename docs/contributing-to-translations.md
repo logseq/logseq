@@ -13,8 +13,8 @@ In order to run the commands in this doc, you will need to install
 
 ## Where to Contribute
 
-Language translations in this library,
-[src/main/frontend/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts/), `<LOCALE>.cljc` file the isolated packages for each language.
+Language translations are under,
+[src/main/frontend/dicts/](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts/) with each language having it's own file. For example, the es locale is in `es.cljc `.
 
 ## Language Overview
 
@@ -52,16 +52,15 @@ Let's try to get your language translated as close to 100% as you can!
 
 ## Edit a Language
 
-To see what translations are missing for your language use:
+To see what translations are missing for your language, let's run a command using `es` as the example language:
 
 ```shell
-$ bb lang:missing LOCALE
-|                            :translation-key |                        :string-to-translate |               :file |
-|---------------------------------------------+---------------------------------------------+---------------------|
-|                     :content/copy-block-url |                              Copy block URL | frontend/dicts/core.cljs |
-|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts/core.cljs |
-|                           :content/copy-ref |                         Copy this reference | frontend/dicts/core.cljs |
-|                         :content/delete-ref |                       Delete this reference | frontend/dicts/core.cljs |
+$ bb lang:missing es
+|                      :translation-key |                                  :string-to-translate |         :file |
+|---------------------------------------+-------------------------------------------------------+---------------|
+|    :command.editor/toggle-number-list |                                    Toggle number list | dicts/es.cljc |
+|     :command.whiteboard/bring-forward |                                          Move forward | dicts/es.cljc |
+|    :command.whiteboard/bring-to-front |                                         Move to front | dicts/es.cljc |
 ...
 ```
 
@@ -70,17 +69,16 @@ Over time you're aiming to have this list drop to zero. Since this process can b
 
 ```sh
 # When pasting this content, be sure to update the indentation to match the file
-$ bb lang:missing LOCALE --copy
+$ bb lang:missing es --copy
 
-;; For frontend/dicts.cljs
-:content/copy-block-url "Copy block URL"
-:content/copy-export-as "Copy / Export as.."
-:content/copy-ref "Copy this reference"
-:content/delete-ref "Delete this reference"
+;; For dicts/es.cljc
+:command.editor/toggle-number-list "Toggle number list"
+:command.whiteboard/bring-forward "Move forward"
+:command.whiteboard/bring-to-front "Move to front"
 ...
 ```
 
-Almost all translations are pretty quick. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
+Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
 
 ## Fix Untranslated
 
@@ -106,11 +104,8 @@ and tell you what's wrong.
 
 ## Add a Language
 
-To add a new language you must create a new file in the `frontend.dicts` namespace containing two variables:
-
-- **application `(def application ...)`:** translation of the application into the idiom
-- **shortcuts `(def shortcuts ...)`:** shortcut translation
-
-Use as base the main language file `frontend/dicts/en.cljs`.
-
-After creating the language pack you should add the `application` variable to `frontend.dicts.core` and the `shortcuts` variable to `frontend.modules.shortcut.dicts`.
+To add a new language:
+* Add an entry to `frontend.dicts/languages`
+* Create a new file under `src/main/frontend/dicts/` and name the file the same as the locale e.g. zz.cljc for a hypothetical zz locale.
+* Add a `(def dicts {})` in that file and then add a entry in the `dicts` map in `src/main/frontend/dicts.cljc`.
+* Then start translating for your language and adding entries in your language's `dicts` using the `bb lang:missing` workflow.

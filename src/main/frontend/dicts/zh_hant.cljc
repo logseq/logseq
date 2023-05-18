@@ -1,7 +1,7 @@
 (ns frontend.dicts.zh-hant
   "Provides translation to zh-Hant")
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "跳轉到主頁面"
    :on-boarding/demo-graph "目前在 demo 用圖表，您需要打開本機目錄以保存。"
    :on-boarding/add-graph "增加圖表"
@@ -339,10 +339,9 @@
    :file-sync/other-user-graph "目前的圖表正在和其他遠端使用者共用，因此無法同步。"
    :file-sync/graph-deleted "目前的遠端圖表已經被刪除"
 
-   :notification/clear-all "清除所有通知"})
+   :notification/clear-all "清除所有通知"
 
-(def shortcuts
-  {:command.editor/indent                  "縮進塊標簽"
+   :command.editor/indent                  "縮進塊標簽"
    :command.editor/outdent                 "取消縮進塊"
    :command.editor/move-block-up           "向上移動塊"
    :command.editor/move-block-down         "向下移動塊"

@@ -2,7 +2,7 @@
   "Provides translation to DE"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:all-files "Alle Dateien"
    :all-graphs "Alle Graphen"
    :all-journals "Alle Journale"
@@ -393,10 +393,9 @@
    :select/default-select-multiple "Ein oder mehrere auswählen"
    :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
 
-   :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"})
-
-(def shortcuts
-  {:command.auto-complete/complete         "Automatische Vervollständigung: Ausgewähltes Element auswählen"
+   :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"
+   
+   :command.auto-complete/complete         "Automatische Vervollständigung: Ausgewähltes Element auswählen"
    :command.auto-complete/next             "Automatische Vervollständigung: Nächstes Element auswählen"
    :command.auto-complete/open-link        "Automatische Vervollständigung: Ausgewähltes Element im Browser öffnen"
    :command.auto-complete/prev             "Automatische Vervollständigung: Vorheriges Element auswählen"

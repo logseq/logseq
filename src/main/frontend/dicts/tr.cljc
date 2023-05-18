@@ -2,7 +2,7 @@
   "Provides translation to TR"
   #?(:cljs (:require [shadow.resource :as rc])))
 
-(def application
+(def ^:large-vars/data-var dicts
   {:accessibility/skip-to-main-content "Ana içeriğe geç"
    :tutorial/text #?(:cljs (rc/inline "tutorial-tr.md")
                      :default "tutorial-tr.md")
@@ -371,10 +371,9 @@
    :file-sync/other-user-graph "Geçerli yerel graf, diğer kullanıcının uzak grafına bağlıdır. Bu yüzden senkronizasyon başlatılamıyor."
    :file-sync/graph-deleted "Geçerli uzak graf silindi"
 
-   :notification/clear-all "Tümünü temizle"})
+   :notification/clear-all "Tümünü temizle"
 
-(def shortcuts
-  {:shortcut.category/basics "Temel bilgiler"
+   :shortcut.category/basics "Temel bilgiler"
    :shortcut.category/formatting "Biçimlendirme"
    :shortcut.category/navigating "Gezinme"
    :shortcut.category/block-editing "Genel blok düzenleme"
