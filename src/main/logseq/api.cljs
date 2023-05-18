@@ -29,7 +29,7 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
-            [frontend.modules.shortcut.dicts :as st]
+            [frontend.modules.shortcut.core :as st]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]

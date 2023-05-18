@@ -1,7 +1,7 @@
 (ns frontend.components.shortcut
   (:require [clojure.string :as str]
             [frontend.context.i18n :refer [t]]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.state :as state]
             [frontend.ui :as ui]

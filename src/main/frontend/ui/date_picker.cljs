@@ -1,7 +1,7 @@
 (ns ^:no-doc frontend.ui.date-picker
   (:require [cljs-time.core       :refer [after? before? day day-of-week days first-day-of-the-month minus month months plus year]]
             [cljs-time.format     :refer [formatter unparse]]
-            [frontend.modules.shortcut.dicts :as shortcut]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.util  :as util    :refer [deref-or-value now->utc]]
             [rum.core :as rum]))
