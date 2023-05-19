@@ -1555,7 +1555,7 @@
          "$" "$"
          ":" ":"))
 
-(defn autopair
+(defn- autopair
   [input-id prefix _format _option]
   (let [value (get autopair-map prefix)
         selected (util/get-selected-text)
@@ -1592,11 +1592,11 @@
 (defn- autopair-left-paren?
   [input key]
   (and (= key "(")
-       (or
-         (surround-by? input :start "")
-         (surround-by? input " " "")
-         (surround-by? input "]" "")
-         (surround-by? input "(" ""))))
+       (or (surround-by? input :start "")
+           (surround-by? input "\n" "")
+           (surround-by? input " " "")
+           (surround-by? input "]" "")
+           (surround-by? input "(" ""))))
 
 (defn wrapped-by?
   [input before end]
@@ -2226,6 +2226,7 @@
        (state/set-edit-content! (state/get-edit-input-id)
                                 (str s1 insertion))
        ;; HACK: save scroll-pos of current pos, then add trailing content
+       ;; This logic is also in commands/simple-insert!
        (let [scroll-container (util/nearest-scrollable-container input)
              scroll-pos (.-scrollTop scroll-container)]
          (state/set-edit-content! (state/get-edit-input-id)
@@ -2866,11 +2867,11 @@
             (contains? key)
             (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
-                  prev (util/nth-safe value (dec pos))]
-            (util/stop e)
-            (if (and (= key "`") (= "`" curr) (not= "`" prev))
-              (cursor/move-cursor-forward input)
-              (autopair input-id key format nil)))
+              prev (util/nth-safe value (dec pos))]
+          (util/stop e)
+          (if (and (= key "`") (= "`" curr) (not= "`" prev))
+            (cursor/move-cursor-forward input)
+            (autopair input-id key format nil)))
 
         (let [sym "$"]
           (and (= key sym)
