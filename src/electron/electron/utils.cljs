@@ -198,23 +198,6 @@
     (cfgs/set-item! :settings/agent {:type type :test test})
     (cfgs/set-item! :settings/agent {:type type :protocol type :host host :port port :test test})))
 
-
-(defn ignored-path?
-  "Ignore given path from file-watcher notification"
-  [dir path]
-  (when (string? path)
-    (or
-     (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/ends-with? path %)
-           [".DS_Store" "logseq/graphs-txid.edn"])
-     ;; hidden directory or file
-     (let [relpath (node-path/relative dir path)]
-       (or (re-find #"/\.[^.]+" relpath)
-           (re-find #"^\.[^.]+" relpath))))))
-
 (defn should-read-content?
   "Skip reading content of file while using file-watcher"
   [path]

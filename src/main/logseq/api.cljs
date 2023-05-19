@@ -652,13 +652,13 @@
       nil)))
 
 (def ^:export update_block
-  (fn [block-uuid content ^js _opts]
+  (fn [block-uuid content ^js opts]
     (let [repo       (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing?   (and edit-input (string/ends-with? edit-input (str block-uuid)))]
       (if editing?
         (state/set-edit-content! edit-input content)
-        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content))
+        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))
       nil)))
 
 (def ^:export move_block

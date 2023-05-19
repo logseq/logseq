@@ -3,12 +3,10 @@
   application. The ns dependencies for this ns must be small since it is used
   throughout the application."
   (:require [frontend.dicts :as dicts]
-            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [tongue.core :as tongue]
             [frontend.state :as state]))
 
-(def dicts
-  (merge-with merge dicts/dicts shortcut-dicts/dicts))
+(def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
 (def translate
   (tongue/build-translate dicts))

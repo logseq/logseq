@@ -1781,7 +1781,9 @@
                        [:label (str order-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
-                  (:ui/show-empty-bullets? (state/get-config)))
+                  (:ui/show-empty-bullets? (state/get-config))
+                  collapsed?
+                  collapsable?)
               (not doc-mode?))
          bullet
 
