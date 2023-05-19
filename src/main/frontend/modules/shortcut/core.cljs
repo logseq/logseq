@@ -230,7 +230,7 @@
      (let [k (first args)
            keystroke (str/trim @local)]
        (when (and (= @action :save)
-                  (not (empty? keystroke)))
+                  (seq keystroke))
          (config-handler/set-config!
            :shortcuts
            (merge
