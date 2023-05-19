@@ -24,14 +24,15 @@
     files))
 
 (defn- build-graph-files
-  "Given a graph directory, return allowed file paths and their contents in preparation
+  "Given a graph directory, return absolute, allowed file paths and their contents in preparation
    for parsing"
-  [dir config]
-  (->> (common-graph/get-files dir)
-       (map #(hash-map :file/path %))
-       graph-parser/filter-files
-       (remove-hidden-files dir config)
-       (mapv #(assoc % :file/content (slurp (:file/path %))))))
+  [dir* config]
+  (let [dir (path/resolve dir*)]
+    (->> (common-graph/get-files dir)
+        (map #(hash-map :file/path %))
+        graph-parser/filter-files
+        (remove-hidden-files dir config)
+        (mapv #(assoc % :file/content (slurp (:file/path %)))))))
 
 (defn- read-config
   "Reads repo-specific config from logseq/config.edn"

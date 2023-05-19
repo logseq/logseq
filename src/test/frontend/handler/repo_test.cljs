@@ -22,7 +22,7 @@
             (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
-    (docs-graph-helper/docs-graph-assertions db (map :file/path files))))
+    (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))))
 
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload
   (testing "Refs to blocks on a page are retained if that page is reloaded"
