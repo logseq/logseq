@@ -269,7 +269,6 @@
                       :current-repo current-repo
                       :default-home default-home})
 
-      (when (not (state/sub :ui/sidebar-open?))
-        (sidebar/toggle))
+      (sidebar/toggle)
 
       (updater-tips-new-version t)]]))

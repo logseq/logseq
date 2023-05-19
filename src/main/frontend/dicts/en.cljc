@@ -232,6 +232,8 @@
    :settings-page/login-prompt "To access new features before anyone else you must be an Open Collective Sponsor or Backer of Logseq and therefore log in first."
    :settings-page/sync "Sync"
    :settings-page/enable-whiteboards "Whiteboards"
+   :settings-page/native-titlebar "Native title bar"
+   :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux, and hides the custom window controls."
    :yes "Yes"
 
    :submit "Submit"
@@ -388,6 +390,10 @@
    :shortcut.category/toggle "Toggle"
    :shortcut.category/whiteboard "Whiteboard"
    :shortcut.category/others "Others"
+   :window/minimize "Minimize"
+   :window/maximize "Maximize"
+   :window/restore "Restore"
+   :window/close "Close"
 
    ;; Commands are nested for now to stay in sync with the shortcuts system.
    ;; Other languages should not nest keys under :commands

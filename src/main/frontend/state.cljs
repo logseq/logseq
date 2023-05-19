@@ -76,6 +76,7 @@
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
+     :ui/sidebar-width                      "40%"
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
@@ -160,6 +161,8 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
      :electron/server                       nil
+     :electron/window-maximized?            false
+     :electron/window-fullscreen?           false
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
@@ -261,7 +264,7 @@
      ;;                :file-sync/last-synced-at {}}
      :file-sync/graph-state                 {:current-graph-uuid nil}
                                              ;; graph-uuid -> ...
-                                             
+
      :user/info                             {:UserGroups (storage/get :user-groups)}
      :encryption/graph-parsing?             false
 
@@ -279,9 +282,6 @@
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
 
-     ;; win32 title bar
-     :win32-title-bar/window-is-maximized?  false
-     :win32-title-bar/window-is-fullscreen? false
      ;; db tx-id -> editor cursor
      :history/tx->editor-cursor             {}})))
 

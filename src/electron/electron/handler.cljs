@@ -602,7 +602,7 @@
 (defmethod handle :window-minimize [^js win]
   (.minimize win))
 
-(defmethod handle :window-maximize-restore [^js win]
+(defmethod handle :window-toggle-maximized [^js win]
   (if (.isMaximized win)
     (.unmaximize win)
     (.maximize win)))

@@ -12,7 +12,6 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.win32-title-bar :as win32-title-bar]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -34,8 +33,9 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util :refer [win32?]]
+            [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.components.window-controls :as window-controls]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
@@ -726,12 +726,14 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        fullscreen? (state/sub :win32-title-bar/window-is-fullscreen?)
         margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
+        fullscreen? (state/sub :electron/window-fullscreen?)
+        native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
+        window-controls? (and (util/electron?) (not util/mac?) (not fullscreen?) (not native-titlebar?))
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
@@ -761,6 +763,7 @@
       {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
                                  :ls-right-sidebar-open   sidebar-open?
                                  :ls-wide-mode            wide-mode?
+                                 :ls-window-controls      window-controls?
                                  :ls-fold-button-on-right fold-button-on-right?
                                  :ls-hl-colored           ls-block-hl-colored?}])}
 
@@ -774,10 +777,6 @@
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
 
-        (if win32?
-          (if fullscreen?
-            ()
-            (win32-title-bar/container)) ())
 
         (header/header {:open-fn        open-fn
                         :light?         light?
@@ -802,6 +801,9 @@
                :main-content        main-content
                :show-action-bar?    show-action-bar?
                :show-recording-bar? show-recording-bar?})]
+
+       (when window-controls?
+         (window-controls/container))
 
        (right-sidebar/sidebar)
 

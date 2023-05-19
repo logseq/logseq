@@ -26,10 +26,11 @@
    (create-main-window! url nil))
   ([url opts]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
+         native-titlebar? (cfgs/get-item :window/native-titlebar?)
          win-opts  (cond->
                      {:width                (.-width win-state)
                       :height               (.-height win-state)
-                      :frame                (not win32?)
+                      :frame                (or mac? native-titlebar?)
                       :titleBarStyle        "hiddenInset"
                       :trafficLightPosition {:x 16 :y 16}
                       :autoHideMenuBar      (not mac?)
@@ -182,14 +183,15 @@
       (doto web-contents
         (.on "will-navigate" will-navigate-handler)
         (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "page-title-updated" #(.send web-contents "restore-zoom-level"))
+        (.on "page-title-updated" #(do (.send web-contents "maximize" (.isMaximized win))
+                                       (.send web-contents "restore-zoom-level")))
         (.setWindowOpenHandler window-open-handler))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
         (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
-        (.on "maximize" #(if win32? (.send web-contents "maximize" true) ()))
-        (.on "unmaximize" #(if win32? (.send web-contents "maximize" false) ())))
+        (.on "maximize" #(.send web-contents "maximize" true))
+        (.on "unmaximize" #(.send web-contents "maximize" false)))
 
       ;; clear
       (fn []

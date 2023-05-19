@@ -98,7 +98,7 @@
   [name path-params]
   (case name
     :home
-    (t :home)
+    "Logseq"
     :whiteboards
     (t :whiteboards)
     :repos
