@@ -27,7 +27,7 @@
       (svg/window-minimize)]
 
      [:button.button.icon.maximize-toggle
-      {:title (t (if maximized? :window/restore :window/maximize))
+      {:title (if maximized? (t :window/restore) (t :window/maximize))
        :class (if maximized? "restore" "maximize")
        :on-click toggle-maximized}
       (if maximized?

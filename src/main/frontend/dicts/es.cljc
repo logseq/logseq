@@ -179,7 +179,6 @@
    :page-search "Buscar en la página actual"
    :graph-search "Buscar grafo"
    :home "Inicio"
-   :page "Página"
    :new-page "Nueva página"
    :whiteboard "Pizarra"
    :whiteboards "Pizarras"

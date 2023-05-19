@@ -259,7 +259,6 @@
    :page-search "Search in the current page"
    :graph-search "Search graph"
    :home "Home"
-   :page "Page"
    :new-page "New page"
    :whiteboard "Whiteboard"
    :whiteboards "Whiteboards"
