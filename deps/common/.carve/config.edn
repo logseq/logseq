@@ -1,0 +1,3 @@
+{:paths ["src"]
+ :api-namespaces [logseq.common.path]
+ :report {:format :ignore}}

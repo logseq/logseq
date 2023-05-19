@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :deps
+ {io.github.nextjournal/nbb-test-runner
+  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}}}
