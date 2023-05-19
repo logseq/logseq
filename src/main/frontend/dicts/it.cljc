@@ -218,7 +218,7 @@
    :plugin/load-unpacked "Carica plugin non pacchettizzato"
    :plugin/restart "Riavvia app"
    :plugin/unpacked-tips "Seleziona la cartella del plugin"
-   :plugin/contribute "✨ Svilupppa e sottoponici un nuovo plugin"
+   :plugin/contribute "✨ Sviluppa e sottoponici un nuovo plugin"
    :plugin/up-to-date "È aggiornato"
    :plugin/custom-js-alert "Trovato il file custom.js, è consentito eseguirlo? (Se non si comprende il contenuto di questo file, si consiglia di non consentire l'esecuzione, che presenta alcuni rischi per la sicurezza.)"
 
