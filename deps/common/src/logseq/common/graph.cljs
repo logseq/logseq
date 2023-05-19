@@ -66,7 +66,8 @@
       keyword))
 
 (defn get-files
-  "Given a graph's root dir, returns a list of all files that it recognizes"
+  "Given a graph's root dir, returns a list of all files that it recognizes.
+   Graph dir must be an absolute path in order for ignoring to work correctly"
   [graph-dir]
   (->> (readdir graph-dir)
        (remove (partial ignored-path? graph-dir))
