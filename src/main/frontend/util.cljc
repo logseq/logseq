@@ -399,6 +399,16 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
+   (defn element-visible?
+     [element]
+     (when element
+       (when-let [r (.getBoundingClientRect element)]
+         (and (>= (.-top r) 0)
+              (<= (+ (.-bottom r) 64)
+                  (or (.-innerHeight js/window)
+                      (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -447,6 +457,19 @@
       (scroll-to (app-scroll-container-node) 0 false))
      ([animate?]
       (scroll-to (app-scroll-container-node) 0 animate?))))
+
+#?(:cljs
+   (defn scroll-to-block
+     "Scroll into the view to vertically align a non-visible block to the centre
+     of the visible area"
+     ([block]
+      (scroll-to-block block true))
+     ([block animate?]
+      (when block
+        (when-not (element-visible? block)
+          (.scrollIntoView block
+                           #js {:behavior (if animate? "smooth" "auto")
+                                :block    "center"}))))))
 
 #?(:cljs
    (defn link?
@@ -1396,16 +1419,6 @@
      (p/create
       (fn [resolve]
         (load url resolve)))))
-
-#?(:cljs
-   (defn element-visible?
-     [element]
-     (when element
-       (when-let [r (.getBoundingClientRect element)]
-         (and (>= (.-top r) 0)
-              (<= (+ (.-bottom r) 64)
-                  (or (.-innerHeight js/window)
-                      (js/document.documentElement.clientHeight))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
