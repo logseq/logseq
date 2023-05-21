@@ -278,7 +278,8 @@
                [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
-     ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
+     ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
+                                                     :backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
                (let [file (draw/file-name)
