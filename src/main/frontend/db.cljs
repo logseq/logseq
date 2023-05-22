@@ -195,11 +195,7 @@
 
         :else
         (let [part (->> (take per-length data)
-                        (map (comp edn/read-string
-                                   #(gobj/get % "datoms")))
-                        (remove (fn [data]
-                                  (and (map? data)
-                                       (= :db/type (:db/ident data))))))]
+                        (mapcat (comp edn/read-string #(gobj/get % "datoms"))))]
           (transact! repo part {:skip-persist? true})
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
