@@ -163,18 +163,6 @@
              (when-let [block (state/get-edit-block)]
                (when (and (:block/uuid block) (not (:db/id block)))
                  (state/set-state! :editor/block (db/pull [:block/uuid (:block/uuid block)]))))
-
-             (when true                 ; TODO: add debug flag
-               (let [eids (distinct (mapv first (:tx-data rs)))
-                     left&parent-list (->>
-                                       (d/q '[:find ?e ?l ?p
-                                              :in $ [?e ...]
-                                              :where
-                                              [?e :block/left ?l]
-                                              [?e :block/parent ?p]] @conn eids)
-                                       (vec)
-                                       (map next))]
-                 (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
              rs)
            (catch :default e
              (log/error :exception e)
