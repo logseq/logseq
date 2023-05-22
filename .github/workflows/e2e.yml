@@ -146,10 +146,10 @@ jobs:
           export DISPLAY=:1.0
 
       - name: Start Fluxbox
-        run:  fluxbox >/dev/null 2>&1 &
+        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
 
       - name: Run Playwright test
-        run: npx playwright test --reporter github --shard=${{ matrix.shard }}/3
+        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
