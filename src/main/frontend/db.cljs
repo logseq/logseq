@@ -196,11 +196,11 @@
         :else
         (let [part (->> (take per-length data)
                         (map (comp edn/read-string
-                                   #(gobj/get % "serialized_edn")))
+                                   #(gobj/get % "datoms")))
                         (remove (fn [data]
                                   (and (map? data)
                                        (= :db/type (:db/ident data))))))]
-          (transact! repo part {:restore-db? true})
+          (transact! repo part {:skip-persist? true})
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
 
@@ -208,30 +208,25 @@
   "Load initial data from SQLite"
   [repo]
   (p/let [db-name (datascript-db repo)
-          db-conn (d/create-conn db-schema/schema)
+          db-conn (d/create-conn)
           _ (swap! conns assoc db-name db-conn)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
-          pages (map (comp edn/read-string :serialized_edn) all-pages)
-          all-blocks' (map (fn [b]
-                             {:db/id (:id b)
-                              :block/uuid (:uuid b)
-                              :block/page (:page b)}) all-blocks)
-          journal-blocks' (map (comp edn/read-string :serialized_edn) journal-blocks)
-          blocks' (concat pages all-blocks' journal-blocks')]
+          pages (mapcat (comp edn/read-string :datoms) all-pages)
+          all-blocks' (mapcat (fn [b]
+                                [(d/datom (:id b) :block/uuid (:uuid b))
+                                 (d/datom (:id b) :block/page (:page b))]) all-blocks)
+          journal-blocks' (mapcat (comp edn/read-string :datoms) journal-blocks)
+          datoms (concat pages all-blocks' journal-blocks')]
+
+    (reset! db-conn (d/init-db datoms db-schema/schema))
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
-      {:restore-db? true})
-
-    ;; FIXME: transact is too slow
-    ;; Plan: store datoms in sqlite and use d/init-db to initial the db
-    (util/profile
-     "transact data"
-     (d/transact! db-conn blocks' {:restore-db? true}))
+      {:skip-persist? true})
 
     (js/setTimeout
      (fn []

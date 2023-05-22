@@ -51,7 +51,7 @@
                         name TEXT,
                         uuid TEXT NOT NULL,
                         content TEXT,
-                        serialized_edn TEXT,
+                        datoms TEXT,
                         journal_day INTEGER,
                         core_data INTEGER,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -99,7 +99,7 @@
 (defn upsert-blocks!
   [repo blocks]
   (if-let [db (get-db repo)]
-    (let [insert (prepare db "INSERT INTO blocks (id, page, name, uuid, content, serialized_edn, journal_day, core_data, created_at, updated_at) VALUES (@id, @page, @name, @uuid, @content, @serialized_edn, @journal_day, @core_data, @created_at, @updated_at) ON CONFLICT (id) DO UPDATE SET (page, name, uuid, content, serialized_edn, journal_day, core_data, created_at, updated_at) = (@page, @name, @uuid, @content, @serialized_edn, @journal_day, @core_data, @created_at, @updated_at)" repo)
+    (let [insert (prepare db "INSERT INTO blocks (id, page, name, uuid, content, datoms, journal_day, core_data, created_at, updated_at) VALUES (@id, @page, @name, @uuid, @content, @datoms, @journal_day, @core_data, @created_at, @updated_at) ON CONFLICT (id) DO UPDATE SET (page, name, uuid, content, datoms, journal_day, core_data, created_at, updated_at) = (@page, @name, @uuid, @content, @datoms, @journal_day, @core_data, @created_at, @updated_at)" repo)
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]

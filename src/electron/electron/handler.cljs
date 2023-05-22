@@ -349,7 +349,7 @@
                          :name (:block/name b)
                          :uuid (str (:block/uuid b))
                          :content (:block/content b)
-                         :serialized_edn (pr-str b)
+                         :datoms (:datoms b)
                          :journal_day (:block/journal-day b)
                          :core_data 0
                          :created_at (or (:block/created-at b) (utils/time-ms))

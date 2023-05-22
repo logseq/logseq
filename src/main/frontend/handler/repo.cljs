@@ -541,8 +541,9 @@
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (ipc/ipc :db-new graph)
-          initial-data [(react/kv :db/type "db")
-                        {:file/path (str "logseq/" "config.edn")
+          _ (db/transact! full-graph-name [(react/kv :db/type "db")]
+              {:skip-persist? true})
+          initial-data [{:file/path (str "logseq/" "config.edn")
                          :file/content config/config-default-content}
                         {:file/path (str "logseq/" "custom.css")
                          :file/content ""}
