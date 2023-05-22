@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
           cache-dependency-path: |
             yarn.lock
             static/yarn.lock
@@ -73,7 +74,7 @@ jobs:
             ${{ runner.os }}-shadow-cljs-
 
       - name: Fetch yarn deps
-        run: npm install -g yarn && yarn install
+        run: yarn install
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
