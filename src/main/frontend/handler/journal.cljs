@@ -12,6 +12,14 @@
     (route-handler/redirect! {:to          :page
                               :path-params {:name page}})))
 
+(defn go-to-yesterday!
+  []
+  (redirect-to-journal! (date/yesterday)))
+
+(defn go-to-today!
+  []
+  (redirect-to-journal! (date/today)))
+
 (defn go-to-tomorrow!
   []
   (redirect-to-journal! (date/tomorrow)))

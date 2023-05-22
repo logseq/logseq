@@ -513,6 +513,8 @@
     :go/all-pages                   "Go to all pages"
     :go/graph-view                  "Go to graph view"
     :go/keyboard-shortcuts          "Go to keyboard shortcuts"
+    :go/yesterday                   "Go to yesterday"
+    :go/today                       "Go to today"
     :go/tomorrow                    "Go to tomorrow"
     :go/next-journal                "Go to next journal"
     :go/prev-journal                "Go to previous journal"
