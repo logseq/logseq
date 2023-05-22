@@ -36,8 +36,10 @@
   [state]
   (let [{:keys [value]} (get-state)]
     (editor-handler/clear-when-saved!)
-    ;; TODO: ugly
-    (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))
+    (when (and
+           (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
+           ;; Don't trigger auto-save if the latest op is undo or redo
+           (not (contains? #{:undo :redo} (state/get-editor-latest-op))))
       (editor-handler/save-block! (get-state) value)))
   state)
 
