@@ -122,7 +122,7 @@
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
 
-     ;; delete refed blocks
+     ;; Stores deleted refed blocks, indexed by repo
      :editor/last-replace-ref-content-tx    nil
 
      ;; for audio record
