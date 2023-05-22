@@ -119,16 +119,17 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (let [upsert-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b))) blocks)
-              datoms-data (map (fn [d]
-                                 [(:e d) (:a d) (:v d) (:tx d) (:added d)]) (:tx-data tx-report))]
-          (p/let [ipc-result (ipc/ipc :db-transact-data repo
-                                      (pr-str
-                                       {:blocks upsert-blocks
-                                        :deleted-block-ids deleted-block-ids
-                                        :datoms datoms-data}))]
-            ;; TODO: disable edit when transact failed to avoid future data-loss
-            (prn "DB transact result: " ipc-result)))
+        (when-not (:restore-db? tx-meta)
+          (let [upsert-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b))) blocks)
+               datoms-data (map (fn [d]
+                                  [(:e d) (:a d) (:v d) (:tx d) (:added d)]) (:tx-data tx-report))]
+           (p/let [ipc-result (ipc/ipc :db-transact-data repo
+                                       (pr-str
+                                        {:blocks upsert-blocks
+                                         :deleted-block-ids deleted-block-ids
+                                         :datoms datoms-data}))]
+             ;; TODO: disable edit when transact failed to avoid future data-loss
+             (prn "DB transact result: " ipc-result))))
 
         (when-not (:delete-files? tx-meta)
           (doseq [p (seq pages)]

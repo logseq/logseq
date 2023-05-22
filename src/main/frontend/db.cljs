@@ -181,9 +181,8 @@
 
 (defn restore-other-data-from-sqlite!
   [repo data]
-  (let [per-length 100]
+  (let [per-length 2000]
     (p/loop [data data]
-      (prn "count: " (count data))
       (cond
         (not= repo (state/get-current-repo)) ; switched to another graph
         nil
@@ -201,8 +200,7 @@
                         (remove (fn [data]
                                   (and (map? data)
                                        (= :db/type (:db/ident data))))))]
-          (prn "part: " part)
-          (transact! repo part)
+          (transact! repo part {:restore-db? true})
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
 
@@ -226,13 +224,14 @@
     ;; (db-migrate/migrate attached-db)
 
     (d/transact! db-conn [(react/kv :db/type "db")
-                          {:schema/version db-schema/version}])
+                          {:schema/version db-schema/version}]
+      {:restore-db? true})
 
     ;; FIXME: transact is too slow
     ;; Plan: store datoms in sqlite and use d/init-db to initial the db
     (util/profile
      "transact data"
-     (d/transact! db-conn blocks'))
+     (d/transact! db-conn blocks' {:restore-db? true}))
 
     (js/setTimeout
      (fn []
