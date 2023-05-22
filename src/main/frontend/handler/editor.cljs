@@ -233,6 +233,13 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
+;; id: block dom id, "ls-block-counter-uuid"
+(defn- another-block-with-same-id-exists?
+  [current-id block-id]
+  (when-let [id (and (string? block-id) (parse-uuid block-id))]
+    (and (not= current-id id)
+         (db/entity [:block/uuid id]))))
+
 (defn- remove-non-existed-refs!
   [refs]
   (remove (fn [x] (or
@@ -376,14 +383,25 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [page format repo content]} block
+   (let [{:block/keys [uuid page format repo content properties]} block
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
+         block-id (when (map? properties) (get properties :id))
          content (-> (property/remove-built-in-properties format content)
                      (drawer/remove-logbook))]
-     (if force?
+     (cond
+       (and (another-block-with-same-id-exists? uuid block-id)
+            (not (= :delete (:editor/op opts))))
+       (notification/show!
+        [:p.content
+         (util/format "Block with the id %s already exists!" block-id)]
+        :error)
+
+       force?
        (save-block-inner! block value opts)
+
+       :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when (and content-changed? page)
            (save-block-inner! block value opts)))))))
@@ -811,7 +829,7 @@
                                                   :block/additional-properties (:block/properties block))
                                            prev-block)]
                          (delete-block-aux! block delete-children?)
-                         (save-block! repo prev-block' new-content))
+                         (save-block! repo prev-block' new-content {:editor/op :delete}))
                        (delete-block-aux! block delete-children?)))
                    (move-fn)))))))))
    (state/set-editor-op! nil)))
@@ -1231,20 +1249,19 @@
 (defn save-block!
   ([repo block-or-uuid content]
     (save-block! repo block-or-uuid content {}))
-  ([repo block-or-uuid content {:keys [properties] :or {}}]
+  ([repo block-or-uuid content {:keys [properties] :as opts}]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
                  (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)]
      (save-block!
-       {:block block :repo repo}
-       (if (seq properties)
-          (property/insert-properties (:block/format block) content properties)
-        content)
-     )))
-  ([{:keys [block repo] :as _state} value]
+      {:block block :repo repo :opts (dissoc opts :properties)}
+      (if (seq properties)
+        (property/insert-properties (:block/format block) content properties)
+        content))))
+  ([{:keys [block repo opts] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
      (when (db/entity repo [:block/uuid (:block/uuid block)])
-       (save-block-aux! block value {})))))
+       (save-block-aux! block value opts)))))
 
 (defn save-blocks!
   [blocks]
@@ -2626,7 +2643,7 @@
                           edit-block)]
         (outliner-tx/transact! transact-opts
           (delete-block-aux! next-block false)
-          (save-block! repo edit-block' new-content))
+          (save-block! repo edit-block' new-content {:editor/op :delete}))
         (let [block (if next-block-has-refs? next-block edit-block)]
           (edit-block! block current-pos (:block/uuid block)))))))
 
