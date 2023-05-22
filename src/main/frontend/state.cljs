@@ -281,7 +281,6 @@
      :whiteboard/last-persisted-at          {}
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
-
      ;; db tx-id -> editor cursor
      :history/tx->editor-cursor             {}})))
 

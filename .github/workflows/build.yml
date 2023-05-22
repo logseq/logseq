@@ -185,15 +185,18 @@ jobs:
       - name: Install fluxbox
         run: sudo apt-get update && sudo apt-get install -y fluxbox
 
+      - name: Export display
+        run: export DISPLAY=:99
+
       - name: Run Playwright test - 1/2
-        run: Xvfb :1 -screen 0 "1280x720x24" >/dev/null 2>&1 & export DISPLAY=:1.0 fluxbox >/dev/null 2>&1 & npx playwright test --reporter github --shard=1/2
+        run: Xvfb :99 -screen 0 1024x768x16 & fluxbox & npx playwright test --reporter github --shard=1/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
       - name: Run Playwright test - 2/2
-        run: Xvfb :1 -screen 0 "1280x720x24" >/dev/null 2>&1 & export DISPLAY=:1.0 fluxbox >/dev/null 2>&1 & npx playwright test --reporter github --shard=2/2
+        run: Xvfb :99 -screen 0 1024x768x16 & fluxbox & npx playwright test --reporter github --shard=2/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"

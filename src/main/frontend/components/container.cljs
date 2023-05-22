@@ -776,8 +776,6 @@
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-
-
         (header/header {:open-fn        open-fn
                         :light?         light?
                         :current-repo   current-repo
