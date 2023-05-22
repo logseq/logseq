@@ -137,14 +137,17 @@ jobs:
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
-      - name: Install fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox
-
       - name: Export display
-        run: export DISPLAY=:99
+        run: export DISPLAY=:1
+
+      - name: Start XVFB
+        run: Xvfb $DISPLAY -screen 0 1024x768x16
+
+      - name: Install and start fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox && fluxbox
 
       - name: Run Playwright test
-        run: Xvfb :99 -screen 0 1024x768x16 & fluxbox & npx playwright test --reporter github --shard=${{ matrix.shard }}/3
+        run: xvfb-run -- npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
