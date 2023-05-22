@@ -186,13 +186,13 @@ jobs:
         run: export DISPLAY=:1
 
       - name: Start XVFB
-        run: Xvfb $DISPLAY -screen 0 1024x768x16
+        run: Xvfb :1 -screen 0 1024x768x16 &&
 
       - name: Install and start fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox && fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox && fluxbox &&
 
       - name: Run Playwright test - 1/2
-        run: xvfb-run -- npx playwright test --reporter github --shard=1/2
+        run: npx playwright test --reporter github --shard=1/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"

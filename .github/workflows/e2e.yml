@@ -141,10 +141,10 @@ jobs:
         run: export DISPLAY=:1
 
       - name: Start XVFB
-        run: Xvfb $DISPLAY -screen 0 1024x768x16
+        run: Xvfb $DISPLAY -screen 0 1024x768x16 &&
 
       - name: Install and start fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox && fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox && fluxbox &&
 
       - name: Run Playwright test
         run: xvfb-run -- npx playwright test --reporter github --shard=${{ matrix.shard }}/3
