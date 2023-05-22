@@ -190,6 +190,9 @@ jobs:
           Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
           export DISPLAY=:1.0
 
+      - name: Run fluxbox
+        run: fluxbox >/dev/null 2>&1
+
       - name: Run Playwright test - 1/2
         run: npx playwright test --reporter github --shard=1/2
         env:
