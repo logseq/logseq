@@ -7,11 +7,15 @@
             [frontend.db.react :as react]
             [frontend.db :as db]
             [clojure.set :as set]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
+            [promesa.core :as p]))
 
 (defn updated-page-hook
   [tx-report page]
-  (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
+  (when (and
+         (not (react/db-graph? (state/get-current-repo)))
+         (not (get-in tx-report [:tx-meta :created-from-journal-template?])))
     (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
@@ -82,6 +86,14 @@
                          children-refs))))
                   blocks))))))
 
+(defn- filter-deleted-blocks
+  [datoms]
+  (keep
+   (fn [d]
+     (when (and (= :block/uuid (:a d)) (false? (:added d)))
+       (:e d)))
+   datoms))
+
 (defn invoke-hooks
   [tx-report]
   (let [tx-meta (:tx-meta tx-report)]
@@ -101,10 +113,22 @@
                            ;; merge
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)
-            importing? (:graph/importing @state/state)]
+            importing? (:graph/importing @state/state)
+            deleted-block-ids (set (filter-deleted-blocks (:tx-data tx-report)))]
 
         (when-not importing?
           (react/refresh! repo tx-report'))
+
+        (let [upsert-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b))) blocks)
+              datoms-data (map (fn [d]
+                                 [(:e d) (:a d) (:v d) (:tx d) (:added d)]) (:tx-data tx-report))]
+          (p/let [ipc-result (ipc/ipc :db-transact-data repo
+                                      (pr-str
+                                       {:blocks upsert-blocks
+                                        :deleted-block-ids deleted-block-ids
+                                        :datoms datoms-data}))]
+            ;; TODO: disable edit when transact failed to avoid future data-loss
+            (prn "DB transact result: " ipc-result)))
 
         (when-not (:delete-files? tx-meta)
           (doseq [p (seq pages)]
@@ -116,5 +140,6 @@
                    (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
+                              :deleted-block-ids deleted-block-ids
                               :tx-data (:tx-data tx-report)
                               :tx-meta (:tx-meta tx-report)}]))))))

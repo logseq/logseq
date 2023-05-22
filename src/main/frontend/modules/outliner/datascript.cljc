@@ -4,6 +4,7 @@
   #?(:cljs (:require [datascript.core :as d]
                      [frontend.db.conn :as conn]
                      [frontend.db :as db]
+                     [frontend.db.react :as react]
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
@@ -54,7 +55,8 @@
 #?(:cljs
    (defn transact!
      [txs opts before-editor-cursor]
-     (let [txs (remove-nil-from-transaction txs)
+     (let [repo (state/get-current-repo)
+           txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
@@ -62,8 +64,10 @@
                               m)) txs)]
        (when (and (seq txs)
                   (not (:skip-transact? opts))
-                  (not (contains? (:file/unlinked-dirs @state/state)
-                                  (config/get-repo-dir (state/get-current-repo)))))
+                  (if (react/db-graph? repo)
+                    true
+                    (not (contains? (:file/unlinked-dirs @state/state)
+                                    (config/get-repo-dir repo)))))
 
          ;; (prn "[DEBUG] Outliner transact:")
          ;; (frontend.util/pprint txs)

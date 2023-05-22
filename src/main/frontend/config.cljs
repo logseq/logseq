@@ -354,6 +354,7 @@
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
+(defonce db-version-prefix "logseq_db_")
 
 (defn local-db?
   [s]

@@ -201,6 +201,7 @@
 
 (defn upsert-blocks!
   [repo blocks]
+  (prn "debug-search-blocks" blocks)
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     ;; Should update all values on id conflict

@@ -1,6 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.search :as search]
+            [electron.db :as db]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
@@ -266,6 +267,7 @@
                (js-utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
+               (db/ensure-graphs-dir!)
 
                (search/open-dbs!)
 

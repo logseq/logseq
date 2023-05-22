@@ -16,7 +16,11 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [clojure.string :as string]
+            [frontend.config :as config]
+            [clojure.edn :as edn]
+            [cljs-bean.core :as bean]))
 
 (import-vars
  [frontend.db.conn
@@ -174,12 +178,30 @@
                 (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
+(defn restore-graph-from-sqlite!
+  "Load graph from SQLite"
+  [repo]
+  (p/let [db-name (datascript-db repo)
+          db-conn (d/create-conn db-schema/schema)
+          _ (swap! conns assoc db-name db-conn)
+          data (ipc/ipc :get-initial-data repo)
+          data (bean/->clj data)
+          blocks (map (comp edn/read-string :serialized_edn) data)]
+
+    ;; TODO: Store schema in sqlite
+    ;; (db-migrate/migrate attached-db)
+
+    (d/transact! db-conn [{:schema/version db-schema/version}])
+    (d/transact! db-conn blocks)))
+
 (defn restore-graph!
   "Restore db from serialized db cache"
   [repo]
-  (p/let [db-name (datascript-db repo)
-          stored (db-persist/get-serialized-graph db-name)]
-    (restore-graph-from-text! repo stored)))
+  (if (string/starts-with? repo config/db-version-prefix)
+    (restore-graph-from-sqlite! repo)
+    (p/let [db-name (datascript-db repo)
+           stored (db-persist/get-serialized-graph db-name)]
+     (restore-graph-from-text! repo stored))))
 
 (defn restore!
   [repo]

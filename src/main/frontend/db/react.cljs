@@ -393,3 +393,8 @@
               (js/console.error error)))))
       (recur))
     chan))
+
+(defn db-graph?
+  "Whether the current graph is db-only"
+  [graph]
+  (= "db" (sub-key-value :db/type)))

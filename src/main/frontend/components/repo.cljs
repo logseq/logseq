@@ -186,6 +186,8 @@
               (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
                 {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
                 {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
+              {:title (str (t :new-graph) "- DB version")
+               :options {:on-click #(state/pub-event! [:graph/new-db-graph])}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link
@@ -241,3 +243,18 @@
                                                       (ui/icon "refresh")]))]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))
+
+(rum/defcs new-db-graph <
+  (rum/local "" ::graph-name)
+  [state]
+  (let [*graph-name (::graph-name state)]
+    [:div.new-graph.p-4
+     [:h1.title "Create new graph: "]
+     [:input.form-input.mb-4 {:value @*graph-name
+                              :auto-focus true
+                              :on-change #(reset! *graph-name (util/evalue %))}]
+     (ui/button
+       "Submit"
+       :on-click (fn []
+                   (when-not (string/blank? @*graph-name)
+                     (repo-handler/new-db! @*graph-name))))]))

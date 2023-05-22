@@ -31,7 +31,8 @@
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
             [logseq.common.path :as path]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [frontend.db.react :as react]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -531,3 +532,24 @@
   ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
   [graph]
   (ipc/ipc "graphReady" graph))
+
+;; New DB implementation
+(defn new-db!
+  [graph]
+  ;; TODO: check whether graph exists first
+  (p/let [full-graph-name (str config/db-version-prefix graph)
+          _ (start-repo-db-if-not-exists! full-graph-name)
+          _ (state/add-repo! {:url full-graph-name})
+          _ (ipc/ipc :db-new graph)
+          initial-data [(react/kv :db/type "db")
+                        {:file/path (str "logseq/" "config.edn")
+                         :file/content config/config-default-content}
+                        {:file/path (str "logseq/" "custom.css")
+                         :file/content ""}
+                        {:file/path (str "logseq/" "custom.js")
+                         :file/content ""}]
+          _ (db/transact! full-graph-name initial-data)
+          _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+          ;; TODO: handle global graph
+          _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
+    (prn "New db created: " full-graph-name)))

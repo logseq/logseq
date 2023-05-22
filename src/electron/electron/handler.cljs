@@ -23,6 +23,7 @@
             [electron.logger :as logger]
             [electron.plugin :as plugin]
             [electron.search :as search]
+            [electron.db :as db]
             [electron.server :as server]
             [electron.shell :as shell]
             [electron.state :as state]
@@ -328,6 +329,38 @@
   (search/delete-db! repo))
 ;; ^^^^
 ;; Search related IPCs End
+
+;; DB related IPCs start
+
+(defmethod handle :db-new [_window [_ repo]]
+  (db/open-db! repo))
+
+(defmethod handle :db-transact-data [_window [_ repo data-str]]
+  (let [data (reader/read-string data-str)
+        {:keys [blocks deleted-block-ids tx-data]} data]
+    ;; TODO: store files
+    (when (seq deleted-block-ids)
+      (db/delete-blocks! repo deleted-block-ids))
+    (when (seq blocks)
+      (let [blocks' (mapv
+                      (fn [b]
+                        {:id (:db/id b)
+                         :page (:db/id (:block/page b))
+                         :name (:block/name b)
+                         :uuid (str (:block/uuid b))
+                         :content (:block/content b)
+                         :serialized_edn (pr-str b)
+                         :journal_day (:block/journal-day b)
+                         :core_data 0
+                         :created_at (or (:block/created-at b) (utils/time-ms))
+                         :updated_at (or (:block/updated-at b) (utils/time-ms))})
+                      blocks)]
+        (db/upsert-blocks! repo (bean/->js blocks'))))))
+
+(defmethod handle :get-initial-data [_ [_ repo _opts]]
+  (db/get-all-data repo))
+
+;; DB related IPCs End
 
 (defn clear-cache!
   [window]

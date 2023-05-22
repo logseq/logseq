@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -866,6 +867,12 @@
        #(graph-picker/graph-picker-cp opts')
        {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
+
+(defmethod handle :graph/new-db-graph [[_ opts]]
+  (state/set-modal!
+   repo/new-db-graph
+   {:id :new-db-graph
+    :label "graph-setup"}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

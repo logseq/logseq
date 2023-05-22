@@ -249,8 +249,10 @@
                                      blocks-result)
                              (map search-db/block->index)
                              (remove nil?))
+          added (set (map :id blocks-to-add))
           blocks-to-remove-set (->> (remove :added blocks)
                                     (map :e)
+                                    (remove added)
                                     (set))]
       {:blocks-to-remove-set blocks-to-remove-set
        :blocks-to-add        blocks-to-add})))
