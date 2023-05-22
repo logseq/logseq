@@ -2016,15 +2016,6 @@
   (let [ids (set (map :db/id blocks))]
     (some? (some #(ids (:db/id (:block/parent %))) blocks))))
 
-(defn- get-revert-cut-tx
-  [blocks]
-  (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
-        recent-cut-block-ids (->> retracted-block-ids (map second) (set))]
-    (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
-    (when (and (= (set (map :block/uuid blocks)) recent-cut-block-ids)
-               (seq revert-tx))
-      revert-tx)))
-
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -2032,7 +2023,9 @@
                   exclude-properties
                   target-block
                   sibling?
-                  keep-uuid?]
+                  keep-uuid?
+                  cut-paste?
+                  revert-cut-txs]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
@@ -2047,9 +2040,6 @@
         empty-target? (string/blank? (:block/content target-block))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
-        revert-cut-txs (get-revert-cut-tx blocks)
-        cut-paste? (seq revert-cut-txs)
-        keep-uuid? (if cut-paste? true keep-uuid?)
         replace-empty-target? (if (and paste-nested-blocks? empty-target? target-block-has-children?)
                                 false
                                 true)
