@@ -183,8 +183,7 @@
       (doto web-contents
         (.on "will-navigate" will-navigate-handler)
         (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "page-title-updated" #(do (.send web-contents "maximize" (.isMaximized win))
-                                       (.send web-contents "restore-zoom-level")))
+        (.on "page-title-updated" #(.send web-contents "restore-zoom-level"))
         (.setWindowOpenHandler window-open-handler))
 
       (doto win

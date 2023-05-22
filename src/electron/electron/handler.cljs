@@ -422,7 +422,8 @@
   js/__dirname)
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
-  {:isFullScreen (.isFullScreen win)})
+  {:isFullScreen (.isFullScreen win)
+   :isMaximized (.isMaximized win)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
