@@ -14,7 +14,8 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [frontend.config :as config]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -143,7 +144,10 @@
                 (dissoc :block/children :block/meta :block/top? :block/bottom?
                         :block/title :block/body :block/level)
                 (gp-util/remove-nils))
-          m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
+          m (if (or (config/db-only? (state/get-current-repo))
+                    (state/enable-block-timestamps?))
+              (block-with-timestamps m)
+              m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)]
