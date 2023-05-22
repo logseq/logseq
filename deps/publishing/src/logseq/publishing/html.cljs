@@ -121,13 +121,13 @@ necessary db filtering"
         }
       }(window.location))"]
             ;; TODO: should make this configurable
-            [:script {:src "static/js/custom.js"}]
             [:script {:src "static/js/main.js"}]
             [:script {:src "static/js/interact.min.js"}]
             [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
             [:script {:src "static/js/html2canvas.min.js"}]
-            [:script {:src "static/js/code-editor.js"}]])))))
+            [:script {:src "static/js/code-editor.js"}]
+            [:script {:src "static/js/custom.js"}]])))))
 
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
