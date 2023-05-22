@@ -1104,16 +1104,17 @@
         [:div.ui-items-container
          {:data-type (name type)}
 
-         ;; manage plugin buttons
-         (when toolbar?
-           [:<>
-            (header-ui-items-list-wrap
-              (for [[_ {:keys [key pinned?] :as opts} pid] items]
-                (when (or (not toolbar?)
-                          (not (set? pinned-items)) pinned?)
-                  (rum/with-key (ui-item-renderer pid type opts) key))))
+         [:<>
+          (header-ui-items-list-wrap
+            (for [[_ {:keys [key pinned?] :as opts} pid] items]
+              (when (or (not toolbar?)
+                        (not (set? pinned-items)) pinned?)
+                (rum/with-key (ui-item-renderer pid type opts) key))))
+
+          ;; manage plugin buttons
+          (when toolbar?
             (let [updates-coming (state/sub :plugin/updates-coming)]
-              (toolbar-plugins-manager-list updates-coming items))])]))))
+              (toolbar-plugins-manager-list updates-coming items)))]]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]

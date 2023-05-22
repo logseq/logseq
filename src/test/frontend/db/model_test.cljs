@@ -163,6 +163,22 @@ foo:: bar"}])
                 (catch :default e
                   (ex-message e)))))))
 
+(deftest get-block-immediate-children
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "\n
+- parent
+  - child 1
+    - grandchild 1
+  - child 2
+    - grandchild 2
+  - child 3"}])
+  (let [parent (-> (d/q '[:find (pull ?b [*]) :where [?b :block/content "parent"]]
+                        (conn/get-db test-helper/test-db))
+                   ffirst)]
+    (is (= ["child 1" "child 2" "child 3"]
+           (map :block/content
+                (model/get-block-immediate-children test-helper/test-db (:block/uuid parent)))))))
+
 (deftest get-property-values
   (load-test-files [{:file/path "pages/Feature.md"
                      :file/content "type:: [[Class]]"}

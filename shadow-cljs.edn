@@ -21,8 +21,8 @@
                          :depends-on #{:main}}
                         :tldraw
                         {:entries    [frontend.extensions.tldraw]
-                         :depends-on #{:main}}
-                        }
+                         :depends-on #{:main}}}
+                        
         :output-dir       "./static/js"
         :asset-path       "/static/js"
         :release          {:asset-path "https://asset.logseq.com/static/js"}
@@ -95,8 +95,8 @@
                                 :depends-on #{:main}}
                                :tldraw
                                {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}
-                               }
+                                :depends-on #{:main}}}
+                               
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
                :closure-defines  {frontend.config/PUBLISHING true
@@ -109,5 +109,5 @@
                                                        :redef false}}
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
-                                  :preloads    [devtools.preload]}}
-  }}
+                                  :preloads    [devtools.preload]}}}}
+  

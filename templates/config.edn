@@ -1,137 +1,165 @@
 {:meta/version 1
 
- ;; Currently, we support either "Markdown" or "Org".
- ;; This can overwrite your global preference so that
- ;; maybe your personal preferred format is Org but you'd
- ;; need to use Markdown for some projects.
- ;; :preferred-format ""
+ ;; Set the preferred format.
+ ;; Available options:
+ ;; - Markdown (default)
+ ;; - Org
+ ;; :preferred-format "Markdown"
 
- ;; Preferred workflow style.
- ;; Value is either ":now" for NOW/LATER style,
- ;; or ":todo" for TODO/DOING style.
+ ;; Set the preferred workflow style.
+ ;; Available options:
+ ;; - :now for NOW/LATER style (default)
+ ;; - :todo for TODO/DOING style
  :preferred-workflow :now
 
- ;; The app will ignore those directories or files.
- ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
+ ;; Exclude directories/files.
+ ;; Example usage: 
+ ;; :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
- ;; When creating the new journal page, the app will use your template if there is one.
- ;; You only need to input your template name here.
+ ;; Define the default journal page template.
+ ;; Enter the template name between the quotes.
  :default-templates
  {:journals ""}
 
- ;; Set a custom date format for journal page title
- ;; Example:
- ;; :journal/page-title-format "EEE, do MMM yyyy"
+ ;; Set a custom date format for the journal page title.
+ ;; Default value: "MMM do, yyyy"
+ ;; e.g., "Jan 19th, 2038"
+ ;; Example usage e.g., "Tue 19th, Jan 2038"
+ ;; :journal/page-title-format "EEE do, MMM yyyy"
 
- ;; Whether to enable hover on tooltip preview feature
- ;; Default is true, you can also toggle this via setting page
+ ;; Specify the journal filename format using a valid date format string.
+ ;; !Warning:
+ ;;   This configuration is not retroactive and affects only new journals.
+ ;;   To show old journal files in the app, manually rename the files in the
+ ;;   journal directory to match the new format.
+ ;; Default value: "yyyy_MM_dd"
+ ;; :journal/file-name-format "yyyy_MM_dd"
+
+ ;; Enable tooltip preview on hover.
+ ;; Default value: true
  :ui/enable-tooltip? true
 
- ;; Show brackets around page references
+ ;; Display brackets [[]] around page references.
+ ;; Default value: true
  ;; :ui/show-brackets? true
 
- ;; Enable showing the body of blocks when referencing them.
+ ;; Display all lines of a block when referencing ((block)).
+ ;; Default value: false
  :ui/show-full-blocks? false
 
- ;; Expand block references automatically when zoom-in
+ ;; Automatically expand block references when zooming in.
+ ;; Default value: true
  :ui/auto-expand-block-refs? true
 
- ;; Enable Block timestamp
+ ;; Enable Block timestamps.
+ ;; Default value: false
  :feature/enable-block-timestamps? false
 
- ;; Enable remove accents when searching.
- ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ ;; Disable accent marks when searching.
+ ;; After changing this setting, rebuild the search index by pressing (^C ^S).
+ ;; Default value: true
  :feature/enable-search-remove-accents? true
 
- ;; Enable journals
+ ;; Enable journals.
+ ;; Default value: true
  ;; :feature/enable-journals? true
 
- ;; Enable flashcards
+ ;; Enable flashcards.
+ ;; Default value: true
  ;; :feature/enable-flashcards? true
 
- ;; Enable Whiteboards
+ ;; Enable whiteboards.
+ ;; Default value: true
  ;; :feature/enable-whiteboards? true
 
- ;; Disable the built-in Scheduled tasks and deadlines query
- ;; :feature/disable-scheduled-and-deadline-query? true
+ ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
+ ;; Default value: false
+ ;; :feature/disable-scheduled-and-deadline-query? false
 
- ;; Specify the number of days in the future to display in the
- ;; scheduled tasks and deadlines query, with a default value of 7 which
- ;; displays tasks for the next 7 days.
+ ;; Specify the number of days displayed in the future for
+ ;; the 'scheduled tasks and deadlines' query.
  ;; Example usage:
- ;; Display all scheduled and deadline blocks for the next 14 days
+ ;; Display all scheduled and deadline blocks for the next 14 days:
  ;; :scheduled/future-days 14
+ ;; Default value: 7
+ ;; :scheduled/future-days 7
 
- ;; Specify the date on which the week starts.
- ;; Goes from 0 to 6 (Monday to Sunday), default to 6
+ ;; Specify the first day of the week.
+ ;; Available options:
+ ;;  - integer from 0 to 6 (Monday to Sunday) 
+ ;; Default value: 6 (Sunday)
  :start-of-week 6
 
- ;; Specify a custom CSS import
- ;; This option take precedence over your local `logseq/custom.css` file
- ;; You may find a list of awesome logseq themes here:
- ;; https://github.com/logseq/awesome-logseq#css-themes
- ;; Example:
+ ;; Specify a custom CSS import.
+ ;; This option takes precedence over the local `logseq/custom.css` file.
+ ;; Example usage:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
 
- ;; Specify a custom js import
- ;; This option take precedence over your local `logseq/custom.js` file
- ;; :custom-js-url ""
+ ;; Specify a custom JS import.
+ ;; This option takes precedence over the local `logseq/custom.js` file.
+ ;; Example usage:
+ ;; :custom-js-url "https://cdn.logseq.com/custom.js"
 
  ;; Set a custom Arweave gateway
- ;; Default gateway: https://arweave.net
- ;; :arweave/gateway ""
+ ;; Default value: https://arweave.net
+ ;; :arweave/gateway "https://arweave.net"
 
- ;; Set Bullet indentation when exporting
- ;; default option: tab
- ;; Possible options for `:export/bullet-indentation` are
- ;; 1. `:eight-spaces` as eight spaces
- ;; 2. `:four-spaces` as four spaces
- ;; 3. `:two-spaces` as two spaces
+ ;; Set bullet indentation when exporting
+ ;; Available options:
+ ;;  - `:eight-spaces` as eight spaces
+ ;;  - `:four-spaces` as four spaces
+ ;;  - `:two-spaces` as two spaces
+ ;;  - `:tab` as a tab character (default)
  ;; :export/bullet-indentation :tab
 
- ;; When :all-pages-public? true, export repo would export all pages within that repo.
- ;; Regardless of whether you've set any page to public or not.
- ;; Example:
- ;; :publishing/all-pages-public? true
+ ;; Publish all pages within the Graph
+ ;; Regardless of whether individual pages have been marked as public.
+ ;; Default value: false
+ ;; :publishing/all-pages-public? false
 
- ;; Specify default home page and sidebar status for Logseq
- ;; If not specified, Logseq default opens journals page on startup
- ;; value for `:page` is name of page
- ;; Possible options for `:sidebar` are
- ;; 1. `"Contents"` to open up `Contents` in sidebar by default
- ;; 2. `page name` to open up some page in sidebar
- ;; 3. Or multiple pages in an array ["Contents" "Page A" "Page B"]
- ;; If `:sidebar` is not set, sidebar will be hidden
- ;; Example:
- ;; 1. Setup page "Changelog" as home page and "Contents" in sidebar
+ ;; Define the default home page and sidebar status.
+ ;; If unspecified, the journal page will be loaded on startup and the right sidebar will stay hidden.
+ ;; The `:page` value represents the name of the page displayed at startup.
+ ;; Available options for `:sidebar` are:
+ ;; - "Contents" to display the Contents page in the right sidebar.
+ ;; - A specific page name to display in the right sidebar.
+ ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"].
+ ;; If `:sidebar` remains unset, the right sidebar will stay hidden.
+ ;; Examples:
+ ;; 1. Set "Changelog" as the home page and display "Contents" in the right sidebar:
  ;; :default-home {:page "Changelog", :sidebar "Contents"}
- ;; 2. Setup page "Jun 3rd, 2021" as home page without sidebar
+ ;; 2. Set "Jun 3rd, 2021" as the home page without the right sidebar:
  ;; :default-home {:page "Jun 3rd, 2021"}
- ;; 3. Setup page "home" as home page with multiple pages in sidebar
- ;; :default-home {:page "home" :sidebar ["page a" "page b"]}
+ ;; 3. Set "home" as the home page and display multiple pages in the right sidebar:
+ ;; :default-home {:page "home", :sidebar ["Page A" "Page B"]}
 
- ;; Tell logseq to use a specific folder in the repo as a default location for notes
- ;; if not specified, notes are stored in `pages` directory
- ;; :pages-directory "your-directory"
+ ;; Set the default location for storing notes.
+ ;; Default value: "pages"
+ ;; :pages-directory "pages"
 
- ;; Tell logseq to use a specific folder in the repo as a default location for journals
- ;; if not specified, journals are stored in `journals` directory
- ;; :journals-directory "your-directory"
+ ;; Set the default location for storing journals.
+ ;; Default value: "journals"
+ ;; :journals-directory "journals"
 
- ;; Set this to true will convert
- ;; `[[Grant Ideas]]` to `[[file:./grant_ideas.org][Grant Ideas]]` for org-mode
- ;; For more, see https://github.com/logseq/logseq/issues/672
- ;; :org-mode/insert-file-link? true
+ ;; Set the default location for storing whiteboards.
+ ;; Default value: "whiteboards"
+ ;; :whiteboards-directory "whiteboards"
 
- ;; Setup custom shortcuts under `:shortcuts` key
+ ;; Enabling this option converts
+ ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
+ ;; For more information, visit https://github.com/logseq/logseq/issues/672
+ ;; :org-mode/insert-file-link? false
+
+ ;; Configure custom shortcuts.
  ;; Syntax:
- ;; 1. `+` means keys pressing simultaneously. eg: `ctrl+shift+a`
- ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `t` followed by `s`
- ;; 3. `mod` means `Ctrl` for Windows/Linux  and `Command` for Mac
- ;; 4. use `false` to disable particular shortcut
- ;; 5. you can define multiple bindings for one action, eg `["ctrl+j" "down"]`
- ;; full list of configurable shortcuts are available below:
+ ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Shift+a`.
+ ;; 2. A space between keys represents key chords, e.g., `t s` means 
+ ;;    pressing `t` followed by `s`.
+ ;; 3. mod refers to `Ctrl` for Windows/Linux and `Command` for Mac.
+ ;; 4. Use false to disable a specific shortcut.
+ ;; 5. You can define multiple bindings for a single action, e.g., ["ctrl+j" "down"].
+ ;; The full list of configurable shortcuts is available at:
  ;; https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/config.cljs
  ;; Example:
  ;; :shortcuts
@@ -146,33 +174,38 @@
  ;;  :editor/right           ["ctrl+l" "right"]}
  :shortcuts {}
 
- ;; By default, pressing `Enter` in the document mode will create a new line.
- ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
+ ;; Configure the behavior of pressing Enter in document mode.
+ ;; if set to true, pressing Enter will create a new block.
+ ;; Default value: false
  :shortcut/doc-mode-enter-for-new-block? false
 
  ;; Block content larger than `block/content-max-length` will not be searchable
  ;; or editable for performance.
+ ;; Default value: 10000
  :block/content-max-length 10000
 
- ;; Whether to show command doc on hover
+ ;; Display command documentation on hover.
+ ;; Default value: true
  :ui/show-command-doc? true
 
- ;; Whether to show empty bullets for non-document mode (the default mode)
+ ;; Display empty bullet points.
+ ;; Default value: false
  :ui/show-empty-bullets? false
 
- ;; Pre-defined :view function to use with advanced queries
+ ;; Pre-defined :view function to use with advanced queries.
  :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
 
- ;; Pre-defined :result-transform function for use with advanced queries
+ ;; Advanced queries `:result-transform` function.
+ ;; Transform the query result before displaying it.
  :query/result-transforms
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 
- ;; The app will show those queries in today's journal page,
- ;; the "NOW" query asks the tasks which need to be finished "now",
- ;; the "NEXT" query asks the future tasks.
+ ;; The following queries will be displayed at the bottom of today's journal page.
+ ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
+ ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
  :default-queries
  {:journals
   [{:title "🔨 NOW"
@@ -207,25 +240,26 @@
     :group-by-page? false
     :collapsed? false}]}
 
- ;; Add your own commands to slash menu to speedup.
- ;; E.g.
+ ;; Add custom commands to the command palette
+ ;; Example usage:
  ;; :commands
  ;; [
- ;; ["js" "Javascript"]
- ;; ["md" "Markdown"]
- ;; ]
- :commands
- []
+ ;;  ["js" "Javascript"]
+ ;;  ["md" "Markdown"]
+ ;;  ]
+ :commands []
 
- ;; By default, a block can only be collapsed if it has some children.
- ;; `:outliner/block-title-collapse-enabled? true` enables a block with a title
- ;; (multiple lines) can be collapsed too. For example:
+ ;; Enable collapsing blocks with titles but no children.
+ ;; By default, only blocks with children can be collapsed.
+ ;; Setting `:outliner/block-title-collapse-enabled?` to true allows collapsing
+ ;; blocks with titles (multiple lines) and content. For example:
  ;; - block title
  ;;   block content
+ ;; Default value: false
  :outliner/block-title-collapse-enabled? false
 
  ;; Macros replace texts and will make you more productive.
- ;; For example:
+ ;; Example usage:
  ;; Change the :macros value below to:
  ;; {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}
  ;; input "{{poem red,blue}}"
@@ -233,119 +267,148 @@
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
  :macros {}
 
- ;; The default level to be opened for the linked references.
- ;; For example, if we have some example blocks like this:
+ ;; Configure the default expansion level for linked references.
+ ;; For example, consider the following block hierarchy:
  ;; - a [[page]] (level 1)
  ;;   - b        (level 2)
  ;;     - c      (level 3)
  ;;       - d    (level 4)
  ;;
- ;; With the default value of level 2, `b` will be collapsed.
- ;; If we set the level's value to 3, `b` will be opened and `c` will be collapsed.
+ ;; With the default value of level 2, block b will be collapsed.
+ ;; If the level's value is set to 3, block c will be collapsed.
+ ;; Default value: 2
  :ref/default-open-blocks-level 2
 
+ ;; Configure the threshold for linked references before collapsing.
+ ;; Default value: 50
  :ref/linked-references-collapsed-threshold 50
+
+ ;; Graph view configuration.
+ ;; Example usage:
+ ;; :graph/settings
+ ;; {:orphan-pages?   true   ; Default value: true
+ ;;  :builtin-pages?  false  ; Default value: false
+ ;;  :excluded-pages? false  ; Default value: false
+ ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
  :favorites []
 
- ;; any number between 0 and 1 (the greater it is the faster the changes of the next-interval of card reviews) (default 0.5)
+ ;; Set flashcards interval.
+ ;; Expected value:
+ ;; - Float between 0 and 1
+ ;; higher values result in faster changes to the next review interval.
+ ;; Default value: 0.5
  ;; :srs/learning-fraction 0.5
 
- ;; the initial interval after the first successful review of a card (default 4)
+ ;; Set the initial interval after the first successful review of a card.
+ ;; Default value: 4
  ;; :srs/initial-interval 4
 
- ;; hide specific properties for blocks
- ;; E.g. :block-hidden-properties #{:created-at :updated-at}
- ;; :block-hidden-properties #{}
+ ;; Hide specific block properties.
+ ;; Example usage:
+ ;; :block-hidden-properties #{:public :icon}
 
- ;; Enable all your properties to have corresponding pages
+ ;; Create a page for all properties.
+ ;; Default value: true
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
- ;; E.g.:property-pages/excludelist #{:duration :author}
- ;; :property-pages/excludelist
+ ;; Example usage:
+ ;; :property-pages/excludelist #{:duration :author}
 
  ;; By default, property value separated by commas will not be treated as
  ;; page references. You can add properties to enable it.
- ;; E.g. :property/separated-by-commas #{:alias :tags}
- ;; :property/separated-by-commas #{}
+ ;; Example usage:
+ ;; :property/separated-by-commas #{:alias :tags}
 
  ;; Properties that are ignored when parsing property values for references
- ;; :ignored-page-references-keywords #{:author :startup}
-
- ;; logbook setup
+ ;; Example usage:
+ ;; :ignored-page-references-keywords #{:author :website}
+ 
+ ;; logbook configuration.
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
  ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
  ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
  ;; }
 
- ;; Mobile photo uploading setup
+ ;; Mobile photo upload configuration.
  ;; :mobile/photo
  ;; {:allow-editing? true
- ;;  :quality          80}
+ ;;  :quality        80}
 
  ;; Mobile features options
  ;; Gestures
- ;; :mobile
+ ;; Example usage:
+ ;; :mobile 
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
  ;; Extra CodeMirror options
  ;; See https://codemirror.net/5/doc/manual.html#config for possible options
- ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
+ ;; Example usage:
+ ;; :editor/extra-codemirror-options
+ ;; {:lineWrapping  false  ; Default value: false
+ ;;  :lineNumbers   true   ; Default value: true
+ ;;  :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
- ;; :editor/logical-outdenting? true
+ ;; Default value: false 
+ ;; :editor/logical-outdenting? false
 
- ;; When both text and a file are in the clipboard, paste the file
- ;; :editor/preferred-pasting-file? true
+ ;; Prefer pasting the file when text and a file are in the clipboard.
+ ;; Default value: false 
+ ;; :editor/preferred-pasting-file? false
 
- ;; Quick capture templates for receiving contents from other apps.
+ ;; Quick capture templates for receiving content from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
- ;; by received contents from other apps. Note: the {} cannot be omitted.
+ ;; by receiving content from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
  ;; - {date}: capture date using current date format, use `[[{date}]]` to get a page reference
  ;; - {text}: text that users selected before sharing.
- ;; - {url}: url or assets path for media files stored in Logseq.
- ;; You can also reorder them, or even only use one or two of them in the template.
- ;; You can also insert or format any text in the template as shown in the following examples.
+ ;; - {url}: URL or assets path for media files stored in Logseq.
+ ;; You can also reorder them or use only one or two of them in the template.
+ ;; You can also insert or format any text in the template, as shown in the following examples.
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
- ;; Quick capture options
- ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
+ ;; Quick capture options.
+ ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
+ ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
+ ;; - default-page    The default page to capture to if insert-today? is false (string).
+ ;; :quick-capture-options
+ ;; {:insert-today? false           ;; Default value: true
+ ;;  :redirect-page? false          ;; Default value: false
+ ;;  :default-page "quick capture"} ;; Default page: "quick capture"
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
  ;; :file-sync/ignore-files []
 
- ;; dwim (do what I mean) for Enter key when editing.
- ;; Context-awareness of Enter key makes editing more easily
- ; :dwim/settings {
- ;   :admonition&src?  true
- ;   :markup?          false
- ;   :block-ref?       true
- ;   :page-ref?        true
- ;   :properties?      true
- ;   :list?            true
- ; }
+ ;; Configure the Enter key behavior for
+ ;; context-aware editing with DWIM (Do What I Mean).
+ ;; context-aware Enter key behavior implies that pressing Enter will
+ ;; have different outcomes based on the context.
+ ;; For instance, pressing Enter within a list generates a new list item,
+ ;; whereas pressing Enter in a block reference opens the referenced block.
+ ;; :dwim/settings
+ ;; {:admonition&src?  true        ;; Default value: true
+ ;;  :markup?          false       ;; Default value: false
+ ;;  :block-ref?       true        ;; Default value: true
+ ;;  :page-ref?        true        ;; Default value: true
+ ;;  :properties?      true        ;; Default value: true
+ ;;  :list?            false}      ;; Default value: false
 
- ;; Decide the way to escape the special characters in the page title.
+ ;; Configure the escaping method for special characters in page titles.
  ;; Warning:
- ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions.
- ;;   Or you have to rename all the affected files manually then re-index on all
- ;;   clients after the files are synced. Wrong handling may cause page titles
- ;;   containing special characters to be messy.
- ;; Available values:
- ;;   :file/name-format :triple-lowbar
- ;;     ;use triple underscore `___` for slash `/` in page title
- ;;     ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar
-
- ;; specify the format of the filename for journal files
- ;; :journal/file-name-format "yyyy_MM_dd"
-
- }
+ ;;   This is a dangerous operation. To modify the setting,
+ ;;   access the 'Filename format' setting and follow the instructions.
+ ;;   Otherwise, You may need to manually rename all affected files and
+ ;;   re-index them on all clients after synchronization.
+ ;;   Incorrect handling may result in messy page titles.
+ ;; Available options:
+ ;;   - :triple-lowbar (default)
+ ;;      ;use triple underscore `___` for slash `/` in page title
+ ;;      ;use Percent-encoding for other invalid characters
+ :file/name-format :triple-lowbar}

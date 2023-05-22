@@ -12,11 +12,11 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id]
-                           :opt [:block/page :block/left :block/parent]))
+(s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
                                    :map ::block-map))
@@ -25,8 +25,14 @@
 
 (defn block
   [m]
-  (assert (map? m) (util/format "block data must be map, got: %s %s" (type m) m))
-  (->Block m))
+  (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
+  (if (de/entity? m)
+    (->Block {:db/id (:db/id m)
+              :block/uuid (:block/uuid m)
+              :block/page (:block/page m)
+              :block/left (:block/left m)
+              :block/parent (:block/parent m)})
+    (->Block m)))
 
 (defn get-data
   [block]
@@ -140,42 +146,49 @@
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
-          block-entity (db/entity id)
-          remove-self-page #(remove (fn [b]
-                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
-          old-refs (remove-self-page (:block/refs block-entity))
-          new-refs (remove-self-page (:block/refs m))]
+          block-entity (db/entity id)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
 
       (when id
+        ;; Retract attributes to prepare for tx which rewrites block attributes
         (swap! txs-state (fn [txs]
                            (vec
                             (concat txs
                                     (map (fn [attribute]
                                            [:db/retract id attribute])
-                                      db-schema/retract-attributes)))))
+                                         db-schema/retract-attributes)))))
 
+        ;; Update block's page attributes
         (when-let [e (:block/page block-entity)]
-          (let [m' {:db/id (:db/id e)
-                   :block/updated-at (util/time-ms)}
-                m' (if (:block/created-at e)
-                    m'
-                    (assoc m' :block/created-at (util/time-ms)))
-                m' (if (or (:block/pre-block? block-entity)
-                           (:block/pre-block? m))
-                     (let [properties (:block/properties m)
-                           alias (set (:alias properties))
-                           tags (set (:tags properties))
-                           alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
-                           tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)]
-                       (assoc m'
-                              :block/alias alias
-                              :block/tags tags
-                              :block/properties properties))
-                     m')]
-            (swap! txs-state conj m'))
+          (let [m' (cond-> {:db/id (:db/id e)
+                            :block/updated-at (util/time-ms)}
+                     (not (:block/created-at e))
+                     (assoc :block/created-at (util/time-ms)))
+                txs (if (or (:block/pre-block? block-entity)
+                            (:block/pre-block? m))
+                      (let [properties (:block/properties m)
+                            alias (set (:alias properties))
+                            tags (set (:tags properties))
+                            alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
+                            tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)
+                            deleteable-page-attributes {:block/alias alias
+                                                        :block/tags tags
+                                                        :block/properties properties
+                                                        :block/properties-text-values (:block/properties-text-values m)}
+                            ;; Retract page attributes to allow for deletion of page attributes
+                            page-retractions
+                            (mapv #(vector :db/retract (:db/id e) %) (keys deleteable-page-attributes))]
+                        (conj page-retractions (merge m' deleteable-page-attributes)))
+                      [m'])]
+            (swap! txs-state into txs)))
+
+        ;; Remove orphaned refs from block
+        (let [remove-self-page #(remove (fn [b]
+                                          (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+              old-refs (remove-self-page (:block/refs block-entity))
+              new-refs (remove-self-page (:block/refs m))]
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
@@ -222,11 +235,6 @@
     (let [parent-id (tree/-get-id this)
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
-
-(defn get-right-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (tree/-get-right node))
 
 (defn get-right-sibling
   [db-id]
@@ -399,7 +407,7 @@
   (let [level-blocks (blocks-with-level blocks)]
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
-(defn get-right-siblings
+(defn- get-right-siblings
   "Get `node`'s right siblings."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
@@ -408,6 +416,21 @@
       (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
            last
            rest))))
+
+(defn blocks-with-ordered-list-props
+  [blocks target-block sibling?]
+  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))]
+    (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
+      (if-let [list-type (and target-block (list-type-fn target-block))]
+        (mapv
+          (fn [{:block/keys [content format] :as block}]
+            (cond-> block
+              (and (some? (:block/uuid block))
+                   (nil? (list-type-fn block)))
+              (-> (update :block/properties #(assoc % :logseq.order-list-type list-type))
+                  (assoc :block/content (property/insert-property format content :logseq.order-list-type list-type)))))
+          blocks)
+        blocks))))
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
@@ -454,7 +477,7 @@
                         (:db/id target-block))
         get-new-id (fn [block lookup]
                      (cond
-                       (or (map? lookup) (vector? lookup))
+                       (or (map? lookup) (vector? lookup) (de/entity? lookup))
                        (when-let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
                                          (get uuids (last lookup))
                                          (get id->new-uuid (:db/id lookup)))]
@@ -487,6 +510,13 @@
                          (dissoc :db/id)))))
                  blocks)))
 
+(defn- get-target-block
+  [target-block]
+  (if (:db/id target-block)
+    (db/pull (:db/id target-block))
+    (when (:block/uuid target-block)
+      (db/pull [:block/uuid (:block/uuid target-block)]))))
+
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -504,7 +534,7 @@
   [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [target-block' (db/pull (:db/id target-block))
+  (let [target-block' (get-target-block target-block)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -519,6 +549,7 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
+        blocks' (blocks-with-ordered-list-props blocks' target-block sibling?)
         blocks' (if (= outliner-op :paste)
                   (fix-top-level-blocks blocks')
                   blocks')
@@ -560,7 +591,7 @@
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
         {:tx-data full-tx
-         :blocks tx}))))
+         :blocks  tx}))))
 
 (defn- build-move-blocks-next-tx
   [blocks non-consecutive-blocks?]
@@ -689,7 +720,9 @@
   [blocks target-block {:keys [sibling? outliner-op]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
+  (let [target-block (get-target-block target-block)
+        _ (assert (some? target-block) (str "Invalid target: " target-block))
+        non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))

@@ -30,6 +30,7 @@ import {
 import { ToggleInput } from '../inputs/ToggleInput'
 import { GeometryTools } from '../GeometryTools'
 import { LogseqContext } from '../../lib/logseq-context'
+import { KeyboardShortcut } from '../KeyboardShortcut'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -61,13 +62,7 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
-  'logseq-portal': [
-    'Swatch',
-    'LogseqPortalViewMode',
-    'ScaleLevel',
-    'AutoResizing',
-    'Links',
-  ],
+  'logseq-portal': ['Swatch', 'LogseqPortalViewMode', 'ScaleLevel', 'AutoResizing', 'Links'],
   youtube: ['YoutubeLink', 'Links'],
   tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
@@ -134,13 +129,22 @@ const LogseqPortalViewModeAction = observer(() => {
     return null
   }
 
+  const tooltip = (
+    <div className="flex">
+      {collapsed ? 'Expand' : 'Collapse'}
+      <KeyboardShortcut
+        action={collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'}
+      />
+    </div>
+  )
+
   return (
     <ToggleInput
-      tooltip={collapsed ? 'Expand' : 'Collapse'}
+      tooltip={tooltip}
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-button"
       pressed={collapsed}
-      onPressedChange={() => app.api.setCollapsed(!collapsed) }
+      onPressedChange={() => app.api.setCollapsed(!collapsed)}
     >
       <TablerIcon name={collapsed ? 'object-expanded' : 'object-compact'} />
     </ToggleInput>
@@ -247,7 +251,7 @@ const NoFillAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>('NoFill')
   const handleChange = React.useCallback((v: boolean) => {
-    shapes.forEach(s => s.update({ noFill: v }))
+    app.selectedShapesArray.forEach(s => s.update({ noFill: v }))
     app.persist()
   }, [])
 
@@ -273,14 +277,14 @@ const SwatchAction = observer(() => {
   >('Swatch')
 
   const handleSetColor = React.useCallback((color: string) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ fill: color, stroke: color })
     })
     app.persist()
   }, [])
 
   const handleSetOpacity = React.useCallback((opacity: number) => {
-    shapes.forEach(s => {
+    app.selectedShapesArray.forEach(s => {
       s.update({ opacity: opacity })
     })
     app.persist()
@@ -306,12 +310,7 @@ const GeometryAction = observer(() => {
     app.api.convertShapes(type)
   }, [])
 
-  return (
-    <GeometryTools
-      popoverSide="top"
-      chevron={false}
-      setGeometry={handleSetGeometry}/>
-  )
+  return <GeometryTools popoverSide="top" chevron={false} setGeometry={handleSetGeometry} />
 })
 
 const StrokeTypeAction = observer(() => {

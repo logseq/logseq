@@ -83,7 +83,7 @@ test('draw a rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('r')
+  await page.keyboard.type('wr')
 
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
@@ -130,7 +130,7 @@ test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('c')
+  await page.keyboard.type('wc')
 
   await page.mouse.move(bounds.x + 20, bounds.y + 20)
   await page.mouse.down()
@@ -157,6 +157,38 @@ test('undo the delete action', async ({ page }) => {
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(1)
+})
+
+test('convert the first rectangle to ellipse', async ({ page }) => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1000)
+  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.mouse.move(0, 0)  // move mouse to trigger a rerender of the context bar
+  await page.click('.tl-context-bar .tl-geometry-tools-pane-anchor')
+  await page.click('.tl-context-bar .tl-geometry-toolbar [data-tool=ellipse]')
+
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+})
+
+test('change the color of the ellipse', async ({ page }) => {
+  await page.click('.tl-context-bar .tl-color-bg')
+  await page.click('.tl-context-bar .tl-color-palette .bg-red-500')
+
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container ellipse:last-of-type')).toHaveAttribute('fill', 'var(--ls-wb-background-color-red)')
+})
+
+test('undo the color switch', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container ellipse:last-of-type')).toHaveAttribute('fill', 'var(--ls-wb-background-color-default)')
+})
+
+test('undo the shape conversion', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+  await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(0)
 })
 
 test('locked elements should not be removed', async ({ page }) => {
@@ -205,7 +237,7 @@ test('create a block', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('s')
+  await page.keyboard.type('ws')
   await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
   await page.waitForTimeout(100)
 
@@ -240,7 +272,7 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -259,7 +291,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -278,7 +310,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.keyboard.press('t')
+  await page.keyboard.type('wt')
   await page.mouse.move(bounds.x + 5, bounds.y + 5)
   await page.mouse.down()
   await page.waitForTimeout(100)
@@ -296,7 +328,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
 test('zoom in', async ({ page }) => {
   await page.keyboard.press('Shift+0') // reset zoom
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}++`)
+  await page.keyboard.press('Shift+=')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
@@ -304,7 +336,7 @@ test('zoom in', async ({ page }) => {
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
-  await page.keyboard.press(`${modKey}+-`)
+  await page.keyboard.press('Shift+-')
   await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await expect(page.locator('#tl-zoom')).toContainText('80%')
 })

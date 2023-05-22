@@ -9,7 +9,6 @@ import type {
   TLShortcut,
   TLEvents,
 } from '../types'
-import { KeyUtils } from '../utils'
 import type { TLShape } from './shapes'
 
 export interface TLStateClass<
@@ -120,7 +119,6 @@ export abstract class TLRootState<S extends TLShape, K extends TLEventMap>
       if (this.currentState) {
         prevState._events.onExit({ ...data, toId: id })
         prevState.dispose()
-        nextState.registerKeyboardShortcuts()
         this.setCurrentState(nextState)
         this._events.onTransition({ ...data, fromId: prevState.id, toId: id })
         nextState._events.onEnter({ ...data, fromId: prevState.id })
@@ -404,34 +402,15 @@ export abstract class TLState<
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const shortcuts = this.constructor['shortcuts'] as TLShortcut<S, K>[]
-    this._shortcuts = shortcuts
-
     makeObservable(this)
   }
 
   static cursor?: TLCursor
 
-  registerKeyboardShortcuts = (): void => {
-    if (!this._shortcuts?.length) return
-
-    this._disposables.push(
-      ...this._shortcuts.map(({ keys, fn }) => {
-        return KeyUtils.registerShortcut(keys, event => {
-          if (!this.isActive) return
-          fn(this.root, this, event)
-        })
-      })
-    )
-  }
-
   /* --------------------- States --------------------- */
 
   protected _root: R
   protected _parent: P
-  private _shortcuts: TLShortcut<S, K>[] = []
 
   get root() {
     return this._root

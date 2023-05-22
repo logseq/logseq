@@ -10,6 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -75,13 +76,19 @@
   (apply whiteboard/references-count
          (map (fn [k] (js->clj (gobj/get props k) {:keywordize-keys true})) ["id" "className" "options"])))
 
+(rum/defc keyboard-shortcut
+  [props]
+  (let [shortcut (shortcut-helper/gen-shortcut-seq (keyword (gobj/get props "action")))]
+    (ui/render-keyboard-shortcut shortcut)))
+
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :Tweet tweet
                        :PageName page-name-link
                        :BacklinksCount references-count
-                       :BlockReference block-reference})
+                       :BlockReference block-reference
+                       :KeyboardShortcut keyboard-shortcut})
 
 (def undo (fn [] (history/undo! nil)))
 (def redo (fn [] (history/redo! nil)))

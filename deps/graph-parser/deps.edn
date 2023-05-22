@@ -3,8 +3,9 @@
  ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  ;; local dep
+  ;; local deps
   logseq/db                   {:local/root "../db"}
+  logseq/common               {:local/root "../common"}
   ;; stubbed in nbb
   com.lambdaisland/glogi      {:mvn/version "1.1.144"}
   ;; built in to nbb

@@ -12,6 +12,7 @@
             [lambdaisland.glogi :as log]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [logseq.graph-parser.util :as gp-util]))
 
 (defn built-in-custom-query?
@@ -49,7 +50,7 @@
            view-f
            result
            group-by-page?]}]
-  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline]} config
+  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline inline]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and group-by-page?
@@ -58,6 +59,7 @@
                                      (:block/name (ffirst result))
                                      (:block/uuid (first (second (first result))))
                                      true)]
+    (println "this should be a function" inline)
     (if @*query-error
       (do
         (log/error :exception @*query-error)
@@ -76,10 +78,10 @@
            (util/hiccup-keywordize result))
 
          page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text inline)
 
          table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text inline)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result
@@ -206,12 +208,12 @@
                (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                            :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
                                                                                                  "query-table"
                                                                                                  false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                            :on-click (fn [] (editor-handler/set-block-property! current-block-uuid
+                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
                                                                                                  "query-table"
                                                                                                  true))}
                     (ui/icon "table" {:style {:font-size 20}})]))

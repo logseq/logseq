@@ -6,7 +6,6 @@
    [frontend.db :as db]
    [frontend.db.model :as db-model]
    [frontend.db.react :as react]
-   [frontend.db.utils :as db-utils]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
@@ -70,14 +69,9 @@
                                    (util/distinct-by :db/id))))))
 
 (defn indentable?
-  [{:block/keys [parent] :as block}]
+  [{:block/keys [parent left]}]
   (when parent
-    (let [parent-block (db-utils/pull (:db/id parent))
-          first-child (first
-                       (db-model/get-block-immediate-children
-                        (state/get-current-repo)
-                        (:block/uuid parent-block)))]
-      (not= (:db/id block) (:db/id first-child)))))
+    (not= parent left)))
 
 (defn outdentable?
   [{:block/keys [level] :as _block}]
@@ -291,3 +285,38 @@
                               (recur parent (conj result parent))
                               result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))
+
+(defn get-idx-of-order-list-block
+  [block order-list-type]
+  (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
+        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
+        prev-block      (prev-block-fn block)]
+    (letfn [(page-fn? [b] (some-> b :block/name some?))
+            (order-sibling-list [b]
+              (lazy-seq
+                (when (and (not (page-fn? b)) (order-block-fn? b))
+                  (cons b (order-sibling-list (prev-block-fn b))))))
+            (order-parent-list [b]
+              (lazy-seq
+                (when (and (not (page-fn? b)) (order-block-fn? b))
+                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
+      (let [idx           (if prev-block
+                            (count (order-sibling-list block)) 1)
+            order-parents-count (dec (count (order-parent-list block)))
+            delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
+        (cond
+          (zero? delta) idx
+
+          (= delta 1)
+          (some-> (util/convert-to-letters idx) util/safe-lower-case)
+
+          :else
+          (util/convert-to-roman idx))))))
+
+(defn attach-order-list-state
+  [config block]
+  (let [own-order-list-type  (some-> block :block/properties :logseq.order-list-type str string/lower-case)
+        own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
+    (assoc config :own-order-list-type own-order-list-type
+                  :own-order-list-index own-order-list-index
+                  :own-order-number-list? (= own-order-list-type "number"))))

@@ -89,11 +89,12 @@
   (let [assets (js->clj-keywordize (.getCleanUpAssets app))
         new-shapes (.-shapes tl-page)
         shapes-index (map #(gobj/get % "id") new-shapes)
+        shape-id->index (zipmap shapes-index (range (.-length new-shapes)))
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
                            (map (fn [{:keys [id]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
                                       js->clj-keywordize
-                                      (assoc :index (.indexOf shapes-index id)))))
+                                      (assoc :index (get shape-id->index id)))))
                            (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
@@ -134,13 +135,15 @@
 (defn transact-tldr-delta! [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
-        shapes-index (map #(gobj/get % "id") shapes)
-        new-id-nonces (set (map (fn [shape]
+        page-block (model/get-page page-name)
+        prev-shapes-index (get-in page-block [:block/properties :logseq.tldraw.page :shapes-index])
+        shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
+        new-id-nonces (set (map-indexed (fn [idx shape]
                                   (let [id (.-id shape)]
-                                   {:id id
-                                    :nonce (if (= shape.id (.indexOf shapes-index id))
-                                             (.-nonce shape)
-                                             (.getTime (js/Date.)))})) shapes))
+                                    {:id id
+                                     :nonce (if (= idx (get shape-id->prev-index id))
+                                              (.-nonce shape)
+                                              (js/Date.now))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])

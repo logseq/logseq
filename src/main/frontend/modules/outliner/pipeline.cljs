@@ -6,7 +6,8 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db :as db]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [datascript.core :as d]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -24,7 +25,7 @@
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
-  [{:keys [tx-meta]} blocks]
+  [{:keys [tx-meta db-before]} blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
     (when (:outliner-op tx-meta)
@@ -36,19 +37,42 @@
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
-                            old-refs (set (map :db/id (:block/path-refs block)))
+                            old-refs (if db-before
+                                       (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
+                                       #{})
                             new-refs (set (util/concat-without-nil
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
                                            parents-refs))
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
-                            children-refs (map (fn [id]
-                                                 (let [entity (db/entity [:block/uuid id])]
-                                                   {:db/id (:db/id entity)
-                                                    :block/path-refs (concat
-                                                                      (map :db/id (:block/path-refs entity))
-                                                                      new-refs)})) children)]
+                            ;; Builds map of children ids to their parent id and :block/refs ids
+                            children-maps (into {}
+                                                (map (fn [id]
+                                                       (let [entity (db/entity [:block/uuid id])]
+                                                         [(:db/id entity)
+                                                          {:parent-id (get-in entity [:block/parent :db/id])
+                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))
+                                                     children))
+                            children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
+                                                 {:db/id id
+                                                  ;; Recalculate :block/path-refs as db contains stale data for this attribute
+                                                  :block/path-refs
+                                                  (set/union
+                                                   ;; Refs from top-level parent
+                                                   new-refs
+                                                   ;; Refs from current block
+                                                   block-ref-ids
+                                                   ;; Refs from parents in between top-level
+                                                   ;; parent and current block
+                                                   (loop [parent-refs #{}
+                                                          parent-id (:parent-id child-map)]
+                                                     (if-let [parent (children-maps parent-id)]
+                                                       (recur (into parent-refs (:block-ref-ids parent))
+                                                              (:parent-id parent))
+                                                       ;; exits when top-level parent is reached
+                                                       parent-refs)))})
+                                               children-maps)]
                         (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                         (util/concat-without-nil
                          [(when (and (seq new-refs)

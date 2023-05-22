@@ -116,6 +116,7 @@
       position: relative;
       top: 4px;
     }
+
     a {
       color: var(--ls-primary-text-color);
 
@@ -200,8 +201,15 @@
 }
 
 .block-control-wrap {
-  height: 24px;
-  margin-top: 0;
+  @apply h-[24px] mt-0 pr-[6px];
+
+  &.is-order-list {
+    @apply mr-0 pr-0;
+
+    .bullet-link-wrap {
+      @apply relative left-[-3px];
+    }
+  }
 }
 
 .block-control, .block-control:hover {
@@ -525,25 +533,49 @@
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
+  &.as-order-list {
+    @apply w-[22px] whitespace-nowrap justify-center pl-[3px];
+  }
+
   .bullet {
-    border-radius: 50%;
-    width: 6px;
-    height: 6px;
+    @apply rounded-full w-[6px] h-[6px];
+
+    font-size: 14px;
+
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
+
+    > * {
+      @apply cursor-pointer;
+    }
   }
 
-  &.bullet-closed {
+  &:not(.typed-list) {
+    &.bullet-closed {
+      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    }
+  }
+
+  &.typed-list:not(:focus-within) {
+    .bullet {
+      background-color: unset;
+      height: unset;
+      width: unset;
+      box-shadow: none;
+    }
+  }
+}
+
+.bullet-link-wrap {
+  color: var(--ls-primary-text-color);
+
+  &:hover > .bullet-container .bullet {
+    transform: scale(1.4);
+  }
+
+  &:hover > .bullet-container:not(.typed-list) {
     background-color: var(--ls-block-bullet-border-color, #ced9e0);
   }
-}
-
-a:hover > .bullet-container .bullet {
-  transform: scale(1.4);
-}
-
-a:hover > .bullet-container {
-  background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
 .content.doc-mode {
