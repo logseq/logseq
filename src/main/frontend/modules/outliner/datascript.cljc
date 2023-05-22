@@ -103,7 +103,7 @@
                                                 new-content (-> (:block/content ref)
                                                                 (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                                 block-content)
-                                                                (string/replace (util/format "((%s))" (str (:block/uuid block)))
+                                                                (string/replace (block-ref/->block-ref (str (:block/uuid block))))
                                                                                 block-content))]
                                             {:tx [[:db/retract (:db/id ref) :block/refs (:db/id block)]
                                                   [:db/retract (:db/id ref) :block/path-refs (:db/id block)]
