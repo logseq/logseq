@@ -33,7 +33,6 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
           cache-dependency-path: |
             yarn.lock
             static/yarn.lock
@@ -74,7 +73,7 @@ jobs:
             ${{ runner.os }}-shadow-cljs-
 
       - name: Fetch yarn deps
-        run: yarn install
+        run: npm install -g yarn && yarn install
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
@@ -137,8 +136,11 @@ jobs:
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
+      - name: Install fluxbox
+        run: apt-get update && apt-get install -y fluxbox
+
       - name: Run Playwright test
-        run: xvfb-run -- npx playwright test --reporter github --shard=${{ matrix.shard }}/3
+        run: Xvfb :1 -screen 0 "1280x720x24" >/dev/null 2>&1 & export DISPLAY=:1.0 fluxbox >/dev/null 2>&1 & npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
