@@ -32,6 +32,26 @@ export async function lastBlock(page: Page): Promise<Locator> {
 }
 
 /**
+ * Move the cursor to the beginning of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToBeginning(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  return page.locator('textarea >> nth=0')
+}
+
+/**
+ * Move the cursor to the end of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToEnd(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
+  return page.locator('textarea >> nth=0')
+}
+
+/**
  * Press Enter and create the next block.
  * @param page The Playwright Page object.
  */
@@ -155,8 +175,12 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   console.log('Graph loaded for ' + path)
 }
 
+export async function editNthBlock(page: Page, n) {
+  await page.click(`.ls-block .block-content >> nth=${n}`)
+}
+
 export async function editFirstBlock(page: Page) {
-  await page.click('.ls-block .block-content >> nth=0')
+  await editNthBlock(page, 0)
 }
 
 /**
