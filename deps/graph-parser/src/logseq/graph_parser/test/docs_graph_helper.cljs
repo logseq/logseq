@@ -69,11 +69,11 @@
        ffirst))
 
 (defn- query-assertions
-  [db files]
+  [db graph-dir files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
                 ;; edn files being listed in docs by parse-graph aren't graph files
                 (remove #(and (not (gp-config/whiteboard? %)) (string/ends-with? % ".edn")))
                 set)
@@ -148,7 +148,7 @@
   logseq app. It is important to run these in both contexts to ensure that the
   functionality in frontend.handler.repo and logseq.graph-parser remain the
   same"
-  [db files]
+  [db graph-dir files]
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
@@ -168,4 +168,4 @@
                  db)))
         "Advanced query count"))
 
-  (query-assertions db files))
+  (query-assertions db graph-dir files))

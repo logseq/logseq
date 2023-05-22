@@ -17,11 +17,11 @@
                      :after test-helper/destroy-test-db!})
 
 (defn- query-assertions-v067
-  [db files]
+  [db graph-dir files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -93,7 +93,7 @@
   logseq app. It is important to run these in both contexts to ensure that the
   functionality in frontend.handler.repo and logseq.graph-parser remain the
   same"
-  [db files]
+  [db graph-dir files]
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
@@ -113,7 +113,7 @@
                  db)))
         "Advanced query count"))
 
-  (query-assertions-v067 db files))
+  (query-assertions-v067 db graph-dir files))
 
 (defn- convert-to-triple-lowbar
   [path]
@@ -144,4 +144,4 @@
         db (conn/get-db test-helper/test-db)]
 
     ;; Result under new naming rule after conversion should be the same as the old one
-    (docs-graph-assertions-v067 db (map :file/path files))))
+    (docs-graph-assertions-v067 db graph-dir (map :file/path files))))
