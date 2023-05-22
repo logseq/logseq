@@ -20,7 +20,8 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [clojure.edn :as edn]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [goog.object :as gobj]))
 
 (import-vars
  [frontend.db.conn
@@ -178,21 +179,66 @@
                 (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
+(defn restore-other-data-from-sqlite!
+  [repo data]
+  (let [per-length 100]
+    (p/loop [data data]
+      (prn "count: " (count data))
+      (cond
+        (not= repo (state/get-current-repo)) ; switched to another graph
+        nil
+
+        (empty? data)
+        nil
+
+        (not (state/input-idle? repo))             ; wait until input is idle
+        (js/setTimeout #(restore-other-data-from-sqlite! repo data) 5000)
+
+        :else
+        (let [part (->> (take per-length data)
+                        (map (comp edn/read-string
+                                   #(gobj/get % "serialized_edn")))
+                        (remove (fn [data]
+                                  (and (map? data)
+                                       (= :db/type (:db/ident data))))))]
+          (prn "part: " part)
+          (transact! repo part)
+          (p/let [_ (p/delay 200)]
+            (p/recur (drop per-length data))))))))
+
 (defn restore-graph-from-sqlite!
-  "Load graph from SQLite"
+  "Load initial data from SQLite"
   [repo]
   (p/let [db-name (datascript-db repo)
           db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
           data (ipc/ipc :get-initial-data repo)
-          data (bean/->clj data)
-          blocks (map (comp edn/read-string :serialized_edn) data)]
+          {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
+          pages (map (comp edn/read-string :serialized_edn) all-pages)
+          all-blocks' (map (fn [b]
+                             {:db/id (:id b)
+                              :block/uuid (:uuid b)
+                              :block/page (:page b)}) all-blocks)
+          journal-blocks' (map (comp edn/read-string :serialized_edn) journal-blocks)
+          blocks' (concat pages all-blocks' journal-blocks')]
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
-    (d/transact! db-conn [{:schema/version db-schema/version}])
-    (d/transact! db-conn blocks)))
+    (d/transact! db-conn [(react/kv :db/type "db")
+                          {:schema/version db-schema/version}])
+
+    ;; FIXME: transact is too slow
+    ;; Plan: store datoms in sqlite and use d/init-db to initial the db
+    (util/profile
+     "transact data"
+     (d/transact! db-conn blocks'))
+
+    (js/setTimeout
+     (fn []
+       (p/let [other-data (ipc/ipc :get-other-data repo)]
+         (restore-other-data-from-sqlite! repo other-data)))
+     1000)))
 
 (defn restore-graph!
   "Restore db from serialized db cache"

@@ -1620,13 +1620,16 @@ Similar to re-frame subscriptions"
   [repo & {:keys [diff]
            :or {diff 1000}}]
   (when repo
-    (or
-     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+    (let [last-input-time (get-in @state [:editor/last-input-time repo])]
+      (or
+       (nil? last-input-time)
+
        (let [now (util/time-ms)]
-         (>= (- now last-time) diff)))
-     ;; not in editing mode
-     ;; Is this a good idea to put whiteboard check here?
-     (not (get-edit-input-id)))))
+         (>= (- now last-input-time) diff))
+
+       ;; not in editing mode
+       ;; Is this a good idea to put whiteboard check here?
+       (not (get-edit-input-id))))))
 
 (defn whiteboard-idle?
   "Check if whiteboard is idle."

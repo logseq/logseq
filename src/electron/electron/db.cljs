@@ -123,16 +123,27 @@
 ;; core data such as config, custom css/js
 ;; current page, sidebar blocks
 
-(defn get-initial-data!
-  [repo]
-  (when-let [db (get-db repo)]
-    (let [sql "select * from blocks"
-          stmt (prepare db sql repo)]
-      (.all ^object stmt))))
+(defn- query
+  [repo db sql]
+  (let [stmt (prepare db sql repo)]
+    (.all ^object stmt)))
 
-(defn get-all-data
+(defn get-initial-data
   [repo]
   (when-let [db (get-db repo)]
-    (let [sql "select * from blocks"
-          stmt (prepare db sql repo)]
-      (.all ^object stmt))))
+    (let [all-pages (query repo db "select * from blocks where name is not null")
+          all-block-ids (query repo db "select id, uuid, page from blocks where name is null and uuid is not null and page is not null")
+          recent-journal (some-> (query repo db "select id from blocks order by journal_day desc limit 1")
+                                 first
+                                 bean/->clj
+                                 :id)
+          latest-journal-blocks (when recent-journal
+                                  (query repo db (str "select * from blocks where page = " recent-journal)))]
+      {:all-pages all-pages
+       :all-blocks all-block-ids
+       :journal-blocks latest-journal-blocks})))
+
+(defn get-other-data
+  [repo]
+  (when-let [db (get-db repo)]
+    (query repo db "select * from blocks where name is null")))

@@ -357,8 +357,12 @@
                       blocks)]
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
-(defmethod handle :get-initial-data [_ [_ repo _opts]]
-  (db/get-all-data repo))
+(defmethod handle :get-initial-data [window [_ repo _opts]]
+  (db/open-db! repo)
+  (db/get-initial-data repo))
+
+(defmethod handle :get-other-data [window [_ repo _opts]]
+  (db/get-other-data repo))
 
 ;; DB related IPCs End
 
