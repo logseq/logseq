@@ -73,7 +73,7 @@
          (let [original-paths (map path/basename (get-files-recursively "tmp/static"))
                copied-paths (map path/basename (get-files-recursively "tmp/published-graph"))
                new-files (set/difference (set copied-paths) (set original-paths))]
-           (is (= #{"index.html" "custom.css" "export.css"}
+           (is (= #{"index.html" "custom.css" "export.css" "custom.js"}
                   new-files)
                "A published graph has the correct new files")
            (is (= "<div>WOOT</div>"
