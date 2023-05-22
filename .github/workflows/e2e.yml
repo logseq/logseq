@@ -140,14 +140,13 @@ jobs:
       - name: Install Fluxbox
         run: sudo apt-get update && sudo apt-get install -y fluxbox
 
-      - name: Run Xvfb and Fluxbox
+      - name: Run Xvfb
         run: |
           Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
           export DISPLAY=:1.0
-          fluxbox >/dev/null 2>&1
 
       - name: Run Playwright test
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=${{ matrix.shard }}/3
+        run: DISPLAY=:1.0 fluxbox >/dev/null 2>&1 && npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"

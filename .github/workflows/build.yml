@@ -189,17 +189,16 @@ jobs:
         run: |
           Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
           export DISPLAY=:1.0
-          fluxbox >/dev/null 2>&1
 
       - name: Run Playwright test - 1/2
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=1/2
+        run: DISPLAY=:1.0 fluxbox >/dev/null 2>&1 && npx playwright test --reporter github --shard=1/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
       - name: Run Playwright test - 2/2
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=2/2
+        run: DISPLAY=:1.0 fluxbox >/dev/null 2>&1 && npx playwright test --reporter github --shard=2/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
