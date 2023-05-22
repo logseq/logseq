@@ -138,7 +138,7 @@ jobs:
         run: git diff --exit-code static/yarn.lock
 
       - name: Install fluxbox
-        run: sudo apt-get update && apt-get install -y fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox
 
       - name: Run Playwright test
         run: Xvfb :1 -screen 0 "1280x720x24" >/dev/null 2>&1 & export DISPLAY=:1.0 fluxbox >/dev/null 2>&1 & npx playwright test --reporter github --shard=${{ matrix.shard }}/3
