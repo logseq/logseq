@@ -387,7 +387,8 @@
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
   ;; Replace initial fs watcher
-  (fs-watcher/load-graph-files! repo)
+  (when-not (config/db-only? repo)
+    (fs-watcher/load-graph-files! repo))
   ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout

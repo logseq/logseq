@@ -172,9 +172,9 @@
         reindex-link {:title        (t :re-index)
                       :hover-detail (t :re-index-detail)
                       :options (cond->
-                                {:on-click
-                                 (fn []
-                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}
+                                 {:on-click
+                                  (fn []
+                                    (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}
         new-window-link (when (and (util/electron?)
                                    ;; New Window button in menu bar of macOS is available.
                                    (not util/mac?))
@@ -190,7 +190,8 @@
                :options {:on-click #(state/pub-event! [:graph/new-db-graph])}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
-              reindex-link
+              (when-not (config/db-only? current-repo)
+                reindex-link)
               new-window-link])
      (remove nil?))))
 

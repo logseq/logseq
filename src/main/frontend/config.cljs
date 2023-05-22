@@ -361,6 +361,11 @@
   (and (string? s)
        (string/starts-with? s local-db-prefix)))
 
+(defn db-only?
+  [s]
+  (and (string? s)
+       (string/starts-with? s db-version-prefix)))
+
 (defn get-local-asset-absolute-path
   [s]
   (str "/" (string/replace s #"^[./]*" "")))
@@ -381,6 +386,9 @@
     (do
       (js/console.error "BUG: nil repo")
       nil)
+
+    (db-only? repo-url)
+    nil
 
     (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)

@@ -136,40 +136,41 @@
 
 (defn exec-js-if-exists-&-allowed!
   [t]
-  (when-let [href (or
-                   (state/get-custom-js-link)
-                   (config/get-custom-js-path))]
-    (let [k (str "ls-js-allowed-" href)
-          execed #(swap! *js-execed conj href)
-          execed? (contains? @*js-execed href)
-          ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
-                       (if r
-                         (storage/set k (js/Date.now))
-                         (storage/set k false))
-                       r)
-          allowed! (storage/get k)
-          should-ask? (or (nil? allowed!)
-                          (> (- (js/Date.now) allowed!) 604800000))]
-      (when (and (not execed?)
-                 (not= false allowed!))
-        (if (string/starts-with? href "http")
-          (when (or (not should-ask?)
-                    (ask-allow))
-            (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-                rpath (path/relative-path repo-dir href)]
-            (p/let [exists? (fs/file-exists? repo-dir rpath)]
-              (when exists?
-                (util/p-handle
-                 (fs/read-file repo-dir rpath)
-                 #(when-let [scripts (and % (string/trim %))]
-                    (when-not (string/blank? scripts)
-                      (when (or (not should-ask?) (ask-allow))
-                        (try
-                          (js/eval scripts)
-                          (execed)
-                          (catch :default e
-                            (js/console.error "[custom js]" e)))))))))))))))
+  (when-not (config/db-only? (state/get-current-repo))
+    (when-let [href (or
+                     (state/get-custom-js-link)
+                     (config/get-custom-js-path))]
+      (let [k (str "ls-js-allowed-" href)
+            execed #(swap! *js-execed conj href)
+            execed? (contains? @*js-execed href)
+            ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
+                         (if r
+                           (storage/set k (js/Date.now))
+                           (storage/set k false))
+                         r)
+            allowed! (storage/get k)
+            should-ask? (or (nil? allowed!)
+                            (> (- (js/Date.now) allowed!) 604800000))]
+        (when (and (not execed?)
+                   (not= false allowed!))
+          (if (string/starts-with? href "http")
+            (when (or (not should-ask?)
+                      (ask-allow))
+              (load href #(do (js/console.log "[custom js]" href) (execed))))
+            (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+                  rpath (path/relative-path repo-dir href)]
+              (p/let [exists? (fs/file-exists? repo-dir rpath)]
+                (when exists?
+                  (util/p-handle
+                   (fs/read-file repo-dir rpath)
+                   #(when-let [scripts (and % (string/trim %))]
+                      (when-not (string/blank? scripts)
+                        (when (or (not should-ask?) (ask-allow))
+                          (try
+                            (js/eval scripts)
+                            (execed)
+                            (catch :default e
+                              (js/console.error "[custom js]" e))))))))))))))))
 
 (defn toggle-wide-mode!
   []
