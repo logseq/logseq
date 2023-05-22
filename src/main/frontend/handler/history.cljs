@@ -46,8 +46,7 @@
   (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
     (restore-cursor! editor-cursor)
     (restore-app-state! app-state))
-  ;; ugly timeout: avoid save block from frontend.handler.editor.lifecycle/will-unmount
-  (js/setTimeout #(state/set-editor-op! nil) 100))
+  (state/set-editor-op! nil))
 
 (defn redo!
   [e]
