@@ -442,7 +442,7 @@
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
    :go/yesterday                   {:binding "g y"
                                     :fn      journal-handler/go-to-yesterday!}
-   :go/today                       {:binding "g u"
+   :go/today                       {:binding "alt+j"
                                     :fn      journal-handler/go-to-today!}
    :go/tomorrow                    {:binding "g t"
                                     :fn      journal-handler/go-to-tomorrow!}
