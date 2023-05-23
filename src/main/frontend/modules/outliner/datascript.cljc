@@ -126,9 +126,12 @@
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
-                                      :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container :db/other-tx
-                                      :block/additional-properties)
+                                      ;; TODO: Move these attributes to :block.temp when the risk is lower
+                                      :block/children :block/meta :block/title :block/body :block/level
+                                      :db/other-tx
+                                      ;; :block.temp is for temporary block attributes that aren't transacted
+                                      :block.temp/container :block.temp/top? :block.temp/bottom?
+                                      :block.temp/additional-properties)
                               m)) txs)
            txs (cond-> txs
                  (:uuid-changed opts)
