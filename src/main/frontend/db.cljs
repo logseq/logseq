@@ -204,7 +204,7 @@
   "Load initial data from SQLite"
   [repo]
   (p/let [db-name (datascript-db repo)
-          db-conn (d/create-conn)
+          db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
