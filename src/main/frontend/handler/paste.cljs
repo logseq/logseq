@@ -233,12 +233,20 @@
     (state/set-state! :editor/on-paste? true)
     (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
-          text (.getData clipboard-data "text")]
+          text (.getData clipboard-data "text")
+          has-files? (seq (.-files clipboard-data))]
       (cond
         (and (string/blank? text) (string/blank? html))
+        ;; When both text and html are blank, paste file if exists.
+        ;; NOTE: util/stop is not called here if no file is provided, 
+        ;; so the default paste behavior of the native platform will be used.
+        (when has-files?
+          (paste-file-if-exists id e))
+
+        ;; both file attachment and text/html exist
+        (and has-files? (state/preferred-pasting-file?))
         (paste-file-if-exists id e)
-        (and (seq (.-files clipboard-data)) (state/preferred-pasting-file?))
-        (paste-file-if-exists id e)
+
         :else
         (let [text' (or (when (gp-util/url? text)
                           (wrap-macro-url text))
