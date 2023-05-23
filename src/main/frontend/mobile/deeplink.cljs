@@ -9,7 +9,8 @@
    [frontend.handler.route :as route-handler]
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
-   [frontend.util.text :as text-util]))
+   [frontend.util.text :as text-util]
+   [logseq.graph-parser.util :as gp-util]))
 
 (def *link-to-another-graph (atom false))
 
@@ -70,8 +71,14 @@
       (= hostname "shared")
       (let [result (into {} (map (fn [key]
                                    [(keyword key) (.get search-params key)])
-                                 ["title" "url" "type"]))]
-        (intent/handle-result result))
+                                 ["title" "url" "type" "payload"]))]
+        (if (:payload result)
+          (let [raw (gp-util/safe-decode-uri-component (:payload result))
+                payload (-> raw
+                            js/JSON.parse
+                            (js->clj :keywordize-keys true))]
+            (intent/handle-payload payload))
+          (intent/handle-result result)))
 
       :else
       nil)))
