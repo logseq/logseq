@@ -392,7 +392,9 @@
                        (util/stop event)
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
+                         ;; incoming href format: "/assets/whatever.ext"
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
+                               rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]

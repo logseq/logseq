@@ -1777,7 +1777,7 @@
         (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
-              (let [path (path-normalize (remove-dir-prefix dir path))
+              (let [path (path-normalize path)
                     files-meta (and (not= "unlink" type)
                                     (<! (<get-local-files-meta
                                          rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
