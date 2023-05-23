@@ -10,6 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [goog.dom :as gdom]
             [rum.core :as rum]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
@@ -78,6 +79,13 @@
                                        :duration "d"}))}
        "Add repeater"])))
 
+(defn restore-focus!
+  "Restore focus to the active input that triggered the date-picker."
+  []
+  (when-let [input (state/get-input)]
+    (when-let [current-input (gdom/getElement input)]
+      (.focus current-input))))
+
 (defn- clear-timestamp!
   []
   (reset! *timestamp default-timestamp-value)
@@ -101,12 +109,21 @@
         block-id (or (:block/uuid block)
                      editing-block-id)
         typ (or @commands/*current-command typ)]
-    (if (and (state/editing?) (= editing-block-id block-id))
-      (editor-handler/set-editing-block-timestamp! typ
-                                                   text)
+    (if (and true
+         ;;(or 
+          ;;(state/editing?)
+          ;;(let [active-elem (.-activeElement js/document)]
+          ;;)) 
+         (= editing-block-id block-id) )
+      (do
+        (editor-handler/set-editing-block-timestamp! typ
+                                                     text)
+        (restore-focus!))
+      (do
       (editor-handler/set-block-timestamp! block-id
                                            typ
                                            text))
+    )
 
     (when show?
       (reset! show? false)))
@@ -169,6 +186,8 @@
                                              format
                                              {:command :page-ref})
              (state/clear-editor-action!)
-             (reset! commands/*current-command nil))))})
+             (reset! commands/*current-command nil)
+             (restore-focus!)
+             )))})
      (when deadline-or-schedule?
        (time-repeater))]))
