@@ -1193,10 +1193,6 @@
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
       (delete-block-aux! block true))))
 
-(defn clear-last-selected-block!
-  []
-  (state/drop-last-selection-block!))
-
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (state/get-selection-start-block-or-first)]
@@ -1212,13 +1208,17 @@
   (cond
     ;; when editing, quit editing and select current block
     (state/editing?)
-    (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
+    (let [element (gdom/getElement (state/get-editing-block-dom-id))]
+      (when element
+        (util/scroll-to-block element)
+        (state/exit-editing-and-set-selected-blocks! [element])))
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           element (f (first (state/get-selection-blocks)))]
       (when element
+        (util/scroll-to-block element)
         (state/conj-selection-block! element direction)))
 
     ;; if same direction, keep conj on same direction
@@ -1227,11 +1227,17 @@
           first-last (if (= :up direction) first last)
           element (f (first-last (state/get-selection-blocks)))]
       (when element
+        (util/scroll-to-block element)
         (state/conj-selection-block! element direction)))
 
     ;; if different direction, keep clear until one left
     (state/selection?)
-    (clear-last-selected-block!))
+    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
+          last-first (if (= :up direction) last first)
+          element (f (last-first (state/get-selection-blocks)))]
+      (when element
+        (util/scroll-to-block element)
+        (state/drop-last-selection-block!))))
   nil)
 
 (defn on-select-block
@@ -2482,13 +2488,6 @@
       (.preventDefault e)
       (keydown-new-line))))
 
-(defn- scroll-to-block
-  [block]
-  (when block
-    (when-not (util/element-visible? block)
-      (.scrollIntoView block #js {:behavior "smooth"
-                                  :block "center"}))))
-
 (defn- select-first-last
   "Select first or last block in viewpoint"
   [direction]
@@ -2496,7 +2495,7 @@
         block (->> (util/get-blocks-noncollapse)
                    (f))]
     (when block
-      (scroll-to-block block)
+      (util/scroll-to-block block)
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
@@ -2509,7 +2508,7 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
-      (scroll-to-block sibling-block)
+      (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundary-up-down
