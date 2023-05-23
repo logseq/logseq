@@ -73,7 +73,7 @@
          (let [original-paths (map path/basename (get-files-recursively "tmp/static"))
                copied-paths (map path/basename (get-files-recursively "tmp/published-graph"))
                new-files (set/difference (set copied-paths) (set original-paths))]
-           (is (= #{"index.html" "custom.css" "export.css"}
+           (is (= #{"index.html" "custom.css" "export.css" "custom.js"}
                   new-files)
                "A published graph has the correct new files")
            (is (= "<div>WOOT</div>"
@@ -96,6 +96,16 @@
          (is (= ".foo {background-color: red}"
                 (str (fs/readFileSync "tmp/published-graph/static/css/export.css")))
              "export.css is copied correctly")))
+
+(deftest-async create-export-with-js-files
+  (create-static-dir "tmp/static")
+  (create-logseq-graph "tmp/test-graph")
+  (fs/writeFileSync "tmp/test-graph/logseq/custom.js" "// foo")
+
+  (p/let [_ (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {})]
+         (is (= "// foo"
+                (str (fs/readFileSync "tmp/published-graph/static/js/custom.js")))
+             "custom.js is copied correctly")))
 
 (deftest-async create-export-with-assets
   (create-static-dir "tmp/static")

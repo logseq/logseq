@@ -13,7 +13,7 @@
  :preferred-workflow :now
 
  ;; Exclude directories/files.
- ;; Example usage: 
+ ;; Example usage:
  ;; :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
@@ -87,7 +87,7 @@
 
  ;; Specify the first day of the week.
  ;; Available options:
- ;;  - integer from 0 to 6 (Monday to Sunday) 
+ ;;  - integer from 0 to 6 (Monday to Sunday)
  ;; Default value: 6 (Sunday)
  :start-of-week 6
 
@@ -102,7 +102,7 @@
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
 
  ;; Set a custom Arweave gateway
- ;; Default value: https://arweave.net
+ ;; Default gateway: https://arweave.net
  ;; :arweave/gateway "https://arweave.net"
 
  ;; Set bullet indentation when exporting
@@ -154,7 +154,7 @@
  ;; Configure custom shortcuts.
  ;; Syntax:
  ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Shift+a`.
- ;; 2. A space between keys represents key chords, e.g., `t s` means 
+ ;; 2. A space between keys represents key chords, e.g., `t s` means
  ;;    pressing `t` followed by `s`.
  ;; 3. mod refers to `Ctrl` for Windows/Linux and `Command` for Mac.
  ;; 4. Use false to disable a specific shortcut.
@@ -280,7 +280,7 @@
  :ref/default-open-blocks-level 2
 
  ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 50
+ ;; Default value: 100
  :ref/linked-references-collapsed-threshold 50
 
  ;; Graph view configuration.
@@ -325,7 +325,7 @@
  ;; Properties that are ignored when parsing property values for references
  ;; Example usage:
  ;; :ignored-page-references-keywords #{:author :website}
- 
+
  ;; logbook configuration.
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
@@ -341,7 +341,7 @@
  ;; Mobile features options
  ;; Gestures
  ;; Example usage:
- ;; :mobile 
+ ;; :mobile
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
  ;; Extra CodeMirror options
@@ -353,11 +353,11 @@
  ;;  :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
- ;; Default value: false 
+ ;; Default value: false
  ;; :editor/logical-outdenting? false
 
  ;; Prefer pasting the file when text and a file are in the clipboard.
- ;; Default value: false 
+ ;; Default value: false
  ;; :editor/preferred-pasting-file? false
 
  ;; Quick capture templates for receiving content from other apps.
