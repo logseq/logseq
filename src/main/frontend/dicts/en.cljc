@@ -233,7 +233,7 @@
    :settings-page/sync "Sync"
    :settings-page/enable-whiteboards "Whiteboards"
    :settings-page/native-titlebar "Native title bar"
-   :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux, and hides the custom window controls."
+   :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux."
    :yes "Yes"
 
    :submit "Submit"
