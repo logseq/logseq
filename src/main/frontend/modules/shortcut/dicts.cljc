@@ -955,8 +955,10 @@
              :command.editor/select-parent            "Выбрать родительский блок"
              :command.editor/zoom-in                  "Увеличить / Вперед"
              :command.editor/zoom-out                 "Уменьшить / Назад"
-             :command.editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
-             :command.editor/toggle-number-list      "Toggle number list"
+            ;;  TODO check all Скопировать/копировать
+            ;; TODO check (Dev)
+             :command.editor/toggle-undo-redo-mode   "Переключить режим отменить/повторить (глобально или только на странице)"
+             :command.editor/toggle-number-list      "Переключить режим нумерованный список"
              :command.whiteboard/select              "Select tool"
              :command.whiteboard/pan                 "Pan tool"
              :command.whiteboard/portal              "Portal tool"
