@@ -7,7 +7,9 @@
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]))
 
 ;;;; APIs
 
@@ -157,8 +159,10 @@
   "Prevent block auto-save during undo/redo."
   []
   (when-let [block (state/get-edit-block)]
-    (state/set-edit-content! (state/get-edit-input-id)
-                             (:block/content (db/entity (:db/id block))))))
+    (when-let [content (:block/content (db/entity (:db/id block)))]
+      (let [content' (-> (property/remove-built-in-properties (:block/format block) content)
+                         (drawer/remove-logbook))]
+        (state/set-edit-content! (state/get-edit-input-id) content')))))
 
 (defn- get-next-tx-editor-cursor
   [tx-id]
