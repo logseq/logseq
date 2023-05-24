@@ -159,7 +159,7 @@
                     (assoc metadata :whiteboard/op :group)
 
                     ;; ungroup
-                    (some #(= "group" (:type %)) (get-in metadata [:data :deleted-shapes]))
+                    (every? #(= "group" (:type %)) (get-in metadata [:data :deleted-shapes]))
                     (assoc metadata :whiteboard/op :un-group)
 
                     ;; arrow
