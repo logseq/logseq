@@ -748,10 +748,10 @@ test.describe('Always auto-pair symbols', () => {
     { name: 'square brackets', prefix: '[', postfix: ']' },
     { name: 'curly brackets', prefix: '{', postfix: '}' },
     { name: 'parentheses', prefix: '(', postfix: ')' },
-    // { name: 'angle brackets', prefix: '<', postfix: '>' },
+    { name: 'angle brackets', prefix: '<', postfix: '>' },
     { name: 'backtick', prefix: '`', postfix: '`' },
-    // { name: 'single quote', prefix: "'", postfix: "'" },
-    // { name: 'double quote', prefix: '"', postfix: '"' },
+    { name: 'single quote', prefix: "'", postfix: "'" },
+    { name: 'double quote', prefix: '"', postfix: '"' },
   ]
 
   for (const symbol of autoPairSymbols) {
@@ -773,13 +773,14 @@ test.describe('Always auto-pair symbols', () => {
 
 test.describe('Auto-pair symbols only with text selection', () => {
   const autoPairSymbols = [
-    // { name: 'tilde', prefix: '~', postfix: '~' },
     { name: 'asterisk', prefix: '*', postfix: '*' },
     { name: 'underscore', prefix: '_', postfix: '_' },
     { name: 'caret', prefix: '^', postfix: '^' },
     { name: 'equal', prefix: '=', postfix: '=' },
     { name: 'slash', prefix: '/', postfix: '/' },
+    { name: 'backlash', prefix: '\\', postfix: '\\' },
     { name: 'plus', prefix: '+', postfix: '+' },
+    { name: 'tilde', prefix: '~', postfix: '~' },
   ]
 
   for (const symbol of autoPairSymbols) {
