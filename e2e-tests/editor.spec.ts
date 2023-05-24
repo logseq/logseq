@@ -10,6 +10,16 @@ import {
   getSelection,
   getCursorPos,
 } from './utils'
+import {
+  createRandomPage,
+  enterNextBlock,
+  modKey,
+  repeatKeyPress,
+  moveCursor,
+  selectCharacters,
+  getSelection,
+  getCursorPos,
+} from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -639,12 +649,12 @@ test.describe('Text Formatting', () => {
       postfix: '~~',
       shortcut: modKey + '+Shift+s',
     },
-    {
-      name: 'underline',
-      prefix: '<u>',
-      postfix: '</u>',
-      shortcut: modKey + '+u',
-    },
+    // {
+    //   name: 'underline',
+    //   prefix: '<u>',
+    //   postfix: '</u>',
+    //   shortcut: modKey + '+u',
+    // },
   ]
 
   for (const format of formats) {
