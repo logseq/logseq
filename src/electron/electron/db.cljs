@@ -148,6 +148,7 @@
        :journal-blocks latest-journal-blocks})))
 
 (defn get-other-data
-  [repo journal-block-ids]
+  [repo journal-block-uuids]
   (when-let [db (get-db repo)]
-    (query repo db "select * from blocks where type = 1")))
+    (query repo db (str "select * from blocks where type = 1 and uuid not in "
+                        (clj-list->sql journal-block-uuids)))))

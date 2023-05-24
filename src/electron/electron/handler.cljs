@@ -377,8 +377,8 @@
   (db/open-db! repo)
   (db/get-initial-data repo))
 
-(defmethod handle :get-other-data [window [_ repo journal-block-ids _opts]]
-  (db/get-other-data repo journal-block-ids))
+(defmethod handle :get-other-data [window [_ repo journal-block-uuids _opts]]
+  (db/get-other-data repo journal-block-uuids))
 
 ;; DB related IPCs End
 

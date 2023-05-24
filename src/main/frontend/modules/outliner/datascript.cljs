@@ -1,5 +1,4 @@
 (ns frontend.modules.outliner.datascript
-  (:require-macros [frontend.modules.outliner.datascript])
   (:require [datascript.core :as d]
                   [frontend.db.conn :as conn]
                   [frontend.db :as db]

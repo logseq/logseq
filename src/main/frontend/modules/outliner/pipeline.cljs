@@ -117,7 +117,8 @@
 
              :else
              v)]
-    [a v']))
+    (when v'
+      [a v'])))
 
 (defn invoke-hooks
   [tx-report]

@@ -193,6 +193,12 @@
     :else
     [a v]))
 
+(defn- add-tempid-to-av-colls
+  [start-tempid av-colls]
+  (map-indexed (fn [idx av-coll]
+                 (map (partial cons (dec (- start-tempid idx))) av-coll))
+               av-colls))
+
 (defn restore-other-data-from-sqlite!
   [repo data]
   (let [per-length 2000]
@@ -213,12 +219,15 @@
                                (map uuid-str->uuid-in-av-vec
                                     (edn/read-string (gobj/get block "datoms")))))
                         (map-indexed (fn [idx av-coll]
-                                       (map (partial cons (dec (- idx))) av-coll)))
+                                       (->> av-coll
+                                            (map (partial cons (dec (- idx))))
+                                            (sort-by #(if (= :block/uuid (second %)) 0 1)))))
                         (apply concat)
                         (map (fn [eav] (cons :db/add eav))))]
           (transact! repo part {:skip-persist? true})
           (p/let [_ (p/delay 200)]
-            (p/recur (drop per-length data))))))))
+            (p/recur (drop per-length data)))
+          )))))
 
 (defn restore-graph-from-sqlite!
   "Load initial data from SQLite"
@@ -244,11 +253,14 @@
                                       edn/read-string
                                       (map uuid-str->uuid-in-av-vec)))
                                journal-blocks)
-          tx-data (->> (concat pages all-blocks' journal-blocks')
-                       (map-indexed (fn [idx av-coll]
-                                      (map (partial cons (dec (- idx))) av-coll)))
-                       (apply concat)
-                       (map (partial cons :db/add)))]
+          pages-eav-colls (add-tempid-to-av-colls 0 pages)
+          pages-eav-coll (->> pages-eav-colls
+                              (apply concat)
+                              (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
+          blocks-eav-colls (->> (concat all-blocks' journal-blocks')
+                                (add-tempid-to-av-colls (- (count pages-eav-colls)))
+                                (apply concat))
+          tx-data (map (partial cons :db/add) (concat pages-eav-coll blocks-eav-colls))]
     (def xx [all-pages all-blocks journal-blocks tx-data])
     (d/transact! db-conn tx-data)
 
@@ -262,9 +274,10 @@
 
     (js/setTimeout
      (fn []
-       (p/let [other-data (ipc/ipc :get-other-data repo (map :id journal-blocks))]
+       (p/let [other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))]
          (restore-other-data-from-sqlite! repo other-data)))
-     1000)))
+     1000)
+    ))
 
 (defn restore-graph!
   "Restore db from serialized db cache"
