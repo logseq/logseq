@@ -973,13 +973,6 @@ independent of format as format specific heading characters are stripped"
       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
         (db-utils/pull-many repo '[*] ids')))))
 
-;; TODO: use the tree directly
-(defn- flatten-tree
-  [blocks-tree]
-  (if-let [children (:block/_parent blocks-tree)]
-    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
-    [blocks-tree]))
-
 (defn get-block-and-children
   [repo id & {:keys [page]}]
   (let [eid (if (integer? id) id [:block/uuid id])
@@ -992,9 +985,7 @@ independent of format as format specific heading characters are stripped"
                     :block/original-name (:block/original-name page)
                     :block/journal-day (:block/journal-day page)}))
         current-block (-> (select-keys e (filter keyword? block-attrs)) ; remove both :block/page and :block/_parent
-                          (assoc :block/page page)
-                          (update :block/left (fn [e] {:db/id (:db/id e)}))
-                          (update :block/parent (fn [e] {:db/id (:db/id e)})))]
+                          (assoc :block/page page))]
     (lazy-seq
      (cons current-block
            (mapcat

@@ -57,7 +57,8 @@
   ([blocks root-id]
    (blocks->vec-tree (state/get-current-repo) blocks root-id))
   ([repo blocks root-id]
-   (let [[page? root] (get-root-and-page repo (str root-id))]
+   (let [blocks (map (fn [block] (update block :block/parent (fn [p] {:db/id (:db/id p)}))) blocks)
+         [page? root] (get-root-and-page repo (str root-id))]
      (if-not root ; custom query
        blocks
        (let [result (blocks->vec-tree-aux blocks root)]
