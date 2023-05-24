@@ -29,13 +29,13 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
     const Indicator = this.ReactIndicator
 
     return (
-      <SVGContainer {...events}>
+      <SVGContainer {...events} className="tl-group-container">
         <rect
           className={'tl-hitarea-fill'}
           x={strokeWidth / 2}
           y={strokeWidth / 2}
-          width={Math.max(0.01, bounds.width - strokeWidth)}
-          height={Math.max(0.01, bounds.height - strokeWidth)}
+          width={Math.max(0.01, bounds?.width - strokeWidth)}
+          height={Math.max(0.01, bounds?.height - strokeWidth)}
           pointerEvents="all"
         />
         {childSelected && (
