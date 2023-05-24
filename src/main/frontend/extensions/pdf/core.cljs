@@ -347,8 +347,8 @@
                                                     (.setAttribute target "data-x" ax)
                                                     (.setAttribute target "data-y" ay))
                                                   ))}
-                           :modifiers [(js/interact.modifiers.restrictRect
-                                         (bean/->js {:restriction ".page"}))]
+                           :modifiers [(js/interact.modifiers.restrict
+                                         (bean/->js {:restriction (.closest el ".page")}))]
                            :inertia   true})
                          ))]
          ;; destroy
