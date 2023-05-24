@@ -35,7 +35,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: var(--ls-primary-text-color);
+        color: or(--lx-gray-12, --ls-primary-text-color);
       }
     }
   }
@@ -43,7 +43,7 @@
 
 .ui__ac-group-name {
   @apply p-2 text-xs;
-  color: var(--ls-block-ref-link-text-color);
+  color: or(--lx-accent-11, --ls-block-ref-link-text-color);
 }
 
 .search-all #ui__ac-inner {
@@ -64,8 +64,8 @@
   }
 
   .notification-area {
-    background-color: var(--ls-tertiary-background-color, #fff);
-    color: var(--ls-primary-text-color);
+    background-color: or(--lx-gray-05, --ls-tertiary-background-color, #fff);
+    color: or(--lx-gray-12, --ls-primary-text-color);
   }
 }
 
@@ -100,15 +100,17 @@
   }
 
   &-overlay div {
-    background-image: linear-gradient(to bottom, var(--ls-primary-background-color), var(--ls-quaternary-background-color));
+    --from: or(--lx-gray-03, --ls-primary-background-color); 
+    --to: or(--lx-gray-06, --ls-quaternary-background-color);
+    background-image: linear-gradient(to bottom, var(--from), var(--to));
   }
 
   &-panel {
     @apply relative rounded-md shadow-xl border;
-    border-color: var(--ls-border-color);
+    border-color: or(--lx-gray-07, --ls-border-color);
 
     overflow: hidden;
-    background: var(--ls-secondary-background-color);
+    background: or(--lx-gray-04, --ls-secondary-background-color);
 
     .panel-content {
       overflow-y: auto;
@@ -269,8 +271,13 @@ html.is-mobile {
 
 .ui__button {
   @apply inline-flex items-center px-3 py-2 border border-transparent
-  text-sm leading-4 font-medium rounded-md text-white
+  text-sm leading-4 font-medium rounded-md
   focus:outline-none transition ease-in-out duration-150;
+
+  /* background-color: or(--lx-accent-04, --color-indigo-600); */
+  /* color: or(--lx-accent-11, white); */
+  background-color: or(--lx-accent-07, --color-indigo-600);
+  color: or(--lx-accent-12, white);
 
   &:disabled {
     opacity: 0.5;
@@ -278,7 +285,9 @@ html.is-mobile {
   }
 
   &:hover:not([disabled]) {
-    opacity: 0.8;
+    /* opacity: or(--lx-accent-01, 0.8); */
+    opacity: 1;
+    background-color: or(--lx-accent-07);
   }
 
   &.is-link {
@@ -288,22 +297,22 @@ html.is-mobile {
   &[intent='logseq'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
-    color: var(--ls-primary-text-color);
-    background: var(--ls-secondary-background-color);
+    color: or(--lx-accent-11, --ls-primary-text-color);
+    background: or(--lx-accent-12, --ls-secondary-background-color);
 
     &:hover {
-      color: var(--ls-link-text-color);
+      color: or(--lx-accent-11, --ls-link-text-color);
     }
   }
 
   &[intent='link'], &[intent='border-link'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
-    color: var(--ls-primary-text-color);
+    color: or(--lx-gray-12, --ls-primary-text-color);
     background: transparent;
 
     &:hover {
-      color: var(--ls-link-text-color);
+      color: or(--lx-accent-11, --ls-link-text-color);
     }
   }
 
@@ -317,8 +326,8 @@ html.is-mobile {
 }
 
 .dropdown-wrapper {
-  background-color: var(--ls-primary-background-color, #fff);
-  border: 1px solid var(--ls-tertiary-background-color);
+  background-color: or(--lx-gray-03, --ls-primary-background-color, #fff);
+  border: 1px solid or(--lx-gray-05, --ls-tertiary-background-color);
   min-width: 12rem;
   border-radius: 6px;
 }
@@ -340,10 +349,10 @@ html.is-mobile {
   @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
   border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
-  background-color: var(--ls-primary-background-color, transparent);
+  background-color: or(--lx-gray-03, --ls-primary-background-color, transparent);
   background-repeat: no-repeat;
   border-width: 1px;
-  border-color: var(--ls-border-color);
+  border-color: or(--lx-gray-07, --ls-border-color);
 
   &.is-small {
     @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
@@ -355,7 +364,7 @@ html.is-mobile {
   sm:text-sm sm:leading-5 rounded;
 
   border-width: 1px;
-  border-color: var(--ls-border-color);
+  border-color: or(--lx-gray-07, --ls-border-color);
 
   &:focus {
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
@@ -375,7 +384,7 @@ html.is-mobile {
 }
 
 .bg-quaternary {
-  background-color: var(--ls-quaternary-background-color);
+  background-color: or(--lx-gray-06, --ls-quaternary-background-color);
 }
 
 .ui__icon {
@@ -388,9 +397,9 @@ html.is-mobile {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  border-color: var(--ls-primary-background-color);
+  border-color: or(--lx-gray-03, --ls-primary-background-color);
   overflow: hidden;
-  color: var(--ls-primary-text-color);
+  color: or(--lx-gray-12, --ls-primary-text-color);
 
   .ti,
   .tie {
@@ -399,7 +408,7 @@ html.is-mobile {
 
   &:before {
     @apply block absolute inset-0 ;
-    background: var(--ls-primary-background-color);
+    background: or(--lx-gray-03, --ls-primary-background-color);
     content: " ";
   }
 }

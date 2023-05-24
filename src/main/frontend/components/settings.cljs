@@ -337,11 +337,11 @@
      (row-with-button-action {:left-label "Radix color theme"
                               :-for       "toggle_radix_theme"
                               :stretch    true
-                              :action     pick-theme}) 
-     (row-with-button-action {:left-label "Preview color theme"
-                              :-for       "display_radix_theme"
-                              :stretch    true
-                              :action     display-theme})])) 
+                              :action     pick-theme})])) 
+     ; (row-with-button-action {:left-label "Preview color theme"
+     ;                          :-for       "display_radix_theme"
+     ;                          :stretch    true
+     ;                          :action     display-theme})])) 
                              
 
 (defn file-format-row [t preferred-format]

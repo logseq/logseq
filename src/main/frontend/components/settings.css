@@ -3,7 +3,7 @@
     > header {
       padding: 10px;
       padding-top: 0;
-      border-bottom: 1px solid var(--ls-quaternary-background-color);
+      border-bottom: 1px solid or(--lx-gray-06, --ls-quaternary-background-color);
 
       h1 {
         font-size: 22px;
@@ -68,7 +68,7 @@
 
     .settings-menu-link {
       @apply px-2 py-1.5 select-none; 
-      color: var(--ls-primary-text-color);
+      color: or(--lx-gray-12, --ls-primary-text-color);
     }
   }
 
@@ -98,7 +98,7 @@
           }
 
           &.active {
-            background-color: var(--ls-quaternary-background-color);
+            background-color: or(--lx-gray-06, --ls-quaternary-background-color);
 
             i {
               opacity: 1;
@@ -215,7 +215,7 @@
           cursor: inherit;
 
           > i {
-            border-color: var(--ls-link-text-color);
+            border-color: or(--lx-accent-11, --ls-link-text-color);
             border-width: 2px;
           }
         }
@@ -265,7 +265,7 @@
 
     .update-state {
       padding: 6px 10px;
-      background-color: var(--ls-quaternary-background-color);
+      background-color: or(--lx-gray-06, --ls-quaternary-background-color);
       border-radius: 4px;
       margin-top: 10px;
       width: fit-content;
@@ -334,7 +334,7 @@
       @apply m-0 list-none -mx-2;
 
       > li {
-        border-top: 1px solid var(--ls-secondary-border-color);
+        border-top: 1px solid or(--lx-accent-08, --ls-secondary-border-color);
 
         &:hover {
           .ext-label.is-plus {
@@ -351,8 +351,8 @@
     .ext-label {
       @apply rounded px-1.5 opacity-70 cursor-pointer flex items-center select-none active:opacity-50;
 
-      background-color: var(--ls-secondary-border-color);
-      color: var(--ls-secondary-text-color);
+      background-color: or(--lx-accent-08, --ls-secondary-border-color);
+      color: or(--lx-gray-11, --ls-secondary-text-color);
 
       &.is-del {
         i.ti {
@@ -376,8 +376,8 @@
       }
 
       &.is-plus {
-        background-color: var(--ls-primary-background-color);
-        border: 1px solid var(--ls-border-color);
+        background-color: or(--lx-gray-03, --ls-primary-background-color);
+        border: 1px solid or(--lx-gray-07, --ls-border-color);
       }
     }
 
@@ -404,7 +404,7 @@
         z-index: 1;
         width: 100px;
         max-height: 180px;
-        border:1px solid var(--ls-border-color);
+        border:1px solid or(--lx-gray-07, --ls-border-color);
         border-radius: 4px;
         overflow: auto;
         overflow: overlay;
@@ -443,13 +443,13 @@
   &-alias-ext-input {
     width: 80px !important;
     padding: 1px 4px;
-    border: 2px solid var(--ls-secondary-border-color);
+    border: 2px solid or(--lx-gray-08, --ls-secondary-border-color);
     font-size: 11px;
     border-radius: 4px;
     height: 22px;
 
     &:focus {
-      border-color: var(--ls-border-color);
+      border-color: var(--lx-gray-07, --ls-border-color);
     }
   }
 }

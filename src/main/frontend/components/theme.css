@@ -1,6 +1,6 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
+  scrollbar-color: or(--lx-gray-05, --ls-scrollbar-foreground-color) or(--lx-gray-02, --ls-scrollbar-background-color);
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -12,15 +12,15 @@
 
 html {
   ::-webkit-scrollbar-thumb {
-    background-color: var(--ls-scrollbar-foreground-color);
+    background-color: or(--lx-gray-05, --ls-scrollbar-foreground-color);
   }
 
   ::-webkit-scrollbar {
-    background-color: var(--ls-scrollbar-background-color);
+    background-color: or(--lx-gray-02, --ls-scrollbar-background-color);
   }
 
   ::-webkit-scrollbar-thumb:active {
-    background-color: var(--ls-scrollbar-thumb-hover-color);
+    background-color: or(--lx-gray-06, --ls-scrollbar-thumb-hover-color);
   }
 
   ::-webkit-scrollbar {
