@@ -892,14 +892,21 @@
                        {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-block}
+                                       {:outliner-op :delete-blocks}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
-                     (when concat-prev-block?
-                       (save-block! repo prev-block new-content))
-                     (delete-block-aux! block delete-children?))))))))))
+                     (if concat-prev-block?
+                       (let [prev-block' (if (seq (:block/_refs block-e))
+                                           (assoc prev-block
+                                                  :block/uuid (:block/uuid block)
+                                                  :block/additional-properties (:block/properties block))
+                                           prev-block)]
+                         (delete-block-aux! block delete-children?)
+                         (save-block! repo prev-block' new-content {:editor/op :delete}))
+                       (delete-block-aux! block delete-children?)))
+                   (move-fn)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -1666,11 +1673,11 @@
 (defn- autopair-left-paren?
   [input key]
   (and (= key "(")
-       (or
-         (surround-by? input :start "")
-         (surround-by? input " " "")
-         (surround-by? input "]" "")
-         (surround-by? input "(" ""))))
+       (or (surround-by? input :start "")
+           (surround-by? input "\n" "")
+           (surround-by? input " " "")
+           (surround-by? input "]" "")
+           (surround-by? input "(" ""))))
 
 (defn wrapped-by?
   [input before end]
@@ -2100,13 +2107,15 @@
         (outliner-core/save-block! editing-block)))
 
     (outliner-tx/transact!
-      {:outliner-op :insert-blocks}
+      {:outliner-op :insert-blocks
+       :additional-tx revert-cut-txs}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :cut-paste? cut-paste?
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
@@ -2715,8 +2724,10 @@
                                  :block/additional-properties (dissoc (:block/properties next-block) :block/uuid))
                           edit-block)]
         (outliner-tx/transact! transact-opts
-          (save-block! repo edit-block new-content)
-          (delete-block-aux! next-block false))
+          (delete-block-aux! next-block false)
+          (save-block! repo edit-block' new-content {:editor/op :delete}))
+        (let [block (if next-block-has-refs? next-block edit-block)]
+          (edit-block! block current-pos (:block/uuid block)))))))
 
 (defn keydown-delete-handler
   [_e]
@@ -2930,11 +2941,11 @@
             (contains? key)
             (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
-                  prev (util/nth-safe value (dec pos))]
-            (util/stop e)
-            (if (and (= key "`") (= "`" curr) (not= "`" prev))
-              (cursor/move-cursor-forward input)
-              (autopair input-id key format nil)))
+              prev (util/nth-safe value (dec pos))]
+          (util/stop e)
+          (if (and (= key "`") (= "`" curr) (not= "`" prev))
+            (cursor/move-cursor-forward input)
+            (autopair input-id key format nil)))
 
         (let [sym "$"]
           (and (= key sym)
