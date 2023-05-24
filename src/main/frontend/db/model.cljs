@@ -1700,3 +1700,15 @@ independent of format as format specific heading characters are stripped"
        (map (fn [{:block/keys [uuid properties]}]
               {:id (str uuid)
                :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))
+
+(comment
+  ;; For debugging
+  (defn get-all-blocks
+    []
+    (let [repo (state/get-current-repo)]
+      (d/q
+       '[:find [(pull ?b [*]) ...]
+         :where
+         [?b :block/uuid]]
+        (conn/get-db repo))))
+  )
