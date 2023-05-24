@@ -107,7 +107,7 @@
         "d3-force": "3.0.0",
         "diff": "5.0.0",
         "dompurify": "2.4.0",
-        "electron": "20.3.8",
+        "electron": "24.3.1",
         "electron-dl": "3.3.0",
         "fs": "0.0.1-security",
         "fs-extra": "9.1.0",
