@@ -144,6 +144,10 @@
        :journal-blocks latest-journal-blocks})))
 
 (defn get-other-data
-  [repo]
+  [repo journal-block-ids]
   (when-let [db (get-db repo)]
-    (query repo db "select * from blocks where name is null")))
+    (if (seq journal-block-ids)
+      (query repo db
+        (str "select * from blocks where name is null and id not in "
+             (clj-list->sql journal-block-ids)))
+      (query repo db "select * from blocks where name is null"))))

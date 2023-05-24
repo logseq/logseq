@@ -226,7 +226,7 @@
 
     (js/setTimeout
      (fn []
-       (p/let [other-data (ipc/ipc :get-other-data repo)]
+       (p/let [other-data (ipc/ipc :get-other-data repo (map :id journal-blocks))]
          (restore-other-data-from-sqlite! repo other-data)))
      1000)))
 
