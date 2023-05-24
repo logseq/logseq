@@ -179,6 +179,20 @@
                 (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
+(defn- uuid-str->uuid-in-av-vec
+  [[a v]]
+  (cond
+    (and (= :block/uuid a) (string? v))
+    [a (uuid v)]
+
+    (and (coll? v) (= 2 (count v))
+         (= :block/uuid (first v))
+         (string? (second v)))
+    [a [:block/uuid (uuid (second v))]]
+
+    :else
+    [a v]))
+
 (defn restore-other-data-from-sqlite!
   [repo data]
   (let [per-length 2000]
@@ -190,12 +204,14 @@
         (empty? data)
         nil
 
-        (not (state/input-idle? repo))             ; wait until input is idle
+        (not (state/input-idle? repo))  ; wait until input is idle
         (js/setTimeout #(restore-other-data-from-sqlite! repo data) 5000)
 
         :else
         (let [part (->> (take per-length data)
-                        (mapcat (comp edn/read-string #(gobj/get % "datoms"))))]
+                        (mapcat (comp edn/read-string #(gobj/get % "datoms")))
+                        (map-indexed (fn [idx av] (concat [:db/add (dec (- idx))]
+                                                          (uuid-str->uuid-in-av-vec av)))))]
           (transact! repo part {:skip-persist? true})
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
@@ -208,21 +224,28 @@
           _ (swap! conns assoc db-name db-conn)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
-          pages (mapcat (comp edn/read-string :datoms) all-pages)
+          pages (->> all-pages
+                     (mapcat (comp edn/read-string :datoms))
+                     (map uuid-str->uuid-in-av-vec))
           all-blocks' (mapcat (fn [b]
-                                [(d/datom (:id b) :block/uuid (:uuid b))
-                                 (d/datom (:id b) :block/page (:page b))]) all-blocks)
-          journal-blocks' (mapcat (comp edn/read-string :datoms) journal-blocks)
-          datoms (concat pages all-blocks' journal-blocks')]
-
-    (reset! db-conn (d/init-db datoms db-schema/schema))
+                                [[:block/uuid (uuid (:uuid b))]
+                                 [:block/page [:block/uuid (uuid (:page_uuid b))]]])
+                              all-blocks)
+          journal-blocks' (->> journal-blocks
+                               (mapcat (comp edn/read-string :datoms))
+                               (map uuid-str->uuid-in-av-vec))
+          tx-data (map-indexed
+                   (fn [idx av] (concat [:db/add (dec (- idx))] av))
+                   (concat pages all-blocks' journal-blocks'))]
+    (def xx [all-pages all-blocks journal-blocks tx-data])
+    (d/transact! db-conn tx-data)
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
-      {:skip-persist? true})
+                 {:skip-persist? true})
 
     (js/setTimeout
      (fn []

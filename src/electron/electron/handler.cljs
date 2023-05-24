@@ -335,26 +335,42 @@
 (defmethod handle :db-new [_window [_ repo]]
   (db/open-db! repo))
 
+(defn- type-of-block
+  "
+  | value | meaning                                        |
+  |-------+------------------------------------------------|
+  |     1 | normal block                                   |
+  |     2 | page block                                     |
+  |     3 | init data, (config.edn, custom.js, custom.css) |
+  |     4 | db schema                                      |
+  |     5 | unknown type                                   |
+  "
+  [block]
+  (cond
+    (:block/page block) 1
+    (:block/name block) 2
+    (:file/content block) 3
+    :else 5))
+
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
   (let [data (reader/read-string data-str)
-        {:keys [blocks deleted-block-ids tx-data]} data]
+        {:keys [blocks deleted-block-uuids tx-data]} data]
     ;; TODO: store files
-    (when (seq deleted-block-ids)
-      (db/delete-blocks! repo deleted-block-ids))
+    (when (seq deleted-block-uuids)
+      (db/delete-blocks! repo deleted-block-uuids))
     (when (seq blocks)
       (let [blocks' (mapv
-                      (fn [b]
-                        {:id (:db/id b)
-                         :page (:db/id (:block/page b))
-                         :name (:block/name b)
-                         :uuid (str (:block/uuid b))
-                         :content (:block/content b)
-                         :datoms (:datoms b)
-                         :journal_day (:block/journal-day b)
-                         :core_data 0
-                         :created_at (or (:block/created-at b) (utils/time-ms))
-                         :updated_at (or (:block/updated-at b) (utils/time-ms))})
-                      blocks)]
+                     (fn [b]
+                       {:uuid (str (:block/uuid b))
+                        :type (type-of-block b)
+                        :page_uuid (str (:page_uuid b))
+                        :page_journal_day (:block/journal-day b)
+                        :name (:block/name b)
+                        :content (:block/content b)
+                        :datoms (:datoms b)
+                        :created_at (or (:block/created-at b) (utils/time-ms))
+                        :updated_at (or (:block/updated-at b) (utils/time-ms))})
+                     blocks)]
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
 (defmethod handle :get-initial-data [window [_ repo _opts]]

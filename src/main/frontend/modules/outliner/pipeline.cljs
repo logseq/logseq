@@ -91,8 +91,33 @@
   (keep
    (fn [d]
      (when (and (= :block/uuid (:a d)) (false? (:added d)))
-       (:e d)))
+       (:v d)))
    datoms))
+
+(defn- datom->av-vector
+  [db datom]
+  (let [a (:a datom)
+        v (:v datom)
+        v' (cond
+             (contains? #{:block/parent ;; these attrs is :db.type/ref
+                          :block/left
+                          :block/page
+                          :block/refs
+                          :block/path-refs
+                          :block/tags
+                          :block/alias
+                          :block/namespace
+                          :block/macros}
+                        a)
+             (when-some [block-uuid-datom (first (d/datoms db :eavt v :block/uuid))]
+               [:block/uuid (str (:v block-uuid-datom))])
+
+             (and (= :block/uuid a) (uuid? v))
+             (str v)
+
+             :else
+             v)]
+    [a v']))
 
 (defn invoke-hooks
   [tx-report]
@@ -114,20 +139,25 @@
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)
             importing? (:graph/importing @state/state)
-            deleted-block-ids (set (filter-deleted-blocks (:tx-data tx-report)))]
+            deleted-block-uuids (set (filter-deleted-blocks (:tx-data tx-report)))]
 
         (when-not importing?
           (react/refresh! repo tx-report'))
 
         (when-not (:skip-persist? tx-meta)
-          (let [upsert-blocks (->> (remove (fn [b] (contains? deleted-block-ids (:db/id b))) blocks)
+          (let [upsert-blocks (->> blocks
+                                   (remove (fn [b] (contains? deleted-block-uuids (:block/uuid b))))
                                    (map (fn [b]
-                                          (assoc b :datoms
-                                                 (pr-str (d/datoms (:db-after tx-report') :eavt (:db/id b)))))))]
+                                          (let [datoms (d/datoms (:db-after tx-report') :eavt (:db/id b))]
+                                            (assoc b :datoms (pr-str (keep (partial datom->av-vector (:db-after tx-report')) datoms))))))
+                                   (map (fn [b]
+                                          (if-some [page-uuid (:block/uuid (d/entity (:db-after tx-report') (:db/id (:block/page b))))]
+                                            (assoc b :page_uuid page-uuid)
+                                            b))))]
             (p/let [ipc-result (ipc/ipc :db-transact-data repo
                                         (pr-str
                                          {:blocks upsert-blocks
-                                          :deleted-block-ids deleted-block-ids}))]
+                                          :deleted-block-uuids deleted-block-uuids}))]
               ;; TODO: disable edit when transact failed to avoid future data-loss
               (prn "DB transact result: " ipc-result))))
 
@@ -141,6 +171,6 @@
                    (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
-                              :deleted-block-ids deleted-block-ids
+                              :deleted-block-uuids deleted-block-uuids
                               :tx-data (:tx-data tx-report)
                               :tx-meta (:tx-meta tx-report)}]))))))

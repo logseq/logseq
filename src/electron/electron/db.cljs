@@ -46,19 +46,20 @@
 (defn create-blocks-table!
   [db db-name]
   (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
-                        id INTEGER PRIMARY KEY,
-                        page INTEGER,
+                        uuid TEXT PRIMARY KEY,
+       			type INTEGER,
+                        page_uuid TEXT,
+                        page_journal_day INTEGER,
                         name TEXT,
-                        uuid TEXT NOT NULL,
                         content TEXT,
                         datoms TEXT,
-                        journal_day INTEGER,
-                        core_data INTEGER,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
                         )"
                       db-name)]
-    (.run ^object stmt)))
+    (.run ^object stmt)
+    (let [create-index-stmt (prepare db "CREATE INDEX IF NOT EXISTS block_type ON blocks(type)" db-name)]
+      (.run ^object create-index-stmt))))
 
 ;; ~/logseq
 (defn get-graphs-dir
@@ -98,8 +99,10 @@
 
 (defn upsert-blocks!
   [repo blocks]
+  (def xx blocks)
   (if-let [db (get-db repo)]
-    (let [insert (prepare db "INSERT INTO blocks (id, page, name, uuid, content, datoms, journal_day, core_data, created_at, updated_at) VALUES (@id, @page, @name, @uuid, @content, @datoms, @journal_day, @core_data, @created_at, @updated_at) ON CONFLICT (id) DO UPDATE SET (page, name, uuid, content, datoms, journal_day, core_data, created_at, updated_at) = (@page, @name, @uuid, @content, @datoms, @journal_day, @core_data, @created_at, @updated_at)" repo)
+    (let [insert (prepare db "INSERT INTO blocks (uuid, type, page_uuid, page_journal_day, name, content,datoms, created_at, updated_at) VALUES (@uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at) ON CONFLICT (uuid) DO UPDATE SET (type, page_uuid, page_journal_day, name, content, datoms, created_at, updated_at) = (@type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at)"
+                          repo)
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
@@ -110,9 +113,9 @@
       (upsert-blocks! repo blocks))))
 
 (defn delete-blocks!
-  [repo ids]
+  [repo uuids]
   (when-let [db (get-db repo)]
-    (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
+    (let [sql (str "DELETE from blocks WHERE uuid IN " (clj-list->sql uuids))
           stmt (prepare db sql repo)]
       (.run ^object stmt))))
 
@@ -131,14 +134,15 @@
 (defn get-initial-data
   [repo]
   (when-let [db (get-db repo)]
-    (let [all-pages (query repo db "select * from blocks where name is not null")
-          all-block-ids (query repo db "select id, uuid, page from blocks where name is null and uuid is not null and page is not null")
-          recent-journal (some-> (query repo db "select id from blocks order by journal_day desc limit 1")
+    (let [all-pages (query repo db "select * from blocks where type = 2") ; 2 = page block
+          ;; 1 = normal block
+          all-block-ids (query repo db "select uuid, page_uuid from blocks where type = 1")
+          recent-journal (some-> (query repo db "select uuid from blocks where type = 2 order by page_journal_day desc limit 1")
                                  first
                                  bean/->clj
-                                 :id)
+                                 :uuid)
           latest-journal-blocks (when recent-journal
-                                  (query repo db (str "select * from blocks where page = " recent-journal)))]
+                                  (query repo db (str "select * from blocks where type = 1 and page_uuid = '" recent-journal "'")))]
       {:all-pages all-pages
        :all-blocks all-block-ids
        :journal-blocks latest-journal-blocks})))
@@ -146,8 +150,4 @@
 (defn get-other-data
   [repo journal-block-ids]
   (when-let [db (get-db repo)]
-    (if (seq journal-block-ids)
-      (query repo db
-        (str "select * from blocks where name is null and id not in "
-             (clj-list->sql journal-block-ids)))
-      (query repo db "select * from blocks where name is null"))))
+    (query repo db "select * from blocks where type = 1")))
