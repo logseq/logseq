@@ -361,6 +361,11 @@
   [^js api ids]
   (apply (.-selectShapes api) ids))
 
+(defn cleanup!
+  [^js tl-page]
+  (let [shapes (.-shapes tl-page)]
+    (.cleanup tl-page (map #(.-id %) shapes))))
+
 (defn update-bindings!
   [^js tl-page page-name]
   (when-let [page (db/entity [:block/name page-name])]
