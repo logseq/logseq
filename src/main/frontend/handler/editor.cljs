@@ -88,6 +88,11 @@
   [block]
   (some-> block (set-block-own-order-list-type! "number")))
 
+(defn reset-cursor-range!
+  [node]
+  (when node
+    (state/set-cursor-range! (util/caret-range node))))
+
 (defn toggle-blocks-as-own-order-list!
   [blocks]
   (when (seq blocks)
@@ -97,6 +102,10 @@
       (if has-ordered?
         (editor-property/batch-remove-block-property! blocks-uuids order-list-prop)
         (editor-property/batch-add-block-property! blocks-uuids order-list-prop "number")))))
+
+(defn clear-selection!
+  []
+  (state/clear-selection!))
 
 (defn get-selection-and-format
   []
@@ -123,30 +132,74 @@
              :edit-id edit-id
              :input input}))))))
 
-(defn- format-text!
-  [pattern-fn]
-  (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-          pattern (pattern-fn format)
-          pattern-count (count pattern)
-          pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
-          pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
-          already-wrapped? (= pattern pattern-prefix pattern-suffix)
-          prefix (if already-wrapped?
-                   (subs value 0 (- selection-start pattern-count))
-                   (subs value 0 selection-start))
-          postfix (if already-wrapped?
-                    (subs value (+ selection-end pattern-count))
-                    (subs value selection-end))
-          inner-value (cond-> selection
-                        (not already-wrapped?)
-                        (#(str pattern % pattern)))
-          new-value (str prefix inner-value postfix)]
-      (state/set-edit-content! edit-id new-value)
-      (cond
-        already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
-        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
-        :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
+(defn- remove-pattern!
+  [selection-prefix text selection-postfix
+   [pattern-prefix pattern-postfix]]
+  (str (subs selection-prefix 0 (- (count selection-prefix)
+                                   (count pattern-prefix)))
+       text
+       (subs selection-postfix (count pattern-postfix))))
+
+(defn- apply-pattern!
+  [selection-prefix text pattern selection-postfix]
+  (str selection-prefix (string/replace pattern "%s" text) selection-postfix))
+
+(defn- update-text-and-cursor!
+  [already-wrapped?
+   selection-prefix selection selection-postfix
+   pattern-prefix pattern-postfix
+   selection-start selection-end]
+  (if already-wrapped?
+    [(remove-pattern!
+      selection-prefix selection selection-postfix
+      [pattern-prefix pattern-postfix])
+     (- selection-end (count pattern-postfix))]
+    [(apply-pattern!
+      selection-prefix selection
+      (str pattern-prefix "%s" pattern-postfix)
+      selection-postfix)
+     (+ selection-start
+        (count pattern-prefix) (count selection) (count pattern-postfix))]))
+
+(defn- handle-selection!
+  [already-wrapped? selection input cursor-pos
+   selection-start selection-end
+   pattern-prefix pattern-postfix]
+  (cond
+    already-wrapped?
+    (cursor/set-selection-to input
+                             (- selection-start (count pattern-prefix))
+                             (- selection-end (count pattern-prefix)))
+    (empty? selection)
+    (cursor/move-cursor-to input (- cursor-pos (count pattern-postfix)))
+    :else
+    (do (cursor/move-cursor-to input (+ selection-end (count pattern-prefix)))
+        (clear-selection!))))
+
+(defn- format-text! [pattern-fn]
+  (when-let [{:keys
+              [selection-start selection-end format selection
+               value edit-id input]} (get-selection-and-format)]
+    (let [default-format (or format "")
+          pattern (pattern-fn default-format)
+          [pattern-prefix pattern-postfix] (string/split pattern #"%s")
+          selection (or selection "")
+          selection-prefix (subs value 0 selection-start)
+          selection-postfix (subs value selection-end)
+          has-prefix? (string/ends-with? selection-prefix pattern-prefix)
+          has-postfix? (string/starts-with? selection-postfix pattern-postfix)
+          already-wrapped? (and has-prefix? has-postfix?)
+
+          [updated-text cursor-pos]
+          (update-text-and-cursor! already-wrapped?
+                                   selection-prefix selection selection-postfix
+                                   pattern-prefix pattern-postfix
+                                   selection-start selection-end)]
+      (state/set-edit-content! edit-id updated-text)
+      (handle-selection! already-wrapped? selection input cursor-pos
+                         selection-start selection-end 
+                         pattern-prefix pattern-postfix)
+      (reset-cursor-range! input))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -154,13 +207,16 @@
 (defn italics-format! []
   (format-text! config/get-italic))
 
+(defn strikethrough-format! []
+  (format-text! config/get-strikethrough))
+
+(defn underline-format! []
+  (format-text! config/get-underline))
+
 (defn highlight-format! []
   (when-let [block (state/get-edit-block)]
     (let [format (:block/format block)]
       (format-text! #(config/get-highlight format)))))
-
-(defn strike-through-format! []
-  (format-text! config/get-strike-through))
 
 (defn html-link-format!
   ([]
@@ -232,6 +288,25 @@
                         (apply concat))]
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
+
+(defn- get-edit-input-id-with-block-id
+  [block-id]
+  (when-let [first-block (util/get-first-block-by-id block-id)]
+    (string/replace (gobj/get first-block "id")
+                    "ls-block"
+                    "edit-block")))
+
+(defn- text-range-by-lst-fst-line [content [direction pos]]
+  (case direction
+    :up
+    (let [last-new-line (or (string/last-index-of content \newline) -1)
+          end (+ last-new-line pos 1)]
+      (subs content 0 end))
+    :down
+    (-> (string/split-lines content)
+        first
+        (or "")
+        (subs 0 pos))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?
@@ -1539,7 +1614,6 @@
   {"[" "]"
    "{" "}"
    "(" ")"
-   "<" ">"
    "`" "`"
    "'" "'"
    "\"" "\""
@@ -1562,6 +1636,7 @@
     "^"
     "="
     "/"
+    "\\"
     "+"
     "~"})
 
@@ -1611,7 +1686,9 @@
            (surround-by? input "\n" "")
            (surround-by? input " " "")
            (surround-by? input "]" "")
-           (surround-by? input "(" ""))))
+           (surround-by? input "(" "")
+           (surround-by? input "{" "")
+           (surround-by? input "<" ""))))
 
 (defn wrapped-by?
   [input before end]
@@ -2869,6 +2946,7 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
+        ;; the same applies to single and double quotes.
         (-> (keys autopair-map)
             set
             (disj "(")
@@ -2877,7 +2955,7 @@
         (let [curr (get-current-input-char input)
               prev (util/nth-safe value (dec pos))]
           (util/stop e)
-          (if (and (= key "`") (= "`" curr) (not= "`" prev))
+          (if (and (#{"`" "'" "\""} key) (= key curr) (not= key prev))
             (cursor/move-cursor-forward input)
             (autopair input-id key format nil)))
 
