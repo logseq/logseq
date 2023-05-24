@@ -371,7 +371,7 @@
    :command.editor/bold                                      "Tučné"
    :command.editor/italics                                   "Kurzíva"
    :command.editor/highlight                                 "Zvýrazniť"
-   :command.editor/strike-through                            "Prečiarknuté"
+   :command.editor/strikethrough                             "Prečiarknuté"
    :command.editor/clear-block                               "Odstrániť celý obsah bloku"
    :command.editor/kill-line-before                          "Odstrániť riadok pred pozíciou kurzora"
    :command.editor/copy-embed                                "Kopírovať vložený blok ukazujúci na aktuálny blok"

@@ -468,7 +468,7 @@
    :command.editor/select-down             "Inhalt unten auswählen"
    :command.editor/select-parent           "Übergeordneten Block auswählen"
    :command.editor/select-up               "Inhalt oben auswählen"
-   :command.editor/strike-through          "Durchgestrichen"
+   :command.editor/strikethrough           "Durchgestrichen"
    :command.editor/toggle-open-blocks      "Öffnen von Blöcken umschalten (alle Blöcke ein- oder ausklappen)"
    :command.editor/toggle-undo-redo-mode   "Rückgängig / Wiederherstellen umschalten (global oder nur die Seite)"
    :command.editor/undo                    "Rückgängig"

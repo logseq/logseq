@@ -462,7 +462,7 @@
    :command.editor/replace-block-reference-at-point "Erstatt blokkreferanse med dets innhold ved markør"
    :command.editor/select-down "Velg innhold under"
    :command.editor/select-up "Velg innhold over"
-   :command.editor/strike-through "Gjennomstreking"
+   :command.editor/strikethrough "Gjennomstreking"
    :command.editor/copy-embed "Kopier en blokkinnebygging som peker til nåværende blokk"
    :command.editor/copy-text "Kopier utvalg som tekst"
    :command.go/all-pages "Gå til alle sider"

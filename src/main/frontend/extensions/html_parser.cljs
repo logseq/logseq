@@ -47,7 +47,7 @@
                                "\n"))
         emphasis-transform (fn [tag attrs children]
                              (let [style (:style attrs)
-                                   [bold? italic? underline? strike-through? mark?]
+                                   [bold? italic? underline? strikethrough? mark?]
                                    (when style
                                      [(re-find #"font-weight:\s*(([6789]\d\d)|1000|(semi)?bold)\b" style)
                                       (re-find #"font-style:\s*italic\b" style)
@@ -71,7 +71,7 @@
 
                                              (contains? #{:del :s :strike} tag)
                                              (when-not (and style (string/includes? style "text-decoration: normal"))
-                                               (config/get-strike-through format))
+                                               (config/get-strikethrough format))
 
                                              (or (contains? #{:mark} tag) mark?)
                                              (when-not (and style (string/includes? style "background-color: transparent"))
@@ -83,7 +83,7 @@
                                                      [(when bold? (config/get-bold format))
                                                       (when italic? (config/get-italic format))
                                                       (when underline? (config/get-underline format))
-                                                      (when strike-through? (config/get-strike-through format))
+                                                      (when strikethrough? (config/get-strikethrough format))
                                                       (when mark? (config/get-highlight format))])
 
                                              :else

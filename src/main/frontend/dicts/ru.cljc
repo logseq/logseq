@@ -414,7 +414,7 @@
    :command.editor/bold                     "Жирный"
    :command.editor/italics                  "Курсив"
    :command.editor/highlight                "Выделение"
-   :command.editor/strike-through           "Перечёркнутый"
+   :command.editor/strikethrough            "Перечёркнутый"
    :command.editor/clear-block              "Удалить содержимое блока"
    :command.editor/kill-line-before         "Удалить строку до курсора"
    :command.editor/copy-embed               "Копировать вставку, ссылающуюся на текущий блок"

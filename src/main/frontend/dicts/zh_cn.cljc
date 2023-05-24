@@ -371,7 +371,7 @@
    :command.editor/replace-block-reference-at-point  "用内容替换块引用"
    :command.editor/select-down              "选择下面内容"
    :command.editor/select-up                "选择上面的内容"
-   :command.editor/strike-through           "删除线"
+   :command.editor/strikethrough            "删除线"
    :command.go/all-graphs                   "所有图谱"
    :command.go/all-pages                    "全部页面"
    :command.go/electron-jump-to-the-next    "跳转到查找栏搜索的下一个匹配项"

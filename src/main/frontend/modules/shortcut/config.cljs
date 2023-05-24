@@ -207,8 +207,8 @@
    :editor/highlight             {:binding "mod+shift+h"
                                   :fn      editor-handler/highlight-format!}
 
-   :editor/strike-through        {:binding "mod+shift+s"
-                                  :fn      editor-handler/strike-through-format!}
+   :editor/strikethrough         {:binding "mod+shift+s"
+                                  :fn      editor-handler/strikethrough-format!}
 
    :editor/clear-block           {:binding (if mac? "ctrl+l" "alt+l")
                                   :fn      editor-handler/clear-block-content!}
@@ -637,7 +637,7 @@
                           :editor/bold
                           :editor/italics
                           :editor/highlight
-                          :editor/strike-through
+                          :editor/strikethrough
                           :editor/clear-block
                           :editor/kill-line-before
                           :editor/kill-line-after
@@ -780,7 +780,7 @@
    [:editor/bold
     :editor/insert-link
     :editor/italics
-    :editor/strike-through
+    :editor/strikethrough
     :editor/highlight]
 
    :shortcut.category/navigating

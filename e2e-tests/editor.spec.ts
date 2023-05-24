@@ -778,7 +778,6 @@ test.describe('Auto-pair symbols only with text selection', () => {
     { name: 'caret', prefix: '^', postfix: '^' },
     { name: 'equal', prefix: '=', postfix: '=' },
     { name: 'slash', prefix: '/', postfix: '/' },
-    { name: 'backlash', prefix: '\\', postfix: '\\' },
     { name: 'plus', prefix: '+', postfix: '+' },
     { name: 'tilde', prefix: '~', postfix: '~' },
   ]

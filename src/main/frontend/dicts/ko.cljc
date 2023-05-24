@@ -452,7 +452,7 @@
    :command.editor/escape-editing                   "편집 나가기"
    :command.editor/open-file-in-default-app         "기본 앱으로 파일 열기"
    :command.editor/open-file-in-directory           "파일 위치 열기"
-   :command.editor/strike-through                   "취소선"
+   :command.editor/strikethrough                    "취소선"
    :command.misc/copy                               "복사"
    :command.ui/goto-plugins                         "플러그인 페이지로 이동"
    :command.ui/select-theme-color                   "테마 색상 선택"
