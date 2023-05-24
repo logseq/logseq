@@ -209,9 +209,13 @@
 
         :else
         (let [part (->> (take per-length data)
-                        (mapcat (comp edn/read-string #(gobj/get % "datoms")))
-                        (map-indexed (fn [idx av] (concat [:db/add (dec (- idx))]
-                                                          (uuid-str->uuid-in-av-vec av)))))]
+                        (map (fn [block]
+                               (map uuid-str->uuid-in-av-vec
+                                    (edn/read-string (gobj/get block "datoms")))))
+                        (map-indexed (fn [idx av-coll]
+                                       (map (partial cons (dec (- idx))) av-coll)))
+                        (apply concat)
+                        (map (fn [eav] (cons :db/add eav))))]
           (transact! repo part {:skip-persist? true})
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
@@ -224,19 +228,27 @@
           _ (swap! conns assoc db-name db-conn)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
-          pages (->> all-pages
-                     (mapcat (comp edn/read-string :datoms))
-                     (map uuid-str->uuid-in-av-vec))
-          all-blocks' (mapcat (fn [b]
-                                [[:block/uuid (uuid (:uuid b))]
-                                 [:block/page [:block/uuid (uuid (:page_uuid b))]]])
-                              all-blocks)
-          journal-blocks' (->> journal-blocks
-                               (mapcat (comp edn/read-string :datoms))
-                               (map uuid-str->uuid-in-av-vec))
-          tx-data (map-indexed
-                   (fn [idx av] (concat [:db/add (dec (- idx))] av))
-                   (concat pages all-blocks' journal-blocks'))]
+          pages (map (fn [page]
+                       (->> page
+                            :datoms
+                            edn/read-string
+                            (map uuid-str->uuid-in-av-vec)))
+                     all-pages)
+          all-blocks' (map (fn [b]
+                             [[:block/uuid (uuid (:uuid b))]
+                              [:block/page [:block/uuid (uuid (:page_uuid b))]]])
+                           all-blocks)
+          journal-blocks' (map (fn [b]
+                                 (->> b
+                                      :datoms
+                                      edn/read-string
+                                      (map uuid-str->uuid-in-av-vec)))
+                               journal-blocks)
+          tx-data (->> (concat pages all-blocks' journal-blocks')
+                       (map-indexed (fn [idx av-coll]
+                                      (map (partial cons (dec (- idx))) av-coll)))
+                       (apply concat)
+                       (map (partial cons :db/add)))]
     (def xx [all-pages all-blocks journal-blocks tx-data])
     (d/transact! db-conn tx-data)
 
@@ -246,6 +258,7 @@
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
                  {:skip-persist? true})
+    (println :restore-graph-from-sqlite! :done)
 
     (js/setTimeout
      (fn []
