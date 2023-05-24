@@ -133,9 +133,16 @@ test('group the rectangles', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(1)
 })
 
-test('deleting the group', async ({ page }) => {
-  await page.keyboard.press(modKey + '+a')
-  await page.keyboard.press(modKey + '+g')
+test('delete the group', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
+  await page.mouse.move(bounds.x + 20, bounds.y + 20, {steps: 5})
+
+  await page.mouse.down()
+  await page.mouse.up()
+
+  await page.keyboard.press('Delete')
 
   // should also delete the grouped shapes
   await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(0)
@@ -149,7 +156,7 @@ test('undo the group deletion', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 })
 
-test('undo the group cation', async ({ page }) => {
+test('undo the group action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
   await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(0)
