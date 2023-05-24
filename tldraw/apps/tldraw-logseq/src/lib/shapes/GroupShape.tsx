@@ -34,8 +34,8 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
           className={'tl-hitarea-fill'}
           x={strokeWidth / 2}
           y={strokeWidth / 2}
-          width={Math.max(0.01, bounds?.width - strokeWidth)}
-          height={Math.max(0.01, bounds?.height - strokeWidth)}
+          width={Math.max(0.01, bounds.width - strokeWidth)}
+          height={Math.max(0.01, bounds.height - strokeWidth)}
           pointerEvents="all"
         />
         {childSelected && (
