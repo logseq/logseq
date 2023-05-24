@@ -296,10 +296,10 @@
 }
 
 .page-ref {
-  color: var(--ls-link-ref-text-color);
+  color: or(--lx-accent-11, --ls-link-ref-text-color);
 
   &:hover {
-    color: var(--ls-link-ref-text-hover-color);
+    color: or(--lx-accent-12, --ls-link-ref-text-hover-color);
   }
 }
 

@@ -306,6 +306,41 @@
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
+(defn theme-row [t dark?]
+  (let [color-accent (state/sub :color/accent)
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(15, 1fr)" 
+                                       :gap "0.75rem"
+                                       :overflow :scroll 
+                                       :width "100%"
+                                       :padding-left "0.25rem"}}
+                    (for [color colors/color-list]
+                      [:div.theme-row--color {:on-click #(state/toggle-color-accent! color) 
+                                              :class (when (= color-accent color) "selected")}
+                       [:div.theme-row--color-swatch {:style {"--background"        (str "var(--rx-" (name color) "-03)")
+                                                              "--background-hover"  (str "var(--rx-" (name color) "-04)")
+                                                              "--background-active" (str "var(--rx-" (name color) "-05)")
+                                                              "--border"            (str "var(--rx-" (name color) "-07)")
+                                                              "--border-hover"      (str "var(--rx-" (name color) "-08)")}}]
+                                                              ; "--border-hover"     (str "var(--rx-" (name color) "-08)")}}]
+                       [:div.text-xs {:style {:margin "0 -0.5rem" 
+                                              :opacity 0.5 
+                                              :height "1rem"}} 
+                        (name color)]])]
+        display-theme [:button {:style {:background "var(--lx-accent-03)" 
+                                        :border "1px solid var(--lx-accent-07)"
+                                        :color "var(--lx-accent-11)"}}
+                        (if color-accent (name color-accent) "default")]]
+    [:<>
+     (row-with-button-action {:left-label "Radix color theme"
+                              :-for       "toggle_radix_theme"
+                              :stretch    true
+                              :action     pick-theme})])) 
+     ; (row-with-button-action {:left-label "Preview color theme"
+     ;                          :-for       "display_radix_theme"
+     ;                          :stretch    true
+     ;                          :action     display-theme})])) 
+                             
+
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
