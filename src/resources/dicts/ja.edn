@@ -1,5 +1,5 @@
-{:tutorial/text #resource "tutorial-ja.md"
- :tutorial/dummy-notes #resource "dummy-notes-ja.md"
+{:tutorial/text #resource "tutorials/tutorial-ja.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-ja.md"
  :on-boarding/demo-graph "これはデモ用のグラフなので変更内容は保存されません。保存するにはローカルフォルダを選んで新規グラフを追加してください。"
  :on-boarding/add-graph "新規グラフを追加"
  :on-boarding/open-local-dir "ここをクリックして、データ保存先のローカルフォルダを選んでください"

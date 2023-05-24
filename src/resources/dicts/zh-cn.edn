@@ -64,8 +64,6 @@
  :settings-page/enable-flashcards "记忆卡片"
  :settings-page/enable-shortcut-tooltip "启用快捷键提示"
  :settings-page/export-theme "导出主题"
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
- :tutorial/text #resource "tutorial-en.md"
  :right-side-bar/help "帮助"
  :right-side-bar/switch-theme "主题模式"
  :right-side-bar/contents "目录"

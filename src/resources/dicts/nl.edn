@@ -251,9 +251,6 @@
 
  :tips/all-done "Alles klaar"
 
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
- :tutorial/text #resource "tutorial-en.md"
-
  :updater/new-version-install "Een nieuwe versie is gedownload."
  :updater/quit-and-install "Herstart om te installeren"
 

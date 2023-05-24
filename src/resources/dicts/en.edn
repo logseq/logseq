@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "Skip to main content"
- :tutorial/text #resource "tutorial-en.md"
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
+ :tutorial/text #resource "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
  :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
  :on-boarding/add-graph "Add a graph"
  :on-boarding/open-local-dir "Open a local directory"

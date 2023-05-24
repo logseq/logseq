@@ -228,8 +228,6 @@
 
  :page/copy-page-url "Copiar URL da página"
  :plugin/not-installed "Não instalado"
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
- :tutorial/text #resource "tutorial-en.md"
  :settings-page/edit-export-css "Editar export.css"
  :settings-page/enable-flashcards "Flashcards"
  :settings-page/export-theme "Exportar Tema"

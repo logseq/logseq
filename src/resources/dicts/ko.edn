@@ -1,5 +1,5 @@
-{:tutorial/text #resource "tutorial-ko.md"
- :tutorial/dummy-notes #resource "dummy-notes-ko.md"
+{:tutorial/text #resource "tutorials/tutorial-ko.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-ko.md"
  :on-boarding/demo-graph "이 그래프는 데모 그래프입니다. 로컬 폴더를 열기 전까지 변경 사항은 저장되지 않습니다."
  :on-boarding/add-graph "그래프 추가"
  :on-boarding/open-local-dir "로컬 폴더 열기"

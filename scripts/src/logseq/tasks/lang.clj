@@ -60,9 +60,9 @@
                                        {:translation-key k
                                                   ;; Shorten values
                                         :string-to-translate (shorten v 50)
-                                        :file (str "dicts/"
-                                                   (-> lang name string/lower-case)
-                                                   ".edn")}))
+                                        :file (if (= "tutorial" (namespace k))
+                                                (str "Under tutorials/")
+                                                (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
                                 (sort-by (juxt :file :translation-key)))]
         (if (:copy options)
           (doseq [[file missing-for-file] (group-by :file sorted-missing)]

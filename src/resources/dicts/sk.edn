@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content               "Preskočiť na hlavný obsah"
- :tutorial/text                                    #resource "tutorial-sk.md"
- :tutorial/dummy-notes                             #resource "dummy-notes-sk.md"
+ :tutorial/text                                    #resource "tutorials/tutorial-sk.md"
+ :tutorial/dummy-notes                             #resource "tutorials/dummy-notes-sk.md"
  :on-boarding/demo-graph                           "Toto je ukážkový graf, zmeny nebudú uložené, kým neotvoríte lokálny adresár."
  :on-boarding/add-graph                            "Pridať graf"
  :on-boarding/open-local-dir                       "Otvoriť lokálny adresár"

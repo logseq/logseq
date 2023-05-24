@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "Ana içeriğe geç"
- :tutorial/text #resource "tutorial-tr.md"
- :tutorial/dummy-notes #resource "dummy-notes-tr.md"
+ :tutorial/text #resource "tutorials/tutorial-tr.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-tr.md"
  :on-boarding/demo-graph "Bu bir demo graftır, yerel bir klasör açana kadar değişiklikler kaydedilmeyecektir."
  :on-boarding/add-graph "Bir graf ekle"
  :on-boarding/open-local-dir "Yerel bir dizin açın"

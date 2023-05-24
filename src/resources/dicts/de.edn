@@ -348,9 +348,6 @@
 
  :tips/all-done "Alles erledigt"
 
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
- :tutorial/text #resource "tutorial-en.md"
-
  :updater/new-version-install "Eine neue Version wurde heruntergeladen."
  :updater/quit-and-install "Neu starten, um zu installieren"
 

@@ -1,5 +1,5 @@
-{:tutorial/text #resource "tutorial-pl.md"
- :tutorial/dummy-notes #resource "dummy-notes-pl.md"
+{:tutorial/text #resource "tutorials/tutorial-pl.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-pl.md"
  :on-boarding/demo-graph "To jest przykładowy graf, zmiany nie zostaną zapisane dopóki nie otworzysz lokalnego katalogu."
  :on-boarding/add-graph "Dodaj graf"
  :on-boarding/open-local-dir "Otwórz lokalny katalog"

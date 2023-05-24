@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "Перейти до головної"
- :tutorial/text #resource "tutorial-uk.md"
- :tutorial/dummy-notes #resource "dummy-notes-uk.md"
+ :tutorial/text #resource "tutorials/tutorial-uk.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-uk.md"
  :on-boarding/demo-graph "Це демонстраційний графік, зміни не будуть збереженні поки ви не відкриєте локальну папку."
  :on-boarding/add-graph "Додати графік"
  :on-boarding/open-local-dir "Відкрити локальну директорію"

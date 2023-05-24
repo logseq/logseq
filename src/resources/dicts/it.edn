@@ -1,5 +1,5 @@
-{:tutorial/text #resource "tutorial-en.md"
- :tutorial/dummy-notes #resource "dummy-notes-en.md"
+{:tutorial/text #resource "tutorials/tutorial-it.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-it.md"
  :on-boarding/demo-graph "Questo è un grafo dimostrativo, le modifiche non saranno salvate finché non aprirai una cartella locale."
  :on-boarding/add-graph "Aggiungi un grafo"
  :on-boarding/open-local-dir "Apri una cartella locale"

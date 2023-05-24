@@ -1,4 +1,4 @@
-{:paths ["scripts/src" "src/main" "templates" "src/resources"]
+{:paths ["scripts/src" "src/main" "src/resources"]
  :deps
  {metosin/malli
   {:mvn/version "0.10.0"}

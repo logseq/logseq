@@ -1,5 +1,5 @@
-{:tutorial/text #resource "tutorial-no.md"
- :tutorial/dummy-notes #resource "dummy-notes-no.md"
+{:tutorial/text #resource "tutorials/tutorial-no.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-no.md"
  :on-boarding/demo-graph "Dette er en demo graf, endringer vil ikke bli lagret før du åpner en lokal mappe."
  :on-boarding/add-graph "Legg til en graf"
  :on-boarding/open-local-dir "Åpne en lokal mappe"

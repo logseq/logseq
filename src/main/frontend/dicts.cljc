@@ -4,7 +4,7 @@
             #?@(:bb [[clojure.java.io :as io]]
                 :clj [[clojure.java.io :as io]
                       [shadow.resource :as rc]]))
-  #?(:cljs (:require-macros [frontend.dicts :refer [resource edn-resource]])))
+  #?(:cljs (:require-macros [frontend.dicts :refer [edn-resource]])))
 
 #?(:clj (defn resource [file] (slurp (io/resource file))))
 
