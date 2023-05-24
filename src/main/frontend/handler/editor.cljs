@@ -63,10 +63,45 @@
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 
+(def clear-selection! editor-property/clear-selection!)
+(def edit-block! editor-property/edit-block!)
+
+(defn get-block-own-order-list-type
+  [block]
+  (some-> block :block/properties :logseq.order-list-type))
+
+(defn set-block-own-order-list-type!
+  [block type]
+  (when-let [uuid (:block/uuid block)]
+    (editor-property/set-block-property! uuid :logseq.order-list-type (name type))))
+
+(defn remove-block-own-order-list-type!
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (editor-property/remove-block-property! uuid :logseq.order-list-type)))
+
+(defn own-order-number-list?
+  [block]
+  (= (get-block-own-order-list-type block) "number"))
+
+(defn make-block-as-own-order-list!
+  [block]
+  (some-> block (set-block-own-order-list-type! "number")))
+
 (defn reset-cursor-range!
   [node]
   (when node
     (state/set-cursor-range! (util/caret-range node))))
+
+(defn toggle-blocks-as-own-order-list!
+  [blocks]
+  (when (seq blocks)
+    (let [has-ordered?    (some own-order-number-list? blocks)
+          blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
+          order-list-prop :logseq.order-list-type]
+      (if has-ordered?
+        (editor-property/batch-remove-block-property! blocks-uuids order-list-prop)
+        (editor-property/batch-add-block-property! blocks-uuids order-list-prop "number")))))
 
 (defn clear-selection!
   []
@@ -224,6 +259,21 @@
          (state/get-current-repo)
          (:db/id block)
          (if page? :page :block))))))
+
+(defn reset-cursor-range!
+  [node]
+  (when node
+    (state/set-cursor-range! (util/caret-range node))))
+
+(defn restore-cursor-pos!
+  [id markup]
+  (when-let [node (gdom/getElement (str id))]
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
 
 (defn highlight-block!
   [block-uuid]
@@ -460,7 +510,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-      (save-current-block! {:current-block current-block})
+     (save-current-block! {:current-block current-block})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -889,72 +939,6 @@
        :block/properties-order (or (keys properties) [])
        :block/content content})))
 
-(defn- batch-set-block-property!
-  "col: a collection of [block-id property-key property-value]."
-  [col]
-  #_:clj-kondo/ignore
-  (when-let [repo (state/get-current-repo)]
-    (let [col' (group-by first col)]
-      (outliner-tx/transact!
-       {:outliner-op :save-block}
-        (doseq [[block-id items] col']
-          (let [block-id (if (string? block-id) (uuid block-id) block-id)
-                new-properties (zipmap (map second items)
-                                (map last items))]
-            (when-let [block (db/entity [:block/uuid block-id])]
-              (let [format (:block/format block)
-                    content (:block/content block)
-                    properties (:block/properties block)
-                    properties-text-values (:block/properties-text-values block)
-                    properties (-> (merge properties new-properties)
-                                   gp-util/remove-nils-non-nested)
-                    properties-text-values (-> (merge properties-text-values new-properties)
-                                               gp-util/remove-nils-non-nested)
-                    property-ks (->> (concat (:block/properties-order block)
-                                             (map second items))
-                                     (filter (set (keys properties)))
-                                     distinct
-                                     vec)
-                    content (property/remove-properties format content)
-                    kvs (for [key property-ks] [key (or (get properties-text-values key)
-                                                        (get properties key))])
-                    content (property/insert-properties format content kvs)
-                    content (property/remove-empty-properties content)
-                    block {:block/uuid block-id
-                           :block/properties properties
-                           :block/properties-order property-ks
-                           :block/properties-text-values properties-text-values
-                           :block/content content}]
-                (outliner-core/save-block! block)))))))
-
-    (let [block-id (ffirst col)
-          block-id (if (string? block-id) (uuid block-id) block-id)
-          input-pos (or (state/get-edit-pos) :max)]
-      ;; update editing input content
-      (when-let [editing-block (state/get-edit-block)]
-        (when (= (:block/uuid editing-block) block-id)
-          (edit-block! editing-block
-                       input-pos
-                       (state/get-edit-input-id)))))))
-
-(defn batch-add-block-property!
-  [block-ids property-key property-value]
-  (batch-set-block-property! (map #(vector % property-key property-value) block-ids)))
-
-(defn batch-remove-block-property!
-  [block-ids property-key]
-  (batch-set-block-property! (map #(vector % property-key nil) block-ids)))
-
-(defn remove-block-property!
-  [block-id key]
-  (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key nil]])))
-
-(defn set-block-property!
-  [block-id key value]
-  (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key value]])))
-
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
@@ -1357,8 +1341,8 @@
   [blocks]
   (outliner-tx/transact!
    {:outliner-op :save-block}
-    (doseq [[block value] blocks]
-      (save-block-if-changed! block value))))
+   (doseq [[block value] blocks]
+     (save-block-if-changed! block value))))
 
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
@@ -1623,17 +1607,14 @@
   {"[" "]"
    "{" "}"
    "(" ")"
-   "<" ">"
    "`" "`"
-   "\"" "\""
-   "'" "'"
+   "~" "~"
    "*" "*"
    "_" "_"
    "^" "^"
    "=" "="
    "/" "/" 
-   "+" "+"
-   "~" "~"})
+   "+" "+"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 (def reversed-autopair-map
@@ -1641,13 +1622,7 @@
           (keys autopair-map)))
 
 (def autopair-when-selected
-
-  #{"*"
-    "_"
-    "^"
-    "="
-    "/"
-    "+"})
+    #{"*" "^" "_" "=" "+" "/"})
 
 (def delete-map
   (assoc autopair-map
@@ -2865,7 +2840,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-        (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler

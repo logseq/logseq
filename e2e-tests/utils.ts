@@ -155,7 +155,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   })
 
   const title = await page.title()
-  if (title === "Import data into Logseq" || title === "Add another repo") {
+  if (title === 'Import data into Logseq' || title === 'Add another repo') {
     await page.click('a.button >> text=Skip')
   }
 
