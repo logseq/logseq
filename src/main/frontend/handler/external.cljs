@@ -119,7 +119,7 @@
    "
   [{:keys [uuid title children] :as tree}]
   (let [has-children? (seq children)
-        page-format (some-> tree (:children) (first) (:format))]
+        page-format (or (some-> tree (:children) (first) (:format)) :markdown)]
     (try (page-handler/create! title {:redirect?  false
                                       :format     page-format
                                       :uuid       uuid})
