@@ -1,4 +1,4 @@
-(ns logseq.publishing.export
+(ns ^:node-only logseq.publishing.export
   "This electron only ns (for the main process) exports files from multiple
   locations to provide a complete publishing app"
   (:require ["fs-extra" :as fse]
@@ -78,6 +78,7 @@
                                          :as options}]
   (let [custom-css-path (node-path/join repo-path "logseq" "custom.css")
         export-css-path (node-path/join repo-path "logseq" "export.css")
+        custom-js-path (node-path/join repo-path "logseq" "custom.js")
         output-static-dir (node-path/join output-dir "static")
         index-html-path (node-path/join output-dir "index.html")]
     (-> (p/let [_ (fs/mkdirSync output-static-dir #js {:recursive true})
@@ -87,6 +88,8 @@
                 _ (fs/writeFileSync (node-path/join output-static-dir "css" "export.css")  export-css)
                 custom-css (if (fs/existsSync custom-css-path) (str (fs/readFileSync custom-css-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "css" "custom.css") custom-css)
+                custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
+                _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
                 _ (cleanup-js-dir output-static-dir)]
                (notification-fn {:type "success"
                                  :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))

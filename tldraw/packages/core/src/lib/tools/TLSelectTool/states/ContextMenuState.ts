@@ -17,11 +17,10 @@ export class ContextMenuState<
   onEnter = (info: TLEventInfo<S>) => {
     const {
       selectedIds,
-      selectedShapes,
       inputs: { shiftKey },
     } = this.app
 
-    if (info.type === TLTargetType.Shape && !selectedShapes.has(info.shape)) {
+    if (info.type === TLTargetType.Shape && !selectedIds.has(info.shape.id)) {
       const shape = this.app.getParentGroup(info.shape) ?? info.shape
       if (shiftKey) {
         this.app.setSelectedShapes([...Array.from(selectedIds.values()), shape.id])

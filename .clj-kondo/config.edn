@@ -82,6 +82,7 @@
              frontend.mixins mixins
              frontend.mobile.util mobile-util
              frontend.page page
+             frontend.schema.handler.common-config common-config-schema
              frontend.search search
              frontend.state state
              frontend.template template
@@ -97,6 +98,8 @@
              frontend.util.thingatpt thingatpt
              lambdaisland.glogi log
              logseq.common.path path
+             logseq.common.graph common-graph
+             logseq.common.config common-config
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
