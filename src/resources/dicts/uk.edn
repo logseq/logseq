@@ -531,4 +531,4 @@
  :command.dev/show-block-ast                               "(Dev) Показати блок AST"
  :command.dev/show-block-data                              "(Dev) Показати дані блоку"
  :command.dev/show-page-ast                                "(Dev) Показати сторінку AST"
- :command.dev/show-page-data                               "(Dev) Показати дані сторінки"})
+ :command.dev/show-page-data                               "(Dev) Показати дані сторінки"}
