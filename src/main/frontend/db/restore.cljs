@@ -124,7 +124,7 @@
   [repo]
   (p/let [start-time (t/now)
           data (ipc/ipc :get-initial-data repo)
-          {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
+          {:keys [all-pages all-blocks journal-blocks init-data]} (bean/->clj data)
           uuid->db-id-tmap (transient (hash-map))
           *next-db-id (atom 100001)
           assign-id-to-uuid-fn (fn [uuid-str]
@@ -139,12 +139,30 @@
                                edn/read-string
                                (map #(apply vector eid %)))))
                       all-pages)
-          all-blocks' (mapv (fn [b]
-                              (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                [[eid :block/uuid (:uuid b)]
-                                 [eid :block/page [:block/uuid (:page_uuid b)]]]))
-                            all-blocks)
+          all-blocks' (doall
+                       (keep (fn [b]
+                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
+                                 (cond
+                                   (and (util/uuid-string? (:uuid b))
+                                        (util/uuid-string? (:page_uuid b)))
+                                   [[eid :block/uuid (:uuid b)]
+                                    [eid :block/page [:block/uuid (:page_uuid b)]]]
+
+                                   ;; Source blocks have been deleted
+                                   (util/uuid-string? (:uuid b))
+                                   [[eid :block/uuid (uuid (:uuid b))]]
+
+                                   :else
+                                   nil)))
+                             all-blocks))
           uuid->db-id-map (persistent! uuid->db-id-tmap)
+          init-data' (map (fn [b]
+                            (if (util/uuid-string? (:uuid b)) ; deleted blocks still refed
+                              (let [eid (assign-id-to-uuid-fn (:uuid b))]
+                                [[eid :block/uuid (uuid (:uuid b))]])
+                              (->> b
+                                   :datoms
+                                   edn/read-string))) init-data)
           journal-blocks' (map (fn [b]
                                  (let [eid (get uuid->db-id-map (:uuid b))]
                                    (->> b
@@ -155,7 +173,7 @@
           sorted-pages-eav-coll (->> pages
                                      (apply concat)
                                      (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
-          blocks-eav-colls (->> (concat all-blocks' journal-blocks')
+          blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
                                 (apply concat))
           all-eav-coll (doall (concat sorted-pages-eav-coll blocks-eav-colls))
           replaced-uuid-lookup-eav-coll (map

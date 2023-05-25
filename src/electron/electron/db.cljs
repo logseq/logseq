@@ -47,7 +47,7 @@
   [db db-name]
   (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
                         uuid TEXT PRIMARY KEY,
-       			type INTEGER,
+                        type INTEGER,
                         page_uuid TEXT,
                         page_journal_day INTEGER,
                         name TEXT,
@@ -141,10 +141,12 @@
                                  bean/->clj
                                  :uuid)
           latest-journal-blocks (when recent-journal
-                                  (query repo db (str "select * from blocks where type = 1 and page_uuid = '" recent-journal "'")))]
+                                  (query repo db (str "select * from blocks where type = 1 and page_uuid = '" recent-journal "'")))
+          init-data (query repo db "select * from blocks where type in (3, 4, 5)")]
       {:all-pages all-pages
        :all-blocks all-block-ids
-       :journal-blocks latest-journal-blocks})))
+       :journal-blocks latest-journal-blocks
+       :init-data init-data})))
 
 (defn get-other-data
   [repo journal-block-uuids]

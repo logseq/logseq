@@ -168,7 +168,6 @@
                                      (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
-         (util/pprint txs)
          (when (seq txs)
            (db/transact! txs)))
 
