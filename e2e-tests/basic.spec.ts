@@ -307,10 +307,9 @@ test('Block content should be preserved when adding a deadline via datepicker', 
   }
 
   async function validateDatePickerInput(kind, step) {
-    // Expect datepicker to disappear
+    // Expect:
     //        previously edited block to still be in editing mode
-    //        content of block to be complete with scheduled date
-    // TODO - add expects
+    //        content of block to be complete with scheduled date (if scheduled/deadline)
     await expect(await block.isEditing()).toBe(true);
 
     var content = page.locator('textarea >> nth=0');
@@ -337,24 +336,11 @@ test('Block content should be preserved when adding a deadline via datepicker', 
   await datePicker.getByText('Submit').click();
   await validateDatePickerInput('deadline', step);
 
+  // Test date picker refocusing
   await block.enterNext();
   step = 'Test a date entered using the keyboard';
   await block.mustType(step);
   datePicker = await openDatePicker('date');
   await page.keyboard.press('Enter');
   await validateDatePickerInput('date', step );
-
-  // await block.enterNext()
-  // await page.waitForTimeout(500)
-  // await block.escapeEditing()
-
-  // // Open date picker
-  // await page.click('a.opacity-80')
-  // await page.waitForTimeout(500)
-  // expect(page.locator('text=May 2000')).toBeVisible()
-  // expect(page.locator('td:has-text("6").active')).toBeVisible()
-
-  // // Close date picker
-  // await page.click('a.opacity-80')
-  // await page.waitForTimeout(500)
 })
