@@ -111,12 +111,16 @@
         (not page-empty?)
         [page]
 
-        create-title?
+        (and create-title?
+             (not whiteboard?)
+             (not (config/db-only? (state/get-current-repo))))
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page
            properties-block])
 
-        (seq properties)
+        (and (seq properties)
+             (not whiteboard?)
+             (not (config/db-only? (state/get-current-repo))))
         [page (editor-handler/properties-block properties format page-entity)]
 
         :else
@@ -158,12 +162,13 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx format nil % journal? whiteboard?))
+                           (mapcat #(build-page-tx format nil % journal? false))
                            (remove nil?)
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
+         (util/pprint txs)
          (when (seq txs)
            (db/transact! txs)))
 

@@ -1,4 +1,4 @@
-(ns frontend.handler.external
+(ns frontend.handler.import
   "Fns related to import from external services"
   (:require [clojure.edn :as edn]
             [clojure.walk :as walk]
@@ -14,6 +14,7 @@
             [frontend.format.block :as block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor]
@@ -118,28 +119,39 @@
    :children - tree
    :properties - map
    "
-  [{:keys [uuid title children properties] :as tree}]
+  [{:keys [type uuid title children properties] :as tree}]
   (let [has-children? (seq children)
-        page-format (or (some-> tree (:children) (first) (:format)) :markdown)]
-    (try (page-handler/create! title {:redirect?  false
-                                      :format     page-format
-                                      :uuid       uuid
-                                      :create-first-block? false})
+        page-format (or (some-> tree (:children) (first) (:format)) :markdown)
+        whiteboard? (= type "whiteboard")]
+    (try (page-handler/create! title {:redirect?           false
+                                      :format              page-format
+                                      :uuid                uuid
+                                      :create-first-block? false
+                                      :properties          properties
+                                      :whiteboard?         whiteboard?})
          (catch :default e
            (js/console.error e)
+           (prn {:tree tree})
            (notification/show! (str "Error happens when creating page " title ":\n"
                                     e
                                     "\nSkipped and continue the remaining import.") :error)))
     (when has-children?
-      (let [page-block  (db/entity [:block/name (util/page-name-sanity-lc title)])]
+      (let [page-name (util/page-name-sanity-lc title)
+            page-block (db/entity [:block/name page-name])]
         ;; Missing support for per block format (or deprecated?)
-        (try (editor/insert-block-tree children page-format
-                                       {:target-block page-block
-                                        :sibling?     false
-                                        :keep-uuid?   true
-                                        :properties   properties})
+        (try (if whiteboard?
+               (let [blocks (->> children
+                                 (map (partial medley/map-keys (fn [k] (keyword "block" k))))
+                                 (map gp-whiteboard/migrate-shape-block)
+                                 (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
+                 (db/transact! blocks))
+               (editor/insert-block-tree children page-format
+                                        {:target-block page-block
+                                         :sibling?     false
+                                         :keep-uuid?   true}))
              (catch :default e
                (js/console.error e)
+               (prn {:tree tree})
                (notification/show! (str "Error happens when creating block content of page " title "\n"
                                         e
                                         "\nSkipped and continue the remaining import.") :error))))))

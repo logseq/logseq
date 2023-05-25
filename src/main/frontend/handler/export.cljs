@@ -331,11 +331,14 @@
                  (assoc page' :block/children children))))
         (nested-select-keys
          [:block/id
+          :block/type
           :block/page-name
           :block/properties
           :block/format
           :block/children
-          :block/content]))})
+          :block/content
+          :block/created-at
+          :block/updated-at]))})
 
 (defn- file-name [repo extension]
   (-> (string/replace repo config/local-db-prefix "")

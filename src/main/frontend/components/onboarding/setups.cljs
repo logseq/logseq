@@ -13,7 +13,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.handler.notification :as notification]
-            [frontend.handler.external :as external-handler]
+            [frontend.handler.import :as import-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user-handler]
             [clojure.string :as string]
@@ -148,7 +148,7 @@
           (set! (.-onload reader)
                 (fn [e]
                   (let [text (.. e -target -result)]
-                    (external-handler/import-from-roam-json!
+                    (import-handler/import-from-roam-json!
                      text
                      #(do
                         (state/set-state! :graph/importing nil)
@@ -169,8 +169,8 @@
         (state/set-state! :graph/importing :logseq)
         (let [reader (js/FileReader.)
               import-f (if edn?
-                         external-handler/import-from-edn!
-                         external-handler/import-from-json!)]
+                         import-handler/import-from-edn!
+                         import-handler/import-from-json!)]
           (set! (.-onload reader)
                 (fn [e]
                   (let [text (.. e -target -result)]
@@ -194,11 +194,11 @@
           (set! (.-onload reader)
                 (fn [e]
                   (let [text (.. e -target -result)]
-                    (external-handler/import-from-opml! text
-                                                        (fn [pages]
-                                                          (reset! *opml-imported-pages pages)
-                                                          (state/set-state! :graph/importing nil)
-                                                          (finished-cb))))))
+                    (import-handler/import-from-opml! text
+                                                      (fn [pages]
+                                                        (reset! *opml-imported-pages pages)
+                                                        (state/set-state! :graph/importing nil)
+                                                        (finished-cb))))))
           (.readAsText reader file)))
       (notification/show! "Please choose a OPML file."
                           :error))))
