@@ -1,16 +1,17 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.modules.datascript-report.core :as ds-report]
+  (:require [clojure.set :as set]
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
+            [frontend.modules.datascript-report.core :as ds-report]
             [frontend.modules.outliner.file :as file]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
-            [frontend.db :as db]
-            [clojure.set :as set]
-            [datascript.core :as d]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
-            [frontend.config :as config]))
+            [logseq.db.schema :as db-schema]
+            [promesa.core :as p]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -100,16 +101,7 @@
   (let [a (:a datom)
         v (:v datom)
         v' (cond
-             (contains? #{:block/parent ;; these attrs is :db.type/ref
-                          :block/left
-                          :block/page
-                          :block/refs
-                          :block/path-refs
-                          :block/tags
-                          :block/alias
-                          :block/namespace
-                          :block/macros}
-                        a)
+             (contains? db-schema/ref-type-attributes a)
              (when-some [block-uuid-datom (first (d/datoms db :eavt v :block/uuid))]
                [:block/uuid (str (:v block-uuid-datom))])
 

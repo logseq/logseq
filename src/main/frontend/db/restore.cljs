@@ -15,7 +15,9 @@
             [goog.object :as gobj]
             [logseq.db.default :as default-db]
             [logseq.db.schema :as db-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]
+            [cljs-time.core :as t]))
 
 
 (defn- old-schema?
@@ -58,25 +60,19 @@
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 
-(defn- uuid-str->uuid-in-av-vec
-  [[a v]]
+(defn- uuid-str->uuid-in-eav-vec
+  [[e a v]]
   (cond
     (and (= :block/uuid a) (string? v))
-    [a (uuid v)]
+    [e a (uuid v)]
 
     (and (coll? v) (= 2 (count v))
          (= :block/uuid (first v))
          (string? (second v)))
-    [a [:block/uuid (uuid (second v))]]
+    [e a [:block/uuid (uuid (second v))]]
 
     :else
-    [a v]))
-
-(defn- add-tempid-to-av-colls
-  [start-tempid av-colls]
-  (map-indexed (fn [idx av-coll]
-                 (map (partial cons (dec (- start-tempid idx))) av-coll))
-               av-colls))
+    [e a v]))
 
 (defn- restore-other-data-from-sqlite!
   [repo data]
@@ -96,12 +92,12 @@
 
         :else
         (let [part (->> (take per-length data)
-                        (map (fn [block]
-                               (map uuid-str->uuid-in-av-vec
-                                    (edn/read-string (gobj/get block "datoms")))))
-                        (map-indexed (fn [idx av-coll]
-                                       (->> av-coll
-                                            (map (partial cons (dec (- idx))))
+                        (map-indexed (fn [idx block]
+                                       (->> (edn/read-string (gobj/get block "datoms"))
+                                            (map
+                                             (comp
+                                              uuid-str->uuid-in-eav-vec
+                                              (partial cons (dec (- idx)))))
                                             (sort-by #(if (= :block/uuid (second %)) 0 1)))))
                         (apply concat)
                         (map (fn [eav] (cons :db/add eav))))]
@@ -109,39 +105,74 @@
           (p/let [_ (p/delay 200)]
             (p/recur (drop per-length data))))))))
 
+(defn- replace-uuid-ref-with-eid
+  [uuid->eid-map [e a v]]
+  (if (and (contains? db-schema/ref-type-attributes a)
+           (coll? v)
+           (= :block/uuid (first v)))
+    (if-let [eid (get uuid->eid-map (second v))]
+      [e a eid]
+      [e a v])
+    [e a v]))
+
+(defn uuid-str->uuid-in-eav
+  [[e a v]]
+  [e a (if (= :block/uuid a) (uuid v) v)])
+
 (defn- restore-graph-from-sqlite!
   "Load initial data from SQLite"
   [repo]
-  (p/let [db-name (db-conn/datascript-db repo)
-          db-conn (d/create-conn db-schema/schema)
-          _ (swap! db-conn/conns assoc db-name db-conn)
+  (p/let [start-time (t/now)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks]} (bean/->clj data)
-          pages (map (fn [page]
-                       (->> page
-                            :datoms
-                            edn/read-string
-                            (map uuid-str->uuid-in-av-vec)))
-                     all-pages)
-          all-blocks' (map (fn [b]
-                             [[:block/uuid (uuid (:uuid b))]
-                              [:block/page [:block/uuid (uuid (:page_uuid b))]]])
-                           all-blocks)
+          uuid->db-id-tmap (transient (hash-map))
+          *next-db-id (atom 100001)
+          assign-id-to-uuid-fn (fn [uuid-str]
+                                 (let [id @*next-db-id]
+                                   (conj! uuid->db-id-tmap [uuid-str id])
+                                   (swap! *next-db-id inc)
+                                   id))
+          pages (mapv (fn [page]
+                        (let [eid (assign-id-to-uuid-fn (:uuid page))]
+                          (->> page
+                               :datoms
+                               edn/read-string
+                               (map #(apply vector eid %)))))
+                      all-pages)
+          all-blocks' (mapv (fn [b]
+                              (let [eid (assign-id-to-uuid-fn (:uuid b))]
+                                [[eid :block/uuid (:uuid b)]
+                                 [eid :block/page [:block/uuid (:page_uuid b)]]]))
+                            all-blocks)
+          uuid->db-id-map (persistent! uuid->db-id-tmap)
           journal-blocks' (map (fn [b]
-                                 (->> b
-                                      :datoms
-                                      edn/read-string
-                                      (map uuid-str->uuid-in-av-vec)))
+                                 (let [eid (get uuid->db-id-map (:uuid b))]
+                                   (->> b
+                                        :datoms
+                                        edn/read-string
+                                        (map #(apply vector eid %)))))
                                journal-blocks)
-          pages-eav-colls (add-tempid-to-av-colls 0 pages)
-          pages-eav-coll (->> pages-eav-colls
-                              (apply concat)
-                              (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
+          sorted-pages-eav-coll (->> pages
+                                     (apply concat)
+                                     (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
           blocks-eav-colls (->> (concat all-blocks' journal-blocks')
-                                (add-tempid-to-av-colls (- (count pages-eav-colls)))
                                 (apply concat))
-          tx-data (map (partial cons :db/add) (concat pages-eav-coll blocks-eav-colls))]
-    (d/transact! db-conn tx-data)
+          all-eav-coll (doall (concat sorted-pages-eav-coll blocks-eav-colls))
+          replaced-uuid-lookup-eav-coll (map
+                                         (comp
+                                          uuid-str->uuid-in-eav-vec
+                                          (partial replace-uuid-ref-with-eid uuid->db-id-map))
+                                         all-eav-coll)
+          datoms (mapv #(apply d/datom %) replaced-uuid-lookup-eav-coll)
+          ;; tx-data (map (partial cons :db/add) replaced-uuid-lookup-eav-coll)
+          db-name (db-conn/datascript-db repo)
+          db-conn (util/profile :restore-graph-from-sqlite!-init-db
+                                (d/conn-from-datoms datoms db-schema/schema))
+          _ (swap! db-conn/conns assoc db-name db-conn)
+          end-time (t/now)]
+    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms")
+
+    ;; (util/profile :restore-graph-from-sqlite!-transact (d/transact! db-conn tx-data))
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
@@ -149,7 +180,6 @@
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
                  {:skip-persist? true})
-    (println :restore-graph-from-sqlite! :done)
 
     (js/setTimeout
      (fn []
@@ -163,5 +193,5 @@
   (if (string/starts-with? repo config/db-version-prefix)
     (restore-graph-from-sqlite! repo)
     (p/let [db-name (db-conn/datascript-db repo)
-           stored (db-persist/get-serialized-graph db-name)]
-     (restore-graph-from-text! repo stored))))
+            stored (db-persist/get-serialized-graph db-name)]
+      (restore-graph-from-text! repo stored))))

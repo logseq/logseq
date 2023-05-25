@@ -140,3 +140,15 @@
     :block/invalid-properties
     :block/alias
     :block/tags})
+
+(def ref-type-attributes
+  #{:block/parent
+    :block/left
+    :block/page
+    :block/refs
+    :block/path-refs
+    :block/tags
+    :block/alias
+    :block/namespace
+    :block/macros
+    :block/file})
