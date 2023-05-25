@@ -307,7 +307,6 @@
    (->> (d/q '[:find (pull ?b [*])
                :in $
                :where
-               [?b :block/file]
                [?b :block/original-name]
                [?b :block/name]] db)
 
