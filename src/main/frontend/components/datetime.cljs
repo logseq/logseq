@@ -109,20 +109,14 @@
         block-id (or (:block/uuid block)
                      editing-block-id)
         typ (or @commands/*current-command typ)]
-    (if (and true
-         ;;(or 
-          ;;(state/editing?)
-          ;;(let [active-elem (.-activeElement js/document)]
-          ;;)) 
-         (= editing-block-id block-id) )
+    (if (= editing-block-id block-id) 
       (do
         (editor-handler/set-editing-block-timestamp! typ
                                                      text)
         (restore-focus!))
-      (do
       (editor-handler/set-block-timestamp! block-id
                                            typ
-                                           text))
+                                           text)
     )
 
     (when show?
