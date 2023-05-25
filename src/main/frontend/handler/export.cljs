@@ -311,17 +311,22 @@
                [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
-               (let [blocks (db/get-page-blocks-no-cache
+               (let [whiteboard? (= "whiteboard" (:block/type page))
+                     blocks (db/get-page-blocks-no-cache
                              (state/get-current-repo)
                              name
                              {:transform? false})
-                     blocks' (map (fn [b]
-                                    (let [b' (if (seq (:block/properties b))
-                                               (update b :block/content
-                                                       (fn [content] (property/remove-properties (:block/format b) content)))
-                                               b)]
-                                      (safe-keywordize b'))) blocks)
-                     children (outliner-tree/blocks->vec-tree blocks' name)
+                     blocks' (if whiteboard?
+                               blocks
+                               (map (fn [b]
+                                     (let [b' (if (seq (:block/properties b))
+                                                (update b :block/content
+                                                        (fn [content] (property/remove-properties (:block/format b) content)))
+                                                b)]
+                                       (safe-keywordize b'))) blocks))
+                     children (if whiteboard?
+                                blocks'
+                                (outliner-tree/blocks->vec-tree blocks' name))
                      page' (safe-keywordize page)]
                  (assoc page' :block/children children))))
         (nested-select-keys

@@ -116,8 +116,9 @@
    :id       - page's uuid
    :title    - page's title (original name)
    :children - tree
+   :properties - map
    "
-  [{:keys [uuid title children] :as tree}]
+  [{:keys [uuid title children properties] :as tree}]
   (let [has-children? (seq children)
         page-format (or (some-> tree (:children) (first) (:format)) :markdown)]
     (try (page-handler/create! title {:redirect?  false
@@ -135,7 +136,8 @@
         (try (editor/insert-block-tree children page-format
                                        {:target-block page-block
                                         :sibling?     false
-                                        :keep-uuid?   true})
+                                        :keep-uuid?   true
+                                        :properties   properties})
              (catch :default e
                (js/console.error e)
                (notification/show! (str "Error happens when creating block content of page " title "\n"
