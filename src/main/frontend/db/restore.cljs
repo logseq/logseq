@@ -155,14 +155,17 @@
                                    :else
                                    nil)))
                              all-blocks))
-          uuid->db-id-map (persistent! uuid->db-id-tmap)
-          init-data' (map (fn [b]
-                            (if (util/uuid-string? (:uuid b)) ; deleted blocks still refed
+          init-data' (doall
+                      (keep (fn [b]
                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                [[eid :block/uuid (uuid (:uuid b))]])
-                              (->> b
-                                   :datoms
-                                   edn/read-string))) init-data)
+                                (if (util/uuid-string? (:uuid b)) ; deleted blocks still refed
+                                  [[eid :block/uuid (uuid (:uuid b))]]
+                                  (->> b
+                                       :datoms
+                                       edn/read-string
+                                       (map #(apply vector eid %))))))
+                            init-data))
+          uuid->db-id-map (persistent! uuid->db-id-tmap)
           journal-blocks' (map (fn [b]
                                  (let [eid (get uuid->db-id-map (:uuid b))]
                                    (->> b
