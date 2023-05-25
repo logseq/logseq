@@ -1,4 +1,5 @@
 (ns frontend.db.restore
+  "Fns for DB restore(from text or sqlite)"
   (:require [cljs-bean.core :as bean]
             [clojure.edn :as edn]
             [clojure.string :as string]
