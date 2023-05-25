@@ -454,7 +454,7 @@
  :command.editor/select-down                        "Seleccionar el contenido a continuación"
  :command.editor/select-parent                      "Seleccionar bloque padre"
  :command.editor/select-up                          "Seleccionar contenido anterior"
- :command.editor/strike-through                     "Tachado"
+ :command.editor/strikethrough                      "Tachado"
  :command.editor/toggle-undo-redo-mode              "Alternar modo deshacer rehacer (global o solo en página)"
  :command.go/all-graphs                             "Ir a todos los grafos"
  :command.go/all-pages                              "Ir a todas las páginas"

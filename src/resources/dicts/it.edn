@@ -268,7 +268,7 @@
  :command.editor/bold                  "Grassetto"
  :command.editor/italics               "Corsivo"
  :command.editor/highlight             "Evidenzia"
- :command.editor/strike-through        "Barrato"
+ :command.editor/strikethrough         "Barrato"
  :command.editor/clear-block           "Elimina l'intero contenuto del blocco"
  :command.editor/kill-line-before      "Cancella la riga prima della posizione del cursore"
  :command.editor/kill-line-after       "Cancella la riga dopo la posizione del cursore"
