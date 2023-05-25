@@ -36,7 +36,9 @@
 (defn- shorten [s length]
   (if (< (count s) length)
     s
-    (str (subs s 0 length) "...")))
+    (string/replace (str (subs s 0 length) "...")
+                    ;; Escape newlines for multi-line translations like tutorials
+                    "\n" "\\n")))
 
 (defn list-missing
   "List missing translations for a given language"
@@ -58,9 +60,9 @@
                                        {:translation-key k
                                                   ;; Shorten values
                                         :string-to-translate (shorten v 50)
-                                        :file (str "dicts/"
-                                                   (-> lang name (string/replace "-" "_") string/lower-case)
-                                                   ".cljc")}))
+                                        :file (if (= "tutorial" (namespace k))
+                                                (str "Under tutorials/")
+                                                (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
                                 (sort-by (juxt :file :translation-key)))]
         (if (:copy options)
           (doseq [[file missing-for-file] (group-by :file sorted-missing)]
