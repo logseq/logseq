@@ -86,9 +86,9 @@
         (empty? data)
         nil
 
-        (not (state/input-idle? repo))  ; wait until input is idle
+        (not (state/input-idle? repo {:diff 600000}))  ; wait until input is idle
         (p/do! (p/delay 5000)
-               (p/recur (data)))
+               (p/recur data))
 
         :else
         (let [part (->> (take per-length data)
