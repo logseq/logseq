@@ -46,7 +46,6 @@ export class TLGroupShape<
     if (this.shapes.length === 0) {
       const app = useApp<Shape>()
       app.deleteShapes([this.id])
-      app.persist(true)
 
       return {
         minX: 0,
