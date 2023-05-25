@@ -402,7 +402,7 @@
  :command.editor/right  "Déplacer le curseur à droite / Ouvrir à la fin du bloc sélectionné"
  :command.editor/select-down  "Sélectionner le contenu en dessous"
  :command.editor/select-up  "Sélectionner le contenu au dessus"
- :command.editor/strike-through  "Barrer"
+ :command.editor/strikethrough   "Barrer"
  :command.editor/toggle-open-blocks  "Basculer l'ouverture des blocs (réduit ou ouvre tous les blocs)"
  :command.editor/undo  "Annuler"
  :command.editor/up  "Déplacer le curseur vers le haut / Sélectionner au dessus"

@@ -411,7 +411,7 @@
   :editor/bold                  "Bold"
   :editor/italics               "Italics"
   :editor/highlight             "Highlight"
-  :editor/strike-through        "Strikethrough"
+  :editor/strikethrough         "Strikethrough"
   :editor/clear-block           "Delete entire block content"
   :editor/kill-line-before      "Delete line before cursor position"
   :editor/copy-embed            "Copy a block embed pointing to the current block"

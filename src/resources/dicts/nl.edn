@@ -320,7 +320,7 @@
  :command.editor/select-block-up         "Selecteer blok hierboven"
  :command.editor/select-down             "Selecteer inhoud hieronder"
  :command.editor/select-up               "Selecteer inhoud hierboven"
- :command.editor/strike-through          "Doorstrepen"
+ :command.editor/strikethrough           "Doorstrepen"
  :command.editor/toggle-open-blocks      "Toggle open blocks (open of dichtklappen van alle blokken)"
  :command.editor/undo                    "Ongedaan maken"
  :command.editor/up                      "Verplaats cursor omhoog / Selecteer omhoog"

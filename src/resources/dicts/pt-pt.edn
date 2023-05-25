@@ -433,7 +433,7 @@
  :command.editor/insert-youtube-timestamp "Inserir timestamp do youtube"
  :command.editor/paste-text-in-one-block-at-point "Colar texto em um bloco no ponto"
  :command.editor/replace-block-reference-at-point "Substitua a referência do bloco pelo seu conteúdo no ponto"
- :command.editor/strike-through           "Rasurar"
+ :command.editor/strikethrough            "Rasurar"
  :command.editor/open-file-in-default-app "Abra o ficheiro na aplicação predefinida"
  :command.editor/open-file-in-directory   "Abra o ficheiro na pasta"
  :command.go/all-pages                    "Ir para todas as páginas"

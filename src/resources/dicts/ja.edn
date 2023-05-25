@@ -372,7 +372,7 @@
  :command.editor/escape-editing                   "編集をやめる"
  :command.editor/open-file-in-default-app         "ファイルを規定のアプリで開く"
  :command.editor/open-file-in-directory           "ファイルをディレクトリで開く"
- :command.editor/strike-through                   "打ち消し線"
+ :command.editor/strikethrough                    "打ち消し線"
  :command.misc/copy                               "コピー"
  :command.ui/goto-plugins                         "プラグインへ"
  :command.ui/select-theme-color                   "利用可能なテーマ色を選択"}

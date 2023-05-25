@@ -380,7 +380,7 @@
  :command.editor/bold                                      "Жирний"
  :command.editor/italics                                   "Курсив"
  :command.editor/highlight                                 "Виділення"
- :command.editor/strike-through                            "Закреслений"
+ :command.editor/strikethrough                             "Закреслений"
  :command.editor/clear-block                               "Видалити весь вміст блоку"
  :command.editor/kill-line-before                          "Видалити рядок перед позицією курсору"
  :command.editor/copy-embed                                "Скопіювати вставлений блок, вказуючи на поточний блок"

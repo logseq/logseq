@@ -278,7 +278,7 @@
  :command.editor/bold                             "Wytłuszczenie"
  :command.editor/italics                          "Pochylenie"
  :command.editor/highlight                        "Podświetlenie"
- :command.editor/strike-through                   "Przekreślenie"
+ :command.editor/strikethrough                    "Przekreślenie"
  :command.editor/clear-block                      "Usuń całą treść bloku"
  :command.editor/kill-line-before                 "Usuń linię powyżej kursora"
  :command.editor/copy-embed                       "Kopiuj kod osadzenia dla obecnego bloku"

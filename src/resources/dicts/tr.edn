@@ -405,7 +405,7 @@
  :command.editor/bold                  "Kalın"
  :command.editor/italics               "İtalik"
  :command.editor/highlight             "Vurgulu"
- :command.editor/strike-through        "Üstü çizili"
+ :command.editor/strikethrough         "Üstü çizili"
  :command.editor/clear-block           "Tüm blok içeriğini sil"
  :command.editor/kill-line-before      "İmleç konumundan önceki satırı sil"
  :command.editor/copy-embed            "Geçerli bloğu işaret eden bir blok eklemesi kopyala"
