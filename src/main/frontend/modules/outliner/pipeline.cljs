@@ -9,7 +9,8 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [electron.ipc :as ipc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -145,7 +146,7 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (when-not (:skip-persist? tx-meta)
+        (when (and (config/db-only? repo) (not (:skip-persist? tx-meta)))
           (let [upsert-blocks (->> blocks
                                    (remove (fn [b] (contains? deleted-block-uuids (:block/uuid b))))
                                    (map (fn [b]

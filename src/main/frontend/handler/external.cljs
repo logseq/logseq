@@ -122,20 +122,22 @@
         page-format (or (some-> tree (:children) (first) (:format)) :markdown)]
     (try (page-handler/create! title {:redirect?  false
                                       :format     page-format
-                                      :uuid       uuid})
-      (catch :default e
-        (notification/show! (str "Error happens when creating page " title ":\n"
-                                 e
-                                 "\nSkipped and continue the remaining import.") :error)))
+                                      :uuid       uuid
+                                      :create-first-block? false})
+         (catch :default e
+           (js/console.error e)
+           (notification/show! (str "Error happens when creating page " title ":\n"
+                                    e
+                                    "\nSkipped and continue the remaining import.") :error)))
     (when has-children?
-      (let [page-block  (db/entity [:block/name (util/page-name-sanity-lc title)])
-            first-child (first (:block/_left page-block)) ]
+      (let [page-block  (db/entity [:block/name (util/page-name-sanity-lc title)])]
         ;; Missing support for per block format (or deprecated?)
         (try (editor/insert-block-tree children page-format
-                                       {:target-block first-child
-                                        :sibling?     true
+                                       {:target-block page-block
+                                        :sibling?     false
                                         :keep-uuid?   true})
              (catch :default e
+               (js/console.error e)
                (notification/show! (str "Error happens when creating block content of page " title "\n"
                                         e
                                         "\nSkipped and continue the remaining import.") :error))))))

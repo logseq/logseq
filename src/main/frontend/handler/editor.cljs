@@ -2071,9 +2071,7 @@
                         (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
     (when (seq block-refs)
       (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
-    (paste-blocks
-     blocks
-     opts)))
+    (paste-blocks blocks opts)))
 
 (defn insert-block-tree-after-target
   "`tree-vec`: a vector of blocks.
