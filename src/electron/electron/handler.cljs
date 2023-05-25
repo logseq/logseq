@@ -371,6 +371,7 @@
                         :created_at (or (:block/created-at b) (utils/time-ms))
                         :updated_at (or (:block/updated-at b) (utils/time-ms))})
                      blocks)]
+
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
 (defmethod handle :get-initial-data [window [_ repo _opts]]

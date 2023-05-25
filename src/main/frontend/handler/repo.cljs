@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.restore :as db-restore]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.file :as file-handler]
@@ -401,7 +402,7 @@
   [repo]
   (p/do!
    (state/set-db-restoring! true)
-   (db/restore-graph! repo)
+   (db-restore/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))

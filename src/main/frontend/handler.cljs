@@ -13,6 +13,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.restore :as db-restore]
             [frontend.db.conn :as conn]
             [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
@@ -82,9 +83,10 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (-> (db/restore! repo)
+    (-> (db-restore/restore-graph! repo)
         (p/then
          (fn []
+           (db/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 
@@ -234,7 +236,6 @@
        (p/finally (fn []
                     (state/set-db-restoring! false))))
 
-   (db/run-batch-txs!)
    (file/<ratelimit-file-writes!)
    (util/<app-wake-up-from-sleep-loop (atom false))
 

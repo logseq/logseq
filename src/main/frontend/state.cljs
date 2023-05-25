@@ -29,7 +29,6 @@
     {:route-match                           nil
      :today                                 nil
      :system/events                         (async/chan 1000)
-     :db/batch-txs                          (async/chan 1000)
      :file/writes                           (async/chan 10000)
      :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 1000)
@@ -1369,10 +1368,6 @@ Similar to re-frame subscriptions"
              :modal/fullscreen? false
              :modal/panel-content nil
              :ui/open-select nil))))
-
-(defn get-db-batch-txs-chan
-  []
-  (:db/batch-txs @state))
 
 (defn get-file-write-chan
   []

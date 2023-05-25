@@ -99,7 +99,6 @@
 
 (defn upsert-blocks!
   [repo blocks]
-  (def xx blocks)
   (if-let [db (get-db repo)]
     (let [insert (prepare db "INSERT INTO blocks (uuid, type, page_uuid, page_journal_day, name, content,datoms, created_at, updated_at) VALUES (@uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at) ON CONFLICT (uuid) DO UPDATE SET (type, page_uuid, page_journal_day, name, content, datoms, created_at, updated_at) = (@type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at)"
                           repo)
@@ -123,7 +122,7 @@
 ;; Initial data:
 ;; All pages and block ids
 ;; latest 3 journals
-;; core data such as config, custom css/js
+;; other data such as config.edn, custom css/js
 ;; current page, sidebar blocks
 
 (defn- query
