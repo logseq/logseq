@@ -481,7 +481,7 @@
 
 (rum/defc main <
   {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "main-content-container")]
+                (when-let [element (gdom/getElement "app-container")]
                   (dnd/subscribe!
                    element
                    :upload-files
@@ -492,19 +492,23 @@
                   (common-handler/listen-to-scroll! element)
                   (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
                     (set! (.. element -scrollTop) 0)))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (when-let [el (gdom/getElement "app-container")]
+                     (dnd/unsubscribe! el :upload-files))
+                   state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open?   (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
-        margin-less-pages? (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
+        margin-less-pages?   (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
      ;; desktop left sidebar layout
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
-                    :route-match route-match})
+                    :route-match        route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
