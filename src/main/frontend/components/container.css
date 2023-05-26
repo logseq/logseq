@@ -6,13 +6,17 @@
 }
 
 #app-container {
-  background-color: or(--lx-gray-02, --ls-primary-background-color, #fff);
+  background-color: or(--logseq-og-top-bar-background, --lx-gray-01, --ls-primary-background-color, #fff);
   position: relative;
+}
+
+.dark #app-container {
+  background-color: or(--logseq-og-top-bar-background, --lx-gray-02, --ls-primary-background-color, #fff);
 }
 
 #root {
   > div {
-    color: var(--ls-primary-text-color, #24292e);
+    color: or(--logseq-og-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
     font-size: var(--ls-page-text-size);
   }
 }
@@ -75,6 +79,10 @@
   overflow: auto;
 }
 
+.dark .left-sidebar-inner { 
+  background-color: or(--lx-gray-01, --ls-primary-background);
+}
+
 .left-sidebar-inner {
   position: relative;
   height: 100%;
@@ -82,7 +90,7 @@
   width: var(--ls-left-sidebar-sm-width);
   overflow-y: auto;
   overflow-x: hidden;
-  background-color: or(--lx-gray-01, --ls-primary-background-color);
+  background-color: or(--lx-gray-02, --ls-primary-background-color);
   transition: transform .3s;
   transform: translate3d(-100%, 0, 0);
   z-index: 3;
@@ -143,11 +151,13 @@
     }
 
     &:hover {
-      background-color: or(--lx-gray-04, --ls-tertiary-background-color);
+      background-color: or(--logseq-og-left-sidebar-hover-background, --lx-gray-04, --ls-tertiary-background-color);
+      color: or(--logseq-og-left-sidebar-text-color-hover, --lx-gray-12, --ls-header-button-background);
     }
 
     &.active, &:active {
-      background-color: or(--lx-gray-05, --ls-quaternary-background-color);
+      background-color: or(--logseq-og-left-sidebar-active-background, --lx-gray-05, --ls-quaternary-background-color);
+      color: or(--logseq-og-left-sidebar-active-text-color, --lx-gray-12, --ls-quaternary-background-color);
     }
   }
 
@@ -190,7 +200,7 @@
       }
 
       &:hover {
-        background-color: var(--ls-tertiary-background-color);
+        background-color: or(--lx-gray-04, --ls-tertiary-background-color);
 
         * {
           opacity: 1 !important;
@@ -246,7 +256,7 @@
           }
 
           &:hover {
-            background-color: var(--ls-quaternary-background-color);
+            background-color: or(--lx-gray-04, --ls-quaternary-background-color);
           }
         }
       }
@@ -275,7 +285,11 @@
     user-select: none;
 
     @screen sm {
-      background-image: linear-gradient(transparent, var(--ls-secondary-background-color));
+      background-image: linear-gradient(transparent, or(--logseq-og-left-sidebar-bottom-gradient, --lx-gray-02, --ls-secondary-background-color));
+
+      .dark & {
+        background-image: linear-gradient(transparent, or(--logseq-og-left-sidebar-bottom-gradient, --lx-gray-01, --ls-secondary-background-color));
+      }
     }
 
     &-link {
@@ -321,7 +335,11 @@
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
-    background-color: or(--lx-gray-01, --ls-secondary-background-color);
+    background-color: or(--lx-gray-02, --ls-secondary-background-color);
+
+    .dark & {
+      background-color: or(--logseq-og-left-sidebar-background, --lx-gray-01, --ls-secondary-background-color);
+    }
 
     > .wrap {
       margin-top: 52px;
@@ -345,8 +363,9 @@
 
   a {
     @apply opacity-90 hover:opacity-100;
+    transition: all 120ms ease-out;
 
-    color: var(--ls-header-button-background);
+    color: or(--logseq-og-left-sidebar-text-color, --lx-gray-11, --ls-header-button-background);
   }
 
   > .left-sidebar-inner {
@@ -423,7 +442,7 @@
     transition: width .3s;
 
     &:before {
-      background-color: or(--lx-gray-01, --ls-secondary-background-color);
+      background-color: or(--lx-gray-02, --ls-secondary-background-color);
       width: 0;
       overflow: hidden;
     }
@@ -493,7 +512,11 @@ html[data-theme='dark'] {
 }
 
 .cp__sidebar-main-layout {
-  background-color: or(--lx-gray-02, --ls-primary-background-color);
+  background-color: or(--logseq-og-main-content-background, --lx-gray-01, --ls-primary-background-color);
+}
+
+.dark .cp__sidebar-main-layout {
+  background-color: or(--logseq-og-main-content-background, --lx-gray-02, --ls-primary-background-color);
 }
 
 .cp__sidebar-main-content {

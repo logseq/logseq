@@ -203,7 +203,7 @@ html {
 }
 
 body {
-  color: var(--ls-primary-text-color);
+  color: or(--logseq-og-default-text-color, --lx-gray-12, --ls-primary-text-color);
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;
@@ -267,12 +267,12 @@ pre {
 
 a {
   cursor: pointer;
-  color: var(--ls-link-text-color, #045591);
+  color: or(--logseq-og-anchor-link-text-color, --lx-accent-11, --ls-link-text-color, #045591);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--ls-link-text-hover-color, #000);
+  color: or(--logseq-og-anchor-link-text-color-hover, --lx-accent-12, --ls-link-text-hover-color, #000);
 }
 
 code {
@@ -522,7 +522,7 @@ i.ti {
 /* region FIXME: override elements (?) */
 h1.title {
   margin-bottom: 1.5rem;
-  color: var(--ls-title-text-color, #222);
+  color: or(--logseq-og-journal-title-color, --lx-gray-12, --ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
 }
@@ -568,14 +568,14 @@ button.menu {
 .menu-link:hover,
 button.pull:hover,
 button.menu:focus {
-  background-color: var(--ls-menu-hover-color, #f4f5f7);
+  background-color: or(--logseq-og-settings-list-item-hover-background-color, --lx-gray-05, --ls-menu-hover-color, #f4f5f7);
 }
 
 .menu-links-wrapper, .menu-links-outer {
   @apply py-2 rounded-md shadow-lg overflow-y-auto;
 
   max-height: calc(100vh - 100px) !important;
-  background-color: var(--ls-primary-background-color, #fff);
+  background-color: or(--logseq-og-settings-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
   min-width: 12rem;
 }
 
@@ -586,8 +586,8 @@ button.menu:focus {
 }
 
 .menu-link {
-  background-color: var(--ls-primary-background-color, #fff);
-  color: var(--ls-primary-text-color);
+  background-color: or(--logseq-og-settings-dropdown-link-item-background, --lx-gray-03, --ls-primary-background-color, #fff);
+  color: or(--logseq-og-settings-dropdown-link-text-color, --lx-gray-11, --ls-primary-text-color);
   user-select: none;
 }
 
@@ -677,13 +677,17 @@ a.tag {
   text-decoration: none;
   display: inline-block;
   cursor: pointer;
-  color: var(--ls-tag-text-color, #045591);
+  padding: 0 2px; 
+  border-radius: 4px;
+  background: or(--logseq-og-tag-background, --lx-accent-05, transparent);
+  color: or(--logseq-og-tag-text, --lx-accent-11, --ls-tag-text-color, #045591);
   opacity: var(--ls-tag-text-opacity, 0.8);
 }
 
 a.tag:hover {
   opacity: var(--ls-tag-text-hover-opacity, 1);
-  color: var(--ls-tag-text-hover-color, #045591);
+  background: or(--logseq-og-tag-background-hover, --lx-accent-06, transparent);
+  color: or(--logseq-og-tag-text-hvoer, --lx-accent-12, --ls-tag-text-hover-color, #045591);
 }
 
 svg.note {
@@ -789,8 +793,8 @@ mark {
   font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
     monospace;
   letter-spacing: 0;
-  background-color: var(--ls-page-inline-code-bg-color, #eee);
-  color: var(--ls-page-inline-code-color);
+  background-color: or(--logseq-og-inline-code-background, --lx-gray-06, --ls-page-inline-code-bg-color, #eee);
+  color: or(--logseq-og-inline-code-text, --lx-gray-11, --ls-page-inline-code-color);
   word-spacing: -0.15em;
   text-rendering: optimizeSpeed;
 }
@@ -826,11 +830,11 @@ a.tooltip-priority {
 }
 
 .page-reference:hover {
-  background: var(--ls-secondary-background-color);
+  background: or(--logseq-og-page-reference-hover-background, --lx-accent-04-alpha, --ls-secondary-background-color);
 }
 
 .references-blocks .page-reference:hover {
-  background: var(--ls-tertiary-background-color);
+  background: or(--logseq-og-page-reference-block-hover-background, --lx-accent-04-alpha, --ls-tertiary-background-color);
 }
 
 #head .fade-link {
