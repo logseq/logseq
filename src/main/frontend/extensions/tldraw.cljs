@@ -138,7 +138,8 @@
                      (when-let [^js api (gobj/get tln "api")]
                       (p/then (when populate-onboarding?
                                 (whiteboard-handler/populate-onboarding-whiteboard api))
-                              #(do (state/focus-whiteboard-shape tln block-id)
+                              #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                   (state/focus-whiteboard-shape tln block-id)
                                    (set-loaded-app tln))))))]
     (rum/use-effect! (fn []
                        (when (and loaded-app block-id)
