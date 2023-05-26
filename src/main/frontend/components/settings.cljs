@@ -316,6 +316,18 @@
                                        :overflow :scroll 
                                        :width "100%"
                                        :padding-left "0.25rem"}}
+                    [:div.theme-row--color {:on-click #(state/unset-color-accent!)}
+                     [:div.theme-row--color-swatch {:style {"--background"        "var(--rx-gray-03)"
+                                                            "--background-hover"  "var(--rx-gray-04)"
+                                                            "--background-active" "var(--rx-gray-05)"
+                                                            "--border"            "var(--rx-gray-07)"
+                                                            "--border-hover"      "var(--rx-gray-08)"}
+                                                           :border-right "1px solid rgba(255,255,255,0.4)"}] 
+                     [:div.text-xs {:style {:margin "0 -0.5rem" 
+                                            :opacity 0.5 
+                                            :height "1rem" 
+                                            :padding "0 0.5rem"}}
+                      "Aqua"]]
                     (for [color colors/color-list]
                       [:div.theme-row--color {:on-click #(state/toggle-color-accent! color) 
                                               :class (when (= color-accent color) "selected")}

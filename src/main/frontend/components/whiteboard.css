@@ -140,12 +140,16 @@ input.tl-text-input {
   position: absolute;
   left: 2.5rem;
   top: 0;
-  background: var(--ls-primary-background-color);
   padding: 4px;
   border-radius: 0 0 12px 12px;
   z-index: 2000;
   gap: 4px;
   line-height: 1.4;
+  background: or(--logseq-og-whiteboard-title-background, --lx-gray-01, --ls-primary-background-color);
+}
+
+.dark .whiteboard-page-title-root {
+  background: or(--logseq-og-whiteboard-title-background, --lx-gray-02, --ls-primary-background-color);
 }
 
 .whiteboard-page-title {

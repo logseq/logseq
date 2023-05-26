@@ -188,7 +188,7 @@
 
 .block-children {
   border-left: 1px solid;
-  border-left-color: var(--ls-guideline-color, #ddd);
+  border-left-color: or(--logseq-og-guideline-color, --lx-gray-07-alpha, --ls-guideline-color, #ddd);
 
   padding-top: 2px;
   padding-bottom: 3px;
@@ -478,7 +478,10 @@
 }
 
 .color-level {
-  background-color: var(--color-level-1);
+  background-color: var(--logseq-og-right-sidebar-content-background, --lx-gray-02, --color-level-1);
+  .dark & {
+    background-color: var(--logseq-og-right-sidebar-content-background, --lx-gray-01, --color-level-1);
+  }
 
   & .color-level {
     background-color: var(--color-level-2);
@@ -542,7 +545,7 @@
 
     font-size: 14px;
 
-    background-color: var(--ls-block-bullet-color, #394b59);
+    background-color: or(--lx-gray-07, --ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
 
     > * {
@@ -552,7 +555,7 @@
 
   &:not(.typed-list) {
     &.bullet-closed {
-      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+      background-color: or(--logseq-og-bullet-closed-background, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
     }
   }
 

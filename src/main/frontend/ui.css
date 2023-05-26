@@ -64,8 +64,8 @@
   }
 
   .notification-area {
-    background-color: or(--lx-gray-05, --ls-tertiary-background-color, #fff);
-    color: or(--lx-gray-12, --ls-primary-text-color);
+    background-color: or(--logseq-of-notification-background, --lx-gray-04, --ls-tertiary-background-color, #fff);
+    color: or(--logseq-og-notification-text-color, --lx-gray-11, --ls-primary-text-color);
   }
 }
 
@@ -297,8 +297,8 @@ html.is-mobile {
   &[intent='logseq'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
-    color: or(--lx-accent-11, --ls-primary-text-color);
-    background: or(--lx-accent-12, --ls-secondary-background-color);
+    color: or(--logseq-of-notification-clear-button-text, --lx-gray-12, --ls-primary-text-color);
+    background: or(--logseq-og-notification-clear-button-background, --lx-gray-04, --ls-secondary-background-color);
 
     &:hover {
       color: or(--lx-accent-11, --ls-link-text-color);
@@ -326,8 +326,8 @@ html.is-mobile {
 }
 
 .dropdown-wrapper {
-  background-color: or(--lx-gray-03, --ls-primary-background-color, #fff);
-  border: 1px solid or(--lx-gray-05, --ls-tertiary-background-color);
+  background-color: or(--logseq-og-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
+  border: 1px solid or(--logseq-og-dropdown-border-color, --lx-gray-05, --ls-tertiary-background-color);
   min-width: 12rem;
   border-radius: 6px;
 }

@@ -23,7 +23,11 @@ html[data-theme=light] a.toggle:hover {
 
 .cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
     opacity: 1;
-    color: var(--ls-header-button-background);
+    color: or(--logseq-og-header-button-text-color, --lx-gray-11, --ls-header-button-background);
+}
+
+.cp__header a:hover, .cp__header button:hover, .cp__right-sidebar-topbar button:hover {
+    color: or(--logseq-og-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
 }
 
 html[data-theme=dark] {

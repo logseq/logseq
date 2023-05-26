@@ -2137,5 +2137,10 @@ Similar to re-frame subscriptions"
     (do (swap! state assoc :color/accent color)
         (colors/set-radix color))))
 
+(defn unset-color-accent! []
+  (swap! state assoc :color/accent nil)
+  (colors/unset-radix))
+ 
+
 (defn get-color-accent []
   (get @state :color/accent))
