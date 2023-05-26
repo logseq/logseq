@@ -86,7 +86,7 @@
         (empty? data)
         nil
 
-        (not (state/input-idle? repo {:diff 600000}))  ; wait until input is idle
+        (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
         (p/do! (p/delay 5000)
                (p/recur data))
 
@@ -142,18 +142,11 @@
           all-blocks' (doall
                        (keep (fn [b]
                                (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                 (cond
+                                 (when
                                    (and (util/uuid-string? (:uuid b))
                                         (util/uuid-string? (:page_uuid b)))
                                    [[eid :block/uuid (:uuid b)]
-                                    [eid :block/page [:block/uuid (:page_uuid b)]]]
-
-                                   ;; Source blocks have been deleted
-                                   (util/uuid-string? (:uuid b))
-                                   [[eid :block/uuid (uuid (:uuid b))]]
-
-                                   :else
-                                   nil)))
+                                    [eid :block/page [:block/uuid (:page_uuid b)]]])))
                              all-blocks))
           init-data' (doall
                       (keep (fn [b]
