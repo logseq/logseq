@@ -27,21 +27,19 @@ test('block related apis',
     // update
     const content1 = content + '+ update!'
     await callAPI('update_block', b1.uuid, content1)
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(1000)
     b1 = await callAPI('get_block', b1.uuid)
 
     expect(b1.content).toBe(content1)
 
     // remove
     await callAPI('remove_block', b1.uuid)
-    await page.waitForTimeout(200)
     b1 = await callAPI('get_block', b1.uuid)
 
     expect(b1).toBeNull()
 
     // traverse
     b1 = await callAPI('insert_block', b.uuid, content1, { sibling: true })
-    await page.waitForTimeout(500)
     const nb = await callAPI('get_next_sibling_block', b.uuid)
     const pb = await callAPI('get_previous_sibling_block', b1.uuid)
 
