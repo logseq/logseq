@@ -23,8 +23,12 @@ if (!IsMac) {
         // Keyboard press F11 won't work, probably because it's a chromium shortcut (not a document event)
         await page.evaluate(`window.document.body.requestFullscreen()`)
 
-        await expect(page.locator('.window-controls')).toHaveCount(0)
-        await page.evaluate(`window.document.exitFullscreen()`)
+        await expect(page.locator('.window-controls .maximize-toggle')).toHaveCount(0)
     })
 
+    test('window controls should be visible when we exit fullscreen mode', async ({ page }) => {
+        await page.click('.window-controls .fullscreen-toggle')
+
+        await expect(page.locator('.window-controls')).toHaveCount(1)
+    })
 }

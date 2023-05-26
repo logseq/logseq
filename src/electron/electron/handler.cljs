@@ -608,6 +608,9 @@
     (.unmaximize win)
     (.maximize win)))
 
+(defmethod handle :window-toggle-fullscreen [^js win]
+  (.setFullScreen win (not (.isFullScreen win))))
+
 (defmethod handle :window-close [^js win]
   (.close win))
 

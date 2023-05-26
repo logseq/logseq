@@ -367,8 +367,8 @@
       (doseq [[event function]
               [["persist-zoom-level" #(storage/set :zoom-level %)]
                ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
-               ["full-screen" #((js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")
-                                (state/set-state! :electron/window-fullscreen? (= % "enter")))]
+               ["full-screen" #(do (js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")
+                                   (state/set-state! :electron/window-fullscreen? (= % "enter")))]
                ["maximize" #(state/set-state! :electron/window-maximized? %)]]]
         (.on js/window.apis event function))
 

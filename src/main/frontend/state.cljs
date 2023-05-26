@@ -73,7 +73,6 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
-     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/sidebar-width                      "40%"

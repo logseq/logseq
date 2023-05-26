@@ -455,12 +455,20 @@
   &.ls-right-sidebar-open {
     .cp__right-sidebar-topbar {
       margin-right: 144px;
+
+      .is-fullscreen & {
+        margin-right: 48px;
+      }
     }
   }
 
   &:not(.ls-right-sidebar-open) {
     .cp__header > .r {
       margin-right: 144px;
+
+      .is-fullscreen & {
+        margin-right: 48px;
+      }
     }
   }
 }
