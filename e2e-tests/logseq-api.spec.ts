@@ -11,6 +11,7 @@ test('block related apis',
     await callAPI('edit_block', b.uuid)
 
     await page.waitForSelector('.block-editor > textarea')
+    await page.locator('.block-editor > textarea').fill('')
     const content = 'test api'
     await page.type('.block-editor > textarea', content)
 
