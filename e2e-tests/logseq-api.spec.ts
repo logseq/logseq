@@ -26,7 +26,7 @@ test('block related apis',
     // update
     const content1 = content + '+ update!'
     await callAPI('update_block', b1.uuid, content1)
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(500)
     b1 = await callAPI('get_block', b1.uuid)
 
     expect(b1.content).toBe(content1)
@@ -40,12 +40,34 @@ test('block related apis',
 
     // traverse
     b1 = await callAPI('insert_block', b.uuid, content1, { sibling: true })
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(500)
     const nb = await callAPI('get_next_sibling_block', b.uuid)
     const pb = await callAPI('get_previous_sibling_block', b1.uuid)
 
     expect(nb.uuid).toBe(b1.uuid)
     expect(pb.uuid).toBe(b.uuid)
+
+    // move
+    await callAPI('move_block', b.uuid, b1.uuid)
+    const mb = await callAPI('get_next_sibling_block', b1.uuid)
+
+    expect(mb.uuid).toBe(b.uuid)
+
+    // properties
+    await callAPI('upsert_block_property', b1.uuid, 'a', 1)
+    let prop1 = await callAPI('get_block_property', b1.uuid, 'a')
+
+    expect(prop1).toBe(1)
+
+    await callAPI('upsert_block_property', b1.uuid, 'a', 2)
+    prop1 = await callAPI('get_block_property', b1.uuid, 'a')
+
+    expect(prop1).toBe(2)
+
+    await callAPI('remove_block_property', b1.uuid, 'a')
+    prop1 = await callAPI('get_block_property', b1.uuid, 'a')
+
+    expect(prop1).toBeNull()
 
     // await page.pause()
   })
