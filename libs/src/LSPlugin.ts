@@ -1078,8 +1078,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   resolveResourceFullUrl(filePath: string): string
 
-  App: IAppProxy & Record<string, any>
-  Editor: IEditorProxy & Record<string, any>
+  App: IAppProxy
+  Editor: IEditorProxy
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy
