@@ -86,10 +86,14 @@ export interface LSPluginPkgConfig {
 export interface LSPluginBaseInfo {
   id: string // should be unique
   mode: 'shadow' | 'iframe'
-
   settings: {
     disabled: boolean
   }
+  effect: boolean
+  /**
+   * For internal use only. Indicates if plugin is installed in dot root.
+   */
+  iir: boolean
 }
 
 export type IHookEvent = {
