@@ -84,7 +84,10 @@ export interface LSPluginPkgConfig {
 }
 
 export interface LSPluginBaseInfo {
-  id: string // should be unique
+  /**
+   * Must be unique.
+   */
+  id: string
   mode: 'shadow' | 'iframe'
   settings: {
     disabled: boolean
