@@ -5,10 +5,16 @@ test('block related apis',
   async ({ page }) => {
     const callAPI = callPageAPI.bind(null, page)
 
+    const bPageName = 'block-test-page'
+    await callAPI('create_page', bPageName, null, { createFirstBlock: false })
+
+    await page.waitForSelector(`span[data-ref="${bPageName}"]`)
+    const bp = await callAPI('append_block_in_page', bPageName, 'tests')
+
+    await callAPI('edit_block', bp.uuid)
+
     const b = (await callAPI('get_current_block'))
     expect(Object.keys(b)).toContain('uuid')
-
-    await callAPI('edit_block', b.uuid)
 
     await page.waitForSelector('.block-editor > textarea')
     await page.locator('.block-editor > textarea').fill('')
