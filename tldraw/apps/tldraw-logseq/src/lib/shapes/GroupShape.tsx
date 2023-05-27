@@ -29,7 +29,7 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
     const Indicator = this.ReactIndicator
 
     return (
-      <SVGContainer {...events}>
+      <SVGContainer {...events} className="tl-group-container">
         <rect
           className={'tl-hitarea-fill'}
           x={strokeWidth / 2}

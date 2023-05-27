@@ -1792,8 +1792,8 @@
          (or
            (and empty-content?
                 (not edit?)
-                (not (:block/top? block))
-                (not (:block/bottom? block))
+                (not (:block.temp/top? block))
+                (not (:block.temp/bottom? block))
                 (not (util/react *control-show?)))
            (and doc-mode?
                 (not collapsed?)
@@ -2066,7 +2066,8 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  #{:logseq.query/nlp-date})
+  (into #{:logseq.query/nlp-date}
+        gp-property/editable-view-and-table-properties))
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")
@@ -2779,7 +2780,8 @@
         block (if ref?
                 (merge block (db/sub-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs level format content properties]} block
+        {:block/keys [uuid children pre-block? refs level format content properties]} block
+        {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2922,7 +2924,7 @@
 
    :should-update (fn [old-state new-state]
                     (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
-                                               :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                                               :block/properties :block/left :block/children :block/_refs :block.temp/bottom? :block.temp/top?]
                           config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
@@ -3316,8 +3318,8 @@
   [config blocks idx item]
   (let [item (->
               (dissoc item :block/meta)
-              (assoc :block/top? (zero? idx)
-                     :block/bottom? (= (count blocks) (inc idx))))
+              (assoc :block.temp/top? (zero? idx)
+                     :block.temp/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))
