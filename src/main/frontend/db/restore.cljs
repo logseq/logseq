@@ -76,7 +76,7 @@
 
 (defn- restore-other-data-from-sqlite!
   [repo data]
-  (let [per-length 2000
+  (let [per-length 500
         conn (db-conn/get-db repo false)]
     (p/loop [data data]
       (cond
