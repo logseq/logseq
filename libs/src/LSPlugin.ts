@@ -73,6 +73,10 @@ export interface LSPluginPkgConfig {
   mode: 'shadow' | 'iframe'
   themes: Theme[]
   icon: string
+  /**
+   * Alternative entrypoint for development.
+   */
+  devEntry: unknown
 }
 
 export interface LSPluginBaseInfo {
