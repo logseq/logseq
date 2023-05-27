@@ -97,6 +97,10 @@ export interface LSPluginBaseInfo {
    * For internal use only. Indicates if plugin is installed in dot root.
    */
   iir: boolean
+  /**
+   * For internal use only.
+   */
+  lsr: string
 }
 
 export type IHookEvent = {
