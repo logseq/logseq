@@ -152,7 +152,92 @@
                         (gp-util/safe-decode-uri-component v)
                         v))])))
 
-(defn handle-result [result]
+(defn- handle-asset-file [url format]
+  (p/let [basename (node-path/basename url)
+          label (-> basename util/node-path.name)
+          path (editor-handler/get-asset-path basename)
+          _file (p/catch
+                 (.copy Filesystem (clj->js {:from url :to path}))
+                 (fn [error]
+                   (log/error :copy-file-error {:error error})))
+          url (util/format "../assets/%s" basename)
+          url-link (editor-handler/get-asset-file-link format url label true)]
+    url-link))
+
+(defn- handle-payload-resource
+  [{:keys [type name ext url] :as resource} format]
+  (if url
+    (cond
+      (contains? (set/union config/doc-formats config/media-formats)
+                 (keyword ext))
+      (handle-asset-file url format)
+
+      :else
+      (notification/show!
+       [:div
+        "Parsing current shared content are not supported. Please report the following codes on "
+        [:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+             :target "_blank"} "Github"]
+        ". We will look into it soon."
+        [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))
+
+    (cond
+      (= type "text/plain")
+      name
+
+      :else
+      (notification/show!
+       [:div
+        "Parsing current shared content are not supported. Please report the following codes on "
+        [:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+             :target "_blank"} "Github"]
+        ". We will look into it soon."
+        [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))))
+
+(defn handle-payload
+  "Mobile share intent handler v2, use complex payload to support more types of content."
+  [payload]
+  ;; use :text template, use {url} as rich text placeholder
+  (p/let [page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          format (db/get-page-format page)
+
+          template (get-in (state/get-config)
+                           [:quick-capture-templates :text]
+                           "**{time}** [[quick capture]]: {text} {url}")
+          {:keys [text resources]} payload
+          text (or text "")
+          rich-content (-> (p/all (map (fn [resource]
+                                         (handle-payload-resource resource format))
+                                       resources))
+                           (p/then (partial string/join "\n")))]
+    (when (or (not-empty text) (not-empty rich-content))
+      (let [time (date/get-current-time)
+            date-ref-name (date/today)
+            content (-> template
+                        (string/replace "{time}" time)
+                        (string/replace "{date}" date-ref-name)
+                        (string/replace "{text}" text)
+                        (string/replace "{url}" rich-content))
+            edit-content (state/get-edit-content)
+            edit-content-blank? (string/blank? edit-content)
+            edit-content-include-capture? (and (not-empty edit-content)
+                                               (string/includes? edit-content "[[quick capture]]"))]
+        (if (and (state/editing?) (not edit-content-include-capture?))
+          (if edit-content-blank?
+            (editor-handler/insert content)
+            (editor-handler/insert (str "\n" content)))
+
+          (do
+            (editor-handler/escape-editing)
+            (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
+                                                                           :edit-block? true
+                                                                           :replace-empty-target? true})
+                           100)))))))
+
+
+(defn handle-result
+  "Mobile share intent handler v1, legacy. Only for Android"
+  [result]
   (let [result (decode-received-result result)]
     (when-let [type (:type result)]
       (cond

@@ -25,7 +25,7 @@ export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ shape }) => 
         link[0].toLowerCase() !== app.currentPage.name &&
         handlers.getBlockPageName(link[0]) !== app.currentPage.name
     )
-  }, [shape.props.type, shape.props.parentId, shape.props.refs])
+  }, [shape.props.id, shape.props.type, shape.props.parentId, shape.props.refs])
 
   if (links.length === 0) return null
 
