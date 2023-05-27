@@ -91,7 +91,7 @@ export interface LSPluginBaseInfo {
   mode: 'shadow' | 'iframe'
   settings: {
     disabled: boolean
-  }
+  } & Record<string, unknown>
   effect: boolean
   /**
    * For internal use only. Indicates if plugin is installed in dot root.
