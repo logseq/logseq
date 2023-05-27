@@ -233,7 +233,7 @@ function initMainUIHandlers(pluginLocal: PluginLocal) {
   pluginLocal.on(_('attrs'), (attrs: Partial<UIContainerAttrs>) => {
     const el = pluginLocal.getMainUIContainer()
     Object.entries(attrs).forEach(([k, v]) => {
-      el?.setAttribute(k, v)
+      el?.setAttribute(k, String(v))
       if (k === 'draggable' && v) {
         pluginLocal._dispose(
           pluginLocal._setupDraggableContainer(el, {
