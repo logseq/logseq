@@ -33,8 +33,6 @@ export type StyleOptions = {
 export type UIContainerAttrs = {
   draggable: boolean
   resizable: boolean
-
-  [key: string]: any
 }
 
 export type UIBaseOptions = {
@@ -75,8 +73,6 @@ export interface LSPluginPkgConfig {
   mode: 'shadow' | 'iframe'
   themes: Theme[]
   icon: string
-
-  [key: string]: any
 }
 
 export interface LSPluginBaseInfo {
@@ -85,10 +81,7 @@ export interface LSPluginBaseInfo {
 
   settings: {
     disabled: boolean
-    [key: string]: any
   }
-
-  [key: string]: any
 }
 
 export type IHookEvent = {
@@ -146,8 +139,6 @@ export interface AppUserConfigs {
   showBracket: boolean
   enabledFlashcards: boolean
   enabledJournals: boolean
-
-  [key: string]: any
 }
 
 /**
@@ -157,8 +148,6 @@ export interface AppGraphInfo {
   name: string
   url: string
   path: string
-
-  [key: string]: any
 }
 
 /**
@@ -184,8 +173,6 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
-
-  [key: string]: any
 }
 
 /**
@@ -205,8 +192,6 @@ export interface PageEntity {
   format?: 'markdown' | 'org'
   journalDay?: number
   updatedAt?: number
-
-  [key: string]: any
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
