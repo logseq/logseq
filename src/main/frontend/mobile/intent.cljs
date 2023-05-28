@@ -65,6 +65,7 @@
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
           time (date/get-current-time)
+          date-ref-name (date/today)
           path (editor-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
@@ -76,12 +77,15 @@
                            [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
     (-> (string/replace template "{time}" time)
+        (string/replace template "{date}" date-ref-name)
+        (string/replace template "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- embed-text-file
   "Store external content with url into Logseq repo"
   [url title]
   (p/let [time (date/get-current-time)
+          date-ref-name (date/today)
           title (some-> (or title (node-path/basename url))
                         gp-util/safe-decode-uri-component
                         util/node-path.name
@@ -99,6 +103,8 @@
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]
     (-> (string/replace template "{time}" time)
+        (string/replace template "{date}" date-ref-name)
+        (string/replace template "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- handle-received-media [result]
