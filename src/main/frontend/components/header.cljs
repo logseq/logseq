@@ -128,6 +128,11 @@
           :options {:href (rfe/href :bug-report)}
           :icon (ui/icon "bug")})
 
+       (when config/publishing?
+         {:title (t :toggle-theme)
+          :options {:on-click #(state/toggle-theme!)}
+          :icon (ui/icon "bulb")})
+
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
           :options {:on-click #(user-handler/logout)}
