@@ -153,13 +153,14 @@
         (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
         new-shapes (get-in metadata [:data :new-shapes])
+        deleted-shapes (get-in metadata [:data :deleted-shapes])
         metadata' (cond
                     ;; group
                     (some #(= "group" (:type %)) new-shapes)
                     (assoc metadata :whiteboard/op :group)
 
                     ;; ungroup
-                    (some #(= "group" (:type %)) (get-in metadata [:data :deleted-shapes]))
+                    (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
                     (assoc metadata :whiteboard/op :un-group)
 
                     ;; arrow
@@ -360,6 +361,11 @@
 (defn- select-shapes
   [^js api ids]
   (apply (.-selectShapes api) ids))
+
+(defn cleanup!
+  [^js tl-page]
+  (let [shapes (.-shapes tl-page)]
+    (.cleanup tl-page (map #(.-id %) shapes))))
 
 (defn update-bindings!
   [^js tl-page page-name]

@@ -341,8 +341,8 @@
                         (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
     (-> block
-        (dissoc :block/top?
-                :block/bottom?)
+        (dissoc :block.temp/top?
+                :block.temp/bottom?)
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
@@ -826,7 +826,7 @@
                        (let [prev-block' (if (seq (:block/_refs block-e))
                                            (assoc prev-block
                                                   :block/uuid (:block/uuid block)
-                                                  :block/additional-properties (:block/properties block))
+                                                  :block.temp/additional-properties (:block/properties block))
                                            prev-block)]
                          (delete-block-aux! block delete-children?)
                          (save-block! repo prev-block' new-content {:editor/op :delete}))
@@ -2646,7 +2646,7 @@
             edit-block' (if next-block-has-refs?
                           (assoc edit-block
                                  :block/uuid (:block/uuid next-block)
-                                 :block/additional-properties (dissoc (:block/properties next-block) :block/uuid))
+                                 :block.temp/additional-properties (dissoc (:block/properties next-block) :block/uuid))
                           edit-block)]
         (outliner-tx/transact! transact-opts
           (delete-block-aux! next-block false)
@@ -2691,7 +2691,7 @@
         repo (state/get-current-repo)
         top-block? (= (:block/left block) (:block/page block))
         single-block? (inside-of-single-block (.-target e))
-        root-block? (= (:block/container block) (str (:block/uuid block)))]
+        root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
     (mark-last-input-time! repo)
     (cond
       (not= selected-start selected-end)

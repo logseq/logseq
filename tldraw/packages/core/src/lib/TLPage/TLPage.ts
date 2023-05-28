@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { deepEqual } from '@tldraw/core'
 import { intersectRayBounds, TLBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
 import { action, autorun, computed, makeObservable, observable, toJS, transaction } from 'mobx'
@@ -264,7 +265,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
           ...fromDelta,
         }
         shapeChanged = true
-        this.getShapeById(nextShape.id)?.update(nextShape, false, true)
+        this.getShapeById(nextShape.id)?.update(nextShape, false, deepEqual(fromDelta?.handles, fromShape?.props.handles))
       }
     })
 

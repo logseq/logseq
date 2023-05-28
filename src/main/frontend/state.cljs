@@ -1808,7 +1808,7 @@ Similar to re-frame subscriptions"
             container (util/get-block-container block-element)
             block (if container
                     (assoc block
-                           :block/container (gobj/get container "id"))
+                           :block.temp/container (gobj/get container "id"))
                     block)
             content (string/trim (or content ""))]
         (swap! state
