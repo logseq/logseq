@@ -646,6 +646,13 @@ Similar to re-frame subscriptions"
        (contains? (set (get-selected-block-ids (:selection/blocks state)))
                   block-uuid)))))
 
+(defn sub-block-unloaded?
+  [repo block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::block-unloaded repo block-uuid]
+     (fn [state]
+       (contains? (get-in state [repo :restore/unfinished-blocks]) block-uuid)))))
+
 (defn block-content-max-length
   [repo]
   (or (:block/content-max-length (sub-config repo)) 10000))

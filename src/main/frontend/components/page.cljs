@@ -151,13 +151,20 @@
                         (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          page-blocks (get-blocks repo page-name block-id)]
-      (if (empty? page-blocks)
+          page-blocks (get-blocks repo page-name block-id)
+          block-entity (db/entity (if block-id
+                                    [:block/uuid block-id]
+                                    [:block/name page-name]))
+          block-unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block-entity)))]
+      (cond
+        block-unloaded?
+        (ui/loading "Loading...")
+
+        (empty? page-blocks)
         (dummy-block page-name)
+
+        :else
         (let [document-mode? (state/sub :document/mode?)
-              block-entity (db/entity (if block-id
-                                       [:block/uuid block-id]
-                                       [:block/name page-name]))
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
                               :db/id (:db/id block-entity)

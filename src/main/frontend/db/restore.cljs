@@ -79,31 +79,38 @@
   (let [per-length 500
         conn (db-conn/get-db repo false)]
     (p/loop [data data]
-      (cond
-        (not= repo (state/get-current-repo)) ; switched to another graph
-        nil
+      (let [unfinished-blocks (set
+                               (->> (mapcat
+                                     (fn [b]
+                                       [(gobj/get b "uuid")
+                                        (gobj/get b "page_uuid")])
+                                     data)
+                                    (remove nil?)))]
+        (state/set-state! [repo :restore/unfinished-blocks] unfinished-blocks)
 
-        (empty? data)
-        nil
+        (cond
+          (or (not= repo (state/get-current-repo)) ; switched to another graph
+              (empty? data))
+          (state/set-state! [repo :restore/unfinished-blocks] nil)
 
-        (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
-        (p/do! (p/delay 5000)
-               (p/recur data))
+          (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
+          (p/do! (p/delay 5000)
+                 (p/recur data))
 
-        :else
-        (let [part (->> (take per-length data)
-                        (map-indexed (fn [idx block]
-                                       (->> (edn/read-string (gobj/get block "datoms"))
-                                            (map
-                                             (comp
-                                              uuid-str->uuid-in-eav-vec
-                                              (partial cons (dec (- idx)))))
-                                            (sort-by #(if (= :block/uuid (second %)) 0 1)))))
-                        (apply concat)
-                        (map (fn [eav] (cons :db/add eav))))]
-          (d/transact! conn part {:skip-persist? true})
-          (p/let [_ (p/delay 200)]
-            (p/recur (drop per-length data))))))))
+          :else
+          (let [part (->> (take per-length data)
+                          (map-indexed (fn [idx block]
+                                         (->> (edn/read-string (gobj/get block "datoms"))
+                                              (map
+                                                (comp
+                                                 uuid-str->uuid-in-eav-vec
+                                                 (partial cons (dec (- idx)))))
+                                              (sort-by #(if (= :block/uuid (second %)) 0 1)))))
+                          (apply concat)
+                          (map (fn [eav] (cons :db/add eav))))]
+            (d/transact! conn part {:skip-persist? true})
+            (p/let [_ (p/delay 200)]
+              (p/recur (drop per-length data)))))))))
 
 (defn- replace-uuid-ref-with-eid
   [uuid->eid-map [e a v]]

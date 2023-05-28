@@ -791,20 +791,23 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config uuid]
   (when-let [block (db/entity [:block/uuid uuid])]
-    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
-                                          {:scoped-block-id (:db/id block)})]
-      [:div.color-level.embed-block.bg-base-2
-       {:style {:z-index 2}
-        :on-double-click #(edit-parent-block % config)
-        :on-mouse-down (fn [e] (.stopPropagation e))}
-       [:div.px-3.pt-1.pb-2
-        (blocks-container blocks (assoc config
-                                        :db/id (:db/id block)
-                                        :id (str uuid)
-                                        :embed-id uuid
-                                        :embed? true
-                                        :embed-parent (:block config)
-                                        :ref? false))]])))
+    (let [repo (state/get-current-repo)]
+      (if (state/sub-block-unloaded? repo (str uuid))
+        [:span "Loading..."]
+        (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
+                                              {:scoped-block-id (:db/id block)})]
+          [:div.color-level.embed-block.bg-base-2
+           {:style {:z-index 2}
+            :on-double-click #(edit-parent-block % config)
+            :on-mouse-down (fn [e] (.stopPropagation e))}
+           [:div.px-3.pt-1.pb-2
+            (blocks-container blocks (assoc config
+                                            :db/id (:db/id block)
+                                            :id (str uuid)
+                                            :embed-id uuid
+                                            :embed? true
+                                            :embed-parent (:block config)
+                                            :ref? false))]])))))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -860,76 +863,79 @@
   db-mixins/query
   [config id label]
   (if-let [block-id (parse-uuid id)]
-    (let [db-id (:db/id (db/pull [:block/uuid block-id]))
-          block (when db-id (db/sub-block db-id))
-          block-type (keyword (get-in block [:block/properties :ls-type]))
-          hl-type (get-in block [:block/properties :hl-type])
-          repo (state/get-current-repo)
-          stop-inner-events? (= block-type :whiteboard-shape)]
-      (if (and block (:block/content block))
-        (let [title [:span.block-ref
-                     (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
-                                    block nil (:block/uuid block)
-                                    (:slide? config))]
-              inner (if label
-                      (->elem
-                       :span.block-ref
-                       (map-inline config label))
-                      title)]
-          [:div.block-ref-wrap.inline
-           {:data-type    (name (or block-type :default))
-            :data-hl-type hl-type
-            :on-mouse-down
-            (fn [^js/MouseEvent e]
-              (if (util/right-click? e)
-                (state/set-state! :block-ref/context {:block (:block config)
-                                                      :block-ref block-id})
+    (let [repo (state/get-current-repo)]
+      (if (state/sub-block-unloaded? repo (str block-id))
+        [:span "Loading..."]
+        (let [db-id (:db/id (db/pull [:block/uuid block-id]))
+              block (when db-id (db/sub-block db-id))
+              block-type (keyword (get-in block [:block/properties :ls-type]))
+              hl-type (get-in block [:block/properties :hl-type])
+              repo (state/get-current-repo)
+              stop-inner-events? (= block-type :whiteboard-shape)]
+          (if (and block (:block/content block))
+            (let [title [:span.block-ref
+                         (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+                                        block nil (:block/uuid block)
+                                        (:slide? config))]
+                  inner (if label
+                          (->elem
+                           :span.block-ref
+                           (map-inline config label))
+                          title)]
+              [:div.block-ref-wrap.inline
+               {:data-type    (name (or block-type :default))
+                :data-hl-type hl-type
+                :on-mouse-down
+                (fn [^js/MouseEvent e]
+                  (if (util/right-click? e)
+                    (state/set-state! :block-ref/context {:block (:block config)
+                                                          :block-ref block-id})
 
-                (when (and
-                       (or (gobj/get e "shiftKey")
-                           (not (.. e -target (closest ".blank"))))
-                       (not (util/right-click? e)))
-                  (util/stop e)
+                    (when (and
+                           (or (gobj/get e "shiftKey")
+                               (not (.. e -target (closest ".blank"))))
+                           (not (util/right-click? e)))
+                      (util/stop e)
 
-                  (cond
-                    (gobj/get e "shiftKey")
-                    (state/sidebar-add-block!
-                     (state/get-current-repo)
-                     (:db/id block)
-                     :block-ref)
+                      (cond
+                        (gobj/get e "shiftKey")
+                        (state/sidebar-add-block!
+                         (state/get-current-repo)
+                         (:db/id block)
+                         :block-ref)
 
-                    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-                    (whiteboard-handler/add-new-block-portal-shape!
-                     (:block/uuid block)
-                     (whiteboard-handler/closest-shape (.-target e)))
+                        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+                        (whiteboard-handler/add-new-block-portal-shape!
+                         (:block/uuid block)
+                         (whiteboard-handler/closest-shape (.-target e)))
 
-                    :else
-                    (match [block-type (util/electron?)]
-                      ;; pdf annotation
-                      [:annotation true] (pdf-assets/open-block-ref! block)
+                        :else
+                        (match [block-type (util/electron?)]
+                          ;; pdf annotation
+                          [:annotation true] (pdf-assets/open-block-ref! block)
 
-                      [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
-                                                (get-in block [:block/page :block/name]) {:block-id block-id})
+                          [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
+                                                    (get-in block [:block/page :block/name]) {:block-id block-id})
 
-                      ;; default open block page
-                      :else (route-handler/redirect-to-page! id))))))}
+                          ;; default open block page
+                          :else (route-handler/redirect-to-page! id))))))}
 
-           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
-             (ui/tippy {:html        (fn []
-                                       [:div.tippy-wrapper.overflow-y-auto.p-4
-                                        {:style {:width      735
-                                                 :text-align "left"
-                                                 :max-height 600}}
-                                        [(breadcrumb config repo block-id {:indent? true})
-                                         (blocks-container
-                                          (db/get-block-and-children repo block-id)
-                                          (assoc config :id (str id) :preview? true))]])
-                        :interactive true
-                        :in-editor?  true
-                        :delay       [1000, 100]} inner)
-             inner)])
-        [:span.warning.mr-1 {:title "Block ref invalid"}
-         (block-ref/->block-ref id)]))
+               (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
+                 (ui/tippy {:html        (fn []
+                                           [:div.tippy-wrapper.overflow-y-auto.p-4
+                                            {:style {:width      735
+                                                     :text-align "left"
+                                                     :max-height 600}}
+                                            [(breadcrumb config repo block-id {:indent? true})
+                                             (blocks-container
+                                              (db/get-block-and-children repo block-id)
+                                              (assoc config :id (str id) :preview? true))]])
+                            :interactive true
+                            :in-editor?  true
+                            :delay       [1000, 100]} inner)
+                 inner)])
+            [:span.warning.mr-1 {:title "Block ref invalid"}
+             (block-ref/->block-ref id)]))))
     [:span.warning.mr-1 {:title "Block ref invalid"}
       (block-ref/->block-ref id)]))
 
