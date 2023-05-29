@@ -9,7 +9,15 @@ test('block related apis',
     await callAPI('create_page', bPageName, null, { createFirstBlock: false })
 
     await page.waitForSelector(`span[data-ref="${bPageName}"]`)
+
+    let p = await callAPI('get_current_page')
     const bp = await callAPI('append_block_in_page', bPageName, 'tests')
+
+    expect(p.name).toBe(bPageName)
+
+    p = await callAPI('get_page', bPageName)
+
+    expect(p.name).toBe(bPageName)
 
     await callAPI('edit_block', bp.uuid)
 
@@ -73,6 +81,13 @@ test('block related apis',
     prop1 = await callAPI('get_block_property', b1.uuid, 'a')
 
     expect(prop1).toBeNull()
+
+    await callAPI('upsert_block_property', b1.uuid, 'a', 1)
+    await callAPI('upsert_block_property', b1.uuid, 'b', 1)
+
+    prop1 = await callAPI('get_block_properties', b1.uuid)
+
+    expect(prop1).toEqual({ a: 1, b: 1 })
 
     // await page.pause()
   })
