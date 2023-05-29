@@ -347,9 +347,8 @@
                                                     (.setAttribute target "data-x" ax)
                                                     (.setAttribute target "data-y" ay))
                                                   ))}
-                           :modifiers [;; minimum
-                                       (js/interact.modifiers.restrictSize
-                                        (bean/->js {:min {:width 60 :height 25}}))]
+                           :modifiers [(js/interact.modifiers.restrict
+                                         (bean/->js {:restriction (.closest el ".page")}))]
                            :inertia   true})
                          ))]
          ;; destroy
@@ -376,10 +375,10 @@
    (for [hl page-hls]
      (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
        (rum/with-key
-        (if (get-in hl [:content :image])
-          (pdf-highlight-area-region viewer vw-hl hl ops)
-          (pdf-highlights-text-region viewer vw-hl hl ops))
-        (:id hl))
+         (if (get-in hl [:content :image])
+           (pdf-highlight-area-region viewer vw-hl hl ops)
+           (pdf-highlights-text-region viewer vw-hl hl ops))
+         (:id hl))
        ))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
@@ -388,41 +387,59 @@
   (let [^js viewer-clt          (.. viewer -viewer -classList)
         ^js cnt-el              (.-container viewer)
         *el                     (rum/use-ref nil)
-        *sta-el                 (rum/use-ref nil)
+        *start-el               (rum/use-ref nil)
         *cnt-rect               (rum/use-ref nil)
+        *page-el                (rum/use-ref nil)
+        *page-rect              (rum/use-ref nil)
+        *start-xy               (rum/use-ref nil)
 
-        [start-coord, set-start-coord!] (rum/use-state nil)
-        [end-coord, set-end-coord!] (rum/use-state nil)
+        [start, set-start!] (rum/use-state nil)
+        [end, set-end!] (rum/use-state nil)
         [_ set-area-mode!] (use-atom *area-mode?)
 
         should-start            (fn [^js e]
                                   (let [^js target (.-target e)]
-                                    (when (and (not
-                                                (.contains (.-classList target) "extensions__pdf-hls-area-region"))
+                                    (when (and (not (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                                (.closest target ".page"))
                                       (and e (or (.-metaKey e)
                                                  (and util/win32? (.-shiftKey e))
                                                  @*area-mode?)))))
 
-        reset-coords            #(do
-                                   (set-start-coord! nil)
-                                   (set-end-coord! nil)
-                                   (rum/set-ref! *sta-el nil))
+        reset-coords!           #(do
+                                   (set-start! nil)
+                                   (set-end! nil)
+                                   (rum/set-ref! *start-xy nil)
+                                   (rum/set-ref! *start-el nil)
+                                   (rum/set-ref! *cnt-rect nil)
+                                   (rum/set-ref! *page-el nil)
+                                   (rum/set-ref! *page-rect nil))
 
-        calc-coords             (fn [page-x page-y]
+        calc-coords!            (fn [page-x page-y]
                                   (when cnt-el
-                                    (let [cnt-rect (rum/deref *cnt-rect)
-                                          cnt-rect (or cnt-rect (bean/->clj (.toJSON (.getBoundingClientRect cnt-el))))
-                                          _        (rum/set-ref! *cnt-rect cnt-rect)]
+                                    (let [cnt-rect    (rum/deref *cnt-rect)
+                                          cnt-rect    (or cnt-rect (bean/->clj (.toJSON (.getBoundingClientRect cnt-el))))
+                                          page-rect   (rum/deref *page-rect)
+                                          [start-x, start-y] (rum/deref *start-xy)
+                                          dx-left?    (> start-x page-x)
+                                          dy-top?     (> start-y page-y)
+                                          page-left   (:left page-rect)
+                                          page-right  (:right page-rect)
+                                          page-top    (:top page-rect)
+                                          page-bottom (:bottom page-rect)
+                                          _           (rum/set-ref! *cnt-rect cnt-rect)]
 
                                       {:x (-> page-x
-                                              (- (:left cnt-rect))
+                                              (#(if dx-left?
+                                                  (if (< % page-left) page-left %)
+                                                  (if (> % page-right) page-right %)))
                                               (+ (.-scrollLeft cnt-el)))
                                        :y (-> page-y
-                                              (- (:top cnt-rect))
+                                              (#(if dy-top?
+                                                  (if (< % page-top) page-top %)
+                                                  (if (> % page-bottom) page-bottom %)))
                                               (+ (.-scrollTop cnt-el)))})))
 
-        calc-pos                (fn [start end]
+        calc-rect               (fn [start end]
                                   {:left   (min (:x start) (:x end))
                                    :top    (min (:y start) (:y end))
                                    :width  (js/Math.abs (- (:x end) (:x start)))
@@ -431,81 +448,78 @@
         disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")
 
         fn-move                 (rum/use-callback
-                                 (fn [^js/MouseEvent e]
-                                   (set-end-coord! (calc-coords (.-pageX e) (.-pageY e))))
-                                 [])]
+                                  (fn [^js/MouseEvent e]
+                                    (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
+                                  [])]
 
     (rum/use-effect!
-     (fn []
-       (when-let [^js/HTMLElement root cnt-el]
-         (let [fn-start (fn [^js/MouseEvent e]
-                          (if (should-start e)
-                            (do
-                              (rum/set-ref! *sta-el (.-target e))
-                              (set-start-coord! (calc-coords (.-pageX e) (.-pageY e)))
-                              (disable-text-selection! true)
+      (fn []
+        (when-let [^js/HTMLElement root cnt-el]
+          (let [fn-start (fn [^js/MouseEvent e]
+                           (if (should-start e)
+                             (let [target (.-target e)
+                                   page-el (.closest target ".page")
+                                   [x y] [(.-pageX e) (.-pageY e)]]
+                               (rum/set-ref! *start-el target)
+                               (rum/set-ref! *start-xy [x y])
+                               (rum/set-ref! *page-el page-el)
+                               (rum/set-ref! *page-rect (some-> page-el (.getBoundingClientRect) (.toJSON) (bean/->clj)))
+                               (set-start! (calc-coords! x y))
+                               (disable-text-selection! true)
 
-                              (.addEventListener root "mousemove" fn-move))
+                               (.addEventListener root "mousemove" fn-move))
 
-                            ;; reset
-                            (reset-coords)))
+                             ;; reset
+                             (do (reset-coords!)
+                                 (disable-text-selection! false))))
 
-               fn-end   (fn [^js/MouseEvent e]
-                          (when-let [start-el (rum/deref *sta-el)]
-                            (let [end (calc-coords (.-pageX e) (.-pageY e))
-                                  pos (calc-pos start-coord end)]
+                fn-end   (fn [^js/MouseEvent e]
+                           (when-let [start-el (rum/deref *start-el)]
+                             (let [end  (calc-coords! (.-pageX e) (.-pageY e))
+                                   rect (calc-rect start end)]
 
-                              (if (and (> (:width pos) 10)
-                                       (> (:height pos) 10))
+                               (if (and (> (:width rect) 10)
+                                        (> (:height rect) 10))
 
-                                (when-let [^js page-el (.closest start-el ".page")]
-                                  (let [page-number (int (.-pageNumber (.-dataset page-el)))
-                                        page-pos    (merge pos {:top  (- (:top pos) (.-offsetTop page-el))
-                                                                :left (- (:left pos) (.-offsetLeft page-el))})
-                                        vw-pos      {:bounding page-pos :rects [] :page page-number}
-                                        sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos)
+                                 (when-let [^js page-el (.closest start-el ".page")]
+                                   (let [page-number (int (.-pageNumber (.-dataset page-el)))
+                                         page-pos    (merge rect {:top  (- (:top rect) (.-offsetTop page-el))
+                                                                  :left (- (:left rect) (.-offsetLeft page-el))})
+                                         vw-pos      {:bounding page-pos :rects [] :page page-number}
+                                         sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos)
 
-                                        point       {:x (.-clientX e) :y (.-clientY e)}
-                                        hl          {:id         nil
-                                                     :page       page-number
-                                                     :position   sc-pos
-                                                     :content    {:text "[:span]" :image (js/Date.now)}
-                                                     :properties {}}]
+                                         point       {:x (.-clientX e) :y (.-clientY e)}
+                                         hl          {:id         nil
+                                                      :page       page-number
+                                                      :position   sc-pos
+                                                      :content    {:text "[:span]" :image (js/Date.now)}
+                                                      :properties {}}]
 
-                                    ;; ctx tips
-                                    (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords)})
+                                     ;; ctx tips
+                                     (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords!)}))
 
-                                    ;; export area highlight
-                                    ;;(dd "[selection end] :start"
-                                    ;;    start-coord ":end" end ":pos" pos
-                                    ;;    ":page" page-number
-                                    ;;    ":offset" page-pos
-                                    ;;    ":vw-pos" vw-pos
-                                    ;;    ":sc-pos" sc-pos)
-                                    )
+                                   (set-area-mode! false))
 
-                                  (set-area-mode! false))
+                                 ;; reset
+                                 (reset-coords!)))
 
-                                ;; reset
-                                (reset-coords)))
+                             (disable-text-selection! false)
+                             (.removeEventListener root "mousemove" fn-move)))]
 
-                            (disable-text-selection! false)
-                            (.removeEventListener root "mousemove" fn-move)))]
+            (doto root
+              (.addEventListener "mousedown" fn-start)
+              (.addEventListener "mouseup" fn-end #js {:once true}))
 
-           (doto root
-             (.addEventListener "mousedown" fn-start)
-             (.addEventListener "mouseup" fn-end #js {:once true}))
-
-           ;; destroy
-           #(doto root
-              (.removeEventListener "mousedown" fn-start)
-              (.removeEventListener "mouseup" fn-end)))))
-     [start-coord])
+            ;; destroy
+            #(doto root
+               (.removeEventListener "mousedown" fn-start)
+               (.removeEventListener "mouseup" fn-end)))))
+      [start])
 
     [:div.extensions__pdf-area-selection
      {:ref *el}
-     (when (and start-coord end-coord)
-       [:div.shadow-rect {:style (calc-pos start-coord end-coord)}])]))
+     (when (and start end)
+       [:div.shadow-rect {:style (calc-rect start end)}])]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
@@ -641,8 +655,6 @@
     ;; render hls
     (rum/use-effect!
      (fn []
-       ;;(dd "=== rebuild highlights ===" (count highlights))
-
        (when-let [grouped-hls (and (sequential? highlights) (group-by :page highlights))]
          (doseq [page loaded-pages]
            (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
