@@ -17,7 +17,8 @@
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
             [frontend.util :as util]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [clojure.set :as set]))
 
 
 (defn- old-schema?
@@ -74,43 +75,66 @@
     :else
     [e a v]))
 
+(defn- get-loading-data
+  [repo *data per-length]
+  (let [ks [repo :restore/unloaded-pages]
+        unloaded-pages (get-in @state/state ks)]
+    (loop [unloaded-pages unloaded-pages
+           result []]
+      (if (or (>= (count result) per-length)
+              (empty? unloaded-pages))
+        result
+        (let [[p & others] unloaded-pages
+              items (get @*data p)
+              result' (concat result items)]
+          (swap! *data dissoc p)
+          (state/update-state! ks (fn [pages] (vec (remove #{p} pages))))
+          (state/update-state! [repo :restore/unloaded-blocks]
+                               (fn [ids] (set/difference ids #{p})))
+          (recur others result'))))))
+
 (defn- restore-other-data-from-sqlite!
   [repo data]
   (let [per-length 500
-        conn (db-conn/get-db repo false)]
-    (p/loop [data data]
-      (let [unfinished-blocks (set
-                               (->> (mapcat
-                                     (fn [b]
-                                       [(gobj/get b "uuid")
-                                        (gobj/get b "page_uuid")])
-                                     data)
-                                    (remove nil?)))]
-        (state/set-state! [repo :restore/unfinished-blocks] unfinished-blocks)
+        conn (db-conn/get-db repo false)
+        *data (atom (group-by #(gobj/get % "page_uuid") data))
+        unloaded-pages (keys @*data)
+        unloaded-block-ids (set
+                            (->> (map
+                                   (fn [b] (gobj/get b "uuid"))
+                                   data)
+                                 (concat unloaded-pages)
+                                 (remove nil?)))]
+    (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
+    (state/set-state! [repo :restore/unloaded-pages] unloaded-pages)
+    (p/loop [data (get-loading-data repo *data per-length)]
+      (cond
+        (or (not= repo (state/get-current-repo)) ; switched to another graph
+            (empty? data))
+        (do
+          (state/set-state! [repo :restore/unloaded-blocks] nil)
+          (state/set-state! [repo :restore/unloaded-pages] nil))
 
-        (cond
-          (or (not= repo (state/get-current-repo)) ; switched to another graph
-              (empty? data))
-          (state/set-state! [repo :restore/unfinished-blocks] nil)
+        (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
+        (p/do! (p/delay 5000)
+               (p/recur (get-loading-data repo *data per-length)))
 
-          (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
-          (p/do! (p/delay 5000)
-                 (p/recur data))
-
-          :else
-          (let [part (->> (take per-length data)
-                          (map-indexed (fn [idx block]
-                                         (->> (edn/read-string (gobj/get block "datoms"))
-                                              (map
-                                                (comp
-                                                 uuid-str->uuid-in-eav-vec
-                                                 (partial cons (dec (- idx)))))
-                                              (sort-by #(if (= :block/uuid (second %)) 0 1)))))
-                          (apply concat)
-                          (map (fn [eav] (cons :db/add eav))))]
-            (d/transact! conn part {:skip-persist? true})
-            (p/let [_ (p/delay 200)]
-              (p/recur (drop per-length data)))))))))
+        :else
+        (let [part (->> data
+                        (map-indexed (fn [idx block]
+                                       (->> (edn/read-string (gobj/get block "datoms"))
+                                            (map
+                                              (comp
+                                               uuid-str->uuid-in-eav-vec
+                                               (partial cons (dec (- idx)))))
+                                            (sort-by #(if (= :block/uuid (second %)) 0 1)))))
+                        (apply concat)
+                        (map (fn [eav] (cons :db/add eav))))]
+          (d/transact! conn part {:skip-persist? true})
+          (state/update-state! [repo :restore/unloaded-blocks]
+                               (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
+          (p/let [_ (p/delay 0)]
+            (p/recur (get-loading-data repo *data per-length))))))))
 
 (defn- replace-uuid-ref-with-eid
   [uuid->eid-map [e a v]]

@@ -137,7 +137,6 @@
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
-
      :cursor-range                          nil
 
      :selection/mode                        false
@@ -645,13 +644,6 @@ Similar to re-frame subscriptions"
      (fn [state]
        (contains? (set (get-selected-block-ids (:selection/blocks state)))
                   block-uuid)))))
-
-(defn sub-block-unloaded?
-  [repo block-uuid]
-  (rum/react
-   (rum/derived-atom [state] [::block-unloaded repo block-uuid]
-     (fn [state]
-       (contains? (get-in state [repo :restore/unfinished-blocks]) block-uuid)))))
 
 (defn block-content-max-length
   [repo]
@@ -2113,3 +2105,17 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn sub-block-unloaded?
+  [repo block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::block-unloaded repo block-uuid]
+     (fn [state]
+       (contains? (get-in state [repo :restore/unloaded-blocks]) block-uuid)))))
+
+(defn db-load-page!
+  "Load the page with `page-uuid` into DB."
+  [repo page-uuid]
+  (update-state! [repo :restore/unloaded-pages]
+                 (fn [pages]
+                   (vec (distinct (into [page-uuid] pages))))))

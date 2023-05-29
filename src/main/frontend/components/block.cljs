@@ -793,7 +793,9 @@
   (when-let [block (db/entity [:block/uuid uuid])]
     (let [repo (state/get-current-repo)]
       (if (state/sub-block-unloaded? repo (str uuid))
-        [:span "Loading..."]
+        (do
+          (state/db-load-page! repo (:block/uuid (:block/page block)))
+          [:span "Loading..."])
         (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
                                               {:scoped-block-id (:db/id block)})]
           [:div.color-level.embed-block.bg-base-2
@@ -863,10 +865,13 @@
   db-mixins/query
   [config id label]
   (if-let [block-id (parse-uuid id)]
-    (let [repo (state/get-current-repo)]
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])]
       (if (state/sub-block-unloaded? repo (str block-id))
-        [:span "Loading..."]
-        (let [db-id (:db/id (db/pull [:block/uuid block-id]))
+        (do
+          (state/db-load-page! repo (:block/uuid (:block/page block)))
+          [:span "Loading..."])
+        (let [db-id (:db/id block)
               block (when db-id (db/sub-block db-id))
               block-type (keyword (get-in block [:block/properties :ls-type]))
               hl-type (get-in block [:block/properties :hl-type])
