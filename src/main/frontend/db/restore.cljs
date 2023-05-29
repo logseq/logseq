@@ -250,7 +250,7 @@
      (fn []
        (p/let [other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))]
          (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
-     1000)))
+     200)))
 
 (defn restore-graph!
   "Restore db from serialized db cache"
