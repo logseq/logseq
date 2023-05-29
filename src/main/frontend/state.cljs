@@ -2116,6 +2116,6 @@ Similar to re-frame subscriptions"
 (defn db-load-page!
   "Load the page with `page-uuid` into DB."
   [repo page-uuid]
-  (update-state! [repo :restore/unloaded-pages]
+  (update-state! [repo :restore/unloaded-pages :high-priority-pages]
                  (fn [pages]
                    (vec (distinct (into [page-uuid] pages))))))

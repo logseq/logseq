@@ -78,8 +78,8 @@
 (defn- get-loading-data
   [repo *data per-length]
   (let [ks [repo :restore/unloaded-pages]
-        unloaded-pages (get-in @state/state ks)]
-    (loop [unloaded-pages unloaded-pages
+        {:keys [high-priority-pages unloaded-pages]} (get-in @state/state ks)]
+    (loop [unloaded-pages (concat high-priority-pages unloaded-pages)
            result []]
       (if (or (>= (count result) per-length)
               (empty? unloaded-pages))
@@ -88,9 +88,13 @@
               items (get @*data p)
               result' (concat result items)]
           (swap! *data dissoc p)
-          (state/update-state! ks (fn [pages] (vec (remove #{p} pages))))
+          (state/update-state! ks (fn [m]
+                                    (-> m
+                                        (update :unloaded-pages disj p)
+                                        (update :high-priority-pages (fn [items]
+                                                                       (remove #{p} items))))))
           (state/update-state! [repo :restore/unloaded-blocks]
-                               (fn [ids] (set/difference ids #{p})))
+                               (fn [ids] (disj ids p)))
           (recur others result'))))))
 
 (defn- restore-other-data-from-sqlite!
@@ -106,8 +110,9 @@
                                    data)
                                  (concat unloaded-pages)
                                  (remove nil?)))]
+    ;; (d/unlisten! conn :persistence)
     (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
-    (state/set-state! [repo :restore/unloaded-pages] unloaded-pages)
+    (state/set-state! [repo :restore/unloaded-pages :unloaded-pages] (set unloaded-pages))
     (p/loop [data (get-loading-data repo *data per-length)]
       (cond
         (or (not= repo (state/get-current-repo)) ; switched to another graph
@@ -133,7 +138,7 @@
                                             (sort-by #(if (= :block/uuid (second %)) 0 1)))))
                         (apply concat)
                         (map (fn [eav] (cons :db/add eav))))]
-          (util/profile "DB transact! " (d/transact! conn part {:skip-persist? true}))
+          (util/profile (str "DB transact! " (count part) " datoms") (d/transact! conn part {:skip-persist? true}))
           (state/update-state! [repo :restore/unloaded-blocks]
                                (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
           (p/let [_ (p/delay 0)]
