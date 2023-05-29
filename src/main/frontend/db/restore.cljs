@@ -95,7 +95,8 @@
 
 (defn- restore-other-data-from-sqlite!
   [repo data]
-  (let [per-length 500
+  (let [start (util/time-ms)
+        per-length 2000
         conn (db-conn/get-db repo false)
         *data (atom (group-by #(gobj/get % "page_uuid") data))
         unloaded-pages (keys @*data)
@@ -113,7 +114,9 @@
             (empty? data))
         (do
           (state/set-state! [repo :restore/unloaded-blocks] nil)
-          (state/set-state! [repo :restore/unloaded-pages] nil))
+          (state/set-state! [repo :restore/unloaded-pages] nil)
+          (let [end (util/time-ms)]
+            (println "[debug] load others from SQLite: " (int (/ (- end start) 1000)) " seconds.")))
 
         (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
         (p/do! (p/delay 5000)
@@ -130,7 +133,7 @@
                                             (sort-by #(if (= :block/uuid (second %)) 0 1)))))
                         (apply concat)
                         (map (fn [eav] (cons :db/add eav))))]
-          (d/transact! conn part {:skip-persist? true})
+          (util/profile "DB transact! " (d/transact! conn part {:skip-persist? true}))
           (state/update-state! [repo :restore/unloaded-blocks]
                                (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
           (p/let [_ (p/delay 0)]
@@ -149,6 +152,12 @@
 (defn uuid-str->uuid-in-eav
   [[e a v]]
   [e a (if (= :block/uuid a) (uuid v) v)])
+
+(defn- uuid-string?
+  [s]
+  (and (string? s)
+       (= (count s) 36)
+       (string/includes? s "-")))
 
 (defn- restore-graph-from-sqlite!
   "Load initial data from SQLite"
@@ -173,16 +182,15 @@
           all-blocks' (doall
                        (keep (fn [b]
                                (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                 (when
-                                   (and (util/uuid-string? (:uuid b))
-                                        (util/uuid-string? (:page_uuid b)))
+                                 (when (and (uuid-string? (:uuid b))
+                                            (uuid-string? (:page_uuid b)))
                                    [[eid :block/uuid (:uuid b)]
                                     [eid :block/page [:block/uuid (:page_uuid b)]]])))
                              all-blocks))
           init-data' (doall
                       (keep (fn [b]
                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                (if (util/uuid-string? (:uuid b)) ; deleted blocks still refed
+                                (if (uuid-string? (:uuid b)) ; deleted blocks still refed
                                   [[eid :block/uuid (uuid (:uuid b))]]
                                   (->> b
                                        :datoms
@@ -196,7 +204,7 @@
                                         :datoms
                                         edn/read-string
                                         (map #(apply vector eid %)))))
-                               journal-blocks)
+                            journal-blocks)
           sorted-pages-eav-coll (->> pages
                                      (apply concat)
                                      (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
@@ -204,10 +212,10 @@
                                 (apply concat))
           all-eav-coll (doall (concat sorted-pages-eav-coll blocks-eav-colls))
           replaced-uuid-lookup-eav-coll (map
-                                         (comp
-                                          uuid-str->uuid-in-eav-vec
-                                          (partial replace-uuid-ref-with-eid uuid->db-id-map))
-                                         all-eav-coll)
+                                          (comp
+                                           uuid-str->uuid-in-eav-vec
+                                           (partial replace-uuid-ref-with-eid uuid->db-id-map))
+                                          all-eav-coll)
           datoms (mapv #(apply d/datom %) replaced-uuid-lookup-eav-coll)
           ;; tx-data (map (partial cons :db/add) replaced-uuid-lookup-eav-coll)
           db-name (db-conn/datascript-db repo)
@@ -224,7 +232,7 @@
 
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
-                 {:skip-persist? true})
+      {:skip-persist? true})
 
     (js/setTimeout
      (fn []
