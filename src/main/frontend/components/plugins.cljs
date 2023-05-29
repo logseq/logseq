@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.search :as search]
@@ -1116,14 +1117,60 @@
             (let [updates-coming (state/sub :plugin/updates-coming)]
               (toolbar-plugins-manager-list updates-coming items)))]]))))
 
-(rum/defcs hook-ui-fenced-code < rum/reactive
-  [_state content {:keys [render edit] :as _opts}]
+(rum/defc hook-ui-fenced-code
+  [block content {:keys [render edit] :as _opts}]
 
-  [:div
-   {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
-    :class         (util/classnames [{:not-edit (false? edit)}])}
-   (when (fn? render)
-     (js/React.createElement render #js {:content content}))])
+  (let [[content1 set-content1!] (rum/use-state content)
+        [editor-active? set-editor-active!] (rum/use-state false)
+        *cm (rum/use-ref nil)
+        *el (rum/use-ref nil)]
+
+    (rum/use-effect!
+      #(set-content1! content)
+      [content])
+
+    (rum/use-effect!
+      (fn []
+        (some-> (rum/deref *el)
+                (.closest ".ui-fenced-code-wrap")
+                (.-classList)
+                (#(if editor-active?
+                    (.add % "is-active")
+                    (.remove % "is-active"))))
+        (when-let [cm (rum/deref *cm)]
+          (.refresh cm)
+          (.focus cm)
+          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
+      [editor-active?])
+
+    (rum/use-effect!
+      (fn []
+        (let [t (js/setTimeout
+                  #(when-let [^js cm (some-> (rum/deref *el)
+                                             (.closest ".ui-fenced-code-wrap")
+                                             (.querySelector ".CodeMirror")
+                                             (.-CodeMirror))]
+                     (rum/set-ref! *cm cm)
+                     (doto cm
+                       (.on "change" (fn [_ ^js e]
+                                       (some-> cm (.getDoc) (.getValue) (set-content1!))))))
+                  100)]
+          #(js/clearTimeout t)))
+      [])
+
+    [:div.ui-fenced-code-result
+     {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+      :class         (util/classnames [{:not-edit (false? edit)}])
+      :ref           *el}
+     [:<>
+      [:span.actions
+       {:on-mouse-down #(util/stop %)}
+       (ui/button (ui/icon "square-toggle-horizontal" {:size 14})
+                  :on-click #(set-editor-active! (not editor-active?)))
+       (ui/button (ui/icon "source-code" {:size 14})
+                  :on-click #(editor-handler/edit-block! block (count content1) (:block/uuid block)))]
+      (when (fn? render)
+        (js/React.createElement render #js {:content content1}))]]))
 
 (rum/defc plugins-page
   []

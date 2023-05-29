@@ -3126,14 +3126,15 @@
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div {:ref (fn [el]
-                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+          [:div.ui-fenced-code-editor
+           {:ref (fn [el]
+                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
              (nil? inside-portal?) nil
 
              (or (:slide? config) inside-portal?)
              (highlight/highlight (str (random-uuid))
-                                  {:class (str "language-" language)
+                                  {:class     (str "language-" language)
                                    :data-lang language}
                                   code)
 
@@ -3303,8 +3304,11 @@
 
       ["Src" options]
       [:div.cp__fenced-code-block
-       (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-         (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+       (if-let [opts (plugin-handler/hook-fenced-code-by-type
+                       (util/safe-lower-case (:language options)))]
+         [:div.ui-fenced-code-wrap
+          (src-cp config options html-export?)
+          (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
          (src-cp config options html-export?))]
 
       :else
