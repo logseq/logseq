@@ -76,9 +76,10 @@
           template (get-in (state/get-config)
                            [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
-    (-> (string/replace template "{time}" time)
-        (string/replace template "{date}" date-ref-name)
-        (string/replace template "{text}" "")
+    (-> template
+        (string/replace "{time}" time)
+        (string/replace "{date}" date-ref-name)
+        (string/replace "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- embed-text-file
@@ -92,8 +93,8 @@
                         ;; make the title more user friendly
                         gp-util/page-name-sanity)
           path (node-path/join (config/get-repo-dir (state/get-current-repo))
-                          (config/get-pages-directory)
-                          (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
+                               (config/get-pages-directory)
+                               (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
           _ (p/catch
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]
@@ -102,9 +103,10 @@
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]
-    (-> (string/replace template "{time}" time)
-        (string/replace template "{date}" date-ref-name)
-        (string/replace template "{text}" "")
+    (-> template
+        (string/replace "{time}" time)
+        (string/replace "{date}" date-ref-name)
+        (string/replace "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- handle-received-media [result]
