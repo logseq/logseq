@@ -12,7 +12,8 @@
   {:mvn/version "1.4.100"}}
  :pods
  {clj-kondo/clj-kondo {:version "2022.10.05"}
-  org.babashka/fswatcher {:version "0.0.3"}}
+  org.babashka/fswatcher {:version "0.0.3"}
+  org.babashka/go-sqlite3 {:version "0.1.0"}}
  :tasks
  {dev:desktop-watch
   logseq.tasks.dev.desktop/watch
@@ -87,6 +88,9 @@
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
+
+  dev:validate-sqlite-data
+  logseq.tasks.validate-sqlite-data/-main
 
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
