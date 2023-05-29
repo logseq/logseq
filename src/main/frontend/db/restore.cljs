@@ -97,10 +97,20 @@
                                (fn [ids] (disj ids p)))
           (recur others result'))))))
 
+(defn- replace-uuid-ref-with-eid
+  [uuid->eid-map [e a v]]
+  (if (and (contains? db-schema/ref-type-attributes a)
+           (coll? v)
+           (= :block/uuid (first v)))
+    (if-let [eid (get uuid->eid-map (second v))]
+      [e a eid]
+      [e a v])
+    [e a v]))
+
 (defn- restore-other-data-from-sqlite!
-  [repo data]
+  [repo data uuid->db-id-map]
   (let [start (util/time-ms)
-        per-length 2000
+        per-length 10000
         conn (db-conn/get-db repo false)
         *data (atom (group-by #(gobj/get % "page_uuid") data))
         unloaded-pages (keys @*data)
@@ -110,7 +120,7 @@
                                    data)
                                  (concat unloaded-pages)
                                  (remove nil?)))]
-    ;; (d/unlisten! conn :persistence)
+    (d/unlisten! conn :persistence)
     (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
     (state/set-state! [repo :restore/unloaded-pages :unloaded-pages] (set unloaded-pages))
     (p/loop [data (get-loading-data repo *data per-length)]
@@ -128,31 +138,24 @@
                (p/recur (get-loading-data repo *data per-length)))
 
         :else
-        (let [part (->> data
-                        (map-indexed (fn [idx block]
-                                       (->> (edn/read-string (gobj/get block "datoms"))
-                                            (map
-                                              (comp
-                                               uuid-str->uuid-in-eav-vec
-                                               (partial cons (dec (- idx)))))
-                                            (sort-by #(if (= :block/uuid (second %)) 0 1)))))
-                        (apply concat)
-                        (map (fn [eav] (cons :db/add eav))))]
-          (util/profile (str "DB transact! " (count part) " datoms") (d/transact! conn part {:skip-persist? true}))
+        (let [datoms (->> data
+                          (map (fn [block]
+                                 (let [uuid (gobj/get block "uuid")
+                                       eid (get uuid->db-id-map uuid)]
+                                   (assert eid (str "Can't find eid " eid ", block: " block))
+                                   (->> (edn/read-string (gobj/get block "datoms"))
+                                        (map
+                                          (comp
+                                           uuid-str->uuid-in-eav-vec
+                                           (partial replace-uuid-ref-with-eid uuid->db-id-map)
+                                           (partial cons eid)))))))
+                          (apply concat)
+                          (map #(apply d/datom %)))]
+          (util/profile (str "DB transact! " (count datoms) " datoms") (d/transact! conn datoms {:skip-persist? true}))
           (state/update-state! [repo :restore/unloaded-blocks]
                                (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
           (p/let [_ (p/delay 0)]
             (p/recur (get-loading-data repo *data per-length))))))))
-
-(defn- replace-uuid-ref-with-eid
-  [uuid->eid-map [e a v]]
-  (if (and (contains? db-schema/ref-type-attributes a)
-           (coll? v)
-           (= :block/uuid (first v)))
-    (if-let [eid (get uuid->eid-map (second v))]
-      [e a eid]
-      [e a v])
-    [e a v]))
 
 (defn uuid-str->uuid-in-eav
   [[e a v]]
@@ -242,7 +245,7 @@
     (js/setTimeout
      (fn []
        (p/let [other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))]
-         (restore-other-data-from-sqlite! repo other-data)))
+         (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
      1000)))
 
 (defn restore-graph!
