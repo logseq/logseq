@@ -33,7 +33,8 @@
             [medley.core :as medley]
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
-            [frontend.db.react :as react]))
+            [frontend.db.react :as react]
+            [frontend.db.listener :as db-listener]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -359,7 +360,7 @@
 (defn start-repo-db-if-not-exists!
   [repo]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo))
+  (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!}))
 
 (defn- setup-local-repo-if-not-exists-impl!
   []
@@ -369,7 +370,7 @@
           repo-dir (config/get-repo-dir repo)]
       (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
-             (db/start-db-conn! repo)
+             (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!})
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -407,7 +408,7 @@
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (db/listen-and-persist! repo)
+   (db-listener/listen-and-persist! repo)
    (ui-handler/add-style-if-exists!)
    (state/set-db-restoring! false)))
 
@@ -447,7 +448,7 @@
     (p/do!
      (when before
        (before))
-     (db/persist! repo)
+     (db-listener/persist! repo)
      (when on-success
        (on-success)))
     (p/catch (fn [error]

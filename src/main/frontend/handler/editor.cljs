@@ -56,7 +56,8 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db.listener :as db-listener]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1816,12 +1817,6 @@
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value {})))
 
-(defn- mark-last-input-time!
-  [repo]
-  (when repo
-    (state/set-editor-last-input-time! repo (util/time-ms))
-    (db/clear-repo-persistent-job! repo)))
-
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
   [e _block id]
@@ -1830,7 +1825,7 @@
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
-    (mark-last-input-time! repo)
+    (editor-property/mark-last-input-time! repo)
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
@@ -2690,7 +2685,7 @@
         top-block? (= (:block/left block) (:block/page block))
         single-block? (inside-of-single-block (.-target e))
         root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
-    (mark-last-input-time! repo)
+    (editor-property/mark-last-input-time! repo)
     (cond
       (not= selected-start selected-end)
       (do

@@ -70,7 +70,8 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db.listener :as db-listener]))
 
 ;; TODO: should we move all events here?
 
@@ -130,7 +131,7 @@
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
-  (db/persist! repo)
+  (db-listener/persist! repo)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
     (if empty-graph?
@@ -562,8 +563,8 @@
                 (catch :default e
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
-              (db/listen-and-persist! current-repo)
-              (db/persist-if-idle! current-repo)
+              (db-listener/listen-and-persist! current-repo)
+              (db-listener/persist-if-idle! current-repo)
               (repo-config-handler/restore-repo-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true))

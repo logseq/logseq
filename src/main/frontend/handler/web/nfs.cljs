@@ -20,7 +20,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.listener :as db-listener]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -138,7 +139,7 @@
                                      (state/add-repo! {:url repo :nfs? true})
                                      (state/set-loading-files! repo false)
                                      (when ok-handler (ok-handler {:url repo}))
-                                     (db/persist-if-idle! repo))))))
+                                     (db-listener/persist-if-idle! repo))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)
                            (log/error :exception error)))))))
@@ -275,7 +276,7 @@
       (search/reset-indice! repo)
       (db/remove-conn! repo)
       (db/clear-query-state!)
-      (db/start-db-conn! repo)
+      (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!})
       (reload-dir! repo {:re-index? true
                          :ok-handler ok-handler}))))
 

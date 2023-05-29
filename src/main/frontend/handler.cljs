@@ -44,7 +44,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
-            [frontend.db.react :as db-react]))
+            [frontend.db.react :as db-react]
+            [frontend.db.listener :as db-listener]))
 
 (defn set-global-error-notification!
   []
@@ -86,7 +87,7 @@
     (-> (db-restore/restore-graph! repo)
         (p/then
          (fn []
-           (db/listen-and-persist! repo)
+           (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 
@@ -197,7 +198,7 @@
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
-(reset! db/*db-listener outliner-db/after-transact-pipelines)
+(reset! db-listener/*db-listener outliner-db/after-transact-pipelines)
 
 (defn start!
   [render]

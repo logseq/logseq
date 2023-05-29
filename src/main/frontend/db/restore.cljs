@@ -18,8 +18,8 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [clojure.set :as set]))
-
+            [clojure.set :as set]
+            [frontend.db.listener :as db-listener]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -120,22 +120,25 @@
                                    data)
                                  (concat unloaded-pages)
                                  (remove nil?)))]
-    (d/unlisten! conn :persistence)
     (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
     (state/set-state! [repo :restore/unloaded-pages :unloaded-pages] (set unloaded-pages))
     (p/loop [data (get-loading-data repo *data per-length)]
+      (d/unlisten! conn :persistence)
       (cond
         (or (not= repo (state/get-current-repo)) ; switched to another graph
             (empty? data))
         (do
           (state/set-state! [repo :restore/unloaded-blocks] nil)
           (state/set-state! [repo :restore/unloaded-pages] nil)
+          (db-listener/repo-listen-to-tx! repo conn)
           (let [end (util/time-ms)]
             (println "[debug] load others from SQLite: " (int (/ (- end start) 1000)) " seconds.")))
 
         (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
-        (p/do! (p/delay 5000)
-               (p/recur (get-loading-data repo *data per-length)))
+        (p/do!
+         (db-listener/repo-listen-to-tx! repo conn)
+         (p/delay 5000)
+         (p/recur (get-loading-data repo *data per-length)))
 
         :else
         (let [datoms (->> data
@@ -154,6 +157,7 @@
           (util/profile (str "DB transact! " (count datoms) " datoms") (d/transact! conn datoms {:skip-persist? true}))
           (state/update-state! [repo :restore/unloaded-blocks]
                                (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
+          (db-listener/repo-listen-to-tx! repo conn)
           (p/let [_ (p/delay 0)]
             (p/recur (get-loading-data repo *data per-length))))))))
 

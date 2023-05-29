@@ -10,7 +10,8 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
             [goog.object :as gobj]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.db.listener :as db-listener]))
 
 (defn clear-selection!
   []
@@ -34,6 +35,12 @@
         first
         (or "")
         (subs 0 pos))))
+
+(defn mark-last-input-time!
+  [repo]
+  (when repo
+    (state/set-editor-last-input-time! repo (util/time-ms))
+    (db-listener/clear-repo-persistent-job! repo)))
 
 (defn edit-block!
   ([block pos id]
@@ -69,7 +76,9 @@
                            (drawer/remove-logbook))]
            (clear-selection!)
            (if edit-input-id
-             (state/set-editing! edit-input-id content block text-range)
+             (do
+               (state/set-editing! edit-input-id content block text-range)
+               (mark-last-input-time! (state/get-current-repo)))
              ;; Block may not be rendered yet
              (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))
 
