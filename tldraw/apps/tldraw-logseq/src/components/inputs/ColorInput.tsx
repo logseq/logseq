@@ -85,7 +85,7 @@ export function ColorInput({
               />
             </div>
           </div>
-          <label for="tl-custom-color-input" className="cursor-pointer">
+          <label htmlFor="tl-custom-color-input" className="cursor-pointer">
             Select custom color
           </label>
         </div>
