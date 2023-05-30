@@ -113,7 +113,7 @@
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
-        per-length 10000
+        per-length 1000
         conn (db-conn/get-db repo false)
         *data (atom (group-by #(gobj/get % "page_uuid") data))
         unloaded-pages (keys @*data)
@@ -242,7 +242,8 @@
                                 (d/conn-from-datoms datoms db-schema/schema))
           _ (swap! db-conn/conns assoc db-name db-conn)
           end-time (t/now)]
-    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms")
+    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
+             " Datoms in total: " (count datoms))
 
     ;; (util/profile :restore-graph-from-sqlite!-transact (d/transact! db-conn tx-data))
 
