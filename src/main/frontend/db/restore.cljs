@@ -64,18 +64,19 @@
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn- eav->datom
-  [uuid->eid-map [e a v]]
-  (->>
-   (cond
-     (and (= :block/uuid a) (string? v))
-     [e a (uuid v)]
+  [uuid->eid-map col & {:keys [eid]}]
+  (let [[e a v] (if eid (cons eid col) col)]
+    (->>
+    (cond
+      (and (= :block/uuid a) (string? v))
+      [e a (uuid v)]
 
-     (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
-     [e a (get uuid->eid-map (second v) v)]
+      (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
+      [e a (get uuid->eid-map (second v) v)]
 
-     :else
-     [e a v])
-   (apply d/datom)))
+      :else
+      [e a v])
+    (apply d/datom))))
 
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
@@ -92,18 +93,17 @@
          (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
        (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids))))
 
-    (doseq [block data]
-      (let [uuid (gobj/get block "uuid")
-            eid (get uuid->db-id-map uuid)]
-        (assert eid (str "Can't find eid " eid ", block: " block))
-        (let [block-datoms (->> (gobj/get block "datoms")
-                                (transit/read t-reader)
-                                (mapv
-                                 (comp
-                                  (partial eav->datom uuid->db-id-map)
-                                  (partial apply vector eid))))]
-          (doseq [datom block-datoms]
-            (conj! datoms datom)))))
+    (util/profile
+     "build datoms"
+     (doseq [block data]
+       (let [uuid (gobj/get block "uuid")
+             eid (get uuid->db-id-map uuid)]
+         (assert eid (str "Can't find eid " eid ", block: " block))
+         (let [avs (->> (gobj/get block "datoms")
+                        (transit/read t-reader))]
+           (doseq [av avs]
+             (let [datom (eav->datom uuid->db-id-map av :eid eid)]
+               (conj! datoms datom)))))))
 
     (let [all-datoms (persistent! datoms)
           new-db (util/profile
@@ -117,10 +117,6 @@
       (state/set-state! [repo :restore/unloaded-blocks] nil)
       (state/set-state! [repo :restore/unloaded-pages] nil)
       (db-listener/repo-listen-to-tx! repo conn))))
-
-(defn uuid-str->uuid-in-eav
-  [[e a v]]
-  [e a (if (= :block/uuid a) (uuid v) v)])
 
 (defn- uuid-string?
   [s]

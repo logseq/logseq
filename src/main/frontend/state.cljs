@@ -2115,4 +2115,4 @@ Similar to re-frame subscriptions"
   (rum/react
    (rum/derived-atom [state] [::block-unloaded repo block-uuid]
      (fn [state]
-       (contains? (get-in state [repo :restore/unloaded-blocks]) block-uuid)))))
+       (contains? (get-in state [repo :restore/unloaded-blocks]) (str block-uuid))))))
