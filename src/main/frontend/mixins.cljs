@@ -99,7 +99,7 @@
      :did-mount (fn [state]
                   (attach-listeners state)
                   state)
-     :did-remount (fn [old-state new-state]
+     :will-remount (fn [old-state new-state]
                     (detach old-state)
                     (attach-listeners new-state)
                     new-state)})))

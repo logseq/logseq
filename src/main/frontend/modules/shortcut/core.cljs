@@ -145,7 +145,7 @@
      (let [install-id (install-shortcut! handler-id {:state state})]
        (assoc state ::install-id install-id)))
 
-   :did-remount (fn [old-state new-state]
+   :will-remount (fn [old-state new-state]
                   (uninstall-shortcut! (::install-id old-state))
                   (when-let [install-id (install-shortcut! handler-id {:state new-state})]
                     (assoc new-state ::install-id install-id)))
