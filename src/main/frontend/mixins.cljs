@@ -100,9 +100,9 @@
                   (attach-listeners state)
                   state)
      :will-remount (fn [old-state new-state]
-                    (detach old-state)
-                    (attach-listeners new-state)
-                    new-state)})))
+                     (detach old-state)
+                     (attach-listeners new-state)
+                     new-state)})))
 
 (defn modal
   [k]
