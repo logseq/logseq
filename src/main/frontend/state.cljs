@@ -19,270 +19,273 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(defonce *profile-state
+  (atom {}))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [graph (storage/get :git/current-repo)]
-                        (when graph (ipc/ipc "setCurrentGraph" graph))
-                        graph)]
-   (atom
-    {:route-match                           nil
-     :today                                 nil
-     :system/events                         (async/chan 1000)
-     :file/writes                           (async/chan 10000)
-     :file/unlinked-dirs                    #{}
-     :reactive/custom-queries               (async/chan 1000)
-     :notification/show?                    false
-     :notification/content                  nil
-     :repo/loading-files?                   {}
-     :nfs/user-granted?                     {}
-     :nfs/refreshing?                       nil
-     :instrument/disabled?                  (storage/get "instrument-disabled")
-     ;; TODO: how to detect the network reliably?
-     :network/online?         true
-     :indexeddb/support?      true
-     :me                      nil
-     :git/current-repo        current-graph
-     :draw?                   false
-     :db/restoring?           nil
+                         (when graph (ipc/ipc "setCurrentGraph" graph))
+                         graph)]
+    (atom
+     {:route-match                           nil
+      :today                                 nil
+      :system/events                         (async/chan 1000)
+      :file/writes                           (async/chan 10000)
+      :file/unlinked-dirs                    #{}
+      :reactive/custom-queries               (async/chan 1000)
+      :notification/show?                    false
+      :notification/content                  nil
+      :repo/loading-files?                   {}
+      :nfs/user-granted?                     {}
+      :nfs/refreshing?                       nil
+      :instrument/disabled?                  (storage/get "instrument-disabled")
+      ;; TODO: how to detect the network reliably?
+      :network/online?         true
+      :indexeddb/support?      true
+      :me                      nil
+      :git/current-repo        current-graph
+      :draw?                   false
+      :db/restoring?           nil
 
-     :journals-length                       3
+      :journals-length                       3
 
-     :search/q                              ""
-     :search/mode                           :global  ;; inner page or full graph? {:page :global}
-     :search/result                         nil
-     :search/graph-filters                  []
-     :search/engines                        {}
+      :search/q                              ""
+      :search/mode                           :global ;; inner page or full graph? {:page :global}
+      :search/result                         nil
+      :search/graph-filters                  []
+      :search/engines                        {}
 
-     ;; modals
-     :modal/dropdowns                       {}
-     :modal/id                              nil
-     :modal/label                           ""
-     :modal/show?                           false
-     :modal/panel-content                   nil
-     :modal/fullscreen?                     false
-     :modal/close-btn?                      nil
-     :modal/close-backdrop?                 true
-     :modal/subsets                         []
+      ;; modals
+      :modal/dropdowns                       {}
+      :modal/id                              nil
+      :modal/label                           ""
+      :modal/show?                           false
+      :modal/panel-content                   nil
+      :modal/fullscreen?                     false
+      :modal/close-btn?                      nil
+      :modal/close-backdrop?                 true
+      :modal/subsets                         []
 
-     ;; ui
-     :ui/viewport                           {}
+      ;; ui
+      :ui/viewport                           {}
 
-     ;; left sidebar
-     :ui/navigation-item-collapsed?         {}
+      ;; left sidebar
+      :ui/navigation-item-collapsed?         {}
 
-     ;; right sidebar
-     :ui/fullscreen?                        false
-     :ui/settings-open?                     false
-     :ui/sidebar-open?                      false
-     :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) "light")
-     :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
-     :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      ;; right sidebar
+      :ui/fullscreen?                        false
+      :ui/settings-open?                     false
+      :ui/sidebar-open?                      false
+      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+      :ui/theme                              (or (storage/get :ui/theme) "light")
+      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
+      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
-     ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
-     ;; 1. right sidebar
-     ;; 2. zoom-in view
-     ;; 3. queries
-     ;; 4. references
-     ;; graph => {:block-id bool}
-     :ui/collapsed-blocks                   {}
-     :ui/sidebar-collapsed-blocks           {}
-     :ui/root-component                     nil
-     :ui/file-component                     nil
-     :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
-                                                false)
-     ;; remember scroll positions of visited paths
-     :ui/paths-scroll-positions             {}
-     :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
-                                              false
-                                              true)
-     :ui/scrolling?                         false
-     :document/mode?                        document-mode?
+      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
+      ;; 1. right sidebar
+      ;; 2. zoom-in view
+      ;; 3. queries
+      ;; 4. references
+      ;; graph => {:block-id bool}
+      :ui/collapsed-blocks                   {}
+      :ui/sidebar-collapsed-blocks           {}
+      :ui/root-component                     nil
+      :ui/file-component                     nil
+      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
+                                                 false)
+      ;; remember scroll positions of visited paths
+      :ui/paths-scroll-positions             {}
+      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
+                                               false
+                                               true)
+      :ui/scrolling?                         false
+      :document/mode?                        document-mode?
 
-     :config                                {}
-     :block/component-editing-mode?         false
-     :editor/op                             nil
-     :editor/latest-op                      nil
-     :editor/hidden-editors                 #{}             ;; page names
-     :editor/draw-mode?                     false
-     :editor/action                         nil
-     :editor/action-data                    nil
-     ;; With label or other data
-     :editor/last-saved-cursor              nil
-     :editor/editing?                       nil
-     :editor/in-composition?                false
-     :editor/content                        {}
-     :editor/block                          nil
-     :editor/block-dom-id                   nil
-     :editor/set-timestamp-block            nil             ;; click rendered block timestamp-cp to set timestamp
-     :editor/last-input-time                nil
-     :editor/document-mode?                 document-mode?
-     :editor/args                           nil
-     :editor/on-paste?                      false
-     :editor/last-key-code                  nil
+      :config                                {}
+      :block/component-editing-mode?         false
+      :editor/op                             nil
+      :editor/latest-op                      nil
+      :editor/hidden-editors                 #{} ;; page names
+      :editor/draw-mode?                     false
+      :editor/action                         nil
+      :editor/action-data                    nil
+      ;; With label or other data
+      :editor/last-saved-cursor              nil
+      :editor/editing?                       nil
+      :editor/in-composition?                false
+      :editor/content                        {}
+      :editor/block                          nil
+      :editor/block-dom-id                   nil
+      :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
+      :editor/last-input-time                nil
+      :editor/document-mode?                 document-mode?
+      :editor/args                           nil
+      :editor/on-paste?                      false
+      :editor/last-key-code                  nil
 
-     ;; Stores deleted refed blocks, indexed by repo
-     :editor/last-replace-ref-content-tx    nil
+      ;; Stores deleted refed blocks, indexed by repo
+      :editor/last-replace-ref-content-tx    nil
 
-     ;; for audio record
-     :editor/record-status                  "NONE"
+      ;; for audio record
+      :editor/record-status                  "NONE"
 
-     ;; Whether to skip saving the current block
-     :editor/skip-saving-current-block?     false
+      ;; Whether to skip saving the current block
+      :editor/skip-saving-current-block?     false
 
-     :editor/code-block-context             {}
+      :editor/code-block-context             {}
 
-     :db/last-transact-time                 {}
-     ;; whether database is persisted
-     :db/persisted?                         {}
-     :cursor-range                          nil
+      :db/last-transact-time                 {}
+      ;; whether database is persisted
+      :db/persisted?                         {}
+      :cursor-range                          nil
 
-     :selection/mode                        false
-     ;; Warning: blocks order is determined when setting this attribute
-     :selection/blocks                      []
-     :selection/start-block                 nil
-     ;; either :up or :down, defaults to down
-     ;; used to determine selection direction when two or more blocks are selected
-     :selection/direction                   :down
-     :selection/selected-all?               false
-     :custom-context-menu/show?             false
-     :custom-context-menu/links             nil
-     :custom-context-menu/position          nil
+      :selection/mode                        false
+      ;; Warning: blocks order is determined when setting this attribute
+      :selection/blocks                      []
+      :selection/start-block                 nil
+      ;; either :up or :down, defaults to down
+      ;; used to determine selection direction when two or more blocks are selected
+      :selection/direction                   :down
+      :selection/selected-all?               false
+      :custom-context-menu/show?             false
+      :custom-context-menu/links             nil
+      :custom-context-menu/position          nil
 
-     ;; pages or blocks in the right sidebar
-     ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
-     :sidebar/blocks                        '()
+      ;; pages or blocks in the right sidebar
+      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
+      :sidebar/blocks                        '()
 
-     :preferred-language                    (storage/get :preferred-language)
+      :preferred-language                    (storage/get :preferred-language)
 
-     ;; electron
-     :electron/auto-updater-downloaded      false
-     :electron/updater-pending?             false
-     :electron/updater                      {}
-     :electron/user-cfgs                    nil
-     :electron/server                       nil
+      ;; electron
+      :electron/auto-updater-downloaded      false
+      :electron/updater-pending?             false
+      :electron/updater                      {}
+      :electron/user-cfgs                    nil
+      :electron/server                       nil
 
-     ;; assets
-     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
-     :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+      ;; assets
+      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
+      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
-     ;; mobile
-     :mobile/container-urls                 nil
-     :mobile/show-action-bar?               false
-     :mobile/actioned-block                 nil
-     :mobile/show-toolbar?                  false
-     :mobile/show-recording-bar?            false
-     :mobile/show-tabbar?                   false
-     ;;; Used to monitor mobile app status,
-     ;;; value spec:
-     ;;; {:is-active? bool, :timestamp int}
-     :mobile/app-state-change                 (atom nil)
+      ;; mobile
+      :mobile/container-urls                 nil
+      :mobile/show-action-bar?               false
+      :mobile/actioned-block                 nil
+      :mobile/show-toolbar?                  false
+      :mobile/show-recording-bar?            false
+      :mobile/show-tabbar?                   false
+;;; Used to monitor mobile app status,
+;;; value spec:
+;;; {:is-active? bool, :timestamp int}
+      :mobile/app-state-change                 (atom nil)
 
-     ;; plugin
-     :plugin/enabled                        (and (util/electron?)
-                                                 ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
-     :plugin/preferences                    nil
-     :plugin/indicator-text                 nil
-     :plugin/installed-plugins              {}
-     :plugin/installed-themes               []
-     :plugin/installed-slash-commands       {}
-     :plugin/installed-ui-items             {}
-     :plugin/installed-resources            {}
-     :plugin/installed-hooks                {}
-     :plugin/installed-services             {}
-     :plugin/simple-commands                {}
-     :plugin/selected-theme                 nil
-     :plugin/selected-unpacked-pkg          nil
-     :plugin/marketplace-pkgs               nil
-     :plugin/marketplace-stats              nil
-     :plugin/installing                     nil
-     :plugin/active-readme                  nil
-     :plugin/updates-auto-checking?         false
-     :plugin/updates-pending                {}
-     :plugin/updates-coming                 {}
-     :plugin/updates-downloading?           false
-     :plugin/updates-unchecked              #{}
-     :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil ;; plugin id
+      ;; plugin
+      :plugin/enabled                        (and (util/electron?)
+                                                  ;; true false :theme-only
+                                                  ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
+      :plugin/preferences                    nil
+      :plugin/indicator-text                 nil
+      :plugin/installed-plugins              {}
+      :plugin/installed-themes               []
+      :plugin/installed-slash-commands       {}
+      :plugin/installed-ui-items             {}
+      :plugin/installed-resources            {}
+      :plugin/installed-hooks                {}
+      :plugin/installed-services             {}
+      :plugin/simple-commands                {}
+      :plugin/selected-theme                 nil
+      :plugin/selected-unpacked-pkg          nil
+      :plugin/marketplace-pkgs               nil
+      :plugin/marketplace-stats              nil
+      :plugin/installing                     nil
+      :plugin/active-readme                  nil
+      :plugin/updates-auto-checking?         false
+      :plugin/updates-pending                {}
+      :plugin/updates-coming                 {}
+      :plugin/updates-downloading?           false
+      :plugin/updates-unchecked              #{}
+      :plugin/navs-settings?                 true
+      :plugin/focused-settings               nil ;; plugin id
 
-     ;; pdf
-     :pdf/system-win?                       false
-     :pdf/current                           nil
-     :pdf/ref-highlight                     nil
-     :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+      ;; pdf
+      :pdf/system-win?                       false
+      :pdf/current                           nil
+      :pdf/ref-highlight                     nil
+      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
 
-     ;; all notification contents as k-v pairs
-     :notification/contents                 {}
-     :graph/syncing?                        false
-     ;; graph -> state
-     :graph/parsing-state                   {}
+      ;; all notification contents as k-v pairs
+      :notification/contents                 {}
+      :graph/syncing?                        false
+      ;; graph -> state
+      :graph/parsing-state                   {}
 
-     :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
-                                                "dashes")
-     :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
-                                                #{})
-     :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
-                                                {})
-     :date-picker/date                      nil
+      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
+                                                 "dashes")
+      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
+                                                 #{})
+      :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
+                                                 {})
+      :date-picker/date                      nil
 
-     :youtube/players                       {}
+      :youtube/players                       {}
 
-     ;; command palette
-     :command-palette/commands              []
+      ;; command palette
+      :command-palette/commands              []
 
-     :view/components                       {}
+      :view/components                       {}
 
-     :favorites/dragging                    nil
+      :favorites/dragging                    nil
 
-     :srs/mode?                             false
+      :srs/mode?                             false
 
-     :srs/cards-due-count                   nil
+      :srs/cards-due-count                   nil
 
-     :reactive/query-dbs                    {}
+      :reactive/query-dbs                    {}
 
-     ;; login, userinfo, token, ...
-     :auth/refresh-token                    (storage/get "refresh-token")
-     :auth/access-token                     nil
-     :auth/id-token                         nil
+      ;; login, userinfo, token, ...
+      :auth/refresh-token                    (storage/get "refresh-token")
+      :auth/access-token                     nil
+      :auth/id-token                         nil
 
-     ;; file-sync
-     :file-sync/jstour-inst                   nil
-     :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
-                                                {:welcome false})
-     :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/set-remote-graph-password-result {}
+      ;; file-sync
+      :file-sync/jstour-inst                   nil
+      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
+                                                 {:welcome false})
+      :file-sync/remote-graphs               {:loading false :graphs nil}
+      :file-sync/set-remote-graph-password-result {}
 
-     ;; graph-uuid -> {:graphs-txid {}
-     ;;                :file-sync/sync-manager {}
-     ;;                :file-sync/sync-state {}
-     ;;                ;; {file-path -> payload}
-     ;;                :file-sync/progress {}
-     ;;                :file-sync/start-time {}
-     ;;                :file-sync/last-synced-at {}}
-     :file-sync/graph-state                 {:current-graph-uuid nil}
-                                             ;; graph-uuid -> ...
+      ;; graph-uuid -> {:graphs-txid {}
+      ;;                :file-sync/sync-manager {}
+      ;;                :file-sync/sync-state {}
+      ;;                ;; {file-path -> payload}
+      ;;                :file-sync/progress {}
+      ;;                :file-sync/start-time {}
+      ;;                :file-sync/last-synced-at {}}
+      :file-sync/graph-state                 {:current-graph-uuid nil}
+      ;; graph-uuid -> ...
 
-     :user/info                             {:UserGroups (storage/get :user-groups)}
-     :encryption/graph-parsing?             false
+      :user/info                             {:UserGroups (storage/get :user-groups)}
+      :encryption/graph-parsing?             false
 
-     :ui/loading?                           {}
-     :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+      :ui/loading?                           {}
+      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
-     :file/rename-event-chan                (async/chan 100)
-     :ui/find-in-page                       nil
-     :graph/importing                       nil
-     :graph/importing-state                 {}
+      :file/rename-event-chan                (async/chan 100)
+      :ui/find-in-page                       nil
+      :graph/importing                       nil
+      :graph/importing-state                 {}
 
-     :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
-     :whiteboard/last-persisted-at          {}
-     :whiteboard/pending-tx-data            {}
-     :history/page-only-mode?               false
-     ;; db tx-id -> editor cursor
-     :history/tx->editor-cursor             {}})))
+      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
+      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
+      :whiteboard/last-persisted-at          {}
+      :whiteboard/pending-tx-data            {}
+      :history/page-only-mode?               false
+      ;; db tx-id -> editor cursor
+      :history/tx->editor-cursor             {}})))
 
 ;; Block ast state
 ;; ===============
@@ -693,6 +696,7 @@ Similar to re-frame subscriptions"
 
 (defn set-state!
   [path value]
+  (swap! *profile-state update path inc)
   (if (vector? path)
     (swap! state assoc-in path value)
     (swap! state assoc path value))

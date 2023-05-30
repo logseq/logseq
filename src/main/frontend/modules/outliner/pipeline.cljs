@@ -11,7 +11,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db.schema :as db-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cognitect.transit :as t]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -139,11 +140,16 @@
           (react/refresh! repo tx-report'))
 
         (when (and (config/db-only? repo) (not (:skip-persist? tx-meta)))
-          (let [upsert-blocks (->> blocks
+          (let [t-writer (t/writer :json)
+                upsert-blocks (->> blocks
                                    (remove (fn [b] (contains? deleted-block-uuids (:block/uuid b))))
                                    (map (fn [b]
                                           (let [datoms (d/datoms (:db-after tx-report') :eavt (:db/id b))]
-                                            (assoc b :datoms (pr-str (keep (partial datom->av-vector (:db-after tx-report')) datoms))))))
+                                            (assoc b :datoms
+                                                   (->> datoms
+                                                        (keep
+                                                         (partial datom->av-vector (:db-after tx-report')))
+                                                        (t/write t-writer))))))
                                    (map (fn [b]
                                           (if-some [page-uuid (:block/uuid (d/entity (:db-after tx-report') (:db/id (:block/page b))))]
                                             (assoc b :page_uuid page-uuid)

@@ -19,7 +19,10 @@
             [frontend.util :as util]
             [cljs-time.core :as t]
             [clojure.set :as set]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [cognitect.transit :as transit]))
+
+(def ^:private t-reader (transit/reader :json))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -116,8 +119,8 @@
         unloaded-pages (keys @*data)
         unloaded-block-ids (set
                             (->> (map
-                                   (fn [b] (gobj/get b "uuid"))
-                                   data)
+                                  (fn [b] (gobj/get b "uuid"))
+                                  data)
                                  (concat unloaded-pages)
                                  (remove nil?)))]
     (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
@@ -132,7 +135,7 @@
           (state/set-state! [repo :restore/unloaded-pages] nil)
           (db-listener/repo-listen-to-tx! repo conn)
           (let [end (util/time-ms)]
-            (println "[debug] load others from SQLite: " (int (/ (- end start) 1000)) " seconds.")))
+            (println "[debug] load others from SQLite: " (int (- end start)) " ms.")))
 
         (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
         (p/do!
@@ -141,19 +144,22 @@
          (p/recur (get-loading-data repo *data per-length)))
 
         :else
-        (let [datoms (->> data
-                          (map (fn [block]
-                                 (let [uuid (gobj/get block "uuid")
-                                       eid (get uuid->db-id-map uuid)]
-                                   (assert eid (str "Can't find eid " eid ", block: " block))
-                                   (->> (edn/read-string (gobj/get block "datoms"))
-                                        (map
+        (let [compf (comp
+                     (partial apply d/datom)
+                     uuid-str->uuid-in-eav-vec
+                     (partial replace-uuid-ref-with-eid uuid->db-id-map))
+              datoms (->> data
+                          (mapv (fn [block]
+                                  (let [uuid (gobj/get block "uuid")
+                                        eid (get uuid->db-id-map uuid)]
+                                    (assert eid (str "Can't find eid " eid ", block: " block))
+                                    (->> (gobj/get block "datoms")
+                                         (transit/read t-reader)
+                                         (mapv
                                           (comp
-                                           uuid-str->uuid-in-eav-vec
-                                           (partial replace-uuid-ref-with-eid uuid->db-id-map)
-                                           (partial cons eid)))))))
-                          (apply concat)
-                          (map #(apply d/datom %)))]
+                                           compf
+                                           (partial apply vector eid)))))))
+                          (apply concat))]
           (util/profile (str "DB transact! " (count datoms) " datoms") (d/transact! conn datoms {:skip-persist? true}))
           (state/update-state! [repo :restore/unloaded-blocks]
                                (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
@@ -188,8 +194,8 @@
                         (let [eid (assign-id-to-uuid-fn (:uuid page))]
                           (->> page
                                :datoms
-                               edn/read-string
-                               (map #(apply vector eid %)))))
+                               (transit/read t-reader)
+                               (mapv (partial apply vector eid)))))
                       all-pages)
           all-blocks' (doall
                        (keep (fn [b]
@@ -206,17 +212,18 @@
                                   [[eid :block/uuid (uuid (:uuid b))]]
                                   (->> b
                                        :datoms
-                                       edn/read-string
-                                       (map #(apply vector eid %))))))
+                                       (transit/read t-reader)
+                                       (mapv (partial apply vector eid))))))
                             init-data))
           uuid->db-id-map (persistent! uuid->db-id-tmap)
-          journal-blocks' (map (fn [b]
-                                 (let [eid (get uuid->db-id-map (:uuid b))]
-                                   (->> b
-                                        :datoms
-                                        edn/read-string
-                                        (map #(apply vector eid %)))))
-                            journal-blocks)
+          journal-blocks' (mapv
+                           (fn [b]
+                             (let [eid (get uuid->db-id-map (:uuid b))]
+                               (->> b
+                                    :datoms
+                                    (transit/read t-reader)
+                                    (mapv (partial apply vector eid)))))
+                               journal-blocks)
           sorted-pages-eav-coll (->> pages
                                      (apply concat)
                                      (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
@@ -224,10 +231,10 @@
                                 (apply concat))
           all-eav-coll (doall (concat sorted-pages-eav-coll blocks-eav-colls))
           replaced-uuid-lookup-eav-coll (map
-                                          (comp
-                                           uuid-str->uuid-in-eav-vec
-                                           (partial replace-uuid-ref-with-eid uuid->db-id-map))
-                                          all-eav-coll)
+                                         (comp
+                                          uuid-str->uuid-in-eav-vec
+                                          (partial replace-uuid-ref-with-eid uuid->db-id-map))
+                                         all-eav-coll)
           datoms (mapv #(apply d/datom %) replaced-uuid-lookup-eav-coll)
           ;; tx-data (map (partial cons :db/add) replaced-uuid-lookup-eav-coll)
           db-name (db-conn/datascript-db repo)
@@ -244,7 +251,7 @@
 
     (d/transact! db-conn [(react/kv :db/type "db")
                           {:schema/version db-schema/version}]
-      {:skip-persist? true})
+                 {:skip-persist? true})
 
     (js/setTimeout
      (fn []
