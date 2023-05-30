@@ -367,11 +367,15 @@
       (doseq [[event function]
               [["persist-zoom-level" #(storage/set :zoom-level %)]
                ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
-               ["full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")]]]
+               ["full-screen" #(do (js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")
+                                   (state/set-state! :electron/window-fullscreen? (= % "enter")))]
+               ["maximize" #(state/set-state! :electron/window-maximized? %)]]]
         (.on js/window.apis event function))
 
-      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
-                                           (and isFullScreen (.add cl "is-fullscreen")))))))
+      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen isMaximized]} (js->clj % :keywordize-keys true)]
+                                           (when isFullScreen ((.add cl "is-fullscreen")
+                                                               (state/set-state! :electron/window-fullscreen? true)))
+                                           (when isMaximized (state/set-state! :electron/window-maximized? true)))))))
 
 (defn inject-dynamic-style-node!
   []

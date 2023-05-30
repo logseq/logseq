@@ -99,6 +99,8 @@
   (case name
     :home
     "Logseq"
+    :whiteboards
+    (t :whiteboards)
     :repos
     "Repos"
     :repo-add
@@ -129,6 +131,15 @@
         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
           (or (util/get-page-original-name page)
               "Logseq"))))
+    :whiteboard
+    (let [name (:name path-params)
+          block? (util/uuid-string? name)]
+      (str
+       (if block?
+         (t :untitled)
+         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
+           (or (util/get-page-original-name page)
+               "Logseq"))) " - " (t :whiteboard)))
     :tag
     (str "#"  (:name path-params))
     :diff

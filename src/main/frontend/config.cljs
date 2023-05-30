@@ -339,7 +339,7 @@
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def config-default-content (rc/inline "config.edn"))
+(def config-default-content (rc/inline "templates/config.edn"))
 (def config-default-content-md5 (let [md5 (new crypt/Md5)]
                                   (.update md5 (crypt/stringToUtf8ByteArray config-default-content))
                                   (crypt/byteArrayToHex (.digest md5))))

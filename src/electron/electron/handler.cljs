@@ -422,7 +422,8 @@
   js/__dirname)
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
-  {:isFullScreen (.isFullScreen win)})
+  {:isFullScreen (.isFullScreen win)
+   :isMaximized (.isMaximized win)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
@@ -598,6 +599,20 @@
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
+
+(defmethod handle :window-minimize [^js win]
+  (.minimize win))
+
+(defmethod handle :window-toggle-maximized [^js win]
+  (if (.isMaximized win)
+    (.unmaximize win)
+    (.maximize win)))
+
+(defmethod handle :window-toggle-fullscreen [^js win]
+  (.setFullScreen win (not (.isFullScreen win))))
+
+(defmethod handle :window-close [^js win]
+  (.close win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
