@@ -126,6 +126,37 @@ test('clone the rectangle', async ({ page }) => {
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 })
 
+test('group the rectangles', async ({ page }) => {
+  await page.keyboard.press(modKey + '+a')
+  await page.keyboard.press(modKey + '+g')
+
+  await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(1)
+})
+
+test('delete the group', async ({ page }) => {
+  await page.keyboard.press(modKey + '+a')
+
+  await page.keyboard.press('Delete')
+
+  await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(0)
+    // should also delete the grouped shapes
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(0)
+})
+
+test('undo the group deletion', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(1)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+})
+
+test('undo the group action', async ({ page }) => {
+  await page.keyboard.press(modKey + '+z')
+
+  await expect(page.locator('.logseq-tldraw .tl-group-container')).toHaveCount(0)
+  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
+})
+
 test('connect rectangles with an arrow', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
