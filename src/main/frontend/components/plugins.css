@@ -902,7 +902,7 @@
   &-wrap {
     &:not(.is-active) {
       .ui-fenced-code-editor {
-        display: none;
+        display: none !important;
       }
     }
 
