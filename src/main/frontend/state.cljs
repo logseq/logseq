@@ -2116,10 +2116,3 @@ Similar to re-frame subscriptions"
    (rum/derived-atom [state] [::block-unloaded repo block-uuid]
      (fn [state]
        (contains? (get-in state [repo :restore/unloaded-blocks]) block-uuid)))))
-
-(defn db-load-page!
-  "Load the page with `page-uuid` into DB."
-  [repo page-uuid]
-  (update-state! [repo :restore/unloaded-pages :high-priority-pages]
-                 (fn [pages]
-                   (vec (distinct (into [page-uuid] pages))))))

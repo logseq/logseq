@@ -4,6 +4,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.db :as db]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.db.conn :as db-conn]
@@ -42,7 +43,6 @@
       :else
       true)))
 
-
 (defn- restore-graph-from-text!
   "Swap db string into the current db status
    stored: the text to restore from"
@@ -63,109 +63,60 @@
                 (db-conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
-
-(defn- uuid-str->uuid-in-eav-vec
-  [[e a v]]
-  (cond
-    (and (= :block/uuid a) (string? v))
-    [e a (uuid v)]
-
-    (and (coll? v) (= 2 (count v))
-         (= :block/uuid (first v))
-         (string? (second v)))
-    [e a [:block/uuid (uuid (second v))]]
-
-    :else
-    [e a v]))
-
-(defn- get-loading-data
-  [repo *data per-length]
-  (let [ks [repo :restore/unloaded-pages]
-        {:keys [high-priority-pages unloaded-pages]} (get-in @state/state ks)]
-    (loop [unloaded-pages (concat high-priority-pages unloaded-pages)
-           result []]
-      (if (or (>= (count result) per-length)
-              (empty? unloaded-pages))
-        result
-        (let [[p & others] unloaded-pages
-              items (get @*data p)
-              result' (concat result items)]
-          (swap! *data dissoc p)
-          (state/update-state! ks (fn [m]
-                                    (-> m
-                                        (update :unloaded-pages disj p)
-                                        (update :high-priority-pages (fn [items]
-                                                                       (remove #{p} items))))))
-          (state/update-state! [repo :restore/unloaded-blocks]
-                               (fn [ids] (disj ids p)))
-          (recur others result'))))))
-
-(defn- replace-uuid-ref-with-eid
+(defn- eav->datom
   [uuid->eid-map [e a v]]
-  (if (and (contains? db-schema/ref-type-attributes a)
-           (coll? v)
-           (= :block/uuid (first v)))
-    (if-let [eid (get uuid->eid-map (second v))]
-      [e a eid]
-      [e a v])
-    [e a v]))
+  (->>
+   (cond
+     (and (= :block/uuid a) (string? v))
+     [e a (uuid v)]
+
+     (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
+     [e a (get uuid->eid-map (second v) v)]
+
+     :else
+     [e a v])
+   (apply d/datom)))
 
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
-        per-length 1000
         conn (db-conn/get-db repo false)
-        *data (atom (group-by #(gobj/get % "page_uuid") data))
-        unloaded-pages (keys @*data)
-        unloaded-block-ids (set
-                            (->> (map
-                                  (fn [b] (gobj/get b "uuid"))
-                                  data)
-                                 (concat unloaded-pages)
-                                 (remove nil?)))]
-    (state/set-state! [repo :restore/unloaded-blocks] unloaded-block-ids)
-    (state/set-state! [repo :restore/unloaded-pages :unloaded-pages] (set unloaded-pages))
-    (p/loop [data (get-loading-data repo *data per-length)]
-      (d/unlisten! conn :persistence)
-      (cond
-        (or (not= repo (state/get-current-repo)) ; switched to another graph
-            (empty? data))
-        (do
-          (state/set-state! [repo :restore/unloaded-blocks] nil)
-          (state/set-state! [repo :restore/unloaded-pages] nil)
-          (db-listener/repo-listen-to-tx! repo conn)
-          (let [end (util/time-ms)]
-            (println "[debug] load others from SQLite: " (int (- end start)) " ms.")))
+        datoms (transient (vec (d/datoms @conn :eavt)))]
 
-        (not (state/input-idle? repo {:diff 6000}))  ; wait until input is idle
-        (p/do!
-         (db-listener/repo-listen-to-tx! repo conn)
-         (p/delay 5000)
-         (p/recur (get-loading-data repo *data per-length)))
+    (d/unlisten! conn :persistence)
 
-        :else
-        (let [compf (comp
-                     (partial apply d/datom)
-                     uuid-str->uuid-in-eav-vec
-                     (partial replace-uuid-ref-with-eid uuid->db-id-map))
-              datoms (->> data
-                          (mapv (fn [block]
-                                  (let [uuid (gobj/get block "uuid")
-                                        eid (get uuid->db-id-map uuid)]
-                                    (assert eid (str "Can't find eid " eid ", block: " block))
-                                    (->> (gobj/get block "datoms")
-                                         (transit/read t-reader)
-                                         (mapv
-                                          (comp
-                                           compf
-                                           (partial apply vector eid)))))))
-                          (apply concat))]
-          (util/profile (str "DB transact! " (count datoms) " datoms") (d/transact! conn datoms {:skip-persist? true}))
-          (state/update-state! [repo :restore/unloaded-blocks]
-                               (fn [ids] (set/difference ids (set (map #(gobj/get % "uuid") data)))))
-          (db-listener/repo-listen-to-tx! repo conn)
-          (p/let [_ (p/delay 0)]
-            (p/recur (get-loading-data repo *data per-length))))))))
+    (util/profile
+     "Set unloaded-block-ids"
+     (let [unloaded-block-ids (transient #{})]
+       (doseq [b data]
+         (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
+       (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids))))
+
+    (doseq [block data]
+      (let [uuid (gobj/get block "uuid")
+            eid (get uuid->db-id-map uuid)]
+        (assert eid (str "Can't find eid " eid ", block: " block))
+        (let [block-datoms (->> (gobj/get block "datoms")
+                                (transit/read t-reader)
+                                (mapv
+                                 (comp
+                                  (partial eav->datom uuid->db-id-map)
+                                  (partial apply vector eid))))]
+          (doseq [datom block-datoms]
+            (conj! datoms datom)))))
+
+    (let [all-datoms (persistent! datoms)
+          new-db (util/profile
+                  (str "DB init! " (count all-datoms) " datoms")
+                  (d/init-db all-datoms db-schema/schema))]
+
+      (reset! conn new-db)
+
+      (let [end (util/time-ms)]
+        (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
+      (state/set-state! [repo :restore/unloaded-blocks] nil)
+      (state/set-state! [repo :restore/unloaded-pages] nil)
+      (db-listener/repo-listen-to-tx! repo conn))))
 
 (defn uuid-str->uuid-in-eav
   [[e a v]]
@@ -209,7 +160,7 @@
                       (keep (fn [b]
                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
                                 (if (uuid-string? (:uuid b)) ; deleted blocks still refed
-                                  [[eid :block/uuid (uuid (:uuid b))]]
+                                  [[eid :block/uuid (:uuid b)]]
                                   (->> b
                                        :datoms
                                        (transit/read t-reader)
@@ -224,19 +175,13 @@
                                     (transit/read t-reader)
                                     (mapv (partial apply vector eid)))))
                                journal-blocks)
-          sorted-pages-eav-coll (->> pages
-                                     (apply concat)
-                                     (sort-by (fn [eav] (if (= :block/uuid (second eav)) 0 1))))
+          pages-eav-coll (apply concat pages)
           blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
                                 (apply concat))
-          all-eav-coll (doall (concat sorted-pages-eav-coll blocks-eav-colls))
-          replaced-uuid-lookup-eav-coll (map
-                                         (comp
-                                          uuid-str->uuid-in-eav-vec
-                                          (partial replace-uuid-ref-with-eid uuid->db-id-map))
-                                         all-eav-coll)
-          datoms (mapv #(apply d/datom %) replaced-uuid-lookup-eav-coll)
-          ;; tx-data (map (partial cons :db/add) replaced-uuid-lookup-eav-coll)
+          all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
+          datoms (map
+                   (partial eav->datom uuid->db-id-map)
+                   all-eav-coll)
           db-name (db-conn/datascript-db repo)
           db-conn (util/profile :restore-graph-from-sqlite!-init-db
                                 (d/conn-from-datoms datoms db-schema/schema))
@@ -244,8 +189,6 @@
           end-time (t/now)]
     (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
              " Datoms in total: " (count datoms))
-
-    ;; (util/profile :restore-graph-from-sqlite!-transact (d/transact! db-conn tx-data))
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)

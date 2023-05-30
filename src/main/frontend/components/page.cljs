@@ -158,9 +158,7 @@
           block-unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block-entity)))]
       (cond
         block-unloaded?
-        (do
-          (state/db-load-page! repo (str (:block/uuid block-entity)))
-          (ui/loading "Loading..."))
+        (ui/loading "Loading...")
 
         (empty? page-blocks)
         (dummy-block page-name)
