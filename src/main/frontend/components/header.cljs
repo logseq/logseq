@@ -29,7 +29,7 @@
   []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:title "Home"
+     {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
@@ -269,7 +269,6 @@
                       :current-repo current-repo
                       :default-home default-home})
 
-      (when (not (state/sub :ui/sidebar-open?))
-        (sidebar/toggle))
+      (sidebar/toggle)
 
       (updater-tips-new-version t)]]))

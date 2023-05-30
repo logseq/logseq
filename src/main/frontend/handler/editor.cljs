@@ -407,10 +407,10 @@
            (save-block-inner! block value opts)))))))
 
 (defn- compute-fst-snd-block-text
-  [value pos]
+  [value selection-start selection-end]
   (when (string? value)
-    (let [fst-block-text (subs value 0 pos)
-          snd-block-text (string/triml (subs value pos))]
+    (let [fst-block-text (subs value 0 selection-start)
+          snd-block-text (string/triml (subs value selection-end))]
       [fst-block-text snd-block-text])))
 
 (declare save-current-block!)
@@ -448,13 +448,21 @@
     (= uuid block-id)))
 
 (defn insert-new-block-before-block-aux!
-  [config block _value {:keys [ok-handler]}]
-  (let [new-m {:block/uuid (db/new-block-id)
+  [config block value {:keys [ok-handler]}]
+  (let [edit-input-id (state/get-edit-input-id)
+        input (gdom/getElement edit-input-id)
+        input-text-selected? (util/input-text-selected? input)
+        new-m {:block/uuid (db/new-block-id)
                :block/content ""}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
+    (when input-text-selected?
+      (let [selection-start (util/get-selection-start input)
+            selection-end (util/get-selection-end input)
+            [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
+        (state/set-edit-content! edit-input-id new-content)))
     (profile
      "outliner insert block"
      (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
@@ -471,8 +479,9 @@
     :as _opts}]
   (let [block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
-        pos (cursor/pos input)
-        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+        selection-start (util/get-selection-start input)
+        selection-end (util/get-selection-end input)
+        [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
         current-block (wrap-parse-block current-block)
@@ -526,8 +535,9 @@
                        block)
              block-self? (block-self-alone-when-insert? config block-id)
              input (gdom/getElement (state/get-edit-input-id))
-             pos (cursor/pos input)
-             [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+             selection-start (util/get-selection-start input)
+             selection-end (util/get-selection-end input)
+             [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
              insert-fn (cond
                          block-self?
                          insert-new-block-aux!

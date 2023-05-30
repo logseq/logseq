@@ -152,6 +152,7 @@ test(
     // This test requires dev mode
     test.skip(process.env.RELEASE === 'true', 'not available for release version')
 
+    // @ts-ignore
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,
       kb_events.macos_pinyin_left_full_square_bracket
@@ -168,7 +169,7 @@ test(
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
     };
 
-    // dont trigger RIME #3440
+    // @ts-ignore dont trigger RIME #3440
     for (let [idx, events] of [
       kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
       kb_events.win10_RIME_selecting_candidate_double_left_square_bracket

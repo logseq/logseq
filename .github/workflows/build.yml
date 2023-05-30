@@ -182,15 +182,26 @@ jobs:
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
+      - name: Install Fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox
+
+      # Emulate a virtual framebuffer on machines with no display hardware
+      - name: Run XVFB
+        run: Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
+
+      # Start a lightweight window manager to simulate window actions (maximize,restore etc)
+      - name: Start Fluxbox
+        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
+
       - name: Run Playwright test - 1/2
-        run: xvfb-run -- npx playwright test --reporter github --shard=1/2
+        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=1/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
       - name: Run Playwright test - 2/2
-        run: xvfb-run -- npx playwright test --reporter github --shard=2/2
+        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=2/2
         env:
           LOGSEQ_CI: true
           DEBUG: "pw:api"

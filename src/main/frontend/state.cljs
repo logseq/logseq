@@ -73,9 +73,9 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
-     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
+     :ui/sidebar-width                      "40%"
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
@@ -165,6 +165,8 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
      :electron/server                       nil
+     :electron/window-maximized?            false
+     :electron/window-fullscreen?           false
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
