@@ -10,6 +10,8 @@ import android.net.Uri;
 
 import java.io.*;
 
+import java.net.URI;
+import java.text.Normalizer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
@@ -90,8 +92,24 @@ public class FsWatcher extends Plugin {
             shouldRead = true;
         }
 
-        obj.put("path", Uri.fromFile(f));
-        obj.put("dir", Uri.fromFile(new File(mPath)));
+        Uri dir = Uri.fromFile(new File(mPath));
+        Uri fpath = Uri.fromFile(f);
+        String relpath = null;
+
+        if (fpath.getPath().startsWith(dir.getPath())) {
+            relpath = fpath.getPath().substring(dir.getPath().length());
+            if (relpath.startsWith("/")) {
+                relpath = relpath.substring(1);
+            }
+            relpath = Uri.decode(relpath);
+        } else {
+            Log.e("FsWatcher", "file path not under watch path");
+            return;
+        }
+
+
+        obj.put("path", Normalizer.normalize(relpath, Normalizer.Form.NFC));
+        obj.put("dir", Uri.fromFile(new File(mPath))); // Uri is for Android. URI is for RFC compatible
         JSObject stat;
 
         switch (event) {

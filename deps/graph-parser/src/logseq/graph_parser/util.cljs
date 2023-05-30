@@ -80,6 +80,9 @@
   (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
 
 (defn url?
+  "Test if it is a `protocol://`-style URL.
+
+   NOTE: Can not handle mailto: links, use this with caution."
   [s]
   (and (string? s)
        (try

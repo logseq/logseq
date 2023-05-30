@@ -1,7 +1,9 @@
 .cp__header {
-  @apply z-10;
-
-  padding-top: var(--ls-headbar-inner-top-padding);
+  @apply shadow z-10;
+  -webkit-app-region: drag;
+  
+  padding-top: calc(var(--ls-headbar-inner-top-padding));
+  margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
   align-items: center;
@@ -126,6 +128,11 @@
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 1rem;
+}
+
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__header .dropdown-wrapper .title-wrap {
+  position: relative;
 }
 
 .cp__header a, .cp__header svg {

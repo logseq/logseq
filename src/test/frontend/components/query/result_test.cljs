@@ -14,10 +14,12 @@
     (binding [rum/*reactions* (volatile! #{})]
       (#'query-result/get-query-result {} {} (atom nil) (atom nil) current-block-uuid query {:table? table?}))))
 
-(deftest get-query-result
-  (let [result [{:block/uuid (random-uuid) :block/scheduled 20230418 :block/page {:db/id 1}}
-                {:block/uuid (random-uuid) :block/scheduled 20230415 :block/page {:db/id 1}}
-                {:block/uuid (random-uuid) :block/scheduled 20230417 :block/page {:db/id 1}}]
+(deftest get-query-result-with-transforms-and-grouping
+  (let [result (mapv
+                #(assoc % :block/page {:db/id 1} :block/parent {:db/id 2})
+                [{:block/uuid (random-uuid) :block/scheduled 20230418}
+                 {:block/uuid (random-uuid) :block/scheduled 20230415}
+                 {:block/uuid (random-uuid) :block/scheduled 20230417}])
         sorted-result (sort-by :block/scheduled result)]
     (testing "For list view"
       (are [query expected]
@@ -38,7 +40,7 @@
            ; User overrides transform to return grouped result
            {:result-transform '(partial sort-by :block/scheduled) :group-by-page? true}
            {{:db/id 1} sorted-result})
-      
+
       (testing "For table view"
         (are [query expected]
              (= expected (mock-get-query-result result query {:table? true}))
@@ -63,3 +65,13 @@
                                         {:table? false
                                          :current-block-uuid (:block/uuid current-block)})))
             "Current block is not included in results")))))
+
+(deftest get-query-result-with-remove-block-children-option
+  (let [result [{:db/id 1 :block/content "parent" :block/uuid 1}
+                {:db/id 2 :block/content "child" :block/uuid 2 :block/parent {:db/id 1}}]]
+    (is (= [{:db/id 1 :block/content "parent" :block/uuid 1}]
+           (mock-get-query-result result {:remove-block-children? true} {:table? true}))
+        "Removes children when :remove-block-children? is true")
+    (is (= result
+           (mock-get-query-result result {:remove-block-children? false} {:table? true}))
+        "Doesn't remove children when :remove-block-children? is false")))

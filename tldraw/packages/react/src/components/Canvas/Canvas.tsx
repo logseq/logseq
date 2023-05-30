@@ -168,6 +168,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isHovered={false}
                 isBinding={false}
                 isSelected={true}
+                isLocked={shape.props.isLocked}
               />
             ))}
           {hoveredShapes.map(
@@ -194,7 +195,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   zIndex={editingShape && selectedShapes.includes(editingShape) ? 1002 : 10002}
                 >
                   <components.SelectionForeground
-                    shapes={selectedShapes}
+                    shapes={selectedShapes.filter(shape => !shape.props.isLocked)}
                     bounds={selectionBounds}
                     showResizeHandles={showResizeHandles}
                     showRotateHandles={showRotateHandles}
@@ -251,7 +252,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
             {selectedShapes && components.ContextBar && (
               <ContextBarContainer
                 key={'context' + selectedShapes.map(shape => shape.id).join('')}
-                shapes={selectedShapes}
+                shapes={selectedShapes.filter(s => !s.props.isLocked)}
                 hidden={!showContextBar}
                 bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
                 rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}

@@ -49,6 +49,7 @@ export class PointingSelectedShapeState<
       selectedShapesArray.length === 1 &&
       this.pointedSelectedShape.canEdit &&
       !this.app.readOnly &&
+      !this.pointedSelectedShape.props.isLocked &&
       this.pointedSelectedShape instanceof TLBoxShape &&
       PointUtils.pointInBounds(currentPoint, this.pointedSelectedShape.bounds)
     ) {

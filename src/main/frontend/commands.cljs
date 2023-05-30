@@ -147,6 +147,7 @@
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
+   "Number list" "LIST TYPE"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -235,10 +236,10 @@
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
+       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       )]
+       
 
     (headings)
 
@@ -250,9 +251,14 @@
      ["Current time" #(date/get-current-time) "Insert current time"]
      ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
+    ;; order list
+    [["Number list" [[:editor/clear-current-slash]
+                     [:editor/toggle-own-number-list]] "Number list"]
+     ["Number children" [[:editor/clear-current-slash]
+                         [:editor/toggle-children-number-list]] "Number children"]]
+
     ;; task management
     (get-preferred-workflow)
-
     [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
@@ -272,7 +278,8 @@
                [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
-     ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
+     ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
+                                                     :backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
                (let [file (draw/file-name)
@@ -396,17 +403,24 @@
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
+        surfix (subs edit-content current-pos)
         new-value (str prefix
                        value
-                       (subs edit-content current-pos))
+                       surfix)
         new-pos (- (+ (count prefix)
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when check-fn
-      (check-fn new-value (dec (count prefix)) new-pos))))
+    (state/set-edit-content! (state/get-edit-input-id)
+                             (str prefix value))
+    ;; HACK: save scroll-pos of current pos, then add trailing content
+    (let [scroll-container (util/nearest-scrollable-container input)
+          scroll-pos (.-scrollTop scroll-container)]
+      (state/set-block-content-and-last-pos! id new-value new-pos)
+      (cursor/move-cursor-to input new-pos)
+      (set! (.-scrollTop scroll-container) scroll-pos)
+      (when check-fn
+        (check-fn new-value (dec (count prefix)) new-pos)))))
 
 (defn simple-replace!
   [id value selected
@@ -653,6 +667,18 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
+
+(defmethod handle-step :editor/toggle-children-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-children-number-list block])))
+
+(defmethod handle-step :editor/toggle-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-own-number-list block])))
+
+(defmethod handle-step :editor/remove-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/remove-own-number-list block])))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and

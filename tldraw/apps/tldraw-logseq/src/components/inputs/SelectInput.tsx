@@ -56,6 +56,7 @@ export function SelectInput({
             position="popper"
             sideOffset={14}
             align="center"
+            onKeyDown={e => e.stopPropagation()}
           >
             <Select.ScrollUpButton />
             <Select.Viewport className="tl-select-input-viewport">

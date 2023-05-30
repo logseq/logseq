@@ -34,9 +34,6 @@
  ;; Enable showing the body of blocks when referencing them.
  :ui/show-full-blocks? false
 
- ;; Expand block references automatically when zoom-in
- :ui/auto-expand-block-refs? true
-
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 
@@ -57,11 +54,11 @@
  ;; :feature/disable-scheduled-and-deadline-query? true
 
  ;; Specify the number of days in the future to display in the
- ;; scheduled tasks and deadlines query, with a default value of 7 which
- ;; displays tasks for the next 7 days.
+ ;; scheduled tasks and deadlines query, with a default value of 0 which
+ ;; only displays tasks for today.
  ;; Example usage:
- ;; Display all scheduled and deadline blocks for the next 14 days
- ;; :scheduled/future-days 14
+ ;; Display all scheduled tasks and deadlines in the next 7 days
+ ;; :scheduled/future-days 7
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6
@@ -84,7 +81,7 @@
 
  ;; Set Bullet indentation when exporting
  ;; default option: tab
- ;; Possible options for `:export/bullet-indentation` are
+ ;; Possible options are for `:sidebar` are
  ;; 1. `:eight-spaces` as eight spaces
  ;; 2. `:four-spaces` as four spaces
  ;; 3. `:two-spaces` as two spaces
@@ -110,6 +107,7 @@
  ;; :default-home {:page "Jun 3rd, 2021"}
  ;; 3. Setup page "home" as home page with multiple pages in sidebar
  ;; :default-home {:page "home" :sidebar ["page a" "page b"]}
+ :default-home {:page "Contents"}
 
  ;; Tell logseq to use a specific folder in the repo as a default location for notes
  ;; if not specified, notes are stored in `pages` directory
@@ -190,7 +188,6 @@
     :result-transform (fn [result]
                         (sort-by (fn [h]
                                    (get h :block/priority "Z")) result))
-    :group-by-page? false
     :collapsed? false}
    {:title "📅 NEXT"
     :query [:find (pull ?h [*])
@@ -204,7 +201,6 @@
             [(> ?d ?start)]
             [(< ?d ?next)]]
     :inputs [:today :7d-after]
-    :group-by-page? false
     :collapsed? false}]}
 
  ;; Add your own commands to slash menu to speedup.
@@ -272,7 +268,7 @@
  ;; :property/separated-by-commas #{}
 
  ;; Properties that are ignored when parsing property values for references
- ;; :ignored-page-references-keywords #{:author :startup}
+ ;; :ignored-page-references-keywords #{"author" "startup"}
 
  ;; logbook setup
  ;; :logbook/settings
@@ -315,7 +311,7 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; Quick capture options
- ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page "my page"}
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false :default-page nil}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
@@ -344,8 +340,9 @@
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
  :file/name-format :triple-lowbar
+ :feature/enable-whiteboards? true}
 
  ;; specify the format of the filename for journal files
  ;; :journal/file-name-format "yyyy_MM_dd"
 
- }
+ 

@@ -31,8 +31,6 @@ export interface TLReactCallbacks<
 > {
   onMount: TLReactCallback<S, R, 'mount'>
   onPersist: TLReactCallback<S, R, 'persist'>
-  onSave: TLReactCallback<S, R, 'save'>
-  onSaveAs: TLReactCallback<S, R, 'saveAs'>
   onError: TLReactCallback<S, R, 'error'>
   onCreateShapes: TLReactCallback<S, R, 'create-shapes'>
   onCreateAssets: TLReactCallback<S, R, 'create-assets'>

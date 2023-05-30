@@ -98,7 +98,11 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
       )
 
       return (
-        <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+        <div
+          {...events}
+          style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+          className="tl-ellipse-container"
+        >
           <TextLabel
             font={font}
             text={label}
@@ -154,11 +158,20 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
   ReactIndicator = observer(() => {
     const {
       size: [w, h],
+      isLocked,
     } = this.props
 
     return (
       <g>
-        <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} strokeWidth={2} fill="transparent" />
+        <ellipse
+          cx={w / 2}
+          cy={h / 2}
+          rx={w / 2}
+          ry={h / 2}
+          strokeWidth={2}
+          fill="transparent"
+          strokeDasharray={isLocked ? '8 2' : 'undefined'}
+        />
       </g>
     )
   })

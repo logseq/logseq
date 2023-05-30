@@ -28,6 +28,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
@@ -38,28 +39,8 @@
 (defmethod handle :mkdir-recur [_window [_ dir]]
   (fs/mkdirSync dir #js {:recursive true}))
 
-(defn- readdir
-  "Read directory recursively, return all filenames"
-  [root-dir]
-  (->> (tree-seq
-        (fn [[is-dir _fpath]]
-          is-dir)
-        (fn [[_is-dir dir]]
-          (let [files (fs/readdirSync dir #js {:withFileTypes true})]
-            (->> files
-                 (remove #(.isSymbolicLink ^js %))
-                 (remove #(string/starts-with? (.-name ^js %) "."))
-                 (map #(do
-                         [(.isDirectory %)
-                          (.join node-path dir (.-name %))])))))
-        [true root-dir])
-       (filter (complement first))
-       (map second)
-       (map utils/fix-win-path!)
-       (vec)))
-
 (defmethod handle :readdir [_window [_ dir]]
-  (readdir dir))
+  (common-graph/readdir dir))
 
 (defmethod handle :listdir [_window [_ dir flat?]]
   (when (and dir (fs-extra/pathExistsSync dir))
@@ -147,21 +128,10 @@
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
 
-(defonce allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
-
-(defn get-ext
-  [p]
-  (-> (.extname node-path p)
-      (subs 1)
-      keyword))
-
 (defn- get-files
   "Returns vec of file-objs"
   [path]
-  (->> (readdir path)
-       (remove (partial utils/ignored-path? path))
-       (filter #(contains? allowed-formats (get-ext %)))
+  (->> (common-graph/get-files path)
        (map (fn [path]
               (let [stat (fs/statSync path)]
                 (when-not (.isDirectory stat)
@@ -238,10 +208,10 @@
     dir))
 
 (defn- get-graphs
-  "Returns all graph names in the cache directory (strating with `logseq_local_`)"
+  "Returns all graph names in the cache directory (starting with `logseq_local_`)"
   []
   (let [dir (get-graphs-dir)]
-    (->> (readdir dir)
+    (->> (common-graph/readdir dir)
          (remove #{dir})
          (map #(node-path/basename % ".transit"))
          (map graph-name->path))))
@@ -452,7 +422,8 @@
   js/__dirname)
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
-  {:isFullScreen (.isFullScreen win)})
+  {:isFullScreen (.isFullScreen win)
+   :isMaximized (.isMaximized win)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
@@ -628,6 +599,20 @@
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
+
+(defmethod handle :window-minimize [^js win]
+  (.minimize win))
+
+(defmethod handle :window-toggle-maximized [^js win]
+  (if (.isMaximized win)
+    (.unmaximize win)
+    (.maximize win)))
+
+(defmethod handle :window-toggle-fullscreen [^js win]
+  (.setFullScreen win (not (.isFullScreen win))))
+
+(defmethod handle :window-close [^js win]
+  (.close win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;

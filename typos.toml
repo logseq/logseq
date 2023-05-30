@@ -13,4 +13,4 @@ fo = "fo"
 aks = "aks"
 Mannor = "Mannor"
 [files]
-extend-exclude = ["resources/*", "templates/*", "dicts.cljc"]
+extend-exclude = ["resources/*", "src/resources/*"]

@@ -49,6 +49,7 @@
     :block/marker
     :block/priority
     :block/properties
+    :block/properties-order
     :block/properties-text-values
     :block/pre-block?
     :block/scheduled
@@ -770,7 +771,11 @@ independent of format as format specific heading characters are stripped"
                                         :include-start? true
                                         :scoped-block-id scoped-block-id}))
 
-      (contains? #{:save-block :delete-blocks} outliner-op)
+      (and (= :delete-blocks outliner-op)
+           (<= (count @result) initial-blocks-length)) ; load more blocks
+      nil
+
+      (= :save-block outliner-op)
       @result
 
       (contains? #{:insert-blocks :collapse-expand-blocks :move-blocks} outliner-op)
@@ -845,6 +850,7 @@ independent of format as format specific heading characters are stripped"
                                                         (db-utils/pull repo-url pull-keys id))) block-eids)
                                              (db-utils/pull-many repo-url pull-keys block-eids))
                                     blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
+
                                 (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
                  nil)
         react)))))
@@ -957,15 +963,8 @@ independent of format as format specific heading characters are stripped"
   "Doesn't include nested children."
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
-    (-> (d/q
-         '[:find [(pull ?b [*]) ...]
-           :in $ ?parent-id
-           :where
-           [?parent :block/uuid ?parent-id]
-           [?b :block/parent ?parent]]
-         db
-         block-uuid)
-        (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
+    (when-let [parent (db-utils/entity repo [:block/uuid block-uuid])]
+      (sort-by-left (:block/_parent parent) parent))))
 
 (defn get-block-children
   "Including nested children."

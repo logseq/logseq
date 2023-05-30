@@ -34,6 +34,10 @@ export function ColorInput({
     )
   }
 
+  function isHexColor(color: string) {
+    return /^#(?:[0-9a-f]{3}){1,2}$/i.test(color)
+  }
+
   const handleChangeDebounced = React.useMemo(() => {
     let latestValue = ''
 
@@ -78,14 +82,14 @@ export function ColorInput({
                 className="color-input cursor-pointer"
                 id="tl-custom-color-input"
                 type="color"
-                value={color}
+                value={isHexColor(color) ? color : "#000000"}
                 onChange={handleChangeDebounced}
                 style={{ opacity: isBuiltInColor(color) ? 0 : 1 }}
                 {...rest}
               />
             </div>
           </div>
-          <label for="tl-custom-color-input" className="cursor-pointer">
+          <label htmlFor="tl-custom-color-input" className="cursor-pointer">
             Select custom color
           </label>
         </div>

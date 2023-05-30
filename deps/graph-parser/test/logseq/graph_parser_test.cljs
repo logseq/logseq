@@ -117,7 +117,7 @@
                          :where
                          [?b :block/name ?name]
                          [?b :block/type "whiteboard"]]
-                    @conn)]
+                       @conn)]
         (is (= pages #{["foo"] ["bar"]}))))))
 
 (defn- test-property-order [num-properties]
@@ -153,11 +153,11 @@
                                    "- desc:: \"#foo is not a ref\""
                                    {:extract-options {:user-config {}}})
         block (->> (d/q '[:find (pull ?b [* {:block/refs [*]}])
-                       :in $
-                       :where [?b :block/properties]]
-                     @conn)
-                (map first)
-                first)]
+                          :in $
+                          :where [?b :block/properties]]
+                        @conn)
+                   (map first)
+                   first)]
     (is (= {:desc "\"#foo is not a ref\""}
            (:block/properties block))
         "Quoted value is unparsed")
@@ -274,9 +274,9 @@
                    set)
               (set refs))
            ; pre-block/page has expected refs
-           db-properties (first (map :block/refs blocks))
+        db-properties (first (map :block/refs blocks))
            ;; block has expected refs
-           block-db-properties (second (map :block/refs blocks))))))
+        block-db-properties (second (map :block/refs blocks))))))
 
 (deftest property-relationships
   (let [properties {:single-link "[[bar]]"
@@ -324,7 +324,7 @@
                 (map #(select-keys % [:block/properties :block/invalid-properties]))))
         "Has correct (in)valid page properties")))
 
-(deftest correct-page-names-created
+(deftest correct-page-names-created-from-title
   (testing "from title"
     (let [conn (ldb/start-conn)
           built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
@@ -358,17 +358,41 @@
                        @conn)
                   (map (comp :block/original-name first))
                   (remove built-in-pages)
-                  set)))))
+                  set))))))
 
-  (testing "for file and web uris"
+(deftest correct-page-names-created-from-page-refs
+  (testing "for file, mailto, web and other uris in markdown"
     (let [conn (ldb/start-conn)
           built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
       (graph-parser/parse-file conn
                                "foo.md"
-                               (str "- [Filename.txt](file:///E:/test/Filename.txt)\n"
-                                    "- [example](https://example.com)")
-                               {})
-      (is (= #{"foo"}
+                               (str "- [title]([[bar]])\n"
+                                    ;; all of the uris below do not create pages
+                                    "- ![image.png](../assets/image_1630480711363_0.png)\n"
+                                    "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                                    "- [mail](mailto:test@test.com?subject=TestSubject)\n"
+                                    "- [onenote link](onenote:https://d.docs.live.net/b2127346582e6386a/blablabla/blablabla/blablabla%20blablabla.one#Etat%202019&section-id={133DDF16-9A1F-4815-9A05-44303784442E6F94}&page-id={3AAB677F0B-328F-41D0-AFF5-66408819C085}&end)\n"
+                                    "- [lock file](deps/graph-parser/yarn.lock)"
+                                    "- [example](https://example.com)"))
+      (is (= #{"foo" "bar"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/name first))
+                  (remove built-in-pages)
+                  set)))))
+
+(testing "for web and page uris in org"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+      (graph-parser/parse-file conn
+                               "foo.org"
+                               (str "* [[bar][title]]\n"
+                                    ;; all of the uris below do not create pages
+                                    "* [[https://example.com][example]]\n"
+                                    "* [[../assets/conga_parrot.gif][conga]]"))
+      (is (= #{"foo" "bar"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
                          :where [?b :block/name]]

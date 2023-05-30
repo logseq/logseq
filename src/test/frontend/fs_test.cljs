@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [is use-fixtures]]
             [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [frontend.test.node-helper :as test-node-helper]
             [frontend.fs :as fs]
             [promesa.core :as p]
             ["fs" :as fs-node]
@@ -11,7 +12,7 @@
 
 (deftest-async create-if-not-exists-creates-correctly
   ;; dir needs to be an absolute path for fn to work correctly
-  (let [dir (node-path/resolve (test-helper/create-tmp-dir))
+  (let [dir (node-path/resolve (test-node-helper/create-tmp-dir))
         some-file (node-path/join dir "something.txt")]
 
     (->
@@ -29,7 +30,7 @@
         (fs-node/rmdirSync dir))))))
 
 (deftest-async create-if-not-exists-does-not-create-correctly
-  (let [dir (node-path/resolve (test-helper/create-tmp-dir))
+  (let [dir (node-path/resolve (test-node-helper/create-tmp-dir))
         some-file (node-path/join dir "something.txt")]
     (fs-node/writeFileSync some-file "OLD")
 

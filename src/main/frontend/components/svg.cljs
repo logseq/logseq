@@ -386,3 +386,29 @@
    [:path
     {:d
      "M256 0C114.6 0 0 114.6 0 256c0 141.4 114.6 256 256 256s256-114.6 256-256C512 114.6 397.4 0 256 0zM352 328c0 13.2-10.8 24-24 24h-144C170.8 352 160 341.2 160 328v-144C160 170.8 170.8 160 184 160h144C341.2 160 352 170.8 352 184V328z"}]])
+
+;; Titlebar icons from https://github.com/microsoft/vscode-codicons
+(defn window-minimize
+  ([] (window-minimize 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 16 16" :fill "currentColor"}
+    [:path {:d "M14 8v1H3V8h11z"}]]))
+
+(defn window-maximize
+  ([] (window-maximize 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 16 16" :fill "currentColor"}
+    [:path {:d "M3 3v10h10V3H3zm9 9H4V4h8v8z"}]]))
+
+(defn window-restore
+  ([] (window-restore 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 16 16" :fill "currentColor"}
+    [:path {:d "M3 5v9h9V5H3zm8 8H4V6h7v7z"}]
+    [:path {:fill-rule "evenodd" :clip-rule "evenodd" :d "M5 5h1V4h7v7h-1v1h2V3H5v2z"}]]))
+
+(defn window-close
+  ([] (window-close 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 16 16" :fill "currentColor"}
+    [:path {:fill-rule "evenodd" :clip-rule "evenodd" :d "M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z"}]]))

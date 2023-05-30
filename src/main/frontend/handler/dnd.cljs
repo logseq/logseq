@@ -1,6 +1,7 @@
 (ns frontend.handler.dnd
   "Provides fns for drag n drop"
   (:require [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -20,7 +21,7 @@
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
       (do
-        (editor-handler/set-block-property! (:block/uuid first-block)
+        (editor-property/set-block-property! (:block/uuid first-block)
                                             :id
                                             (str (:block/uuid first-block)))
         (editor-handler/api-insert-new-block!

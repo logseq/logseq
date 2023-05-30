@@ -93,6 +93,7 @@
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 30px;
     width: 100%;
+    padding-top: var(--ls-win32-title-bar-height);
 
     > .fake-bar {
       @apply w-full px-5 pt-1 sm:hidden;
@@ -226,7 +227,7 @@
         li {
           margin: 0;
         }
-        
+
         a {
           width: 100%;
           padding: 4px 24px;
@@ -450,6 +451,28 @@
   }
 }
 
+.ls-window-controls {
+  &.ls-right-sidebar-open {
+    .cp__right-sidebar-topbar {
+      margin-right: 144px;
+
+      .is-fullscreen & {
+        margin-right: 48px;
+      }
+    }
+  }
+
+  &:not(.ls-right-sidebar-open) {
+    .cp__header > .r {
+      margin-right: 144px;
+
+      .is-fullscreen & {
+        margin-right: 48px;
+      }
+    }
+  }
+}
+
 .ls-wide-mode {
   .cp__sidebar-main-content {
     max-width: var(--ls-main-content-max-width-wide);
@@ -513,6 +536,7 @@ html[data-theme='dark'] {
 
   .resizer {
     @apply absolute top-0 bottom-0;
+    touch-action: none;
     left: 0;
     width: 4px;
     user-select: none;
@@ -537,7 +561,6 @@ html[data-theme='dark'] {
   }
 
   &.open {
-    width: var(--ls-right-sidebar-width);
     max-width: 60vw;
   }
 
@@ -573,7 +596,9 @@ html[data-theme='dark'] {
     user-select: none;
     -webkit-app-region: drag;
 
-    a, svg {
+    a,
+    svg,
+    button {
       -webkit-app-region: no-drag;
     }
   }
@@ -621,6 +646,13 @@ html[data-theme='dark'] {
   .title-wrap {
     line-height: 1.2em;
     padding: 1px 0;
+  }
+}
+
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__menubar-repos {
+  #repo-switch, .nav-header .flex-1 {
+    position: relative;
   }
 }
 

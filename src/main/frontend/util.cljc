@@ -57,6 +57,9 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
+#?(:cljs (defonce convert-to-roman utils/convertToRoman))
+#?(:cljs (defonce convert-to-letters utils/convertToLetters))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
@@ -396,6 +399,23 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
+   (defn nearest-scrollable-container [^js/HTMLElement element]
+     (some #(when-let [overflow-y (.-overflowY (js/window.getComputedStyle %))]
+              (when (contains? #{"auto" "scroll" "overlay"} overflow-y)
+                %))
+           (take-while (complement nil?) (iterate #(.-parentElement %) element)))))
+
+#?(:cljs
+   (defn element-visible?
+     [element]
+     (when element
+       (when-let [r (.getBoundingClientRect element)]
+         (and (>= (.-top r) 0)
+              (<= (+ (.-bottom r) 64)
+                  (or (.-innerHeight js/window)
+                      (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -444,6 +464,19 @@
       (scroll-to (app-scroll-container-node) 0 false))
      ([animate?]
       (scroll-to (app-scroll-container-node) 0 animate?))))
+
+#?(:cljs
+   (defn scroll-to-block
+     "Scroll into the view to vertically align a non-visible block to the centre
+     of the visible area"
+     ([block]
+      (scroll-to-block block true))
+     ([block animate?]
+      (when block
+        (when-not (element-visible? block)
+          (.scrollIntoView block
+                           #js {:behavior (if animate? "smooth" "auto")
+                                :block    "center"}))))))
 
 #?(:cljs
    (defn link?
@@ -527,13 +560,6 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
-
-#?(:cljs
-   (defn safe-path-join [prefix & paths]
-     (let [path (apply node-path.join (cons prefix paths))]
-       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (gp-util/safe-decode-uri-component (subs path 7))
-         path))))
 
 (defn trim-safe
   [s]
@@ -936,6 +962,9 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
+(defonce linux? #?(:cljs goog.userAgent/LINUX
+                   :clj nil))
+
 (defn default-content-with-title
   [text-format]
   (case (name text-format)
@@ -1285,7 +1314,7 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) mobile?))
+     (when (and el (or (mobile-util/native-platform?) (mobile?)))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
@@ -1412,16 +1441,6 @@
      (p/create
       (fn [resolve]
         (load url resolve)))))
-
-#?(:cljs
-   (defn element-visible?
-     [element]
-     (when element
-       (when-let [r (.getBoundingClientRect element)]
-         (and (>= (.-top r) 0)
-              (<= (+ (.-bottom r) 64)
-                  (or (.-innerHeight js/window)
-                      (js/document.documentElement.clientHeight))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard

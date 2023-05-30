@@ -17,14 +17,7 @@ import type {
   TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import {
-  BoundsUtils,
-  createNewLineBinding,
-  dedupe,
-  isNonNullable,
-  KeyUtils,
-  uniqueId,
-} from '../../utils'
+import { BoundsUtils, createNewLineBinding, dedupe, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -77,7 +70,6 @@ export class TLApp<
     this.notify('mount', null)
   }
 
-  keybindingRegistered = false
   uuid = uniqueId()
 
   readOnly: boolean | undefined
@@ -92,139 +84,6 @@ export class TLApp<
   readonly settings = new TLSettings()
 
   Tools: TLToolConstructor<S, K>[] = []
-
-  dispose() {
-    super.dispose()
-    this.keybindingRegistered = false
-    return this
-  }
-
-  initKeyboardShortcuts() {
-    if (this.keybindingRegistered) {
-      return
-    }
-    const ownShortcuts: TLShortcut<S, K>[] = [
-      {
-        keys: 'shift+0',
-        fn: () => this.api.resetZoom(),
-      },
-      {
-        keys: 'shift+1',
-        fn: () => this.api.zoomToFit(),
-      },
-      {
-        keys: 'mod+shift+1',
-        fn: () => this.api.zoomToSelection(),
-      },
-      {
-        keys: 'mod+-',
-        fn: () => this.api.zoomOut(),
-      },
-      {
-        keys: 'mod+=',
-        fn: () => this.api.zoomIn(),
-      },
-      {
-        keys: 'mod+x',
-        fn: () => this.cut(),
-      },
-      {
-        keys: '[',
-        fn: () => this.sendBackward(),
-      },
-      {
-        keys: 'shift+[',
-        fn: () => this.sendToBack(),
-      },
-      {
-        keys: ']',
-        fn: () => this.bringForward(),
-      },
-      {
-        keys: 'shift+]',
-        fn: () => this.bringToFront(),
-      },
-      {
-        keys: 'mod+a',
-        fn: () => {
-          const { selectedTool } = this
-          if (selectedTool.id !== 'select') {
-            this.selectTool('select')
-          }
-          this.api.selectAll()
-        },
-      },
-      {
-        keys: 'mod+shift+s',
-        fn: () => {
-          this.saveAs()
-          this.notify('saveAs', null)
-        },
-      },
-      {
-        keys: 'mod+shift+v',
-        fn: (_, __, e) => {
-          if (!this.editingShape) {
-            e.preventDefault()
-            this.paste(undefined, true)
-          }
-        },
-      },
-      {
-        keys: ['del', 'backspace'],
-        fn: () => {
-          if (!this.editingShape) {
-            this.api.deleteShapes()
-            this.selectedTool.transition('idle')
-          }
-        },
-      },
-      {
-        keys: 'mod+g',
-        fn: () => {
-          this.api.doGroup()
-        },
-      },
-      {
-        keys: 'mod+shift+g',
-        fn: () => {
-          this.api.unGroup()
-        },
-      },
-      {
-        keys: 'shift+g',
-        fn: () => {
-          this.api.toggleGrid()
-        },
-      },
-    ]
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const shortcuts = (this.constructor['shortcuts'] || []) as TLShortcut<S, K>[]
-    const childrenShortcuts = Array.from(this.children.values())
-      // @ts-expect-error ???
-      .filter(c => c.constructor['shortcut'])
-      .map(child => {
-        return {
-          // @ts-expect-error ???
-          keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: KeyboardEvent) => {
-            this.selectTool(child.id)
-            // hack: allows logseq related shortcut combinations to work
-            // fixme?: unsure if it will cause unexpected issues
-            // e.stopPropagation()
-          },
-        }
-      })
-    this._disposables.push(
-      ...[...ownShortcuts, ...shortcuts, ...childrenShortcuts].map(({ keys, fn }) => {
-        return KeyUtils.registerShortcut(keys, e => {
-          fn(this, this, e)
-        })
-      })
-    )
-    this.keybindingRegistered = true
-  }
 
   /* --------------------- History -------------------- */
 
@@ -269,12 +128,6 @@ export class TLApp<
   save = (): this => {
     // todo
     this.notify('save', null)
-    return this
-  }
-
-  saveAs = (): this => {
-    // todo
-    this.notify('saveAs', null)
     return this
   }
 
@@ -335,10 +188,18 @@ export class TLApp<
     return this
   }
 
-  @action updateShapes = <T extends S>(shapes: ({ id: string } & Partial<T['props']>)[]): this => {
+  @action updateShapes = <T extends S>(
+    shapes: ({ id: string; type: string } & Partial<T['props']>)[]
+  ): this => {
     if (this.readOnly) return this
 
-    shapes.forEach(shape => this.getShapeById(shape.id)?.update(shape))
+    shapes.forEach(shape => {
+      const oldShape = this.getShapeById(shape.id)
+      oldShape?.update(shape)
+      if (shape.type !== oldShape?.type) {
+        this.api.convertShapes(shape.type, [oldShape])
+      }
+    })
     this.persist()
     return this
   }
@@ -348,6 +209,7 @@ export class TLApp<
     const normalizedShapes: S[] = shapes
       .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
       .filter(isNonNullable)
+      .filter(s => !s.props.isLocked)
 
     // delete a group shape should also delete its children
     const shapesInGroups = this.shapesInGroups(normalizedShapes)
@@ -381,6 +243,7 @@ export class TLApp<
     }
 
     this.currentPage.shapes
+      .filter(s => !s.props.isLocked)
       .flatMap(s => Object.values(s.props.handles ?? {}))
       .flatMap(h => h.bindingId)
       .filter(isNonNullable)
@@ -513,6 +376,17 @@ export class TLApp<
 
     shapes.forEach(shape => {
       if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
+  setLocked = (locked: boolean): this => {
+    if (this.selectedShapesArray.length === 0 || this.readOnly) return this
+
+    this.selectedShapesArray.forEach(shape => {
+      shape.update({ isLocked: locked })
     })
 
     this.persist()

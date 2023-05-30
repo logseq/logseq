@@ -1680,6 +1680,10 @@
   [r]
   (some->> (ex-cause r) str (re-find #"graph-not-exist")))
 
+(defn- stop-sync-by-rsapi-response?
+  [r]
+  (some->> (ex-cause r) str (re-find #"Request is not yet valid")))
+
 
 ;; type = "change" | "add" | "unlink"
 (deftype FileChangeEvent [type dir path stat checksum]
@@ -1773,7 +1777,7 @@
         (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
-              (let [path (path-normalize (remove-dir-prefix dir path))
+              (let [path (path-normalize path)
                     files-meta (and (not= "unlink" type)
                                     (<! (<get-local-files-meta
                                          rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
@@ -2594,10 +2598,15 @@
               (do (println :graph-has-been-deleted r*)
                   {:graph-has-been-deleted true})
 
+              (stop-sync-by-rsapi-response? r*)
+              (do (println :stop-sync-caused-by-rsapi-err-response r*)
+                  (notification/show! (t :file-sync/rsapi-cannot-upload-err) :warning false)
+                  {:stop true})
+
               paused?
               {:pause true}
 
-              succ?                   ; succ
+              succ?                     ; succ
               (do
                 (println "sync-local->remote! update txid" r*)
                 ;; persist txid

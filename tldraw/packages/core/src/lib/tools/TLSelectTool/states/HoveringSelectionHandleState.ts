@@ -74,7 +74,7 @@ export class HoveringSelectionHandleState<
     if (!isSingle) return
     const selectedShape = getFirstFromSet(this.app.selectedShapes)
 
-    if (selectedShape.canEdit && !this.app.readOnly) {
+    if (selectedShape.canEdit && !this.app.readOnly && !selectedShape.props.isLocked) {
       switch (info.type) {
         case TLTargetType.Shape: {
           this.tool.transition('editingShape', info)

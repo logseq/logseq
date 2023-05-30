@@ -69,8 +69,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -608,10 +607,9 @@
               (plugin/open-waiting-updates-modal!))
             (plugin-handler/set-auto-checking! false))))))
 
-(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
-                          (merge payload {:tx-data (map #(into [] %) tx-data)
-                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
+                          (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
@@ -623,13 +621,7 @@
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)
-        dir (:dir payload)
-        payload (-> payload
-                    (update :path
-                           (fn [path]
-                             (when (string? path)
-                               (path/relative-path dir path)))))]
+        payload (js->clj event :keywordize-keys true)]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
@@ -947,6 +939,26 @@
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :editor/toggle-own-number-list [[_ blocks]]
+  (let [batch? (sequential? blocks)
+        blocks (cond->> blocks
+                  batch?
+                  (map #(cond-> % (or (uuid? %) (string? %)) (db-model/get-block-by-uuid))))]
+    (if (and batch? (> (count blocks) 1))
+      (editor-handler/toggle-blocks-as-own-order-list! blocks)
+      (when-let [block (cond-> blocks batch? (first))]
+        (if (editor-handler/own-order-number-list? block)
+          (editor-handler/remove-block-own-order-list-type! block)
+          (editor-handler/make-block-as-own-order-list! block))))))
+
+(defmethod handle :editor/remove-own-number-list [[_ block]]
+  (when (some-> block (editor-handler/own-order-number-list?))
+    (editor-handler/remove-block-own-order-list-type! block)))
+
+(defmethod handle :editor/toggle-children-number-list [[_ block]]
+  (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
+    (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
 (defn run!
   []
