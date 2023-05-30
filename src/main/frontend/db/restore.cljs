@@ -64,19 +64,17 @@
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn- eav->datom
-  [uuid->eid-map col & {:keys [eid]}]
-  (let [[e a v] (if eid (cons eid col) col)]
-    (->>
-    (cond
-      (and (= :block/uuid a) (string? v))
-      [e a (uuid v)]
+  [uuid->db-id-map [e a v]]
+  (let [v' (cond
+             (and (= :block/uuid a) (string? v))
+             (uuid v)
 
-      (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
-      [e a (get uuid->eid-map (second v) v)]
+             (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
+             (get uuid->db-id-map (second v) v)
 
-      :else
-      [e a v])
-    (apply d/datom))))
+             :else
+             v)]
+    (d/datom e a v')))
 
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
@@ -93,17 +91,15 @@
          (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
        (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids))))
 
-    (util/profile
-     "build datoms"
-     (doseq [block data]
-       (let [uuid (gobj/get block "uuid")
-             eid (get uuid->db-id-map uuid)]
-         (assert eid (str "Can't find eid " eid ", block: " block))
-         (let [avs (->> (gobj/get block "datoms")
-                        (transit/read t-reader))]
-           (doseq [av avs]
-             (let [datom (eav->datom uuid->db-id-map av :eid eid)]
-               (conj! datoms datom)))))))
+    (doseq [block data]
+      (let [uuid (gobj/get block "uuid")
+            eid (get uuid->db-id-map uuid)
+            _ (assert eid (str "Can't find eid " eid ", block: " block))
+            avs (->> (gobj/get block "datoms")
+                     (transit/read t-reader))]
+        (doseq [[a v] avs]
+          (let [datom (eav->datom uuid->db-id-map [eid a v])]
+            (conj! datoms datom)))))
 
     (let [all-datoms (persistent! datoms)
           new-db (util/profile
