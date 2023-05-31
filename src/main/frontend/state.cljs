@@ -426,15 +426,6 @@ should be done through this fn in order to get global config and config defaults
 
        (get-in @state [:me :preferred_format] "markdown")))))
 
-;; TODO: consider adding a pane in Settings to set this through the GUI (rather
-;; than having to go through the config.edn file)
-(defn get-editor-command-trigger
-  ([] (get-editor-command-trigger (get-current-repo)))
-  ([repo-url]
-   (or
-     (:editor/command-trigger (get-config repo-url))        ;; Get from user config
-     "/")))                                                 ;; Set the default
-
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
