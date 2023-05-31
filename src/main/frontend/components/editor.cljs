@@ -14,6 +14,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.search :as search-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -289,8 +290,31 @@
           :item-render (fn [property-value] property-value)
           :class       "black"})))))
 
+(rum/defc code-block-mode-picker < rum/reactive
+  [id]
+  (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
+    (when-let [input (gdom/getElement id)]
+      (let [pos          (state/get-editor-last-pos)
+            current-pos  (cursor/pos input)
+            edit-content (or (state/sub [:editor/content id]) "")
+            q            (or (editor-handler/get-selected-text)
+                             (gp-util/safe-subs edit-content pos current-pos)
+                             "")
+            matched      (seq (search-handler/fuzzy-search modes q))
+            matched      (or matched (if (string/blank? q) modes [q]))]
+        [:div
+         (ui/auto-complete matched
+                           {:on-chosen   (fn [chosen _click?]
+                                           (js/console.log chosen _click?))
+                            :on-enter    (fn []
+                                           (state/clear-editor-action!)
+                                           (commands/handle-step [:codemirror/focus]))
+                            :item-render (fn [mode chosen?]
+                                           [:strong mode])
+                            :class       "code-block-mode-picker"})]))))
+
 (rum/defcs input < rum/reactive
-  (rum/local {} ::input-value)
+                   (rum/local {} ::input-value)
   (mixins/event-mixin
    (fn [state]
      (mixins/on-key-down
@@ -576,6 +600,9 @@
       ;; date-picker in editing-mode
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
+
+      (= :select-code-block-mode action)
+      (animated-modal "select-code-block-mode" (code-block-mode-picker id) true)
 
       (= :input action)
       (animated-modal "input" (input id

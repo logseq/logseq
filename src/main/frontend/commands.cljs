@@ -296,7 +296,11 @@
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
-                                                          :backward-pos 2}]]]]
+                                                          :backward-pos 2}]]]
+
+     ["Code block" [[:editor/input "```\n```" {:type         "block"
+                                               :backward-pos 4}]
+                    [:editor/select-code-block-mode]] "Insert code block"]]
 
     @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
@@ -690,6 +694,9 @@
     (do
       (state/set-timestamp-block! nil)
       (state/set-editor-action! :datepicker))))
+
+(defmethod handle-step :editor/select-code-block-mode [[_]]
+  (state/set-editor-action! :select-code-block-mode))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
