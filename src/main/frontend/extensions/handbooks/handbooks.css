@@ -310,7 +310,8 @@
     border: 1px solid var(--ls-tertiary-background-color);
     touch-action: none;
     height: 720px;
-    width: 430px;
+    max-height: 86vh;
+    width: 450px;
     right: 32px;
     bottom: 58px;
   }

@@ -270,16 +270,16 @@
      [:div.categories-list
       (let [categories (:children root)
             categories (conj (vec categories)
-                             {:key      "ls-shortcuts"
-                              :title    "Work faster"
-                              :children [:span "Keyboard shortcuts"]
+                             {:key      :ls-shortcuts
+                              :title    [:span "Keyboard shortcuts"]
+                              :children [:span "work faster"]
                               :color    "#2563EB"
                               :icon     "command"})]
         (for [{:keys [key title children color icon] :as category} categories]
           [:button.category-card.text-left
            {:key      key
             :style    {:border-left-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
-            :on-click #(if (= key "ls-shortcuts")
+            :on-click #(if (= key :ls-shortcuts)
                          (do (state/toggle! :ui/handbooks-open?)
                              (state/open-right-sidebar!)
                              (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))
