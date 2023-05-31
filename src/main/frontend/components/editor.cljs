@@ -291,7 +291,7 @@
           :class       "black"})))))
 
 (rum/defc code-block-mode-picker < rum/reactive
-  [id]
+  [id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
     (when-let [input (gdom/getElement id)]
       (let [pos          (state/get-editor-last-pos)
@@ -305,7 +305,12 @@
         [:div
          (ui/auto-complete matched
                            {:on-chosen   (fn [chosen _click?]
-                                           (js/console.log chosen _click?))
+                                           (state/clear-editor-action!)
+                                           (let [prefix (str "```" chosen)
+                                                 last-pattern (str "```" q)]
+                                             (editor-handler/insert-command! id
+                                               prefix format {:last-pattern last-pattern})
+                                             (commands/handle-step [:codemirror/focus])))
                             :on-enter    (fn []
                                            (state/clear-editor-action!)
                                            (commands/handle-step [:codemirror/focus]))
@@ -315,10 +320,10 @@
 
 (rum/defcs input < rum/reactive
                    (rum/local {} ::input-value)
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/on-key-down
-      state
+                   (mixins/event-mixin
+                     (fn [state]
+                       (mixins/on-key-down
+                         state
       {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
@@ -602,7 +607,7 @@
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 
       (= :select-code-block-mode action)
-      (animated-modal "select-code-block-mode" (code-block-mode-picker id) true)
+      (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
 
       (= :input action)
       (animated-modal "input" (input id
