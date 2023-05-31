@@ -166,16 +166,16 @@
 
 (defn- get-next-tx-editor-cursor
   [tx-id]
-  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
+  (let [result (->> (sort (keys @(:history/tx->editor-cursor @state/state)))
                     (split-with #(not= % tx-id))
                     second)]
     (when (> (count result) 1)
       (when-let [next-tx-id (nth result 1)]
-        (get-in @state/state [:history/tx->editor-cursor next-tx-id])))))
+        (get @(get @state/state :history/tx->editor-cursor) next-tx-id)))))
 
 (defn- get-previous-tx-id
   [tx-id]
-  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
+  (let [result (->> (sort (keys @(:history/tx->editor-cursor @state/state)))
                     (split-with #(not= % tx-id))
                     first)]
     (when (>= (count result) 1)
@@ -184,14 +184,14 @@
 (defn- get-previous-tx-editor-cursor
   [tx-id]
   (when-let [prev-tx-id (get-previous-tx-id tx-id)]
-    (get-in @state/state [:history/tx->editor-cursor prev-tx-id])))
+    (get @(get @state/state :history/tx->editor-cursor) prev-tx-id)))
 
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
-          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
+          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
           save-block? (= (:outliner-op tx-meta) :save-block)
           prev-editor-cursor (get-previous-tx-editor-cursor tx-id)
           editor-cursor (if (and save-block?
@@ -214,7 +214,7 @@
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
     (let [new-txs (get-txs true txs)
-          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
+          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
           editor-cursor (if (= (:outliner-op tx-meta) :save-block)
                           current-editor-cursor
                           (get-next-tx-editor-cursor tx-id))]
@@ -263,7 +263,9 @@
                     :blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
-                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)
+                    :pagination-blocks-range
+                    (get @(get @state/state :ui/pagination-blocks-range)
+                         (get-in tx-report [:db-after :max-tx]))
                     :app-state (select-keys @state/state
                                             [:route-match
                                              :ui/sidebar-open?

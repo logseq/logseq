@@ -8,7 +8,7 @@
 (defn did-mount!
   [state]
   (let [[{:keys [block-parent-id]} id] (:rum/args state)
-        content (get-in @state/state [:editor/content id])]
+        content (get @(get @state/state :editor/content) id)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
     (when content

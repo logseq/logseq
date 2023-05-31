@@ -2079,8 +2079,8 @@
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
-(def last-input-time-cursor (rum/cursor state/state :editor/last-input-time))
-(add-watch last-input-time-cursor "sync"
+(def last-input-time-atom (get @state/state :editor/last-input-time))
+(add-watch last-input-time-atom "sync"
            (fn [_ _ _ _]
              (offer! recent-edited-chan true)))
 

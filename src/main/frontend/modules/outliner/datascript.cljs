@@ -147,7 +147,8 @@
               conn (conn/get-db repo false)
               rs (d/transact! conn txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
-          (swap! state/state assoc-in [:history/tx->editor-cursor tx-id] before-editor-cursor)
+          (state/update-state! :history/tx->editor-cursor
+                               (fn [m] (assoc m tx-id before-editor-cursor)))
 
           ;; update the current edit block to include full information
           (when-let [block (state/get-edit-block)]

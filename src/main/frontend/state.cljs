@@ -97,34 +97,34 @@
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)
       ;; remember scroll positions of visited paths
-      :ui/paths-scroll-positions             {}
+      :ui/paths-scroll-positions             (atom {})
       :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                                false
                                                true)
-      :ui/scrolling?                         false
+      :ui/scrolling?                         (atom false)
       :document/mode?                        document-mode?
 
       :config                                {}
       :block/component-editing-mode?         false
-      :editor/op                             nil
-      :editor/latest-op                      nil
+      :editor/op                             (atom nil)
+      :editor/latest-op                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
-      :editor/action                         nil
+      :editor/action                         (atom nil)
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              nil
       :editor/editing?                       nil
       :editor/in-composition?                false
-      :editor/content                        {}
-      :editor/block                          nil
+      :editor/content                        (atom {})
+      :editor/block                          (atom nil)
       :editor/block-dom-id                   nil
       :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
-      :editor/last-input-time                nil
+      :editor/last-input-time                (atom {})
       :editor/document-mode?                 document-mode?
       :editor/args                           nil
-      :editor/on-paste?                      false
-      :editor/last-key-code                  nil
+      :editor/on-paste?                      (atom false)
+      :editor/last-key-code                  (atom nil)
 
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
@@ -133,7 +133,7 @@
       :editor/record-status                  "NONE"
 
       ;; Whether to skip saving the current block
-      :editor/skip-saving-current-block?     false
+      :editor/skip-saving-current-block?     (atom false)
 
       :editor/code-block-context             {}
 
@@ -234,7 +234,7 @@
       :youtube/players                       {}
 
       ;; command palette
-      :command-palette/commands              []
+      :command-palette/commands              (atom [])
 
       :view/components                       {}
 
@@ -285,7 +285,8 @@
       :whiteboard/pending-tx-data            {}
       :history/page-only-mode?               false
       ;; db tx-id -> editor cursor
-      :history/tx->editor-cursor             {}})))
+      :history/tx->editor-cursor             (atom {})
+      :ui/pagination-blocks-range            (atom {})})))
 
 ;; Block ast state
 ;; ===============
@@ -553,10 +554,22 @@ should be done through this fn in order to get global config and config defaults
 (defn sub
   "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
 Similar to re-frame subscriptions"
-  [ks]
-  (if (coll? ks)
-    (util/react (rum/cursor-in state ks))
-    (util/react (rum/cursor state ks))))
+  [ks & {:keys [path-in-sub-atom]}]
+  (let [ks-coll?               (coll? ks)
+        get-fn                 (if ks-coll? get-in get)
+        s                      (get-fn @state ks)
+        s-atom?                (util/atom? s)
+        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+    (cond
+      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
+      (util/react (rum/cursor-in s path-in-sub-atom))
+
+      (and s-atom? path-in-sub-atom)
+      (util/react (rum/cursor s path-in-sub-atom))
+
+      s-atom?  (util/react s)
+      ks-coll? (util/react (rum/cursor-in state ks))
+      :else    (util/react (rum/cursor state ks)))))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -630,7 +643,7 @@ Similar to re-frame subscriptions"
 
 (defn sub-edit-content
   [id]
-  (sub [:editor/content id]))
+  (sub :editor/content :path-in-sub-atom id))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -643,10 +656,9 @@ Similar to re-frame subscriptions"
 (defn sub-block-selected?
   [container-id block-uuid]
   (rum/react
-   (rum/derived-atom [state] [::select-block container-id block-uuid]
-     (fn [state]
-       (contains? (set (get-selected-block-ids (:selection/blocks state)))
-                  block-uuid)))))
+   (rum/derived-atom [(rum/cursor state :selection/blocks)] [::select-block container-id block-uuid]
+     (fn [s]
+       (contains? (set (get-selected-block-ids s)) block-uuid)))))
 
 (defn block-content-max-length
   [repo]
@@ -695,18 +707,43 @@ Similar to re-frame subscriptions"
 ;; ======================
 
 (defn set-state!
-  [path value]
+  [path value & {:keys [path-in-sub-atom]}]
   (swap! *profile-state update path inc)
-  (if (vector? path)
-    (swap! state assoc-in path value)
-    (swap! state assoc path value))
+  (let [path-coll?             (coll? path)
+        get-fn                 (if path-coll? get-in get)
+        s                      (get-fn @state path)
+        s-atom?                (util/atom? s)
+        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+    (cond
+      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
+      (swap! s assoc-in path-in-sub-atom value)
+
+      (and s-atom? path-in-sub-atom)
+      (swap! s assoc path-in-sub-atom value)
+
+      s-atom?    (reset! s value)
+      path-coll? (swap! state assoc-in path value)
+      :else      (swap! state assoc path value)))
   nil)
 
 (defn update-state!
-  [path f]
-  (if (vector? path)
-    (swap! state update-in path f)
-    (swap! state update path f))
+  [path f & {:keys [path-in-sub-atom]}]
+  (swap! *profile-state update path inc)
+  (let [path-coll?             (coll? path)
+        get-fn                 (if path-coll? get-in get)
+        s                      (get-fn @state path)
+        s-atom?                (util/atom? s)
+        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+    (cond
+      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
+      (swap! s update-in path-in-sub-atom f)
+
+      (and s-atom? path-in-sub-atom)
+      (swap! s update path-in-sub-atom f)
+
+      s-atom?    (swap! s f)
+      path-coll? (swap! state update-in path f)
+      :else      (swap! state update path f)))
   nil)
 
 ;; State getters and setters
@@ -867,7 +904,7 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-content
   []
-  (get (:editor/content @state) (get-edit-input-id)))
+  (get @(:editor/content @state) (get-edit-input-id)))
 
 (defn get-cursor-range
   []
@@ -895,7 +932,7 @@ Similar to re-frame subscriptions"
 
 (defn get-editor-action
   []
-  (:editor/action @state))
+  @(:editor/action @state))
 
 (defn get-editor-action-data
   []
@@ -938,8 +975,7 @@ Similar to re-frame subscriptions"
 
 (defn clear-editor-action!
   []
-  (swap! state (fn [state]
-                 (assoc state :editor/action nil))))
+  (set-state! :editor/action nil))
 
 (defn set-edit-input-id!
   [input-id]
@@ -1110,7 +1146,7 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-block
   []
-  (get @state :editor/block))
+  @(get @state :editor/block))
 
 (defn get-current-edit-block-and-position
   []
@@ -1128,9 +1164,9 @@ Similar to re-frame subscriptions"
 (defn clear-edit!
   []
   (swap! state merge {:editor/editing? nil
-                      :editor/block    nil
                       :cursor-range    nil
-                      :editor/last-saved-cursor nil}))
+                      :editor/last-saved-cursor nil})
+  (set-state! :editor/block nil))
 
 (defn into-code-editor-mode!
   []
@@ -1261,13 +1297,13 @@ Similar to re-frame subscriptions"
   ([value]
    (save-scroll-position! value js/window.location.hash))
   ([value path]
-   (set-state! [:ui/paths-scroll-positions path] value)))
+   (set-state! :ui/paths-scroll-positions value :path-in-sub-atom path)))
 
 (defn get-saved-scroll-position
   ([]
    (get-saved-scroll-position js/window.location.hash))
   ([path]
-   (get-in @state [:ui/paths-scroll-positions path] 0)))
+   (get @(get @state :ui/paths-scroll-positions) path 0)))
 
 (defn set-today!
   [value]
@@ -1594,18 +1630,19 @@ Similar to re-frame subscriptions"
 
 (defn set-editor-last-input-time!
   [repo time]
-  (swap! state assoc-in [:editor/last-input-time repo] time))
+  (set-state! :editor/last-input-time time :path-in-sub-atom repo))
+
 
 (defn set-last-transact-time!
   [repo time]
-  (swap! state assoc-in [:db/last-transact-time repo] time)
+  (set-state! [:db/last-transact-time repo] time)
 
   ;; THINK: new block, indent/outdent, drag && drop, etc.
   (set-editor-last-input-time! repo time))
 
 (defn set-db-persisted!
   [repo value]
-  (swap! state assoc-in [:db/persisted? repo] value))
+  (set-state! [:db/persisted? repo] value))
 
 (defn db-idle?
   [repo]
@@ -1618,7 +1655,7 @@ Similar to re-frame subscriptions"
   [repo & {:keys [diff]
            :or {diff 1000}}]
   (when repo
-    (let [last-input-time (get-in @state [:editor/last-input-time repo])]
+    (let [last-input-time (get @(get @state :editor/last-input-time) repo)]
       (or
        (nil? last-input-time)
 
@@ -1704,11 +1741,11 @@ Similar to re-frame subscriptions"
 
 (defn get-editor-op
   []
-  (:editor/op @state))
+  @(:editor/op @state))
 
 (defn get-editor-latest-op
   []
-  (:editor/latest-op @state))
+  @(:editor/latest-op @state))
 
 (defn get-events-chan
   []
@@ -1802,36 +1839,37 @@ Similar to re-frame subscriptions"
          (util/scroll-to-element (gobj/get (first elements) "id")))
        (exit-editing-and-set-selected-blocks! elements))
      (when (and edit-input-id block
-               (or
-                (publishing-enable-editing?)
-                (not @publishing?)))
-      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-            container (util/get-block-container block-element)
-            block (if container
-                    (assoc block
-                           :block.temp/container (gobj/get container "id"))
-                    block)
-            content (string/trim (or content ""))]
-        (swap! state
-               (fn [state]
-                 (-> state
-                     (assoc-in [:editor/content edit-input-id] content)
-                     (assoc
-                      :editor/block block
-                      :editor/editing? {edit-input-id true}
-                      :editor/last-key-code nil
-                      :editor/set-timestamp-block nil
-                      :cursor-range cursor-range))))
-        (when-let [input (gdom/getElement edit-input-id)]
-          (let [pos (count cursor-range)]
-            (when content
-              (util/set-change-value input content))
+                (or
+                 (publishing-enable-editing?)
+                 (not @publishing?)))
+       (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+             container (util/get-block-container block-element)
+             block (if container
+                     (assoc block
+                            :block.temp/container (gobj/get container "id"))
+                     block)
+             content (string/trim (or content ""))]
+         (swap! state
+                (fn [state]
+                  (-> state
+                      (assoc
+                       :editor/editing? {edit-input-id true}
+                       :editor/set-timestamp-block nil
+                       :cursor-range cursor-range))))
+         (set-state! :editor/block block)
+         (set-state! :editor/content content :path-in-sub-atom edit-input-id)
+         (set-state! :editor/last-key-code nil)
 
-            (when move-cursor?
-              (cursor/move-cursor-to input pos))
+         (when-let [input (gdom/getElement edit-input-id)]
+           (let [pos (count cursor-range)]
+             (when content
+               (util/set-change-value input content))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
-              (set-state! :mobile/show-action-bar? false)))))))))
+             (when move-cursor?
+               (cursor/move-cursor-to input pos))
+
+             (when (or (util/mobile?) (mobile-util/native-platform?))
+               (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn remove-watch-state [key]
   (remove-watch state key))
@@ -1846,7 +1884,7 @@ Similar to re-frame subscriptions"
 
 (defn get-last-key-code
   []
-  (:editor/last-key-code @state))
+  @(:editor/last-key-code @state))
 
 (defn feature-http-server-enabled?
   []
@@ -2113,6 +2151,6 @@ Similar to re-frame subscriptions"
 (defn sub-block-unloaded?
   [repo block-uuid]
   (rum/react
-   (rum/derived-atom [state] [::block-unloaded repo block-uuid]
-     (fn [state]
-       (contains? (get-in state [repo :restore/unloaded-blocks]) (str block-uuid))))))
+   (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
+     (fn [s]
+       (contains? s (str block-uuid))))))

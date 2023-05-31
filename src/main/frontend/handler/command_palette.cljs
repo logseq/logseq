@@ -26,12 +26,12 @@
        (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
-  (->> (get @state/state :command-palette/commands)
+  (->> @(get @state/state :command-palette/commands)
        (sort-by :id)))
 
 (defn get-commands-unique []
   (reduce #(assoc %1 (:id %2) %2) {}
-          (get @state/state :command-palette/commands)))
+          @(get @state/state :command-palette/commands)))
 
 (defn history
   ([] (or (storage/get "commands-history") []))

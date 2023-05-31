@@ -470,7 +470,7 @@
                (when-let [pos (some-> (state/get-input) cursor/pos)]
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
-              (when-let [block (get-in @state/state [:editor/block :block/uuid])]
+              (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
                 (editor-handler/edit-block! block :max (:block/uuid block))
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]

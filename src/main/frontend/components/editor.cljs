@@ -109,7 +109,7 @@
             input (gdom/getElement id)]
         (when input
           (let [current-pos (cursor/pos input)
-                edit-content (or (state/sub [:editor/content id]) "")
+                edit-content (or (state/sub :editor/content :path-in-sub-atom id) "")
                 sidebar? (in-sidebar? input)
                 q (or
                    (editor-handler/get-selected-text)
@@ -210,7 +210,7 @@
           input (gdom/getElement id)
           [id format] (:rum/args state)
           current-pos (cursor/pos input)
-          edit-content (state/sub [:editor/content id])
+          edit-content (state/sub :editor/content :path-in-sub-atom id)
           edit-block (state/get-edit-block)
           selected-text (editor-handler/get-selected-text)
           q (or
@@ -226,7 +226,7 @@
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
+            edit-content (state/sub :editor/content :path-in-sub-atom id)
             q (or
                (when (>= (count edit-content) current-pos)
                  (subs edit-content pos current-pos))
@@ -269,7 +269,7 @@
     (when (and input
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
+            edit-content (state/sub :editor/content :path-in-sub-atom id)
             start-idx (string/last-index-of (subs edit-content 0 current-pos)
                                             gp-property/colons)
             q (or
@@ -506,7 +506,7 @@
   rum/static
   {:did-update
    (fn [state]
-     (when-not (:editor/on-paste? @state/state)
+     (when-not @(:editor/on-paste? @state/state)
        (try (editor-handler/handle-last-input)
             (catch :default _e
               nil)))

@@ -1284,7 +1284,7 @@
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
-                 (:editor/skip-saving-current-block? @state/state))
+                 @(:editor/skip-saving-current-block? @state/state))
      (when (state/get-current-repo)
        (when-not (state/get-editor-action)
          (try

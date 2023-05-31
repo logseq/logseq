@@ -783,7 +783,7 @@
 (defn on-chosen-handler
   [input id _q pos format]
   (let [current-pos (cursor/pos input)
-        edit-content (state/sub [:editor/content id])
+        edit-content (state/sub :editor/content :path-in-sub-atom id)
         action (state/get-editor-action)
         hashtag? (= action :page-search-hashtag)
         q (or
