@@ -51,7 +51,6 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
             return
         }
         // NOTE: Event in js {dir path content stat{mtime}}
-        print("url \(url) rel \(baseUrl)")
         switch event {
         case .Unlink:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
