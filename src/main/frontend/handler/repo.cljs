@@ -342,19 +342,22 @@
 
 (defn remove-repo!
   [{:keys [url] :as repo}]
-  (let [delete-db-f (fn []
+  (let [db-only? (config/db-only? url)
+        delete-db-f (fn []
                       (let [graph-exists? (db/get-db url)
                             current-repo (state/get-current-repo)]
                         (db/remove-conn! url)
-                        (db-persist/delete-graph! url)
+                        (when-not db-only?
+                          (db-persist/delete-graph! url))
                         (search/remove-db! url)
                         (state/delete-repo! repo)
                         (when graph-exists? (ipc/ipc "graphUnlinked" repo))
                         (when (= current-repo url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
-    (when (or (config/local-db? url) (config/demo-graph? url))
-      (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
-            )
+    (when (or (config/local-db? url)
+              db-only?
+              (config/demo-graph? url))
+      (-> (idb/clear-local-db! url)     ; clear file handles
           (p/finally delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
