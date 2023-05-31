@@ -328,13 +328,10 @@
                                                     :assets assets
                                                     :bindings bindings})))))
 (defn should-populate-onboarding-whiteboard?
-  "When there is not whiteboard, or there is only whiteboard that is the given page name, we should populate the onboarding whiteboard"
-  [page-name]
+  "When there is not whiteboard, we should populate the onboarding whiteboard"
+  []
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
-    (and (or (empty? whiteboards)
-             (and
-              (= 1 (count whiteboards))
-              (= page-name (:block/name (first whiteboards)))))
+    (and (empty? whiteboards)
          (not (state/get-onboarding-whiteboard?)))))
 
 (defn populate-onboarding-whiteboard

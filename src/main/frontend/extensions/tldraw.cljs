@@ -128,7 +128,7 @@
 
 (rum/defc tldraw-app
   [page-name block-id]
-  (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+  (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard?)
         data (whiteboard-handler/page-name->tldr! page-name)
         [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [^js tln]
