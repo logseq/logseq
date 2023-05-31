@@ -155,7 +155,7 @@
           block-entity (db/entity (if block-id
                                     [:block/uuid block-id]
                                     [:block/name page-name]))
-          block-unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block-entity)))]
+          block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block-entity))]
       (cond
         block-unloaded?
         (ui/loading "Loading...")

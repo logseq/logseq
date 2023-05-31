@@ -17,7 +17,6 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [frontend.db.listener :as db-listener]
             [cognitect.transit :as transit]))
 
 (def ^:private t-reader (transit/reader :json))
@@ -73,20 +72,20 @@
              v)]
     (d/datom e a v')))
 
+(defn- set-unloaded-block-ids!
+  [repo data]
+  (util/profile
+   "Set unloaded-block-ids"
+   (let [unloaded-block-ids (transient #{})]
+     (doseq [b data]
+       (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
+     (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids)))))
+
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
         conn (db-conn/get-db repo false)
         datoms (transient (vec (d/datoms @conn :eavt)))]
-
-    (d/unlisten! conn :persistence)
-
-    (util/profile
-     "Set unloaded-block-ids"
-     (let [unloaded-block-ids (transient #{})]
-       (doseq [b data]
-         (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
-       (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids))))
 
     (doseq [block data]
       (let [uuid (gobj/get block "uuid")
@@ -108,9 +107,10 @@
 
       (let [end (util/time-ms)]
         (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
-      (state/set-state! [repo :restore/unloaded-blocks] nil)
-      (state/set-state! [repo :restore/unloaded-pages] nil)
-      (db-listener/repo-listen-to-tx! repo conn))))
+
+      (p/let [_ (p/delay 150)]          ; More time for UI refresh
+        (state/set-state! [repo :restore/unloaded-blocks] nil)
+        (state/set-state! [repo :restore/unloaded-pages] nil)))))
 
 (defn- uuid-string?
   [s]
@@ -189,9 +189,11 @@
 
     (js/setTimeout
      (fn []
-       (p/let [other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))]
+       (p/let [other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))
+               _ (set-unloaded-block-ids! repo other-data)
+               _ (p/delay 10)]
          (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
-     200)))
+     100)))
 
 (defn restore-graph!
   "Restore db from serialized db cache"
