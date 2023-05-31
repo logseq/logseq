@@ -1,10 +1,8 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-bean.core :as bean]
-            [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.db :as db]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.db.conn :as db-conn]
@@ -19,7 +17,6 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [clojure.set :as set]
             [frontend.db.listener :as db-listener]
             [cognitect.transit :as transit]))
 
