@@ -856,7 +856,6 @@
       (let [token (<! (<get-token this))]
         (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
   (<fetch-remote-files [this graph-uuid base-path filepaths]
-    (println "fetch-remote-files" graph-uuid base-path filepaths)
     (go
       (<! (<rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
@@ -957,7 +956,6 @@
                                                                      :filePaths filepaths'
                                                                      :token token})))))))
   (<fetch-remote-files [this graph-uuid base-path filepaths]
-    (js/console.error "mobile <fetch-remote-files")
     (go
       (let [token (<! (<get-token this))
             r (<! (<retry-rsapi
@@ -1592,7 +1590,6 @@
                                       (fs/unlink! repo (path/path-join repo-dir base-file) {}))
                                      ;; base-content != current-content, merge, do not delete
                                      (p/let [merged-content (diff-merge/three-way-merge base-content "" current-content format)]
-                                       (prn "local changed, merge deletion")
                                        (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
                                        (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
                                                                                                          :from-disk? true
