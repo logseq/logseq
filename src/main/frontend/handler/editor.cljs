@@ -807,7 +807,7 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
-   (let [{:keys [id block-id block-parent-id value format]} (get-state)]
+   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
@@ -823,24 +823,28 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       sibling-block (if (:embed? config)
+                                       (util/get-prev-block-non-collapsed
+                                        block-parent
+                                        {:container (util/rec-get-blocks-container block-parent)})
+                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
                        {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-blocks}
+                                      {:outliner-op :delete-blocks}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
-                     (if concat-prev-block?
-                       (let [prev-block' (if (seq (:block/_refs block-e))
-                                           (assoc prev-block
-                                                  :block/uuid (:block/uuid block)
-                                                  :block.temp/additional-properties (:block/properties block))
-                                           prev-block)]
-                         (delete-block-aux! block delete-children?)
-                         (save-block! repo prev-block' new-content {:editor/op :delete}))
-                       (delete-block-aux! block delete-children?)))
+                                          (if concat-prev-block?
+                                            (let [prev-block' (if (seq (:block/_refs block-e))
+                                                                (assoc prev-block
+                                                                       :block/uuid (:block/uuid block)
+                                                                       :block.temp/additional-properties (:block/properties block))
+                                                                prev-block)]
+                                              (delete-block-aux! block delete-children?)
+                                              (save-block! repo prev-block' new-content {:editor/op :delete}))
+                                            (delete-block-aux! block delete-children?)))
                    (move-fn)))))))))
    (state/set-editor-op! nil)))
 
