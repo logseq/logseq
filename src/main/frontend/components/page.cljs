@@ -166,7 +166,8 @@
         :else
         (let [document-mode? (state/sub :document/mode?)
               hiccup-config (merge
-                             {:id (if block? (str block-id) page-name)
+                             {:infinite-list? true
+                              :id (if block? (str block-id) page-name)
                               :db/id (:db/id block-entity)
                               :block? block?
                               :editor-box editor/box

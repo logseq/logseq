@@ -25,7 +25,7 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 50)
+(def initial-blocks-length 100)
 
 (def step-loading-blocks 25)
 
@@ -713,87 +713,6 @@ independent of format as format specific heading characters are stripped"
           (nth blocks i))))
     blocks)))
 
-(defn- get-start-id-for-pagination-query
-  [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
-   result outliner-op page-id block-id tx-block-ids]
-  (let [db-before (or db-before current-db)
-        cached-ids (map :db/id @result)
-        cached-ids-set (set (conj cached-ids page-id))
-        first-changed-id (cond
-                           (= (:real-outliner-op tx-meta) :indent-outdent)
-                           (if (state/logical-outdenting?)
-                             (first (:move-blocks tx-meta))
-                             (last (:move-blocks tx-meta)))
-
-                           (= outliner-op :move-blocks)
-                           (let [{:keys [move-blocks target from-page to-page]} tx-meta]
-                             (cond
-                               (= page-id target) ; move to the first block
-                               nil
-
-                               (and from-page to-page (not= from-page to-page))
-                               (if (= page-id from-page)
-                                 (first move-blocks)
-                                 target)
-
-                               :else
-                               ;; same page, get the most top block before dragging
-                               (let [match-ids (set (conj move-blocks target))]
-                                 (loop [[id & others] cached-ids]
-                                   (if id
-                                     (if (contains? match-ids id)
-                                       id
-                                       (when (seq others)
-                                         (recur others)))
-                                     nil)))))
-                           :else
-                           (let [insert? (= :insert-blocks outliner-op)]
-                             (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
-                                                   true)
-                                               (recursive-child? repo-url % block-id))
-                                      %) tx-block-ids)))]
-    (when first-changed-id
-      (or (get-prev-open-block db-before first-changed-id)
-          (get-prev-open-block current-db first-changed-id)))))
-
-(defn- build-paginated-blocks-from-cache
-  "Notice: tx-report could be nil."
-  [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
-  (let [{:keys [tx-meta]} tx-report
-        current-db (conn/get-db repo-url)]
-    (cond
-      (and (or (:undo? tx-meta) (:redo? tx-meta)) @result)
-      (let [blocks-range (:pagination-blocks-range tx-meta)
-            [start-block-id end-block-id] (:new blocks-range)]
-        (get-paginated-blocks-no-cache current-db start-block-id
-                                       {:end-id end-block-id
-                                        :include-start? true
-                                        :scoped-block-id scoped-block-id}))
-
-      (and (= :delete-blocks outliner-op)
-           (<= (count @result) initial-blocks-length)) ; load more blocks
-      nil
-
-      (= :save-block outliner-op)
-      @result
-
-      (contains? #{:insert-blocks :collapse-expand-blocks :move-blocks} outliner-op)
-      (when-let [start-id (get-start-id-for-pagination-query
-                           repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
-        (let [start-page? (:block/name (db-utils/entity start-id))]
-          (when-not start-page?
-            (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  limit (-> (max (- initial-blocks-length (count previous-blocks))
-                                 (count tx-block-ids))
-                            (+ 25))
-                  more (get-paginated-blocks-no-cache current-db start-id {:limit limit
-                                                                           :include-start? true
-                                                                           :scoped-block-id scoped-block-id})]
-              (concat previous-blocks more)))))
-
-      :else
-      nil)))
-
 (defn get-paginated-blocks
   "Get paginated blocks for a page or a specific block.
    `scoped-block-id`: if specified, returns its children only."
@@ -821,35 +740,14 @@ independent of format as format specific heading characters are stripped"
         (react/q repo-url [query-key block-id]
                  {:use-cache? use-cache?
                   :query-fn (fn [db tx-report result]
-                              (let [tx-data (:tx-data tx-report)
-                                    refs (some->> (filter #(= :block/refs (:a %)) tx-data)
-                                                  (map :v))
-                                    tx-block-ids (distinct (-> (map :e tx-data)
-                                                               (concat refs)))
-                                    [tx-id->block cached-id->block] (when (and tx-report result)
-                                                                      (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
-                                                                                        (remove nil?))]
-                                                                        [(zipmap (mapv :db/id blocks) blocks)
-                                                                         (zipmap (mapv :db/id @result) @result)]))
-                                    limit (if (and result @result)
+                              (let [limit (if (and result @result)
                                             (max (+ (count @result) 5) limit)
                                             limit)
-                                    outliner-op (get-in tx-report [:tx-meta :outliner-op])
-                                    blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
-                                    blocks (or blocks
-                                               (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
-                                                                                                               :include-start? (not page?)
-                                                                                                               :scoped-block-id scoped-block-id}))
+                                    blocks (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
+                                                                                                           :include-start? (not page?)
+                                                                                                           :scoped-block-id scoped-block-id})
                                     block-eids (map :db/id blocks)
-                                    blocks (if (and (seq tx-id->block)
-                                                    (not (contains? #{:move-blocks} outliner-op)))
-                                             (map (fn [id]
-                                                    (or (get tx-id->block id)
-                                                        (get cached-id->block id)
-                                                        (db-utils/pull repo-url pull-keys id))) block-eids)
-                                             (db-utils/pull-many repo-url pull-keys block-eids))
-                                    blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
-
+                                    blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                                 (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
                  nil)
         react)))))

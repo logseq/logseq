@@ -3357,7 +3357,19 @@
     (load-more-blocks! config flat-blocks)
     (reset! *loading? false)))
 
-(rum/defcs lazy-blocks < rum/reactive
+(rum/defc load-more < rum/reactive
+  [config *loading?]
+  (cond
+    (or (:preview? config) (:sidebar? config))
+    "More"
+
+    (rum/react *loading?)
+    (ui/lazy-loading-placeholder 88)
+
+    :else
+    ""))
+
+(rum/defcs lazy-blocks < rum/reactive rum/static
   (rum/local nil ::loading?)
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))
@@ -3368,8 +3380,7 @@
   [state config blocks flat-blocks]
   (let [db-id (:db/id config)
         *loading? (::loading? state)]
-    (if-not db-id
-      (block-list config blocks)
+    (if (:infinite-list? config)
       (let [has-more? (and
                        (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
@@ -3377,21 +3388,14 @@
         [:div {:id dom-id}
          (ui/infinite-list
           "main-content-container"
-          (block-list config blocks)
+          (block-list (dissoc config :infinite-list?) blocks)
           {:on-load #(loading-more-data! config *loading? flat-blocks false)
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
                                (ui/bottom-reached? node 300)))
            :has-more has-more?
-           :more (cond
-                   (or (:preview? config) (:sidebar? config))
-                   "More"
-
-                   @*loading?
-                   (ui/lazy-loading-placeholder 88)
-
-                   :else
-                   "")})]))))
+           :more (load-more config *loading?)})])
+      (block-list config blocks))))
 
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}

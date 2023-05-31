@@ -61,7 +61,11 @@
         option (cond-> {:limit db-model/step-loading-blocks}
                  block?
                  (assoc :scoped-block-id db-id))
-        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id option)
+        query-result (react/get-query-cached-result query-k)
+        start-id' (or
+                   (when query-result (:db/id (last @query-result)))
+                   start-id)
+        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id' option)
                        (map #(db/pull (:db/id %))))]
     (react/swap-new-result! query-k
                             (fn [result]

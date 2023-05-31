@@ -441,7 +441,7 @@
 (defn scroll-down?
   []
   (let [scroll-top (get-scroll-top)
-        down? (>= scroll-top @last-scroll-top)]
+        down? (> scroll-top @last-scroll-top)]
     (reset! last-scroll-top scroll-top)
     down?))
 
@@ -461,7 +461,7 @@
                           (bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
-    (when (and bottom-reached? on-load)
+    (when (and bottom-reached? down? on-load)
       (on-load))
     (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
@@ -1103,8 +1103,7 @@
                                      :onChange (fn [in-view? entry]
                                                  (let [self-top (.-top (.-boundingClientRect entry))]
                                                    (when (or (and (not visible?) in-view?)
-                                                             ;; hide only the components below the current top for better ux
-                                                             (and visible? (not in-view?) (> self-top root-margin)))
+                                                             (and visible? (not in-view?)))
                                                      (set-visible! in-view?))))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref))))
