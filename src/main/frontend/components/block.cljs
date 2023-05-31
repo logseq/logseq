@@ -2949,14 +2949,10 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo          (state/get-current-repo)
-        ref?          (:ref? config)
-        custom-query? (boolean (:custom-query? config))]
-    (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
-      (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block))
-       {:debug-id (str "block-container-ref " (:db/id block))})
-      (block-container-inner state repo config block))))
+  (let [repo          (state/get-current-repo)]
+    (ui/lazy-visible
+     (fn [] (block-container-inner state repo config block))
+     {:debug-id (str "block-container-ref " (:db/id block))})))
 
 (defn divide-lists
   [[f & l]]
