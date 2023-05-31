@@ -328,7 +328,7 @@
                                                     :assets assets
                                                     :bindings bindings})))))
 (defn should-populate-onboarding-whiteboard?
-  "When there is not whiteboard, we should populate the onboarding whiteboard"
+  "When there is no whiteboard, we should populate the onboarding shapes"
   []
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
     (and (empty? whiteboards)
