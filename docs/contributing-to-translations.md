@@ -13,10 +13,8 @@ In order to run the commands in this doc, you will need to install
 
 ## Where to Contribute
 
-Language translations are in two files,
-[src/main/frontend/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljc)
-and
-[src/main/frontend/modules/shortcut/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljc).
+Language translations are under,
+[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/) with each language having it's own file. For example, the es locale is in `es.edn`.
 
 ## Language Overview
 
@@ -54,16 +52,15 @@ Let's try to get your language translated as close to 100% as you can!
 
 ## Edit a Language
 
-To see what translations are missing for your language use:
+To see what translations are missing for your language, let's run a command using `es` as the example language:
 
 ```shell
-$ bb lang:missing LOCALE
-|                            :translation-key |                        :string-to-translate |               :file |
-|---------------------------------------------+---------------------------------------------+---------------------|
-|                     :content/copy-block-url |                              Copy block URL | frontend/dicts.cljs |
-|                     :content/copy-export-as |                          Copy / Export as.. | frontend/dicts.cljs |
-|                           :content/copy-ref |                         Copy this reference | frontend/dicts.cljs |
-|                         :content/delete-ref |                       Delete this reference | frontend/dicts.cljs |
+$ bb lang:missing es
+|                      :translation-key |                                  :string-to-translate |         :file |
+|---------------------------------------+-------------------------------------------------------+---------------|
+|    :command.editor/toggle-number-list |                                    Toggle number list | dicts/es.edn  |
+|     :command.whiteboard/bring-forward |                                          Move forward | dicts/es.edn  |
+|    :command.whiteboard/bring-to-front |                                         Move to front | dicts/es.edn  |
 ...
 ```
 
@@ -72,17 +69,16 @@ Over time you're aiming to have this list drop to zero. Since this process can b
 
 ```sh
 # When pasting this content, be sure to update the indentation to match the file
-$ bb lang:missing LOCALE --copy
+$ bb lang:missing es --copy
 
-;; For frontend/dicts.cljs
-:content/copy-block-url "Copy block URL"
-:content/copy-export-as "Copy / Export as.."
-:content/copy-ref "Copy this reference"
-:content/delete-ref "Delete this reference"
+;; For dicts/es.edn
+:command.editor/toggle-number-list "Toggle number list"
+:command.whiteboard/bring-forward "Move forward"
+:command.whiteboard/bring-to-front "Move to front"
 ...
 ```
 
-Almost all translations are pretty quick. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
+Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
 
 ## Fix Untranslated
 
@@ -108,6 +104,8 @@ and tell you what's wrong.
 
 ## Add a Language
 
-To add a new language, add an entry to `frontend.dicts/languages`. Then add a
-new locale keyword to `frontend.dicts/dicts` and to
-`frontend.modules.shortcut.dicts/dicts` and start translating as described above.
+To add a new language:
+* Add an entry to `frontend.dicts/languages`
+* Create a new file under `src/resources/dicts/` and name the file the same as the locale e.g. zz.edn for a hypothetical zz locale.
+* Add an entry in `frontend.dicts/dicts` referencing the file you created.
+* Then start translating for your language and adding entries in your language's EDN file using the `bb lang:missing` workflow.

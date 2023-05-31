@@ -238,8 +238,7 @@
              (when-not contents-matched?
                (backup-file repo-dir :backup-dir fpath disk-content))
              (db/set-file-last-modified-at! repo rpath mtime)
-             (p/let [content content]
-               (db/set-file-content! repo rpath content))
+             (db/set-file-content! repo rpath content)
              (when ok-handler
                (ok-handler repo fpath result))
              result)

@@ -610,6 +610,19 @@
                 (fn [_] (conversion-component/files-breaking-changed))
                 {:id :filename-format-panel :center? true})}))
 
+(rum/defcs native-titlebar-row < rum/reactive
+  [state t]
+  (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
+    (toggle
+     "native-titlebar"
+     (t :settings-page/native-titlebar)
+     enabled?
+     #(when (js/confirm (t :relaunch-confirm-to-work))
+        (state/set-state! [:electron/user-cfgs :window/native-titlebar?] (not enabled?))
+        (ipc/ipc :userAppCfgs :window/native-titlebar? (not enabled?))
+        (js/logseq.api.relaunch))
+     [:span.text-sm.opacity-50 (t :settings-page/native-titlebar-desc)])))
+
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
@@ -621,6 +634,7 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
+     (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
@@ -667,14 +681,20 @@
   []
   [:div.panel-wrap
    [:div.text-sm.my-4
+    (ui/admonition
+     :tip
+     [:p "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."])
+    [:span.text-sm.opacity-50.my-4 
+     "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
+    [:br][:br]
     [:span.text-sm.opacity-50.my-4
-     "You can view a page's edit history by clicking the three horizontal dots "
-     "in the top-right corner and selecting \"View page history\". "
-     "Logseq uses "]
+     "For professional users, Logseq also supports using "]
     [:a {:href "https://git-scm.com/" :target "_blank"}
      "Git"]
     [:span.text-sm.opacity-50.my-4
-     " for version control."]]
+     " for version control."]
+    [:span.text-sm.opacity-50.my-4
+     "Use Git at your own risk as general Git issues are not supported by the Logseq team"]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
@@ -827,9 +847,7 @@
               [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
-               (when (and
-                      (util/electron?)
-                      (not (file-sync-handler/synced-file-graph? current-repo)))
+               (when (util/electron?)
                  [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)

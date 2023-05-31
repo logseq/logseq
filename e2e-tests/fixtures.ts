@@ -21,22 +21,24 @@ export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 
 // NOTE: This following is a console log watcher for error logs.
 // Save and print all logs when error happens.
-let logs: string
+let logs: string = '';
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  // console.log(msg.text())
-  const text = msg.text()
-  logs += text + '\n'
+  const text = msg.text();
 
-  expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed)/)
+  // List of error messages to ignore
+  const ignoreErrors = [
+    /net::ERR_CONNECTION_REFUSED/,
+    /^Error with Permissions-Policy header:/
+  ];
 
-  // youtube video
-  // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
-  if (!text.match(/^Error with Permissions-Policy header:/)) {
-    expect(text, logs).not.toMatch(/^Error/)
+  // If the text matches any of the ignoreErrors, return early
+  if (ignoreErrors.some(error => text.match(error))) {
+    return;
   }
 
-  // NOTE: React warnings will be logged as error.
-  // expect(msg.type()).not.toBe('error')
+  logs += text + '\n';
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed)/);
+  expect(text, logs).not.toMatch(/^Error/);
 }
 
 base.beforeAll(async () => {

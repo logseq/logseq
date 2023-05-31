@@ -2,6 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as pathlib from 'path'
 import { modKey } from './util/basic'
+import { Block } from './types'
 
 // TODO: The file should be a facade of utils in the /util folder
 // No more additional functions should be added to this file
@@ -28,6 +29,26 @@ export async function lastBlock(page: Page): Promise<Locator> {
   // wait for textarea
   await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
   await page.waitForTimeout(100)
+  return page.locator('textarea >> nth=0')
+}
+
+/**
+ * Move the cursor to the beginning of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToBeginning(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  return page.locator('textarea >> nth=0')
+}
+
+/**
+ * Move the cursor to the end of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToEnd(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
   return page.locator('textarea >> nth=0')
 }
 
@@ -155,8 +176,12 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   console.log('Graph loaded for ' + path)
 }
 
+export async function editNthBlock(page: Page, n) {
+  await page.click(`.ls-block .block-content >> nth=${n}`)
+}
+
 export async function editFirstBlock(page: Page) {
-  await page.click('.ls-block .block-content >> nth=0')
+  await editNthBlock(page, 0)
 }
 
 /**
@@ -212,4 +237,69 @@ export async function navigateToStartOfBlock(page: Page, block: Block) {
   for (let i = 0; i < selectionStart; i++) {
     await page.keyboard.press('ArrowLeft')
   }
+}
+
+/**
+ * Repeats a key press a certain number of times.
+ * @param {Page} page - The Page object.
+ * @param {string} key - The key to press.
+ * @param {number} times - The number of times to press the key.
+ * @return {Promise<void>} - Promise which resolves when the key press repetition is done.
+ */
+export async function repeatKeyPress(page: Page, key: string, times: number): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await page.keyboard.press(key);
+  }
+}
+
+/**
+ * Moves the cursor a certain number of characters to the right (positive value) or left (negative value).
+ * @param {Page} page - The Page object.
+ * @param {number} shift - The number of characters to move the cursor. Positive moves to the right, negative to the left.
+ * @return {Promise<void>} - Promise which resolves when the cursor has moved.
+ */
+export async function moveCursor(page: Page, shift: number): Promise<void> {
+  const direction = shift < 0 ? 'ArrowLeft' : 'ArrowRight';
+  const absShift = Math.abs(shift);
+  await repeatKeyPress(page, direction, absShift);
+}
+
+/**
+ * Selects a certain length of text in a textarea to the right of the cursor.
+ * @param {Page} page - The Page object.
+ * @param {number} length - The number of characters to select.
+ * @return {Promise<void>} - Promise which resolves when the text selection is done.
+ */
+export async function selectCharacters(page: Page, length: number): Promise<void> {
+  await page.keyboard.down('Shift');
+  await repeatKeyPress(page, 'ArrowRight', length);
+  await page.keyboard.up('Shift');
+}
+
+/**
+ * Retrieves the selected text in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<string | null>} - Promise which resolves to the selected text or null.
+ */
+export async function getSelection(page: Page): Promise<string | null> {
+  const selection = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea')
+    return textarea?.value.substring(textarea.selectionStart, textarea.selectionEnd) || null
+  })
+
+  return selection
+}
+
+/**
+ * Retrieves the current cursor position in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<number | null>} - Promise which resolves to the cursor position or null.
+ */
+export async function getCursorPos(page: Page): Promise<number | null> {
+  const cursorPosition = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea');
+    return textarea ? textarea.selectionStart : null;
+  });
+
+  return cursorPosition;
 }

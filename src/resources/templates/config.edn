@@ -13,7 +13,7 @@
  :preferred-workflow :now
 
  ;; Exclude directories/files.
- ;; Example usage: 
+ ;; Example usage:
  ;; :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
@@ -87,7 +87,7 @@
 
  ;; Specify the first day of the week.
  ;; Available options:
- ;;  - integer from 0 to 6 (Monday to Sunday) 
+ ;;  - integer from 0 to 6 (Monday to Sunday)
  ;; Default value: 6 (Sunday)
  :start-of-week 6
 
@@ -110,22 +110,21 @@
  ;;  - `:eight-spaces` as eight spaces
  ;;  - `:four-spaces` as four spaces
  ;;  - `:two-spaces` as two spaces
- ;; - `:tab` as a tab character (default)
+ ;;  - `:tab` as a tab character (default)
  ;; :export/bullet-indentation :tab
 
  ;; Publish all pages within the Graph
- ;; regardless of whether individual pages have been marked as public.
+ ;; Regardless of whether individual pages have been marked as public.
  ;; Default value: false
  ;; :publishing/all-pages-public? false
 
- ;; Set the default home page and sidebar status.
- ;; Define the default home page and sidebar status. 
- ;; If unspecified, Logseq will load the journal page by default on startup. 
- ;; The `:page` value represents the name of the page displayed at startup. 
- ;; Available options for `:sidebar` are: 
- ;; - "Contents" to display the Contents page in the right sidebar. 
- ;; - A specific page name to display in the right sidebar. 
- ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"]. 
+ ;; Define the default home page and sidebar status.
+ ;; If unspecified, the journal page will be loaded on startup and the right sidebar will stay hidden.
+ ;; The `:page` value represents the name of the page displayed at startup.
+ ;; Available options for `:sidebar` are:
+ ;; - "Contents" to display the Contents page in the right sidebar.
+ ;; - A specific page name to display in the right sidebar.
+ ;; - An array of multiple pages, e.g., ["Contents" "Page A" "Page B"].
  ;; If `:sidebar` remains unset, the right sidebar will stay hidden.
  ;; Examples:
  ;; 1. Set "Changelog" as the home page and display "Contents" in the right sidebar:
@@ -144,7 +143,7 @@
  ;; :journals-directory "journals"
 
  ;; Set the default location for storing whiteboards.
- ;; If not specified, whiteboards will be stored in the 'whiteboards' subdirectory.
+ ;; Default value: "whiteboards"
  ;; :whiteboards-directory "whiteboards"
 
  ;; Enabling this option converts
@@ -155,7 +154,7 @@
  ;; Configure custom shortcuts.
  ;; Syntax:
  ;; 1. + indicates simultaneous key presses, e.g., `Ctrl+Shift+a`.
- ;; 2. A space between keys represents key chords, e.g., `t s` means 
+ ;; 2. A space between keys represents key chords, e.g., `t s` means
  ;;    pressing `t` followed by `s`.
  ;; 3. mod refers to `Ctrl` for Windows/Linux and `Command` for Mac.
  ;; 4. Use false to disable a specific shortcut.
@@ -190,6 +189,7 @@
  :ui/show-command-doc? true
 
  ;; Display empty bullet points.
+ ;; Default value: false
  :ui/show-empty-bullets? false
 
  ;; Pre-defined :view function to use with advanced queries.
@@ -286,10 +286,10 @@
  ;; Graph view configuration.
  ;; Example usage:
  ;; :graph/settings
- ;; {:orphan-pages?  true   ; Default value: true
- ;;  :builtin-pages? false  ; Default value: false
- ;;  :excluded-pages? false ; Default value: false
- ;;  :journal?       false} ; Default value: false
+ ;; {:orphan-pages?   true   ; Default value: true
+ ;;  :builtin-pages?  false  ; Default value: false
+ ;;  :excluded-pages? false  ; Default value: false
+ ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
  :favorites []
@@ -310,7 +310,7 @@
  ;; :block-hidden-properties #{:public :icon}
 
  ;; Create a page for all properties.
- ;; Default value: false
+ ;; Default value: true
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
@@ -341,7 +341,7 @@
  ;; Mobile features options
  ;; Gestures
  ;; Example usage:
- ;; :mobile 
+ ;; :mobile
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
  ;; Extra CodeMirror options
@@ -353,11 +353,11 @@
  ;;  :readOnly      false} ; Default value: false
 
  ;; Enable logical outdenting
- ;; Default value: false 
+ ;; Default value: false
  ;; :editor/logical-outdenting? false
 
  ;; Prefer pasting the file when text and a file are in the clipboard.
- ;; Default value: false 
+ ;; Default value: false
  ;; :editor/preferred-pasting-file? false
 
  ;; Quick capture templates for receiving content from other apps.
@@ -404,7 +404,7 @@
  ;; Warning:
  ;;   This is a dangerous operation. To modify the setting,
  ;;   access the 'Filename format' setting and follow the instructions.
- ;;   Othwerwise, You may need to manually rename all affected files and
+ ;;   Otherwise, You may need to manually rename all affected files and
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:

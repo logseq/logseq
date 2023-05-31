@@ -392,7 +392,9 @@
                        (util/stop event)
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
+                         ;; incoming href format: "/assets/whatever.ext"
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
+                               rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]
@@ -1781,15 +1783,17 @@
                        [:label (str order-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
-                  (:ui/show-empty-bullets? (state/get-config)))
+                  (:ui/show-empty-bullets? (state/get-config))
+                  collapsed?
+                  collapsable?)
               (not doc-mode?))
          bullet
 
          (or
            (and empty-content?
                 (not edit?)
-                (not (:block/top? block))
-                (not (:block/bottom? block))
+                (not (:block.temp/top? block))
+                (not (:block.temp/bottom? block))
                 (not (util/react *control-show?)))
            (and doc-mode?
                 (not collapsed?)
@@ -2060,7 +2064,8 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  #{:logseq.query/nlp-date})
+  (into #{:logseq.query/nlp-date}
+        gp-property/editable-view-and-table-properties))
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")
@@ -2210,7 +2215,10 @@
                 (editor-handler/clear-selection!)
                 (editor-handler/unhighlight-blocks!)
                 (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                               cursor-range (util/caret-range (gdom/getElement block-id))
+                               cursor-range (some-> (gdom/getElement block-id)
+                                                    (dom/by-class "block-content-wrapper")
+                                                    first
+                                                    util/caret-range)
                                {:block/keys [content format]} block
                                content (->> content
                                             (property/remove-built-in-properties format)
@@ -2302,7 +2310,8 @@
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [{:block/keys [title body] :as block} (if (:block/title block) block
+  (let [content (property/remove-built-in-properties format content)
+        {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
@@ -2314,7 +2323,7 @@
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
-                         
+
         attrs (cond->
                {:blockid       (str uuid)
                 :data-type (name block-type)
@@ -2769,7 +2778,8 @@
         block (if ref?
                 (merge block (db/sub-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs level format content properties]} block
+        {:block/keys [uuid children pre-block? refs level format content properties]} block
+        {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2806,6 +2816,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
+        own-number-list? (:own-order-number-list? config)
+        order-list? (boolean own-number-list?)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2818,6 +2830,7 @@
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect")
+                    (when order-list? " is-order-list")
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
@@ -2846,7 +2859,7 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2
+     [:div.block-main-container.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
@@ -2912,7 +2925,7 @@
 
    :should-update (fn [old-state new-state]
                     (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
-                                               :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                                               :block/properties :block/left :block/children :block/_refs :block.temp/bottom? :block.temp/top?]
                           config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
@@ -3022,8 +3035,8 @@
 
 (defn table
   [config {:keys [header groups col_groups]}]
-  (case (get-shui-component-version :table config) 
-    2 (shui/table-v2 {:data (concat [[header]] groups)} 
+  (case (get-shui-component-version :table config)
+    2 (shui/table-v2 {:data (concat [[header]] groups)}
                      (make-shui-context config inline))
     1 (let [tr (fn [elm cols]
                  (->elem
@@ -3070,7 +3083,7 @@
         clocks (reverse (sort-by str clocks))]
         ;; TODO: display states change log
         ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-        
+
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
@@ -3306,8 +3319,8 @@
   [config blocks idx item]
   (let [item (->
               (dissoc item :block/meta)
-              (assoc :block/top? (zero? idx)
-                     :block/bottom? (= (count blocks) (inc idx))))
+              (assoc :block.temp/top? (zero? idx)
+                     :block.temp/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))

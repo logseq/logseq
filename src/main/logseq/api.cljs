@@ -652,13 +652,13 @@
       nil)))
 
 (def ^:export update_block
-  (fn [block-uuid content ^js _opts]
+  (fn [block-uuid content ^js opts]
     (let [repo       (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing?   (and edit-input (string/ends-with? edit-input (str block-uuid)))]
       (if editing?
         (state/set-edit-content! edit-input content)
-        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content))
+        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))
       nil)))
 
 (def ^:export move_block
@@ -700,7 +700,7 @@
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
-        (let [block (db/pull (:id right-sibling))]
+        (let [block (db/pull (:db/id right-sibling))]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed

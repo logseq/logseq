@@ -27,6 +27,7 @@
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
 		FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF527BDFEF500F3206B /* FsWatcher.m */; };
+		FE96D6102A1B811A001ECE32 /* SharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE96D60F2A1B811A001ECE32 /* SharedData.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +84,7 @@
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
 		FE647FF327BDFEDE00F3206B /* FsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsWatcher.swift; sourceTree = "<group>"; };
 		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
+		FE96D60F2A1B811A001ECE32 /* SharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,6 +158,7 @@
 			children = (
 				5FFF7D7927E4E70700B00DA8 /* ShareViewController.entitlements */,
 				5FFF7D6C27E343FA00B00DA8 /* ShareViewController.swift */,
+				FE96D60F2A1B811A001ECE32 /* SharedData.swift */,
 				5FFF7D6E27E343FA00B00DA8 /* MainInterface.storyboard */,
 				5FFF7D7127E343FA00B00DA8 /* Info.plist */,
 			);
@@ -345,6 +348,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FE96D6102A1B811A001ECE32 /* SharedData.swift in Sources */,
 				5FFF7D6D27E343FA00B00DA8 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -438,7 +442,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -492,7 +496,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
@@ -513,9 +517,9 @@
 				DEVELOPMENT_TEAM = K378MFWK59;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.8;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -540,9 +544,9 @@
 				DEVELOPMENT_TEAM = K378MFWK59;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -565,9 +569,9 @@
 				INFOPLIST_FILE = ShareViewController/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.8;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.ShareViewController;
@@ -592,9 +596,9 @@
 				INFOPLIST_FILE = ShareViewController/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.8;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.ShareViewController;
 				PRODUCT_NAME = "$(TARGET_NAME)";

@@ -122,7 +122,7 @@ body"
 (deftest ^:integration test->edn
   (let [graph-dir "test/docs-0.9.2"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
-        files (gp-cli/build-graph-files graph-dir)
+        files (#'gp-cli/build-graph-files graph-dir {})
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
                                  (let [format (if (string/ends-with? path ".org")
@@ -139,7 +139,7 @@ body"
             "Heading" 5648,
             "Hiccup" 9,
             "List" 22,
-            "Paragraph" 573,
+            "Paragraph" 571,
             "Properties" 87,
             "Property_Drawer" 423,
             "Quote" 24,

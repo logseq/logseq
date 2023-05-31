@@ -27,7 +27,7 @@
       (js/setTimeout #(util/scroll-editor-cursor element) 50)))
   state)
 
-(defn did-remount!
+(defn will-remount!
   [_old-state state]
   (keyboards-handler/esc-save! state)
   state)
@@ -36,12 +36,14 @@
   [state]
   (let [{:keys [value]} (get-state)]
     (editor-handler/clear-when-saved!)
-    ;; TODO: ugly
-    (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))
+    (when (and
+           (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
+           ;; Don't trigger auto-save if the latest op is undo or redo
+           (not (contains? #{:undo :redo} (state/get-editor-latest-op))))
       (editor-handler/save-block! (get-state) value)))
   state)
 
 (def lifecycle
   {:did-mount did-mount!
-   :did-remount did-remount!
+   :will-remount will-remount!
    :will-unmount will-unmount})

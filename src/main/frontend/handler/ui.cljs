@@ -17,26 +17,18 @@
             [promesa.core :as p]
             [logseq.common.path :as path]))
 
-(defn- get-css-var-value
-  [var-name]
-  (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
-
 ;; sidebars
 (def *right-sidebar-resized-at (atom (js/Date.now)))
 
-(defn- get-right-sidebar-width
-  []
-  (or (.. (js/document.getElementById "right-sidebar") -style -width)
-      (get-css-var-value "--right-sidebar-width")))
-
 (defn persist-right-sidebar-width!
-  []
-  (storage/set "ls-right-sidebar-width" (get-right-sidebar-width)))
+  [width]
+  (state/set-state! :ui/sidebar-width width)
+  (storage/set "ls-right-sidebar-width" width))
 
 (defn restore-right-sidebar-width!
   []
   (when-let [width (storage/get "ls-right-sidebar-width")]
-    (.setProperty (.-style (js/document.getElementById "right-sidebar")) "width" width)))
+    (state/set-state! :ui/sidebar-width width)))
 
 (defn close-left-sidebar!
   []

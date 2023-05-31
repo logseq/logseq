@@ -139,7 +139,17 @@ By convention, a namespace's tests are found at a corresponding namespace
 of the same name with an added `-test` suffix. For example, tests
 for `frontend.db.model` are found in `frontend.db.model-test`.
 
-There are a couple different ways to develop with tests:
+There are a couple different ways to run tests:
+
+* [Focus tests](#focus-tests) - Run one or more tests from the CLI
+* [Autorun tests](#autorun-tests) - Autorun tests from the CLI
+* [Repl tests](#repl-tests) - Run tests from REPL
+
+There a couple types of tests and they can overlap with each other:
+
+* [Database tests](#database-tests) - Tests that involve a datascript DB.
+* [Performance tests](#performance-tests) - Tests that aim to measure and enforce a performance characteristic.
+* [Async tests](#async-tests) - Tests that run async code and require some helpers.
 
 #### Focus Tests
 
@@ -166,6 +176,15 @@ To run tests automatically on file save, run `clojure -M:test watch test
 the `:ns-regexp` option e.g. `clojure -M:test watch test --config-merge
 '{:autorun true :ns-regexp "frontend.util.page-property-test"}'`.
 
+#### REPL tests
+
+Most unit tests e.g. ones that are browser compatible and don't require node libraries, can be run from the REPL. To do so:
+
+* Start a REPL for your editor. See [here for an example](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md#repl-setup).
+* Load a test namespace.
+* Run `(cljs.test/run-tests)` to run tests for the current test namespace.
+
+
 #### Database tests
 
 To write a test that uses a datascript db:
@@ -188,7 +207,7 @@ To write a performance test:
 
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
-### Async Unit Testing
+#### Async Tests
 
 Async unit testing is well supported in ClojureScript.
 https://clojurescript.org/tools/testing#async-testing is a good guide for how to
@@ -263,7 +282,7 @@ point out:
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
 
   ```sh
-  bb dev:validate-repo-config-edn templates/config.edn
+  bb dev:validate-repo-config-edn src/resources/templates/config.edn
   ```
 
 * `dev:publishing` - Build a publishing app for a given graph dir. If the

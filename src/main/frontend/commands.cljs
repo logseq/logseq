@@ -278,7 +278,8 @@
                [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
-     ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
+     ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
+                                                     :backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
                (let [file (draw/file-name)
@@ -402,17 +403,24 @@
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
+        surfix (subs edit-content current-pos)
         new-value (str prefix
                        value
-                       (subs edit-content current-pos))
+                       surfix)
         new-pos (- (+ (count prefix)
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when check-fn
-      (check-fn new-value (dec (count prefix)) new-pos))))
+    (state/set-edit-content! (state/get-edit-input-id)
+                             (str prefix value))
+    ;; HACK: save scroll-pos of current pos, then add trailing content
+    (let [scroll-container (util/nearest-scrollable-container input)
+          scroll-pos (.-scrollTop scroll-container)]
+      (state/set-block-content-and-last-pos! id new-value new-pos)
+      (cursor/move-cursor-to input new-pos)
+      (set! (.-scrollTop scroll-container) scroll-pos)
+      (when check-fn
+        (check-fn new-value (dec (count prefix)) new-pos)))))
 
 (defn simple-replace!
   [id value selected

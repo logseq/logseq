@@ -44,6 +44,8 @@ After cloning the [Logseq repository](https://github.com/logseq/logseq), there a
 
   - `src/test/` contains all the tests and `src/dev-cljs/` contains some development utilities.
 
+  - `src/resources/` - directory and classpath for resources used by Clojure(Script)
+
   - `src/main/frontend/` contains code that powers the Logseq editor. Folders and files inside are organized by features or functions. For example, `components` contains all the UI components and `handler` contains all the event-handling code. You can explore on your own interest.
 
   - `src/main/logseq/` contains the api used by plugins.

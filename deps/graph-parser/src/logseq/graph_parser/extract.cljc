@@ -208,7 +208,7 @@
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta :block/anchor))))]
+                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta))))]
       [pages blocks])
     (catch :default e
       (log/error :exception e))))

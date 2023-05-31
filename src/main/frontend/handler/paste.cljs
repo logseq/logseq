@@ -105,6 +105,15 @@
   [text]
   (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
 
+(defn- get-revert-cut-tx
+  "Get reverted previous cut tx when paste"
+  [blocks]
+  (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
+        recent-cut-block-ids (->> retracted-block-ids (map second) (set))]
+    (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
+    (when (= (set (map :block/uuid blocks)) recent-cut-block-ids)
+      (seq revert-tx))))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
@@ -120,7 +129,12 @@
                               (commands/simple-insert! input-id text nil)))
            internal-paste? (seq copied-blocks)]
        (if internal-paste?
-         (editor-handler/paste-blocks copied-blocks {})
+         (let [revert-cut-tx (get-revert-cut-tx copied-blocks)
+               cut-paste? (boolean (seq revert-cut-tx))
+               keep-uuid? cut-paste?]
+           (editor-handler/paste-blocks copied-blocks {:revert-cut-tx revert-cut-tx
+                                                       :cut-paste? cut-paste?
+                                                       :keep-uuid? keep-uuid?}))
          (let [shape-refs-text (when (and (not (string/blank? html))
                                           (get-whiteboard-tldr-from-text html))
                                  ;; text should always be prepared block-ref generated in tldr
@@ -219,12 +233,20 @@
     (state/set-state! :editor/on-paste? true)
     (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
-          text (.getData clipboard-data "text")]
+          text (.getData clipboard-data "text")
+          has-files? (seq (.-files clipboard-data))]
       (cond
         (and (string/blank? text) (string/blank? html))
+        ;; When both text and html are blank, paste file if exists.
+        ;; NOTE: util/stop is not called here if no file is provided, 
+        ;; so the default paste behavior of the native platform will be used.
+        (when has-files?
+          (paste-file-if-exists id e))
+
+        ;; both file attachment and text/html exist
+        (and has-files? (state/preferred-pasting-file?))
         (paste-file-if-exists id e)
-        (and (seq (.-files clipboard-data)) (state/preferred-pasting-file?))
-        (paste-file-if-exists id e)
+
         :else
         (let [text' (or (when (gp-util/url? text)
                           (wrap-macro-url text))

@@ -1,4 +1,4 @@
-(ns logseq.publishing
+(ns ^:node-only logseq.publishing
   "This node only ns provides api fns for exporting a publishing app"
   (:require [logseq.publishing.html :as publish-html]
             [logseq.publishing.export :as publish-export]))
