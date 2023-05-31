@@ -521,4 +521,12 @@
  :command.whiteboard/zoom-to-selection              "Zoom para ajustar a la selección"
  :shortcut.category/whiteboard                      "Pizarra"
  :context-menu/toggle-number-list                   "Alternar lista de números"
- :file-sync/rsapi-cannot-upload-err                 "Incapaz de comenzar la sincronización, favor de checar si..."}
+ :file-sync/rsapi-cannot-upload-err                 "Incapaz de comenzar la sincronización, favor de checar si..."
+ :toggle-theme                                      "Alternar tema"
+ :settings-page/native-titlebar                     "Barra de título nativa"
+ :settings-page/native-titlebar-desc                "Habilta la barra de título nativa de la ventana en Windows y ..."
+ :window/close                                      "Cerrar"
+ :window/exit-fullscreen                            "Salir de pantalla completa"
+ :window/maximize                                   "Maximizar"
+ :window/minimize                                   "Minimizar"
+ :window/restore                                    "Restaurar"}
