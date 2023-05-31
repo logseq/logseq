@@ -852,31 +852,25 @@
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
-     [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (dec index)]
-             (when (>= idx 0)
-               (nth-safe blocks idx))))))))
+     "Gets previous non-collapsed block. If given a container
+      looks up blocks in that container e.g. for embed"
+     ([block] (get-prev-block-non-collapsed block {}))
+     ([block {:keys [container]}]
+      (when-let [blocks (if container
+                          (get-blocks-noncollapse container)
+                          (get-blocks-noncollapse))]
+        (let [block-id (.-id block)
+              block-ids (mapv #(.-id %) blocks)]
+          (when-let [index (.indexOf block-ids block-id)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (dec index)]
-             (when (>= idx 0)
-               (nth-safe blocks idx))))))))
-
-#?(:cljs
-   (defn get-prev-block-non-collapsed-in-embed
-     [blocks-container block]
-     (when-let [blocks (get-blocks-noncollapse blocks-container)]
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
