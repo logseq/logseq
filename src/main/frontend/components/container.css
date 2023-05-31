@@ -536,6 +536,7 @@ html[data-theme='dark'] {
 
   .resizer {
     @apply absolute top-0 bottom-0;
+    touch-action: none;
     left: 0;
     width: 4px;
     user-select: none;

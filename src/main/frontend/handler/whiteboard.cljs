@@ -224,7 +224,7 @@
   ([name]
    (when-not config/publishing?
      (create-new-whiteboard-page! name)
-     (route-handler/redirect-to-whiteboard! name))))
+     (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true}))))
 
 (defn ->logseq-portal-shape
   [block-id point]
@@ -328,7 +328,7 @@
                                                     :assets assets
                                                     :bindings bindings})))))
 (defn should-populate-onboarding-whiteboard?
-  "When there is not whiteboard, or there is only whiteboard that is the given page name, we should populate the onboarding whiteboard"
+  "When there is no whiteboard, or there is only one whiteboard that has the given page name, we should populate the onboarding shapes"
   [page-name]
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
     (and (or (empty? whiteboards)
