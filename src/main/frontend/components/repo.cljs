@@ -146,8 +146,15 @@
         repo-links (mapv
                     (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-db? url)
-                            repo-path (if local? (db/get-repo-name url) GraphName )
-                            short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
+                            db-only? (config/db-only? url)
+                            repo-path (cond
+                                        local? (db/get-repo-name url)
+                                        db-only? url
+                                        :else GraphName)
+                            short-repo-name (cond
+                                              local? (text-util/get-graph-name-from-path repo-path)
+                                              db-only? url
+                                              :else GraphName)]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1.flex.items-center
@@ -157,9 +164,9 @@
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
-                                                        (if-not local?
-                                                          (state/pub-event! [:graph/pull-down-remote-graph graph])
-                                                          (state/pub-event! [:graph/switch url]))))}})))
+                                                        (if (or local? db-only?)
+                                                          (state/pub-event! [:graph/switch url])
+                                                          (state/pub-event! [:graph/pull-down-remote-graph graph]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
                        (when (and nfs-repo?
