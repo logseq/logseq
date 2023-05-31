@@ -98,8 +98,9 @@
             avs (->> (gobj/get block "datoms")
                      (transit/read t-reader))]
         (doseq [[a v] avs]
-          (let [datom (eav->datom uuid->db-id-map [eid a v])]
-            (conj! datoms datom)))))
+          (when (not= :block/uuid a)
+            (let [datom (eav->datom uuid->db-id-map [eid a v])]
+              (conj! datoms datom))))))
 
     (let [all-datoms (persistent! datoms)
           new-db (util/profile
