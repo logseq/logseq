@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest are is]]
             [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.text :as text]
             [frontend.fs.diff-merge :as fs-diff]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.db.conn :as conn]
@@ -68,6 +69,16 @@
    {:body "b" :uuid nil :level 2}
    {:body "c" :uuid nil :level 3}]
 
+"- a
+\t- b
+\t\t- c
+\t\t  multiline
+- d"
+[{:body "a" :uuid nil :level 1}
+ {:body "b" :uuid nil :level 2}
+ {:body "c\nmultiline" :uuid nil :level 3}
+ {:body "d" :uuid nil :level 1}]
+
   "## hello
 \t- world
 \t\t- nice
@@ -105,7 +116,7 @@
     "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58
 \t- b
 \t\t- c"
-[{:body "a\n id:: 63e25526-3612-4fb1-8cf9-f66db1254a58" 
+[{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58" 
   :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
  {:body "b" :uuid nil :level 2}
  {:body "c" :uuid nil :level 3}]))
@@ -127,7 +138,10 @@
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-    [[[-1 {:body "## hello"
+    ;; Empty op, because no insertion op before the first base block required
+    ;; See https://github.com/logseq/diff-merge#usage
+    [[]
+     [[-1 {:body "## hello"
           :level 2
           :uuid nil}]
       [1  {:body "## Halooooo"
@@ -162,7 +176,10 @@
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-[[[-1 {:body "## hello"
+;; Empty op, because no insertion op before the first base block required
+;; See https://github.com/logseq/diff-merge#usage
+[[]
+ [[-1 {:body "## hello"
        :level 2
        :uuid nil}]
   [1  {:body "## Halooooo"
@@ -171,7 +188,7 @@
   [1 {:body "world"
       :level 2
       :uuid nil}]]
- [[-1 {:body "world\n  id:: 63e25526-3612-4fb1-8cf9-abcd12354abc"
+ [[-1 {:body "world\nid:: 63e25526-3612-4fb1-8cf9-abcd12354abc"
       :level 2
       :uuid "63e25526-3612-4fb1-8cf9-abcd12354abc"}]]
  [[0 {:body "nice"
@@ -358,3 +375,17 @@
       (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
       foo-new-content
       "foo-error-cap")))
+
+(deftest test-remove-indentation-spaces
+  (is (= "" (gp-mldoc/remove-indentation-spaces "" 0 false)))
+  (is (= "" (gp-mldoc/remove-indentation-spaces "" 3 true)))
+  
+  (is (= "- nice\n  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 3 true)))
+  (is (= "\t\t\t- nice\n  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 3 false)))
+  (is (= "\t\t\t- nice\n\t\t\t  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 0 true))))
+
+(deftest test-remove-level-spaces
+  ;; Test when `format` is nil
+  (is (= "nice\n\t\t\t  good" (text/remove-level-spaces "\t\t\t- nice\n\t\t\t  good" :markdown "-")))
+  (is (= "- nice" (text/remove-level-spaces "\t\t\t- nice" :markdown "")))
+  (is (= "nice" (text/remove-level-spaces "\t\t\t- nice" :markdown "-"))))
