@@ -56,8 +56,7 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.db.listener :as db-listener]))
+            [rum.core :as rum]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -540,7 +539,7 @@
                          insert-new-block-aux!)]
          (insert-fn config block value
                     {:ok-handler
-                     (fn [last-block]
+                     (fn insert-new-block!-ok-handler [last-block]
                        (clear-when-saved!)
                        (edit-block! last-block 0 id))}))))
    (state/set-editor-op! nil)))
@@ -3620,7 +3619,7 @@
       :else
       (do
         (util/stop e)
-        (when-not (:selection/selected-all? @state/state)
+        (when-not @(:selection/selected-all? @state/state)
           (if-let [block-id (some-> (first (state/get-selection-blocks))
                                     (dom/attr "blockid")
                                     uuid)]

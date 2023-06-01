@@ -142,14 +142,14 @@
       :db/persisted?                         {}
       :cursor-range                          nil
 
-      :selection/mode                        false
+      :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
-      :selection/blocks                      []
-      :selection/start-block                 nil
+      :selection/blocks                      (atom [])
+      :selection/start-block                 (atom nil)
       ;; either :up or :down, defaults to down
       ;; used to determine selection direction when two or more blocks are selected
-      :selection/direction                   :down
-      :selection/selected-all?               false
+      :selection/direction                   (atom :down)
+      :selection/selected-all?               (atom false)
       :custom-context-menu/show?             false
       :custom-context-menu/links             nil
       :custom-context-menu/position          nil
@@ -656,7 +656,7 @@ Similar to re-frame subscriptions"
 (defn sub-block-selected?
   [container-id block-uuid]
   (rum/react
-   (rum/derived-atom [(rum/cursor state :selection/blocks)] [::select-block container-id block-uuid]
+   (rum/derived-atom [(:selection/blocks @state)] [::select-block container-id block-uuid]
      (fn [s]
        (contains? (set (get-selected-block-ids s)) block-uuid)))))
 
@@ -716,14 +716,26 @@ Similar to re-frame subscriptions"
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (swap! s assoc-in path-in-sub-atom value)
+      (let [old-v (get-in @s path-in-sub-atom)]
+        (when (not= old-v value)
+          (swap! s assoc-in path-in-sub-atom value)))
 
       (and s-atom? path-in-sub-atom)
-      (swap! s assoc path-in-sub-atom value)
+      (let [old-v (get @s path-in-sub-atom)]
+        (when (not= old-v value)
+          (swap! s assoc path-in-sub-atom value)))
 
-      s-atom?    (reset! s value)
-      path-coll? (swap! state assoc-in path value)
-      :else      (swap! state assoc path value)))
+      s-atom?
+      (when (not= @s value)
+        (reset! s value))
+
+      path-coll?
+      (when (not= s value)
+        (swap! state assoc-in path value))
+
+      :else
+      (when (not= s value)
+        (swap! state assoc path value))))
   nil)
 
 (defn update-state!
@@ -990,12 +1002,12 @@ Similar to re-frame subscriptions"
 
 (defn get-selection-start-block
   []
-  (get @state :selection/start-block))
+  @(get @state :selection/start-block))
 
 (defn set-selection-start-block!
   [start-block]
   (when-not (get-selection-start-block)
-    (swap! state assoc :selection/start-block start-block)))
+    (set-state! :selection/start-block start-block)))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1003,27 +1015,25 @@ Similar to re-frame subscriptions"
   ([blocks direction]
    (when (seq blocks)
      (let [blocks (util/sort-by-height (remove nil? blocks))]
-       (swap! state assoc
-             :selection/mode true
-             :selection/blocks blocks
-             :selection/direction direction)))))
+       (set-state! :selection/mode true)
+       (set-state! :selection/blocks blocks)
+       (set-state! :selection/direction direction)))))
 
 (defn into-selection-mode!
   []
-  (swap! state assoc :selection/mode true))
+  (set-state! :selection/mode true))
 
 (defn clear-selection!
   []
-  (swap! state assoc
-         :selection/mode false
-         :selection/blocks nil
-         :selection/direction :down
-         :selection/start-block nil
-         :selection/selected-all? false))
+  (set-state! :selection/mode false)
+  (set-state! :selection/blocks nil)
+  (set-state! :selection/direction :down)
+  (set-state! :selection/start-block nil)
+  (set-state! :selection/selected-all false))
 
 (defn get-selection-blocks
   []
-  (->> (:selection/blocks @state)
+  (->> @(:selection/blocks @state)
        (remove nil?)))
 
 (defn get-selection-block-ids
@@ -1038,7 +1048,7 @@ Similar to re-frame subscriptions"
 
 (defn in-selection-mode?
   []
-  (:selection/mode @state))
+  @(:selection/mode @state))
 
 (defn selection?
   "True sense of selection mode with valid selected block"
@@ -1047,31 +1057,29 @@ Similar to re-frame subscriptions"
 
 (defn conj-selection-block!
   [block direction]
-  (swap! state assoc
-         :selection/mode true
-         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
-                               (util/sort-by-height))
-         :selection/direction direction))
+  (set-state! :selection/mode true)
+  (set-state! :selection/blocks (-> (conj (vec @(:selection/blocks @state)) block)
+                                    (util/sort-by-height)))
+  (set-state! :selection/direction direction))
 
 (defn drop-last-selection-block!
   []
-  (let [direction (:selection/direction @state)
+  (let [direction @(:selection/direction @state)
         up? (= direction :up)
-        blocks (:selection/blocks @state)
+        blocks @(:selection/blocks @state)
         last-block (if up?
                      (first blocks)
                      (peek (vec blocks)))
         blocks' (if up?
                   (rest blocks)
                   (pop (vec blocks)))]
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks blocks')
+    (set-state! :selection/mode true)
+    (set-state! :selection/blocks blocks')
     last-block))
 
 (defn get-selection-direction
   []
-  (:selection/direction @state))
+  @(:selection/direction @state))
 
 (defn show-custom-context-menu!
   [links position]
