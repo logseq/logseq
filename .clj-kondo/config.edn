@@ -39,6 +39,7 @@
              electron.utils utils
              "/electron/utils" js-utils
              frontend.commands commands
+             frontend.components.block.macros block-macros
              frontend.components.query query
              frontend.components.query.result query-result
              frontend.config config
