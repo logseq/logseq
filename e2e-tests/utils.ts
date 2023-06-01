@@ -4,6 +4,9 @@ import * as pathlib from 'path'
 import { modKey } from './util/basic'
 import { Block } from './types'
 
+// Default key press delay
+export const STD_DELAY = 100
+
 // TODO: The file should be a facade of utils in the /util folder
 // No more additional functions should be added to this file
 // Move the functions to the corresponding files in the /util folder
