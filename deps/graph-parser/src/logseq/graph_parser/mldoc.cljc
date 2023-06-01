@@ -75,12 +75,16 @@
           js/JSON.stringify))))
 
 (defn remove-indentation-spaces
+  "Remove the indentation spaces from the content. Only for markdown."
   [s level remove-first-line?]
   (let [lines (string/split-lines s)
         [f & r] lines
         body (map (fn [line]
+                    ;; Check if the indentation area only contains white spaces
                     (if (string/blank? (gp-util/safe-subs line 0 level))
+                      ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
                       (gp-util/safe-subs line level)
+                      ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
