@@ -64,7 +64,7 @@
               pos-meta (assoc pos-meta :end_pos end-pos)]
           (cond
             (gp-block/heading-block? block)
-            (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
+            (let [content (gp-block/get-block-content encoded-content (second block) format pos-meta block-pattern)]
               (recur (conj headings {:body  content
                                      :level (:level (second block))
                                      :uuid  (:id properties)})
@@ -80,6 +80,7 @@
             (recur headings (rest blocks) properties (:end_pos pos-meta))))
         (if (empty? properties)
           (reverse headings)
+          ;; Add pre-blocks
           (let [[block _] (first blocks)
                 pos-meta {:start_pos 0 :end_pos end-pos}
                 content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)
