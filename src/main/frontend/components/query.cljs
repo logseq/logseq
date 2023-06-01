@@ -59,7 +59,6 @@
                                      (:block/name (ffirst result))
                                      (:block/uuid (first (second (first result))))
                                      true)]
-    (println "this should be a function" inline)
     (if @*query-error
       (do
         (log/error :exception @*query-error)
