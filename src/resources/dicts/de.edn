@@ -299,6 +299,7 @@
  :settings-page/custom-configuration "Individuelle Konfiguration"
  :settings-page/custom-date-format "Bevorzugtes Datumsformat"
  :settings-page/custom-date-format-warning "Neuindizierung erforderlich! Vorhandene Journal-Verweise würden nicht mehr funktionieren!"
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/custom-global-configuration "Benutzerdefinierte globale Konfiguration"
  :settings-page/custom-theme "Individuelles Theme"
  :settings-page/customize-shortcuts "Tastaturbefehle"

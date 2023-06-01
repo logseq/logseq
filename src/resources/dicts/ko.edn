@@ -319,6 +319,7 @@
  :settings-page/beta-features "베타 기능"
  :settings-page/clear-cache-warning "캐시 삭제로, 현재 작업 내용을 잃을 수 있습니다."
  :settings-page/custom-date-format-warning "인덱스 재생성이 필요합니다. 일지 레퍼런스가 잘못될 수 있습니다."
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/custom-global-configuration "전역 사용자 설정"
  :settings-page/disable-sentry-desc "Logseq는 사용자의 로컬 그래프 데이터베이스 정보를 수집하지 않습니다."
  :settings-page/edit-global-config-edn "전역 config.edn 수정"

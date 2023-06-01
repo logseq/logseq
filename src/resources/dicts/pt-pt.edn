@@ -170,6 +170,7 @@
  :settings-page/show-full-blocks "Mostrar todas a linhas de uma referência de bloco"
  :settings-page/custom-date-format "Formato de data preferido"
  :settings-page/custom-date-format-warning "Reindexação necessária! As referências de páginas diárias já existentes não funcionariam mais!"
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/preferred-file-format "Formato de ficheiro preferido"
  :settings-page/preferred-workflow "Workflow preferido"
  :settings-page/preferred-pasting-file "Preferir colar ficheiro"

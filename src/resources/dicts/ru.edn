@@ -192,6 +192,7 @@
  :settings-page/auto-expand-block-refs "Автоматически раскрывать ссылки на блок при увеличении масштаба"
  :settings-page/custom-date-format "Формат даты"
  :settings-page/custom-date-format-warning "Требуется переиндексация! Существующие ссылки на журналы будут нарушены!"
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/preferred-file-format "Предпочитаемый формат файлов"
  :settings-page/preferred-workflow "Предпочтительный рабочий процесс"
  :settings-page/preferred-pasting-file "Предпочтительнее вставлять файл"

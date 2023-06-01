@@ -345,6 +345,7 @@
  :settings-page/beta-features "Características Beta"
  :settings-page/clear-cache-warning "Limpiar la cache va a desechar los grafos abiertos. Vas a..."
  :settings-page/custom-date-format-warning "¡Se requiere reindexar! Las referencias existentes del diario pod..."
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/custom-global-configuration "Configuración global personalizada"
  :settings-page/disable-sentry-desc " Logseq nunca va a colectar tu base de datos de grafos local ... "
  :settings-page/edit-global-config-edn "Editar config.edn global"
