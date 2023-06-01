@@ -90,6 +90,14 @@
                   (reverse headings))))))))
 
 
+(defn- prepend-lines
+  "prepend prefix to every lines of content"
+  [prefix content]
+  (->> content
+       (string/split-lines)
+       (map (fn [line] (str prefix line)))
+       (string/join "\n")))
+
 (defn- rebuild-content
   "translate [[[op block]]] to merged content"
   [_base-diffblocks diffs format]
@@ -100,7 +108,7 @@
          ops-fn (fn [ops]
                   (map (fn [[op {:keys [body level]}]]
                          (when (or (= op 0) (= op 1)) ;; equal or insert
-                           (str (level-prefix-fn level) body)))
+                           (str (level-prefix-fn level) "-" (prepend-lines " " body))))
                        ops))]
     (->> diffs
          (mapcat ops-fn)
@@ -114,11 +122,11 @@
                            (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))))
         merger (Merger.)
         base-ast (->ast base)
-        base-diffblocks (ast->diff-blocks base-ast base format {})
+        base-diffblocks (ast->diff-blocks base-ast base format {:block-pattern "-"})
         income-ast (->ast income)
-        income-diffblocks (ast->diff-blocks income-ast income format {})
+        income-diffblocks (ast->diff-blocks income-ast income format {:block-pattern "-"})
         current-ast (->ast current)
-        current-diffblocks (ast->diff-blocks current-ast current format {})
+        current-diffblocks (ast->diff-blocks current-ast current format {:block-pattern "-"})
         branch-diffblocks [income-diffblocks current-diffblocks]
         merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
         merged-diff (bean/->clj merged)
