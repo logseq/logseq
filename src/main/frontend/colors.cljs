@@ -1512,7 +1512,6 @@
      (get-in radix [(keyword color-name) (keyword color-value)]))))
 
 (defn set-radix [color]
-  (js/console.log "set-radix" (pr-str color))
   (let [style-tag (or (js/document.querySelector "style#color-variables") 
                       (js/document.createElement "style"))
         steps ["01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "01-alpha" "02-alpha" "03-alpha" "04-alpha" "05-alpha" "06-alpha" "07-alpha" "08-alpha" "09-alpha" "10-alpha" "11-alpha" "12-alpha"]
@@ -1528,6 +1527,7 @@
                           "--ls-secondary-text-color: var(--rx-" (name gray) "-11); "
                           "--ls-primary-text-color: var(--rx-" (name gray) "-12); "
                           "--ls-border-color: var(--rx-" (name gray) "-05); "
+                          "--ls-block-highlight-color: var(--rx-" (name gray) "-04); "
                           "--ls-secondary-border-color: var(--rx-" (name color) "-05); "
                           "--ls-wb-stroke-color-default: var(--rx-" (name color) "-07); " 
                           "--ls-wb-background-color-default: var(--rx-" (name color) "-04); "
@@ -1543,6 +1543,5 @@
     (js/document.head.appendChild style-tag)))
 
 (defn unset-radix []
-  (js/console.log "unset-radix")
   (when-let [style-tag (js/document.querySelector "style#color-variables")]
     (js/document.head.removeChild style-tag)))

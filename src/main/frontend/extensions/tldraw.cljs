@@ -159,9 +159,9 @@
 
        (when
         (and populate-onboarding? (not loaded-app))
-         [:div.absolute.inset-0.flex.items-center.justify-center
-          {:style {:z-index 200}}
-          (ui/loading "Loading onboarding whiteboard ...")])
+        [:div.absolute.inset-0.flex.items-center.justify-center
+         {:style {:z-index 200}}
+         (ui/loading "Loading onboarding whiteboard ...")])
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount

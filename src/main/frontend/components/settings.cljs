@@ -1,6 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
@@ -308,42 +309,42 @@
 
 (defn theme-row [t dark?]
   (let [color-accent (state/sub :color/accent)
-        pick-theme [:div.grid {:style {:grid-template-columns "repeat(15, 1fr)" 
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(17, 1fr)" 
                                        :gap "0.75rem"
-                                       :overflow :scroll 
+                                       :overflow-x :scroll 
                                        :width "100%"
                                        :padding-left "0.25rem"}}
-                    [:div.theme-row--color {:on-click #(state/unset-color-accent!)}
-                     [:div.theme-row--color-swatch {:style {"--background"        "var(--rx-gray-03)"
-                                                            "--background-hover"  "var(--rx-gray-04)"
-                                                            "--background-active" "var(--rx-gray-05)"
-                                                            "--border"            "var(--rx-gray-07)"
-                                                            "--border-hover"      "var(--rx-gray-08)"}
+                    [:div.theme-row--color {:on-click #(state/unset-color-accent!)
+                                            :class (when (nil? color-accent) "selected")}
+                     [:div.theme-row--color-swatch {:style {"--background"        "#0F2A35"
+                                                            "--background-hover"  "#163542"
+                                                            "--background-active" "#274E5E"
+                                                            "--border"            "#0369a1"
+                                                            "--border-hover"      "#38bdf8" ;; TODO what is the hover color?
+                                                            "--border-active"      "#0ea5e9"} ;; TODO what is the hover color?
                                                            :border-right "1px solid rgba(255,255,255,0.4)"}] 
                      [:div.text-xs {:style {:margin "0 -0.5rem" 
                                             :opacity 0.5 
                                             :height "1rem" 
-                                            :padding "0 0.5rem"}}
-                      "Aqua"]]
-                    (for [color colors/color-list]
+                                            :padding "0 0.5rem"}}]]
+                    [:div.theme-row--color-separator]
+                    (for [color colors/color-list
+                          :let [gray (get colors/gray-pairing-map color)]]
                       [:div.theme-row--color {:on-click #(state/toggle-color-accent! color) 
                                               :class (when (= color-accent color) "selected")}
-                       [:div.theme-row--color-swatch {:style {"--background"        (str "var(--rx-" (name color) "-03)")
-                                                              "--background-hover"  (str "var(--rx-" (name color) "-04)")
-                                                              "--background-active" (str "var(--rx-" (name color) "-05)")
+                       [:div.theme-row--color-swatch {:style {"--background"        (str "var(--rx-" (name gray) "-02-alpha)")
+                                                              "--background-hover"  (str "var(--rx-" (name gray) "-03)")
+                                                              "--background-active" (str "var(--rx-" (name gray) "-06)")
                                                               "--border"            (str "var(--rx-" (name color) "-07)")
-                                                              "--border-hover"      (str "var(--rx-" (name color) "-08)")}}]
+                                                              "--border-hover"      (str "var(--rx-" (name color) "-10)")
+                                                              "--border-active"     (str "var(--rx-" (name color) "-09) ")}}]])]
                                                               ; "--border-hover"     (str "var(--rx-" (name color) "-08)")}}]
-                       [:div.text-xs {:style {:margin "0 -0.5rem" 
-                                              :opacity 0.5 
-                                              :height "1rem"}} 
-                        (name color)]])]
         display-theme [:button {:style {:background "var(--lx-accent-03)" 
                                         :border "1px solid var(--lx-accent-07)"
                                         :color "var(--lx-accent-11)"}}
                         (if color-accent (name color-accent) "default")]]
     [:<>
-     (row-with-button-action {:left-label "Radix color theme"
+     (row-with-button-action {:left-label "Logseq color theme"
                               :-for       "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})])) 
