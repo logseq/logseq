@@ -298,8 +298,8 @@
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
                                                           :backward-pos 2}]]]
 
-     ["Code block" [[:editor/input "```\n```" {:type         "block"
-                                               :backward-pos 4}]
+     ["Code block" [[:editor/input "```\n```\n" {:type         "block"
+                                                 :backward-pos 5}]
                     [:editor/select-code-block-mode]] "Insert code block"]]
 
     @*extend-slash-commands
@@ -696,7 +696,13 @@
       (state/set-editor-action! :datepicker))))
 
 (defmethod handle-step :editor/select-code-block-mode [[_]]
-  (state/set-editor-action! :select-code-block-mode))
+  (-> (p/delay 50)
+      (p/then
+        (fn []
+          (when-let [input (state/get-input)]
+            ;; update action cursor position
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+            (state/set-editor-action! :select-code-block-mode))))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]

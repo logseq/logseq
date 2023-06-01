@@ -290,6 +290,15 @@
           :item-render (fn [property-value] property-value)
           :class       "black"})))))
 
+(rum/defc code-block-mode-keyup-listener
+  [_q _edit-content last-pos current-pos]
+  (rum/use-effect!
+    (fn []
+      (when (< current-pos last-pos)
+        (state/clear-editor-action!)))
+    [last-pos current-pos])
+  [:<>])
+
 (rum/defc code-block-mode-picker < rum/reactive
   [id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
@@ -303,6 +312,7 @@
             matched      (seq (search-handler/fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]
         [:div
+         (code-block-mode-keyup-listener q edit-content pos current-pos)
          (ui/auto-complete matched
                            {:on-chosen   (fn [chosen _click?]
                                            (state/clear-editor-action!)
@@ -314,7 +324,7 @@
                             :on-enter    (fn []
                                            (state/clear-editor-action!)
                                            (commands/handle-step [:codemirror/focus]))
-                            :item-render (fn [mode chosen?]
+                            :item-render (fn [mode _chosen?]
                                            [:strong mode])
                             :class       "code-block-mode-picker"})]))))
 
