@@ -399,7 +399,8 @@
                                   (:start_pos meta)))
         content (when content
                   (let [content (text/remove-level-spaces content format block-pattern)]
-                    (if (:pre-block? block)
+                    (if (or (:pre-block? block)
+                            (= (:format block) :org))
                       content
                       (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
@@ -613,7 +614,7 @@
                                                (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page?
+(defn block-exists-in-another-page? 
   "For sanity check only.
    For renaming file externally, the file is actually deleted and transacted before-hand."
   [db block-uuid current-page-name]
