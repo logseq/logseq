@@ -81,7 +81,7 @@
         body (map (fn [line]
                     (if (string/blank? (gp-util/safe-subs line 0 level))
                       (gp-util/safe-subs line level)
-                      line))
+                      (string/triml line)))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))
