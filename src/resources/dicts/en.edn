@@ -257,7 +257,7 @@
  :whiteboard/align-center-vertically "Align center vertically"
  :whiteboard/align-bottom "Align bottom"
  :whiteboard/distribute-vertically "Distribute vertically"
- :whiteboard/pack-into-rectangle"Pack into rectangle"
+ :whiteboard/pack-into-rectangle "Pack into rectangle"
  :whiteboard/zoom-to-fit "Zoom to fit"
  :whiteboard/ungroup "Ungroup"
  :whiteboard/group "Group"
