@@ -534,7 +534,7 @@
   }
 
   &.as-order-list {
-    @apply w-[22px] whitespace-nowrap justify-center pl-[3px];
+    @apply whitespace-nowrap justify-end pl-[3px];
   }
 
   .bullet {
