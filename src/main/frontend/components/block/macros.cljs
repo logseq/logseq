@@ -55,8 +55,12 @@
 
 (defn function-macro
   "Provides functionality for {{function}}"
-  [query-result arguments]
-  (let [fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
+  [query-result* arguments]
+  (let [query-result (if (map? query-result*)
+                       ;; Ungroup results grouped by page in page view
+                       (mapcat val query-result*)
+                       query-result*)
+        fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
                       (normalize-query-function query-result)
                       (str))
