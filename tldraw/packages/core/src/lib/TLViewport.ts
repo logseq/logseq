@@ -50,7 +50,7 @@ export class TLViewport {
     })
   }
 
-  panToPointWhenOutOfBounds = (point: number[]) => {
+  panToPointWhenNearBounds = (point: number[]) => {
     const threshold = [TLViewport.panThreshold, TLViewport.panThreshold]
 
     const deltaMax = Vec.sub([this.currentView.maxX, this.currentView.maxY], Vec.add(point, threshold))
