@@ -549,7 +549,7 @@
                    :class (if small? "is-small" "")}
     [:span.wrapper.transition-colors.ease-in-out.duration-200
      {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
-      :class        (if on? "bg-indigo-600" "bg-gray-300")}
+      :class        (if on? "ui__toggle-background-on" "ui__toggle-background-off")}
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))

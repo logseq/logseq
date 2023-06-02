@@ -22,8 +22,8 @@ td {
     text-align: left;
 }
 
-tr:nth-child(even) {background: var(--ls-table-tr-even-background-color);}
-tr:nth-child(odd) {background: var(--ls-primary-background-color);}
+tr:nth-child(even) {background: or(--logseq-og-table-stripe-background, --lx-gray-03, --ls-table-tr-even-background-color);}
+tr:nth-child(odd) {background:  or(--logseq-og-table-background, --lx-gray-01, --ls-primary-background-color);}
 
 caption.t-above {caption-side:top}
 caption.t-bottom {caption-side:bottom}
@@ -37,8 +37,8 @@ figcaption{margin-top:.3em}
     color: var(--ls-primary-text-color);
 }
 
-.dark-theme tr:nth-child(even) {background: var(--ls-table-tr-even-background-color);}
-.dark-theme tr:nth-child(odd) {background: var(--ls-primary-background-color);}
+.dark-theme tr:nth-child(even) {background: or(--logseq-og-table-stripe-background, --lx-gray-03, --ls-table-tr-even-background-color);}
+.dark-theme tr:nth-child(odd) {background: or(--logseq-og-table-background, --lx-gray-02, --ls-primary-background-color);}
 .dark-theme td, .dark-theme tr {
     border-bottom: none;
 }

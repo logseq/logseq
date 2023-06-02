@@ -50,9 +50,13 @@ h1.title.whiteboard-dashboard-title {
 
 .dashboard-create-card {
   @apply items-center justify-center relative;
-  background-color: var(--ls-secondary-background-color);
+  background-color: or(--logseq-og-create-whiteboard-background, --lx-gray-02, --ls-secondary-background-color);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
   border: 1px solid transparent;
+}
+
+.dark .dashboard-create-card {
+  background-color: or(--logseq-og-create-whiteboard-background, --lx-gray-03, --ls-secondary-background-color);
 }
 
 .dashboard-create-card i {
@@ -79,8 +83,12 @@ h1.title.whiteboard-dashboard-title {
   @apply px-4 py-3 flex flex-col;
   gap: 4px;
   border-bottom: 1px solid var(--ls-border-color);
-  background-color: var(--ls-secondary-background-color);
+  background-color: or(--logseq-og-whiteboard-card-title-background, --lx-gray-02, --ls-secondary-background-color);
   font-size: 16px;
+}
+
+.dark .dashboard-card-title {
+  background-color: or(--logseq-og-whiteboard-card-title-background, --lx-gray-03, --ls-secondary-background-color);
 }
 
 .dashboard-card-title-name {

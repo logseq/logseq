@@ -43,7 +43,8 @@
 
 .ui__ac-group-name {
   @apply p-2 text-xs;
-  color: or(--lx-accent-11, --ls-block-ref-link-text-color);
+  color: or(--logseq-og-dropdown-title-color, --lx-gray-11-alpha, --ls-block-ref-link-text-color);
+  background-color: or(--logseq-og-dropdown-title-background, --lx-gray-03);
 }
 
 .search-all #ui__ac-inner {
@@ -415,4 +416,12 @@ html.is-mobile {
 
 .ui__radio-list {
   @apply grid grid-flow-col gap-2;
+}
+
+.ui__toggle-background-on {
+  background: or(--logseq-og-toggle-on-background, --lx-accent-09, rgb(2, 132, 199));
+}
+
+.ui__toggle-background-off {
+  background: or(--logseq-og-toggle-off-background, --lx-gray-08, rgb(212, 212, 212));
 }

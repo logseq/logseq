@@ -173,7 +173,7 @@ html[data-theme='light'] {
 
   pointer-events: all;
   position: relative;
-  background-color: var(--ls-secondary-background-color);
+  background-color: or(--logseq-whiteboard-toolbar-background, --lx-gray-03, --ls-secondary-background-color);
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
@@ -815,7 +815,7 @@ html[data-theme='light'] {
 
 html[data-theme='dark'] {
   .tl-type-tag[data-active='true'] {
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), 
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
                 or(--logseq-og-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
     border: 1px solid or(--logseq-og-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
     color: var(--ls-secondary-text-color);

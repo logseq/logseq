@@ -152,12 +152,12 @@
 
     &:hover {
       background-color: or(--logseq-og-left-sidebar-hover-background, --lx-gray-04, --ls-tertiary-background-color);
-      color: or(--logseq-og-left-sidebar-text-color-hover, --lx-gray-12, --ls-header-button-background);
+      color: or(--logseq-og-left-sidebar-text-color-hover, --lx-gray-12);
     }
 
     &.active, &:active {
       background-color: or(--logseq-og-left-sidebar-active-background, --lx-gray-05, --ls-quaternary-background-color);
-      color: or(--logseq-og-left-sidebar-active-text-color, --lx-gray-12, --ls-quaternary-background-color);
+      color: or(--logseq-og-left-sidebar-active-text-color, --lx-gray-12);
     }
   }
 
