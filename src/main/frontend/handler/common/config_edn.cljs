@@ -92,7 +92,7 @@ nested keys or positional errors e.g. tuples"
   (let [body (try (edn/read-string content)
                (catch :default _ ::failed-to-detect))
         warnings {:editor/command-trigger
-                  "Will no longer be supported soon. Please use '/' and report bugs on it."}]
+                  "is no longer supported. Please use '/' and report bugs on it."}]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")
