@@ -85,10 +85,10 @@ test('draw a rectangle', async ({ page }) => {
 
   await page.keyboard.type('wr')
 
-  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.move(bounds.x + 105, bounds.y + 105)
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 50, bounds.y + 50 )
+  await page.mouse.move(bounds.x + 150, bounds.y + 150 )
   await page.mouse.up()
   await page.keyboard.press('Escape')
 
@@ -114,12 +114,14 @@ test('clone the rectangle', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   const bounds = (await canvas.boundingBox())!
 
-  await page.mouse.move(bounds.x + 20, bounds.y + 20, {steps: 5})
+  await page.mouse.move(bounds.x + 400, bounds.y + 400)
+
+  await page.mouse.move(bounds.x + 120, bounds.y + 120, {steps: 5})
 
   await page.keyboard.down('Alt')
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5})
+  await page.mouse.move(bounds.x + 200, bounds.y + 200, {steps: 5})
   await page.mouse.up()
   await page.keyboard.up('Alt')
 
@@ -163,10 +165,10 @@ test('connect rectangles with an arrow', async ({ page }) => {
 
   await page.keyboard.type('wc')
 
-  await page.mouse.move(bounds.x + 20, bounds.y + 20)
+  await page.mouse.move(bounds.x + 120, bounds.y + 120)
   await page.mouse.down()
 
-  await page.mouse.move(bounds.x + 100, bounds.y + 100, {steps: 5}) // will fail without steps
+  await page.mouse.move(bounds.x + 200, bounds.y + 200, {steps: 5}) // will fail without steps
   await page.mouse.up()
   await page.keyboard.press('Escape')
 
@@ -191,10 +193,15 @@ test('undo the delete action', async ({ page }) => {
 })
 
 test('convert the first rectangle to ellipse', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(1000)
-  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
-  await page.mouse.move(0, 0)  // move mouse to trigger a rerender of the context bar
+  await page.mouse.move(bounds.x + 220, bounds.y + 220)
+  await page.mouse.down()
+  await page.mouse.up()
+  await page.mouse.move(bounds.x + 520, bounds.y + 520)
+
   await page.click('.tl-context-bar .tl-geometry-tools-pane-anchor')
   await page.click('.tl-context-bar .tl-geometry-toolbar [data-tool=ellipse]')
 
@@ -223,9 +230,14 @@ test('undo the shape conversion', async ({ page }) => {
 })
 
 test('locked elements should not be removed', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  const bounds = (await canvas.boundingBox())!
+
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(1000)
-  await page.click('.logseq-tldraw .tl-box-container:first-of-type')
+  await page.mouse.move(bounds.x + 220, bounds.y + 220)
+  await page.mouse.down()
+  await page.mouse.up()
+  await page.mouse.move(bounds.x + 520, bounds.y + 520)
   await page.keyboard.press(`${modKey}+l`)
   await page.keyboard.press('Delete')
   await page.keyboard.press(`${modKey}+Shift+l`)
@@ -269,7 +281,7 @@ test('create a block', async ({ page }) => {
   const bounds = (await canvas.boundingBox())!
 
   await page.keyboard.type('ws')
-  await page.mouse.dblclick(bounds.x + 5, bounds.y + 5)
+  await page.mouse.dblclick(bounds.x + 105, bounds.y + 105)
   await page.waitForTimeout(100)
 
   await page.keyboard.type('a')
@@ -304,7 +316,7 @@ test('copy/paste url to create an iFrame shape', async ({ page }) => {
   const bounds = (await canvas.boundingBox())!
 
   await page.keyboard.type('wt')
-  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.move(bounds.x + 105, bounds.y + 105)
   await page.mouse.down()
   await page.waitForTimeout(100)
 
@@ -323,7 +335,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
   const bounds = (await canvas.boundingBox())!
 
   await page.keyboard.type('wt')
-  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.move(bounds.x + 105, bounds.y + 105)
   await page.mouse.down()
   await page.waitForTimeout(100)
 
@@ -342,7 +354,7 @@ test('copy/paste youtube video url to create a Youtube shape', async ({ page }) 
   const bounds = (await canvas.boundingBox())!
 
   await page.keyboard.type('wt')
-  await page.mouse.move(bounds.x + 5, bounds.y + 5)
+  await page.mouse.move(bounds.x + 105, bounds.y + 105)
   await page.mouse.down()
   await page.waitForTimeout(100)
 
@@ -394,8 +406,8 @@ test('quick add another whiteboard', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   await canvas.dblclick({
     position: {
-      x: 100,
-      y: 100,
+      x: 200,
+      y: 200,
     },
   })
 
