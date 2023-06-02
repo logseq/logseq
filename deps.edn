@@ -1,4 +1,4 @@
-{:paths ["src/main" "src/electron" "templates"]
+{:paths ["src/main" "src/electron" "src/resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   rum/rum                               {:mvn/version "0.12.9"}

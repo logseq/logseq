@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
+import { callPageAPI } from './logseq-api.spec'
 
 test.skip('enabled plugin system default', async ({ page }) => {
   const callAPI = callPageAPI.bind(null, page)
@@ -59,14 +60,3 @@ test.skip('play a plugin<logseq-journals-calendar> from the Marketplace', async 
   await expect(page.locator('body[data-page="page"]')).toBeVisible()
 })
 
-/**
- * @param page
- * @param method
- * @param args
- */
-async function callPageAPI(page, method, ...args) {
-  return await page.evaluate(([method, args]) => {
-    // @ts-ignore
-    return window.logseq.api[method]?.(...args)
-  }, [method, args])
-}

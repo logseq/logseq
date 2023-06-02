@@ -36,7 +36,9 @@
 (defn- shorten [s length]
   (if (< (count s) length)
     s
-    (str (subs s 0 length) "...")))
+    (string/replace (str (subs s 0 length) "...")
+                    ;; Escape newlines for multi-line translations like tutorials
+                    "\n" "\\n")))
 
 (defn list-missing
   "List missing translations for a given language"
@@ -58,9 +60,9 @@
                                        {:translation-key k
                                                   ;; Shorten values
                                         :string-to-translate (shorten v 50)
-                                        :file (str "dicts/"
-                                                   (-> lang name (string/replace "-" "_") string/lower-case)
-                                                   ".cljc")}))
+                                        :file (if (= "tutorial" (namespace k))
+                                                (str "Under tutorials/")
+                                                (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
                                 (sort-by (juxt :file :translation-key)))]
         (if (:copy options)
           (doseq [[file missing-for-file] (group-by :file sorted-missing)]
@@ -113,6 +115,14 @@
    "(t title" []
    "(t subtitle" [:asset/physical-delete]})
 
+(defn- whiteboard-dicts
+  []
+  (->> (shell {:out :string}
+              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "tldraw/apps/tldraw-logseq/src/components")
+       :out
+       string/split-lines
+       (map #(keyword (subs % 3)))))
+
 (defn- validate-ui-translations-are-used
   "This validation checks to see that translations done by (t ...) are equal to
   the ones defined for the default :en lang. This catches translations that have
@@ -127,6 +137,7 @@
                           string/split-lines
                           (map #(keyword (subs % 4)))
                           (concat (mapcat val manual-ui-dicts))
+                          (concat (whiteboard-dicts))
                           set)
         expected-dicts (set (remove #(re-find #"^(command|shortcut)\." (str (namespace %)))
                                     (keys (:en (get-dicts)))))

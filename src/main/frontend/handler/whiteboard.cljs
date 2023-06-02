@@ -153,13 +153,14 @@
         (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
         new-shapes (get-in metadata [:data :new-shapes])
+        deleted-shapes (get-in metadata [:data :deleted-shapes])
         metadata' (cond
                     ;; group
                     (some #(= "group" (:type %)) new-shapes)
                     (assoc metadata :whiteboard/op :group)
 
                     ;; ungroup
-                    (some #(= "group" (:type %)) (get-in metadata [:data :deleted-shapes]))
+                    (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
                     (assoc metadata :whiteboard/op :un-group)
 
                     ;; arrow
@@ -223,7 +224,7 @@
   ([name]
    (when-not config/publishing?
      (create-new-whiteboard-page! name)
-     (route-handler/redirect-to-whiteboard! name))))
+     (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true}))))
 
 (defn ->logseq-portal-shape
   [block-id point]
@@ -327,7 +328,7 @@
                                                     :assets assets
                                                     :bindings bindings})))))
 (defn should-populate-onboarding-whiteboard?
-  "When there is not whiteboard, or there is only whiteboard that is the given page name, we should populate the onboarding whiteboard"
+  "When there is no whiteboard, or there is only one whiteboard that has the given page name, we should populate the onboarding shapes"
   [page-name]
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
     (and (or (empty? whiteboards)
@@ -360,6 +361,11 @@
 (defn- select-shapes
   [^js api ids]
   (apply (.-selectShapes api) ids))
+
+(defn cleanup!
+  [^js tl-page]
+  (let [shapes (.-shapes tl-page)]
+    (.cleanup tl-page (map #(.-id %) shapes))))
 
 (defn update-bindings!
   [^js tl-page page-name]

@@ -610,6 +610,19 @@
                 (fn [_] (conversion-component/files-breaking-changed))
                 {:id :filename-format-panel :center? true})}))
 
+(rum/defcs native-titlebar-row < rum/reactive
+  [state t]
+  (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
+    (toggle
+     "native-titlebar"
+     (t :settings-page/native-titlebar)
+     enabled?
+     #(when (js/confirm (t :relaunch-confirm-to-work))
+        (state/set-state! [:electron/user-cfgs :window/native-titlebar?] (not enabled?))
+        (ipc/ipc :userAppCfgs :window/native-titlebar? (not enabled?))
+        (js/logseq.api.relaunch))
+     [:span.text-sm.opacity-50 (t :settings-page/native-titlebar-desc)])))
+
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
@@ -621,6 +634,7 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
+     (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

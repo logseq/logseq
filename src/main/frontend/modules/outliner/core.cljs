@@ -140,7 +140,7 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
-                (dissoc :block/children :block/meta :block/top? :block/bottom?
+                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 (gp-util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
@@ -564,8 +564,6 @@
       (do
         (state/pub-event! [:capture-error {:error "Outliner invalid structure"
                                            :payload {:type :outliner/invalid-structure
-                                                     :blocks blocks
-                                                     :target-block target-block'
                                                      :opt opts
                                                      :data (mapv #(dissoc % :block/content) tx)}}])
         (throw (ex-info "Invalid outliner data"

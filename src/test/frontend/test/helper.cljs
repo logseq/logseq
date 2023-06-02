@@ -14,6 +14,11 @@
   []
   (conn/destroy-all!))
 
+(defn reset-test-db!
+  []
+  (destroy-test-db!)
+  (start-test-db!))
+
 (defn load-test-files
   "Given a collection of file maps, loads them into the current test-db.
 This can be called in synchronous contexts as no async fns should be invoked"
