@@ -354,7 +354,6 @@
  :settings-page/beta-features "Beta funksjoner"
  :settings-page/clear-cache-warning "Tømming av hurtigbufferen vil forkaste dine åpne grafer. Du m..."
  :settings-page/custom-date-format-warning "Re-indeksering kreves! Eksisterernde dagbokreferanse vi..."
- :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/disable-sentry-desc "Logseq vil aldri samle inn dine lokale graf sin databas..."
  :settings-page/edit-setting "Rediger"
  :settings-page/enable-whiteboards "Whiteboards"

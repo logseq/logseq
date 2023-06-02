@@ -318,7 +318,6 @@
  :settings-page/beta-features "Recursos em fase Beta"
  :settings-page/clear-cache-warning "A limpeza do cache descartará os gráficos abertos. Você perderá as alterações não salvas."
  :settings-page/custom-date-format-warning "É necessário reindexar! As referências de periódicos existentes seriam quebradas!"
- :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/disable-sentry-desc "A Logseq nunca coletará seu banco de dados gráfico local ou venderá seus dados."
  :settings-page/edit-setting "Editar"
  :settings-page/enable-whiteboards "Quadros brancos"

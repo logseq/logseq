@@ -170,7 +170,6 @@
  :settings-page/auto-expand-block-refs "Автоматично розгортайти посилання на блоки під час збільшення"
  :settings-page/custom-date-format "Бажаний формат дати"
  :settings-page/custom-date-format-warning "Потрібна повторна індексація! Існуючі посилання на журнали будуть порушені!"
- :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/preferred-file-format "Віддавати перевагу формату файлу"
  :settings-page/preferred-workflow "Віддавати перевагу робочому процесу"
  :settings-page/preferred-pasting-file "Віддавати перевагу вставці файлу"

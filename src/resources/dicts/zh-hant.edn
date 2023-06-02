@@ -167,7 +167,6 @@
  :settings-page/show-full-blocks "顯示所有區塊引用列"
  :settings-page/custom-date-format "偏好日期格式"
  :settings-page/custom-date-format-warning "需要重新索引，否則現有的日記引用連結將會失效！"
- :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/preferred-file-format "偏好檔案格式"
  :settings-page/preferred-workflow "偏好工作流"
  :settings-page/preferred-pasting-file "保存連結為文件"
