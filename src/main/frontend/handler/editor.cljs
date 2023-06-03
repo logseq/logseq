@@ -1536,7 +1536,7 @@
                                        (if file-obj (.-name file-obj) (if image? "image" "asset"))
                                        image?)
                   format
-                  {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
+                  {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                    :restore?     true
                    :command      :insert-asset})))))
           (p/finally
@@ -1675,7 +1675,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= (state/get-editor-command-trigger) (util/nth-safe edit-content (dec pos)))
+         (and (= commands/command-trigger (util/nth-safe edit-content (dec pos)))
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -1793,7 +1793,7 @@
                id
                (get-link format link label)
                format
-               {:last-pattern (str (state/get-editor-command-trigger) "link")
+               {:last-pattern (str commands/command-trigger "link")
                 :command :link})))
 
     :image-link (let [{:keys [link label]} m]
@@ -1802,7 +1802,7 @@
                      id
                      (get-image-link format link label)
                      format
-                     {:last-pattern (str (state/get-editor-command-trigger) "link")
+                     {:last-pattern (str commands/command-trigger "link")
                       :command :image-link})))
 
     nil)
@@ -1879,7 +1879,7 @@
         (-> (p/delay 10)
             (p/then #(state/pub-event! [:editor/toggle-own-number-list edit-block]))))
 
-      (and (= last-input-char (state/get-editor-command-trigger))
+      (and (= last-input-char commands/command-trigger)
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
@@ -2730,7 +2730,7 @@
             (delete-block! repo false))))
 
       (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
+           (= (util/nth-safe value (dec current-pos)) commands/command-trigger))
       (do
         (util/stop e)
         (commands/restore-state)
@@ -3014,8 +3014,8 @@
                (util/event-is-composing? e true)])]
         (cond
           ;; When you type something after /
-          (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
-          (if (= (state/get-editor-command-trigger) (second (re-find #"(\S+)\s+$" value)))
+          (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
+          (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
             (state/clear-editor-action!)
             (let [matched-commands (get-matched-commands input)]
               (if (seq matched-commands)
