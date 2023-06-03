@@ -237,8 +237,6 @@
  :paginates/prev "前"
  :paginates/next "次"
 
- :tips/all-done "All Done"
-
  :command-palette/prompt "コマンドを入力"
  :select/default-prompt "選択してください"
  :select.graph/prompt "グラフを選んでください"
