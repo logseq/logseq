@@ -227,7 +227,8 @@
                           (remove string/blank?)
                           (map search-db/original-page-name->index))
         pages-to-remove-set (->> (remove :added pages)
-                                 (map :v))
+                                 (map :v)
+                                 set)
         pages-to-remove-id-set (->> (remove :added pages)
                                     (map :e)
                                     set)]
