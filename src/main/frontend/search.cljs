@@ -260,12 +260,14 @@
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
-                  (contains? #{:block/name :block/content} (:a datom)))
+                  (contains? #{:block/name :block/original-name :block/content} (:a datom)))
                 data)]
     (when (seq datoms)
       (let [datoms (group-by :a datoms)
             blocks (:block/content datoms)
-            pages (:block/name datoms)]
+            pages (concat
+                   (:block/name datoms)
+                   (:block/original-name datoms))]
         (merge (get-blocks-from-datoms-impl blocks)
                (get-pages-from-datoms-impl pages))))))
 
