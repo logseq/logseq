@@ -249,15 +249,17 @@ test('Select codeblock language', async ({ page }) => {
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', '/code block', { delay: 100 })
-  await page.press('textarea >> nth=0', 'Enter', {delay: 100})
+  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
 
   // Select Clojure from the dropdown menu
   await repeatKeyPress(page, 'ArrowDown', 6)
-  await page.press('textarea >> nth=0', 'Enter', {delay: 100})
+  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
 
   await page.fill('.CodeMirror textarea', '(println "Hello, Logseq!")')
-  await page.press('.CodeMirror textarea', 'Escape', {delay: 100})
-  expect(await page.inputValue('.block-editor textarea')).toBe('```clojure \n(println "Hello, Logseq!")\n```')
+  await page.press('.CodeMirror textarea', 'Escape', { delay: 100 })
+  expect(await page.inputValue('.block-editor textarea')).toBe(
+    '```clojure\n(println "Hello, Logseq!")\n```'
+  )
 })
 
 test('Select codeblock language while surrounded by text', async ({ page }) => {
@@ -266,12 +268,14 @@ test('Select codeblock language while surrounded by text', async ({ page }) => {
   await page.fill('textarea >> nth=0', 'abc abc')
   await repeatKeyPress(page, 'ArrowLeft', 3)
   await page.type('textarea >> nth=0', '/code', { delay: 100 })
-  await page.press('textarea >> nth=0', 'Enter', {delay: 100})
+  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
 
   // Select Clojure from the dropdown menu
   await repeatKeyPress(page, 'ArrowDown', 6)
-  await page.press('textarea >> nth=0', 'Enter', {delay: 100})
+  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
 
-  await page.press('.CodeMirror textarea', 'Escape', {delay: 100})
-  expect(await page.inputValue('.block-editor textarea')).toBe('abc \n```clojure \n```\nabc')
+  await page.press('.CodeMirror textarea', 'Escape', { delay: 100 })
+  expect(await page.inputValue('.block-editor textarea')).toBe(
+    'abc \n```clojure\n```\nabc'
+  )
 })
