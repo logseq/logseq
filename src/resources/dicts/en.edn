@@ -192,6 +192,7 @@
  :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in"
  :settings-page/custom-date-format "Preferred date format"
  :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
+ :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings-page/preferred-file-format "Preferred file format"
  :settings-page/preferred-workflow "Preferred workflow"
  :settings-page/preferred-pasting-file "Prefer pasting file"
