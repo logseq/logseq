@@ -185,7 +185,6 @@
  :settings-page/developer-mode "開發者模式"
  :settings-page/developer-mode-desc "開發者模式可以協助貢獻者及擴充套件開發人員更有效率地測試 Logseq。"
  :settings-page/current-version "目前版本"
- :settings-page/tab-general "General"
  :settings-page/tab-editor "編輯器"
  :settings-page/tab-version-control "版本控制"
  :settings-page/tab-advanced "進階功能"

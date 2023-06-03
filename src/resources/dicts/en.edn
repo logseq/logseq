@@ -125,7 +125,7 @@
  :file-rn/instruct-3 "2. Follow the instructions below to rename the files to the new format:"
  :page/created-at "Created At"
  :page/updated-at "Updated At"
- :page/backlinks "Back Links"
+ :page/backlinks "Backlinks"
  :linked-references/filter-search "Search in linked pages"
  :editor/block-search "Search for a block"
  :text/image "Image"
