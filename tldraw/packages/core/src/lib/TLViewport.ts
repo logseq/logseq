@@ -19,6 +19,7 @@ export class TLViewport {
   static readonly minZoom = 0.1
   static readonly maxZoom = 4
   static readonly panMultiplier = 0.05
+  static readonly panThreshold = 100
 
   /* ------------------- Properties ------------------- */
 
@@ -49,9 +50,11 @@ export class TLViewport {
     })
   }
 
-  panToPointWhenOutOfBounds = (point: number[]) => {
-    const deltaMax = Vec.sub([this.currentView.maxX, this.currentView.maxY], point)
-    const deltaMin = Vec.sub([this.currentView.minX, this.currentView.minY], point)
+  panToPointWhenNearBounds = (point: number[]) => {
+    const threshold = [TLViewport.panThreshold, TLViewport.panThreshold]
+
+    const deltaMax = Vec.sub([this.currentView.maxX, this.currentView.maxY], Vec.add(point, threshold))
+    const deltaMin = Vec.sub([this.currentView.minX, this.currentView.minY], Vec.sub(point, threshold))
 
     const deltaX = deltaMax[0] < 0 ? deltaMax[0] : deltaMin[0] > 0 ? deltaMin[0] : 0
     const deltaY = deltaMax[1] < 0 ? deltaMax[1] : deltaMin[1] > 0 ? deltaMin[1] : 0

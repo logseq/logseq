@@ -153,7 +153,7 @@
  :plugin/custom-js-alert "custom.js bestand gevonden, mag deze uitgevoerd worden? (Als je niet begrijpt wat dit bestand inhoud is het aangeraden om het uivoeren hiervan niet toe te staan, dit is in verband met beveiligings risico's.)" ;; TODO
  :plugin/delete-alert "Weet je zeker dat je plugin [{1}] wilt verwijderen?"
  :plugin/disabled "Uitgeschakeld"
-\ :plugin/enabled "Ingeschakeld"
+ :plugin/enabled "Ingeschakeld"
  :plugin/install "Installeren"
  :plugin/installed "Geïnstalleerd"
  :plugin/installing "Installeren"

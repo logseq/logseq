@@ -7,9 +7,13 @@ import { GeometryTools } from '../GeometryTools'
 import { ColorInput } from '../inputs/ColorInput'
 import { ScaleInput } from '../inputs/ScaleInput'
 import * as Separator from '@radix-ui/react-separator'
+import { LogseqContext } from '../../lib/logseq-context'
 
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
 
   const handleSetColor = React.useCallback((color: string) => {
     app.api.setColor(color)
@@ -37,50 +41,50 @@ export const PrimaryTools = observer(function PrimaryTools() {
       <div className="tl-toolbar tl-tools-floating-panel">
         <ToolButton
           handleClick={() => app.selectTool('select')}
-          tooltip="Select"
+          tooltip={t('whiteboard/select')}
           id="select"
           icon="select-cursor"
         />
         <ToolButton
           handleClick={() => app.selectTool('move')}
-          tooltip="Pan"
+          tooltip={t('whiteboard/pan')}
           id="move"
           icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
         />
         <Separator.Root className="tl-toolbar-separator" orientation="horizontal" />
         <ToolButton
           handleClick={() => app.selectTool('logseq-portal')}
-          tooltip="Add block or page"
+          tooltip={t('whiteboard/add-block-or-page')}
           id="logseq-portal"
           icon="circle-plus"
         />
         <ToolButton
           handleClick={() => app.selectTool('pencil')}
-          tooltip="Draw"
+          tooltip={t('whiteboard/draw')}
           id="pencil"
           icon="ballpen"
         />
         <ToolButton
           handleClick={() => app.selectTool('highlighter')}
-          tooltip="Highlight"
+          tooltip={t('whiteboard/highlight')}
           id="highlighter"
           icon="highlight"
         />
         <ToolButton
           handleClick={() => app.selectTool('erase')}
-          tooltip="Eraser"
+          tooltip={t('whiteboard/eraser')}
           id="erase"
           icon="eraser"
         />
         <ToolButton
           handleClick={() => app.selectTool('line')}
-          tooltip="Connector"
+          tooltip={t('whiteboard/connector')}
           id="line"
           icon="connector"
         />
         <ToolButton
           handleClick={() => app.selectTool('text')}
-          tooltip="Text"
+          tooltip={t('whiteboard/text')}
           id="text"
           icon="text"
         />

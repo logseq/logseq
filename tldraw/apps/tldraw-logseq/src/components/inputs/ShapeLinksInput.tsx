@@ -34,6 +34,7 @@ function ShapeLinkItem({
 }) {
   const app = useApp<Shape>()
   const { handlers } = React.useContext(LogseqContext)
+  const t = handlers.t
 
   return (
     <div className="tl-shape-links-panel-item color-level relative">
@@ -42,12 +43,16 @@ function ShapeLinkItem({
       </div>
       <div className="flex-1" />
       {handlers.getBlockPageName(id) !== app.currentPage.name && (
-        <Button tooltip="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
+        <Button
+          tooltip={t('whiteboard/open-page')}
+          type="button"
+          onClick={() => handlers?.redirectToPage(id)}
+        >
           <TablerIcon name="open-as-page" />
         </Button>
       )}
       <Button
-        tooltip="Open Page in Right Sidebar"
+        tooltip={t('whiteboard/open-page-in-sidebar')}
         type="button"
         onClick={() => handlers?.sidebarAddBlock(id, type === 'B' ? 'block' : 'page')}
       >
@@ -56,7 +61,7 @@ function ShapeLinkItem({
       {onRemove && (
         <Button
           className="tl-shape-links-panel-item-remove-button"
-          tooltip="Remove link"
+          tooltip={t('whiteboard/remove-link')}
           type="button"
           onClick={onRemove}
         >
@@ -76,6 +81,10 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
   onRefsChange,
   ...rest
 }: ShapeLinksInputProps) {
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
+
   const noOfLinks = refs.length + (pageId ? 1 : 0)
   const canAddLink = refs.length === 0
 
@@ -94,7 +103,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
       align="start"
       alignOffset={-6}
       label={
-        <Tooltip content={'Link'} sideOffset={14}>
+        <Tooltip content={t('whiteboard/link')} sideOffset={14}>
           <div className="flex gap-1 relative items-center justify-center px-1">
             <TablerIcon name={noOfLinks > 0 ? 'link' : 'add-link'} />
             {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
@@ -107,7 +116,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
           <div className="tl-shape-links-reference-panel">
             <div className="text-base inline-flex gap-1 items-center">
               <TablerIcon className="opacity-50" name="internal-link" />
-              References
+              {t('whiteboard/references')}
             </div>
             <ShapeLinkItem type={portalType} id={pageId} />
           </div>
@@ -115,7 +124,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
         <div className="tl-shape-links-panel color-level">
           <div className="text-base inline-flex gap-1 items-center">
             <TablerIcon className="opacity-50" name="add-link" />
-            Link to any page or block
+            {t('whiteboard/link-to-any-page-or-block')}
           </div>
 
           {canAddLink && (
@@ -124,7 +133,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
                 width: 'calc(100% - 46px)',
                 marginLeft: '46px',
               }}
-              placeholder="Start typing to search..."
+              placeholder={t('whiteboard/start-typing-to-search')}
               onChange={addNewRef}
             />
           )}
