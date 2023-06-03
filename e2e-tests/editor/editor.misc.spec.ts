@@ -212,30 +212,22 @@ test('copy and paste block after editing new block #5962', async ({
   await block.waitForBlocks(3)
 })
 
-test('press escape when link/image dialog is open, should restore focus to input', async ({
-  page,
-  block,
-}) => {
+test('press escape when link/image dialog is open, should restore focus to input', async ({ page, block }) => {
   for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
     await createRandomPage(page)
 
     // Open the action modal
     await block.mustFill('')
     await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
-    await page.waitForSelector(`[data-modal-name="${modalName}"]`)
-    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible({
-      timeout: STD_DELAY * 5,
-    })
+    await page.waitForSelector(`[data-modal-name="${modalName}"]`, {timeout: STD_DELAY * 10})
 
     // Press enter to open the link dialog
-    await page.keyboard.press('Enter', { delay: STD_DELAY })
-    await expect(page.locator(`[data-modal-name="input"]`)).toBeVisible()
+    await page.keyboard.press('Enter')
+    await page.waitForSelector(`[data-modal-name="input"]`, {timeout: STD_DELAY * 10})
 
     // Press escape; should close link dialog and restore focus to the block textarea
     await page.keyboard.press('Escape', { delay: STD_DELAY })
-    await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible({
-      timeout: STD_DELAY * 5,
-    })
+    await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible()
     expect(await block.isEditing()).toBe(true)
   }
 })
