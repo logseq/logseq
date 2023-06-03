@@ -299,8 +299,9 @@
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]
 
-     ["Code block" [[:editor/input "```\n```\n" {:type         "block"
-                                                 :backward-pos 5}]
+     ["Code block" [[:editor/input "```\n```\n" {:type            "block"
+                                                 :backward-pos    5
+                                                 :only-breakline? true}]
                     [:editor/select-code-block-mode]] "Insert code block"]]
 
     @*extend-slash-commands
@@ -335,7 +336,7 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command only-breakline?]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
@@ -385,6 +386,10 @@
 
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
+          postfix (cond-> postfix
+                          (and only-breakline? postfix
+                               (= (get postfix 0) "\n"))
+                          (string/replace-first "\n" ""))
           new-value (cond
                       (string/blank? postfix)
                       prefix
