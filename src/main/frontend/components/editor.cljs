@@ -14,7 +14,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
-            [frontend.search :as search-handler]
+            [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -309,7 +309,7 @@
             q            (or (editor-handler/get-selected-text)
                              (gp-util/safe-subs edit-content pos current-pos)
                              "")
-            matched      (seq (search-handler/fuzzy-search modes q))
+            matched      (seq (fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]
         [:div
          (code-block-mode-keyup-listener q edit-content pos current-pos)
