@@ -221,25 +221,11 @@ test('press escape when link/image dialog is open, should restore focus to input
 
     // Open the action modal
     await block.mustFill('')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
-    const MAX_ATTEMPTS = 3
-    let attempts = 0
-    while (true) {
-      try {
-        await page.waitForSelector(`[data-modal-name="${modalName}"]`, {
-          timeout: STD_DELAY * 10,
-        })
-        break // if waitForSelector succeeds, break the loop
-      } catch (err) {
-        attempts++
-        if (attempts >= MAX_ATTEMPTS) {
-          throw err // if it fails MAX_ATTEMPTS times, re-throw the error
-        }
-      }
-    }
+    await page.keyboard.type(commandTrigger, { delay: STD_DELAY * 2.5 })
+    await page.waitForSelector(`[data-modal-name="${modalName}"]`, {timeout: STD_DELAY * 10})
 
     // Press enter to open the link dialog
-    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter', {delay: STD_DELAY})
     await page.waitForSelector(`[data-modal-name="input"]`, {
       timeout: STD_DELAY * 10,
     })
