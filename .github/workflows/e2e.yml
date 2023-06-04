@@ -132,8 +132,7 @@ jobs:
           yarn install
           (cd static && yarn install && yarn rebuild:all)
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true,
-          HEADLESS: false, # run tests in headful mode
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
