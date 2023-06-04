@@ -261,12 +261,13 @@
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
+                  ;; Capture any direct change on page display title, page ref or block content
                   (contains? #{:block/name :block/original-name :block/content} (:a datom)))
                 data)]
     (when (seq datoms)
       (let [datoms (group-by :a datoms)
             blocks (:block/content datoms)
-            pages (concat
+            pages (concat ;; Duplicated eids are handled in `get-pages-from-datoms-impl`
                    (:block/name datoms)
                    (:block/original-name datoms))]
         (merge (get-blocks-from-datoms-impl blocks)
