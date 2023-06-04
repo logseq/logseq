@@ -41,8 +41,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
     // First, left arrow
     await createRandomPage(page)
 
-    await block.mustFill('t ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -52,8 +51,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
     // Then, right arrow
     await createRandomPage(page)
 
-    await block.mustFill('t ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -73,10 +71,9 @@ test('#6266 moving cursor outside of parens immediately after searching should s
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await block.mustFill('t ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
-    await page.keyboard.type('some block search text', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'some block search text', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor outside of the space strictly between the double parens
@@ -97,8 +94,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await block.mustFill('t ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
     const cursorPos = await block.selectionStart()
@@ -126,13 +122,13 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
 
     // Open the autocomplete menu
     await block.mustType('test ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     if (commandTrigger === '[[') {
       await autocompleteMenu.expectVisible(modalName)
     }
 
-    await page.keyboard.type('search', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'search', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor, still inside the brackets
@@ -151,8 +147,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await block.mustFill('')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -170,7 +165,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await autocompleteMenu.expectHidden(modalName)
 
     // Type a letter, this should open the autocomplete menu
-    await page.keyboard.type('z', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'z', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -187,12 +182,11 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await block.mustFill('')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.keyboard.type('some page search text', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'some page search text', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
 
     // Select some text within the brackets
@@ -213,12 +207,11 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await block.mustFill('test ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.keyboard.type('some page search text', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'some page search text', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
 
     // Delete one character inside the brackets
@@ -238,8 +231,7 @@ test('press escape when autocomplete menu is open, should close autocomplete men
     await createRandomPage(page)
 
     // Open the action modal
-    await block.mustFill('text ')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible({
       timeout: STD_DELAY,

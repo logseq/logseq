@@ -220,23 +220,29 @@ test('press escape when link/image dialog is open, should restore focus to input
     await createRandomPage(page)
 
     // Open the action modal
-    await block.mustFill('')
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     // wait for the Command menu modal to appear
-    let locator = `[data-modal-name="${modalName}"]`
-    await page.locator(locator).isVisible({ timeout: STD_DELAY * 30 })
+    let selector = `[data-modal-name="${modalName}"]`
+
+    await page.waitForSelector(selector, {
+      state: 'visible',
+      timeout: STD_DELAY * 10,
+    })
 
     // Press enter to open the link dialog
     await page.keyboard.press('Enter', { delay: STD_DELAY })
 
     // wait for the link dialog to appear
-    locator = `[data-modal-name="input"]`
-    await page.locator(locator).isVisible({ timeout: STD_DELAY * 30 })
+    selector = `[data-modal-name="input"]`
+    await page.waitForSelector(selector, {
+      state: 'visible',
+      timeout: STD_DELAY * 10,
+    })
 
     // Press escape; should close link dialog and restore focus to the block textarea
     await page.keyboard.press('Escape', { delay: STD_DELAY })
-    await expect(page.locator(locator)).not.toBeVisible()
+    await expect(page.locator(selector)).not.toBeVisible()
     expect(await block.isEditing()).toBe(true)
   }
 })

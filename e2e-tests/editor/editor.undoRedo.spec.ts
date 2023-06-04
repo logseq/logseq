@@ -43,8 +43,7 @@ test('undo after starting an action should close the action menu #6269', async (
     await createRandomPage(page)
 
     // Open the action modal
-    await block.mustType('text1 ', { delay: STD_DELAY })
-    await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
 
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
