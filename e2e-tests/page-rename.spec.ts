@@ -67,12 +67,12 @@ test('page rename test', async ({ page }) => {
   // The page name in page search are not updated after changing the capitalization of the page name #9577
   // https://github.com/logseq/logseq/issues/9577
   // Expect the page name to be updated in the search results
-  await page_rename_test(page, "DcBA", "dCBA")
-  const results = await searchPage(page, "DcBA")
+  await page_rename_test(page, "DcBA_", "dCBA_")
+  const results = await searchPage(page, "DcBA_")
   // search result 0 is the new page & 1 is the new whiteboard
   const thirdResultRow = await results[2].innerText()
-  expect(thirdResultRow).toContain("dCBA");
-  expect(thirdResultRow).not.toContain("DcBA");
+  expect(thirdResultRow).toContain("dCBA_");
+  expect(thirdResultRow).not.toContain("DcBA_");
 })
 
 // TODO introduce more samples when #4722 is fixed
