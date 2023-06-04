@@ -42,6 +42,7 @@ export interface LogseqContextValue {
     }>
   }
   handlers: {
+    t: (key: string) => any
     search: (
       query: string,
       filters: { 'pages?': boolean; 'blocks?': boolean; 'files?': boolean }

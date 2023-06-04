@@ -92,13 +92,16 @@ function filterShapeByAction<S extends Shape>(type: ContextBarActionType) {
 
 const AutoResizingAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>('AutoResizing')
 
   const pressed = shapes.every(s => s.props.isAutoResizing)
 
   return (
     <ToggleInput
-      tooltip="Auto Resize"
+      tooltip={t('whiteboard/auto-resize')}
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-button"
       pressed={pressed}
@@ -122,6 +125,9 @@ const AutoResizingAction = observer(() => {
 
 const LogseqPortalViewModeAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<LogseqPortalShape>('LogseqPortalViewMode')
 
   const collapsed = shapes.every(s => s.collapsed)
@@ -131,7 +137,7 @@ const LogseqPortalViewModeAction = observer(() => {
 
   const tooltip = (
     <div className="flex">
-      {collapsed ? 'Expand' : 'Collapse'}
+      {collapsed ? t('whiteboard/expand') : t('whiteboard/collapse')}
       <KeyboardShortcut
         action={collapsed ? 'editor/expand-block-children' : 'editor/collapse-block-children'}
       />
@@ -164,6 +170,9 @@ const ScaleLevelAction = observer(() => {
 
 const IFrameSourceAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shape = filterShapeByAction<IFrameShape>('IFrameSource')[0]
 
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,16 +186,20 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <Button tooltip="Reload" type="button" onClick={handleReload}>
+      <Button tooltip={t('whiteboard/reload')} type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </Button>
       <TextInput
-        title="Website Url"
+        title={t('whiteboard/website-url')}
         className="tl-iframe-src"
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <Button tooltip="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
+      <Button
+        tooltip={t('whiteboard/open-website-url')}
+        type="button"
+        onClick={() => window.open(shape.props.url)}
+      >
         <TablerIcon name="external-link" />
       </Button>
     </span>
@@ -195,6 +208,9 @@ const IFrameSourceAction = observer(() => {
 
 const YoutubeLinkAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shape = filterShapeByAction<YouTubeShape>('YoutubeLink')[0]
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     shape.onYoutubeLinkChange(e.target.value)
@@ -204,13 +220,13 @@ const YoutubeLinkAction = observer(() => {
   return (
     <span className="flex gap-3">
       <TextInput
-        title="YouTube Link"
+        title={t('whiteboard/youtube-url')}
         className="tl-youtube-link"
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
       <Button
-        tooltip="Open YouTube Link"
+        tooltip={t('whiteboard/open-youtube-url')}
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -222,6 +238,9 @@ const YoutubeLinkAction = observer(() => {
 
 const TwitterLinkAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shape = filterShapeByAction<TweetShape>('TwitterLink')[0]
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     shape.onTwitterLinkChange(e.target.value)
@@ -231,13 +250,13 @@ const TwitterLinkAction = observer(() => {
   return (
     <span className="flex gap-3">
       <TextInput
-        title="Twitter Link"
+        title={t('whiteboard/twitter-url')}
         className="tl-twitter-link"
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
       <Button
-        tooltip="Open Twitter Link"
+        tooltip={t('whiteboard/open-twitter-url')}
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -249,6 +268,9 @@ const TwitterLinkAction = observer(() => {
 
 const NoFillAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>('NoFill')
   const handleChange = React.useCallback((v: boolean) => {
     app.selectedShapesArray.forEach(s => s.update({ noFill: v }))
@@ -259,7 +281,7 @@ const NoFillAction = observer(() => {
 
   return (
     <ToggleInput
-      tooltip="Fill"
+      tooltip={t('whiteboard/fill')}
       className="tl-button"
       pressed={noFill}
       onPressedChange={handleChange}
@@ -315,6 +337,9 @@ const GeometryAction = observer(() => {
 
 const StrokeTypeAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape
   >('StrokeType')
@@ -340,7 +365,7 @@ const StrokeTypeAction = observer(() => {
 
   return (
     <ToggleGroupInput
-      title="Stroke Type"
+      title={t('whiteboard/stroke-type')}
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -357,6 +382,9 @@ const StrokeTypeAction = observer(() => {
 
 const ArrowModeAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<LineShape>('ArrowMode')
 
   const StrokeTypeOptions: ToggleGroupInputOption[] = [
@@ -384,7 +412,7 @@ const ArrowModeAction = observer(() => {
 
   return (
     <ToggleGroupMultipleInput
-      title="Arrow Head"
+      title={t('whiteboard/arrow-head')}
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -401,6 +429,9 @@ const ArrowModeAction = observer(() => {
 
 const TextStyleAction = observer(() => {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
   const shapes = filterShapeByAction<TextShape>('TextStyle')
 
   const bold = shapes.every(s => s.props.fontWeight > 500)
@@ -409,7 +440,7 @@ const TextStyleAction = observer(() => {
   return (
     <span className="flex gap-1">
       <ToggleInput
-        tooltip="Bold"
+        tooltip={t('whiteboard/bold')}
         className="tl-button"
         pressed={bold}
         onPressedChange={v => {
@@ -425,7 +456,7 @@ const TextStyleAction = observer(() => {
         <TablerIcon name="bold" />
       </ToggleInput>
       <ToggleInput
-        tooltip="Italic"
+        tooltip={t('whiteboard/italic')}
         className="tl-button"
         pressed={italic}
         onPressedChange={v => {

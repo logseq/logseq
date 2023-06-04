@@ -30,6 +30,7 @@
 (defonce angle-bracket "<")
 (defonce hashtag "#")
 (defonce colon ":")
+(defonce command-trigger "/")
 (defonce *current-command (atom nil))
 
 (def query-doc
@@ -52,7 +53,7 @@
     "."]])
 
 (defn link-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+  [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :link
                          :id :link
                          :placeholder "Link"
@@ -62,7 +63,7 @@
                          :placeholder "Label"}]]])
 
 (defn image-link-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+  [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :image-link
                          :id :link
                          :placeholder "Link"
@@ -72,7 +73,7 @@
                          :placeholder "Label"}]]])
 
 (defn zotero-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "zotero")]
+  [[:editor/input (str command-trigger "zotero")]
    [:editor/show-zotero]])
 
 (def *extend-slash-commands (atom []))
@@ -96,19 +97,19 @@
   [type]
   (let [template (util/format "@@%s: @@"
                               type)]
-    [[:editor/input template {:last-pattern (state/get-editor-command-trigger)
+    [[:editor/input template {:last-pattern command-trigger
                               :backward-pos 2}]]))
 
 (defn embed-page
   []
   (conj
-   [[:editor/input "{{embed [[]]}}" {:last-pattern (state/get-editor-command-trigger)
+   [[:editor/input "{{embed [[]]}}" {:last-pattern command-trigger
                                      :backward-pos 4}]]
    [:editor/search-page :embed]))
 
 (defn embed-block
   []
-  [[:editor/input "{{embed (())}}" {:last-pattern (state/get-editor-command-trigger)
+  [[:editor/input "{{embed (())}}" {:last-pattern command-trigger
                                     :backward-pos 4}]
    [:editor/search-block :embed]])
 
@@ -229,9 +230,9 @@
      ["Image link" (image-link-steps) "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern (state/get-editor-command-trigger)
+                      {:last-pattern command-trigger
                        :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input (state/get-editor-command-trigger) nil]
+     ["Template" [[:editor/input command-trigger nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
@@ -239,7 +240,7 @@
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       
+
 
     (headings)
 
@@ -290,12 +291,12 @@
                  text)) "Draw a graph with Excalidraw"]
      ["Embed HTML " (->inline "html")]
 
-     ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
+     ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
                                                       :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
-     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
+     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]]
 
     @*extend-slash-commands
@@ -335,7 +336,7 @@
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
                          (when-not backward-truncate-number
-                          (or last-pattern (state/get-editor-command-trigger))))
+                           (or last-pattern command-trigger)))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
@@ -527,7 +528,7 @@
       (let [edit-content (gobj/get current-input "value")
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last (state/get-editor-command-trigger) prefix "" (boolean space?))
+            prefix (util/replace-last command-trigger prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id

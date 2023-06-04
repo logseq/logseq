@@ -141,7 +141,7 @@ export class TranslatingState<
     } = this.app
 
     this.moveSelectedShapesToPointer()
-    this.app.viewport.panToPointWhenOutOfBounds(currentPoint)
+    this.app.viewport.panToPointWhenNearBounds(currentPoint)
   }
 
   onPointerDown: TLEvents<S>['pointer'] = () => {

@@ -385,8 +385,13 @@
 
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
-          (t :settings-page/preferred-pasting-file)
-          preferred-pasting-file?
+          [(t :settings-page/preferred-pasting-file)
+           (ui/tippy {:html        (t :settings-page/preferred-pasting-file-hint)
+                      :class       "tippy-hover ml-2"
+                      :interactive true
+                      :disabled    false}
+                     (svg/info))]
+          preferred-pasting-file? 
           config-handler/toggle-preferred-pasting-file!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
