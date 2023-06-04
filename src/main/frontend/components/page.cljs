@@ -208,8 +208,7 @@
          [:ul.mt-2
           (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
-             [:a {:href (rfe/href :page {:name name})}
-              original-name]])]
+             (component-block/page-cp {} {:block/name name :block/original-name original-name})])]
          {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
