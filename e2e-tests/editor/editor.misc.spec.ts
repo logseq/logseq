@@ -222,21 +222,31 @@ test('press escape when link/image dialog is open, should restore focus to input
     // Open the action modal
     await block.mustFill('')
     await page.keyboard.type(commandTrigger, { delay: STD_DELAY })
-    await page.waitForFunction(
-      (selector) => !!document.querySelector(selector),
-      `[data-modal-name="${modalName}"]`
-    )
+
+    // wait for the Command menu modal to appear
+    let locator = `[data-modal-name="${modalName}"]`
+    let isVisible = false
+    while (!isVisible) {
+      isVisible = await page
+        .locator(locator)
+        .isVisible({ timeout: STD_DELAY * 10 })
+    }
 
     // Press enter to open the link dialog
     await page.keyboard.press('Enter', { delay: STD_DELAY })
-    await page.waitForFunction(
-      (selector) => !!document.querySelector(selector),
-      '[data-modal-name="input"]'
-    )
+
+    // wait for the link dialog to appear
+    locator = `[data-modal-name="input"]`
+    isVisible = false
+    while (!isVisible) {
+      isVisible = await page
+        .locator(locator)
+        .isVisible({ timeout: STD_DELAY * 10 })
+    }
 
     // Press escape; should close link dialog and restore focus to the block textarea
     await page.keyboard.press('Escape', { delay: STD_DELAY })
-    await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible()
+    await expect(page.locator(locator)).not.toBeVisible()
     expect(await block.isEditing()).toBe(true)
   }
 })
