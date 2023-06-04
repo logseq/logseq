@@ -216,35 +216,37 @@ test('press escape when link/image dialog is open, should restore focus to input
   page,
   block,
 }) => {
-  for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
-    await createRandomPage(page)
+  await createRandomPage(page)
+  let textSelector = 'textarea >> nth=0'
+  let command = '/link'
 
-    // Open the action modal
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
-
-    // wait for the Command menu modal to appear
-    let selector = `[data-modal-name="${modalName}"]`
-
-    await page.waitForSelector(selector, {
-      state: 'visible',
-      timeout: STD_DELAY * 10,
+  // Step 1: Open the slash command menu
+  let dataModalSelector = '[data-modal-name="commands"]'
+  test.step('Open the slash command menu', async () => {
+    await page.type(textSelector, command, {
+      delay: STD_DELAY,
     })
+    // wait for the Command menu modal to appear
+    await expect(page.locator(dataModalSelector)).toBeVisible()
+  })
 
-    // Press enter to open the link dialog
+  // Step 2: Open & close the link dialog
+  dataModalSelector = '[data-modal-name="input"]'
+  test.step('Open & close the link dialog', async () => {
     await page.keyboard.press('Enter', { delay: STD_DELAY })
 
     // wait for the link dialog to appear
-    selector = `[data-modal-name="input"]`
-    await page.waitForSelector(selector, {
-      state: 'visible',
-      timeout: STD_DELAY * 10,
-    })
+    await expect(page.locator(dataModalSelector)).toBeVisible()
 
     // Press escape; should close link dialog and restore focus to the block textarea
     await page.keyboard.press('Escape', { delay: STD_DELAY })
-    await expect(page.locator(selector)).not.toBeVisible()
+    await expect(page.locator(dataModalSelector)).not.toBeVisible()
+  })
+
+  // step 3: Check if the block textarea is focused
+  test.step('Check if the block textarea is focused', async () => {
     expect(await block.isEditing()).toBe(true)
-  }
+  })
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({
