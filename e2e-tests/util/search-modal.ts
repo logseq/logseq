@@ -39,6 +39,12 @@ export async function createRandomPage(page: Page) {
     return pageTitle;
   }
   
+  export async function closeSearchBox(page: Page): Promise<void> {
+    await page.keyboard.press("Escape") // escape (potential) search box typing
+    await page.waitForTimeout(500)
+    await page.keyboard.press("Escape") // escape modal
+  }
+
   /**
    * type a search query into the search box
    * stop at the point where search box shows up
@@ -48,16 +54,11 @@ export async function createRandomPage(page: Page) {
    * @returns the HTML element for the search results ui
    */
   export async function searchPage(page: Page, query: string): Promise<ElementHandle<SVGElement | HTMLElement>[]>{
+    await closeSearchBox(page)
     await page.click('#search-button')
     await page.waitForSelector('[placeholder="Search or create page"]')
     await page.type('[placeholder="Search or create page"]', query, { delay: 10 })
     await page.waitForTimeout(2000) // wait longer for search contents to render
   
     return page.$$('#ui__ac-inner>div');
-  }
-  
-  export async function closeSearchBox(page: Page): Promise<void> {
-    await page.keyboard.press("Escape") // escape (potential) search box typing
-    await page.waitForTimeout(500)
-    await page.keyboard.press("Escape") // escape modal
   }

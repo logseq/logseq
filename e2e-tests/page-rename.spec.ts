@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
-import { createPage, randomLowerString, randomString, renamePage, searchPage } from './utils'
+import { closeSearchBox, createPage, randomLowerString, randomString, renamePage, searchPage } from './utils'
 
 /***
  * Test rename feature
@@ -73,6 +73,7 @@ test('page rename test', async ({ page }) => {
   const thirdResultRow = await results[2].innerText()
   expect(thirdResultRow).toContain("dCBA_");
   expect(thirdResultRow).not.toContain("DcBA_");
+  await closeSearchBox(page)
 })
 
 // TODO introduce more samples when #4722 is fixed
