@@ -1118,7 +1118,7 @@
   [block content {:keys [render edit] :as _opts}]
 
   (let [[content1 set-content1!] (rum/use-state content)
-        [editor-active? set-editor-active!] (rum/use-state false)
+        [editor-active? set-editor-active!] (rum/use-state (string/blank? content))
         *cm (rum/use-ref nil)
         *el (rum/use-ref nil)]
 
