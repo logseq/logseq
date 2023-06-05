@@ -107,6 +107,7 @@
  :open-a-directory "Ouvrir un dossier local"
  :open-new-window "Nouvelle fenêtre"
  :page-search "Chercher dans la page en cours"
+ :port "Port"
  :re-index-detail "Reconstruire le graphe"
  :re-index-discard-unsaved-changes-warning "La réindexation va effacer le graphe actuel, puis l'indéxer à nouveau. Ceci risque de vous faire perdre le travail non sauvegardé. Continuer ?"
  :re-index-multiple-windows-warning "Vous devez d'abord fermer les autres fenêtres avant de réindexer"
