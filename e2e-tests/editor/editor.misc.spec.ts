@@ -222,7 +222,7 @@ test('press escape when link/image dialog is open, should restore focus to input
   // Step 1: Open the slash command menu
   let dataModalSelector = '[data-modal-name="commands"]'
   test.step('Open the slash command menu', async () => {
-    await block.mustType(command, { delay: STD_DELAY * 30, toBe: command})
+    await block.mustType(command, { delay: STD_DELAY * 30, toBe: command })
     await expect(page.locator(dataModalSelector)).toBeVisible()
   })
 
