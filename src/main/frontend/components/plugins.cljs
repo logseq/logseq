@@ -1149,7 +1149,7 @@
                                              (.-CodeMirror))]
                      (rum/set-ref! *cm cm)
                      (doto cm
-                       (.on "change" (fn [_ ^js e]
+                       (.on "change" (fn []
                                        (some-> cm (.getDoc) (.getValue) (set-content1!))))))
                   100)]
           #(js/clearTimeout t)))
