@@ -564,8 +564,6 @@
       (do
         (state/pub-event! [:capture-error {:error "Outliner invalid structure"
                                            :payload {:type :outliner/invalid-structure
-                                                     :blocks blocks
-                                                     :target-block target-block'
                                                      :opt opts
                                                      :data (mapv #(dissoc % :block/content) tx)}}])
         (throw (ex-info "Invalid outliner data"

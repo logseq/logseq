@@ -700,7 +700,7 @@
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
-        (let [block (db/pull (:id right-sibling))]
+        (let [block (db/pull (:db/id right-sibling))]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed

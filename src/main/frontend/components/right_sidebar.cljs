@@ -73,6 +73,9 @@
   (when v [:.ml-4 (ui/foldable
                    [:div (str k)]
                    [:.ml-4 (case k
+                             :tx-id
+                             [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]]
+
                              :blocks
                              (map (fn [block]
                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
@@ -220,6 +223,7 @@
 (rum/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
   (let [el-ref (rum/use-ref nil)
+        min-px-width 144 ; Custom window controls width
         min-ratio 0.1
         max-ratio 0.7
         keyboard-step 5
@@ -227,12 +231,12 @@
         remove-resizing-class (fn []
                                 (.. js/document.documentElement -classList (remove "is-resizing-buf"))
                                 (reset! ui-handler/*right-sidebar-resized-at (js/Date.now)))
-        set-width! (fn [ratio element]
-                     (when (and el-ref element)
-                       (let [width (str (* ratio 100) "%")]
-                         (#(.setProperty (.-style element) "width" width)
-                          (.setAttribute (rum/deref el-ref) "aria-valuenow" ratio)
-                          (ui-handler/persist-right-sidebar-width!)))))]
+        set-width! (fn [ratio]
+                     (when el-ref
+                       (let [value (* ratio 100)
+                             width (str value "%")]
+                         (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
+                         (ui-handler/persist-right-sidebar-width! width))))]
     (rum/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
@@ -243,6 +247,7 @@
                 {:move
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
+                         min-ratio (max min-ratio (/ min-px-width width))
                          sidebar-el (js/document.getElementById sidebar-id)
                          offset (.-pageX e)
                          ratio (.toFixed (/ offset width) 6)
@@ -259,7 +264,7 @@
                          (and (< ratio max-ratio) sidebar-el)
                          (when sidebar-el
                            (#(.. js/document.documentElement -classList (remove cursor-class))
-                            (set-width! ratio sidebar-el)))
+                            (set-width! ratio)))
                          :else
                          #(.. js/document.documentElement -classList (remove cursor-class)))
                        (when (> ratio (/ min-ratio 2)) (state/open-right-sidebar!)))))}}))
@@ -269,6 +274,7 @@
              (.on "keydown" (fn [e]
                               (when-let [sidebar-el (js/document.getElementById sidebar-id)]
                                 (let [width js/document.documentElement.clientWidth
+                                      min-ratio (max min-ratio (/ min-px-width width))
                                       keyboard-step (case (.-code e)
                                                       "ArrowLeft" (- keyboard-step)
                                                       "ArrowRight" keyboard-step
@@ -278,7 +284,7 @@
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
                                     ((add-resizing-class)
-                                     (set-width! ratio sidebar-el)))))))
+                                     (set-width! ratio)))))))
              (.on "keyup" remove-resizing-class)))
        #())
      [])
@@ -333,9 +339,7 @@
         (when config/dev? [:div.text-sm
                            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                                        (state/sidebar-add-block! repo "history" :history))}
-                            (t :right-side-bar/history)]])]
-
-       (toggle)]
+                            (t :right-side-bar/history)]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2
        (if @*anim-finished?
@@ -353,9 +357,11 @@
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
+        width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
-     {:class (if sidebar-open? "open" "closed")}
+     {:class (if sidebar-open? "open" "closed")
+      :style {:width width}}
      (sidebar-resizer sidebar-open? "right-sidebar" :west)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))

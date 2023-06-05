@@ -29,7 +29,7 @@
   []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:title "Home"
+     {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
@@ -127,6 +127,11 @@
                   [:span (t :help/bug)]]
           :options {:href (rfe/href :bug-report)}
           :icon (ui/icon "bug")})
+
+       (when config/publishing?
+         {:title (t :toggle-theme)
+          :options {:on-click #(state/toggle-theme!)}
+          :icon (ui/icon "bulb")})
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
@@ -269,7 +274,6 @@
                       :current-repo current-repo
                       :default-home default-home})
 
-      (when (not (state/sub :ui/sidebar-open?))
-        (sidebar/toggle))
+      (sidebar/toggle)
 
       (updater-tips-new-version t)]]))

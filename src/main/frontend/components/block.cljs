@@ -2818,6 +2818,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
+        own-number-list? (:own-order-number-list? config)
+        order-list? (boolean own-number-list?)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2830,6 +2832,7 @@
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect")
+                    (when order-list? " is-order-list")
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
@@ -2858,7 +2861,7 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2
+     [:div.block-main-container.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]

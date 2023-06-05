@@ -101,6 +101,7 @@ export const LogseqQuickSearch = observer(
     )
     const rInput = React.useRef<HTMLInputElement>(null)
     const { handlers, renderers } = React.useContext(LogseqContext)
+    const t = handlers.t
 
     const finishSearching = React.useCallback((id: string) => {
       onChange(id)
@@ -172,11 +173,11 @@ export const LogseqQuickSearch = observer(
               <LogseqTypeTag active type="BA" />
               {q.length > 0 ? (
                 <>
-                  <strong>New block:</strong>
+                  <strong>{t('whiteboard/new-block')}</strong>
                   {q}
                 </>
               ) : (
-                <strong>New block</strong>
+                <strong>{t('whiteboard/new-block-no-colon')}</strong>
               )}
             </div>
           ),
@@ -195,7 +196,7 @@ export const LogseqQuickSearch = observer(
             element: (
               <div className="tl-quick-search-option-row">
                 <LogseqTypeTag active type="PA" />
-                <strong>New page:</strong>
+                <strong>{t('whiteboard/new-page')}</strong>
                 {q}
               </div>
             ),
@@ -210,7 +211,7 @@ export const LogseqQuickSearch = observer(
             element: (
               <div className="tl-quick-search-option-row">
                 <LogseqTypeTag active type="WA" />
-                <strong>New whiteboard:</strong>
+                <strong>{t('whiteboard/new-whiteboard')}</strong>
                 {q}
               </div>
             ),
@@ -230,7 +231,7 @@ export const LogseqQuickSearch = observer(
             element: (
               <div className="tl-quick-search-option-row">
                 <LogseqTypeTag type="BS" />
-                Search only blocks
+                {t('whiteboard/search-only-blocks')}
               </div>
             ),
           },
@@ -243,7 +244,7 @@ export const LogseqQuickSearch = observer(
             element: (
               <div className="tl-quick-search-option-row">
                 <LogseqTypeTag type="PS" />
-                Search only pages
+                {t('whiteboard/search-only-pages')}
               </div>
             ),
           }
@@ -302,10 +303,7 @@ export const LogseqQuickSearch = observer(
                     </div>
                   </>
                 ) : (
-                  <div className="tl-quick-search-option-row">
-                    Cache is outdated. Please click the 'Re-index' button in the graph's dropdown
-                    menu.
-                  </div>
+                  <div className="tl-quick-search-option-row">{t('whiteboard/cache-outdated')}</div>
                 ),
               }
             })
