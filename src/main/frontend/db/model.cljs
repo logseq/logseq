@@ -63,16 +63,6 @@
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
-(defn sub-block
-  [id]
-  (when-let [repo (state/get-current-repo)]
-    (->
-     (react/q repo [:frontend.db.react/block id]
-              {:query-fn (fn [_]
-                           (db-utils/pull (butlast block-attrs) id))}
-              nil)
-     react)))
-
 (def get-original-name util/get-page-original-name)
 
 (defn get-tag-pages
@@ -426,6 +416,20 @@ independent of format as format specific heading characters are stripped"
       result'
       blocks)))
 
+(defn sub-block
+  [id]
+  (when-let [repo (state/get-current-repo)]
+    (->
+     (react/q repo [:frontend.db.react/block id]
+       {:query-fn (fn [_]
+                    (let [e (db-utils/entity id)
+                          children (map :db/id (sort-by-left (:block/_parent e) e))]
+                      [e {:children children
+                          :collapsed? (:block/collapsed? e)}]))}
+       nil)
+     react
+     first)))
+
 (defn sort-by-left-recursive
   [form]
   (walk/postwalk (fn [f]
@@ -714,6 +718,7 @@ independent of format as format specific heading characters are stripped"
           (nth blocks i))))
     blocks)))
 
+;; TODO: deprecate
 (defn get-paginated-blocks
   "Get paginated blocks for a page or a specific block.
    `scoped-block-id`: if specified, returns its children only."
@@ -738,9 +743,8 @@ independent of format as format specific heading characters are stripped"
                               (let [limit (if (and result @result)
                                             (max (+ (count (first @result)) 10) limit)
                                             limit)
-                                    entities (util/profile "get-paginated-blocks-no-cache" (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
-                                                                                                              :include-start? (not page?)
-                                                                                                              :scoped-block-id scoped-block-id}))]
+                                    e (db-utils/entity repo-url block-id)
+                                    entities (:block/_page e)]
                                 [entities (:tx-data tx-report)]))}
                  nil)
         react

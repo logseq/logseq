@@ -10,6 +10,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
@@ -2263,7 +2264,7 @@
              (and (not top?) (= move-to :top))
              (and block-content? (not= move-to :nested))
              (and (not block-content?)
-                  (seq (:block/children block))
+                  (seq (:block/_parent block))
                   (= move-to :nested)))
          (dnd-separator move-to block-content?))))))
 
@@ -2749,7 +2750,7 @@
 
 (defn- get-children-refs
   [block]
-  (when-let [children (seq (:block/children block))]
+  (when-let [children (seq (:block/_parent block))]
     (set
      (lazy-seq
       (concat (map :block/refs children)
@@ -2770,20 +2771,10 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or (and custom-query?
-                           (empty? (:block/children block))
-                           (not (and (:dsl-query? config)
-                                     (string/includes? (:query config) "not"))))
-                      navigated?)
-                (let [block (db/pull [:block/uuid navigating-block])
-                      blocks (db/get-paginated-blocks repo (:db/id block)
-                                                      {:scoped-block-id (:db/id block)})
-                      tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
-                  (first tree))
-                block)
         block (merge (db/sub-block (:db/id block))
-                     (select-keys block [:block/level :block/children]))
-        {:block/keys [uuid children pre-block? refs level format content properties]} block
+                     (select-keys block [:block/level]))
+        {:block/keys [uuid pre-block? refs level format content properties]} block
+        children (db/sort-by-left (:block/_parent block) block)
         {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
@@ -2900,15 +2891,6 @@
     (assoc cp-state
       :rum/args (assoc (vec args) 0 (block-handler/attach-order-list-state (first args) (second args))))))
 
-(defn- get-children-ids
-  [entity]
-  (when-let [children (seq (:block/children entity))]
-    (set
-     (lazy-seq
-      (concat (map (juxt :db/id (comp :db/id :block/left)
-                         (comp :db/id :block/parent)) children)
-              (mapcat get-children-ids children))))))
-
 (defn- block-changed?
   [old-block new-block]
   (let [ks [:block/uuid :block/content :block/collapsed?
@@ -2920,10 +2902,10 @@
              (:db/id (:block/left new-block)))
           (= (:db/id (:block/parent old-block))
              (:db/id (:block/parent new-block)))
-          (= (get-children-ids old-block)
-             (get-children-ids new-block))
           (= (map :db/id (:block/_refs old-block))
-             (map :db/id (:block/_refs new-block)))))))
+             (map :db/id (:block/_refs new-block)))
+          (= (map :db/id (:block/_parent old-block))
+             (map :db/id (:block/_parent new-block)))))))
 
 (rum/defcs block-container < rum/reactive
   (rum/local false ::show-block-left-menu?)
@@ -2968,18 +2950,11 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo          (state/get-current-repo)
-        ref?          (:ref? config)
-        custom-query? (boolean (:custom-query? config))]
+  (let [repo          (state/get-current-repo)]
     (ui/lazy-visible
      (fn [] (block-container-inner state repo config block))
-     {:debug-id (str "block-container-ref " (:db/id block))})
-    ;; (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
-    ;;   (ui/lazy-visible
-    ;;    (fn [] (block-container-inner state repo config block))
-    ;;    {:debug-id (str "block-container-ref " (:db/id block))})
-    ;;   (block-container-inner state repo config block))
-    ))
+     {:debug-id (str "block-container-ref " (:db/id block))
+      :fade-in? false})))
 
 (defn divide-lists
   [[f & l]]
@@ -3366,18 +3341,18 @@
     (or custom-query? ref?)))
 
 (defn- load-more-blocks!
-  [config flat-blocks]
+  [config blocks]
   (when-let [db-id (:db/id config)]
-    (let [last-block-id (:db/id (last flat-blocks))]
+    (let [last-block-id (:db/id (last blocks))]
       (block-handler/load-more! db-id last-block-id))))
 
 (defn- loading-more-data!
-  [config *loading? flat-blocks initial?]
+  [config *loading? blocks initial?]
   ;; To prevent scrolling after inserting new blocks
   (when (or initial?
             (and (not initial?) (> (- (util/time-ms) (:start-time config)) 100)))
     (reset! *loading? true)
-    (load-more-blocks! config flat-blocks)
+    (load-more-blocks! config blocks)
     (reset! *loading? false)))
 
 (rum/defc load-more < rum/reactive
@@ -3397,28 +3372,29 @@
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))
    :did-mount (fn [state]
-                (let [[config _ flat-blocks] (:rum/args state)]
-                  (loading-more-data! config (::loading? state) flat-blocks true))
+                (let [[config blocks] (:rum/args state)]
+                  (loading-more-data! config (::loading? state) blocks true))
                 state)}
-  [state config blocks flat-blocks]
+  [state config blocks]
   (let [db-id (:db/id config)
-        *loading? (::loading? state)]
+        *loading? (::loading? state)
+        config' (dissoc config :infinite-list?)]
     (if (:infinite-list? config)
       (let [has-more? (and
-                       (>= (count flat-blocks) model/initial-blocks-length)
-                       (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
+                       (>= (count blocks) model/initial-blocks-length)
+                       (some? (model/get-next-open-block (db/get-db) (last blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}
          (ui/infinite-list
           "main-content-container"
-          (block-list (dissoc config :infinite-list?) blocks)
-          {:on-load #(loading-more-data! config *loading? flat-blocks false)
+          (block-list config' blocks)
+          {:on-load #(loading-more-data! config' *loading? blocks false)
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
                                (ui/bottom-reached? node 300)))
            :has-more has-more?
-           :more (load-more config *loading?)})])
-      (block-list config blocks))))
+           :more (load-more config' *loading?)})])
+      (block-list config' blocks))))
 
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
@@ -3432,17 +3408,11 @@
         config (assoc config :blocks-container-id blocks-container-id)
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
-      (let [flat-blocks (vec blocks)
-            query-or-ref? (custom-query-or-ref? config)
-            id (if (:navigated? config) @(:navigating-block config) (:id config))
-            blocks' (if (or (and query-or-ref? (:navigated? config))
-                            (not query-or-ref?))
-                      (tree/blocks->vec-tree flat-blocks id)
-                      flat-blocks)
+      (let [id (if (:navigated? config) @(:navigating-block config) (:id config))
             config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
-         (lazy-blocks config blocks' flat-blocks)]))))
+         (lazy-blocks config blocks)]))))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -3461,8 +3431,7 @@
                           (:db/id (:block/parent navigating-block-entity))))
         blocks (if navigated?
                  (let [block navigating-block-entity]
-                   (db/get-paginated-blocks repo (:db/id block)
-                                            {:scoped-block-id (:db/id block)}))
+                   [(model/sub-block (:db/id block))])
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)

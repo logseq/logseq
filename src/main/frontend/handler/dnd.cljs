@@ -6,11 +6,12 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.db :as db]))
 
 (defn move-blocks
   [^js event blocks target-block move-to]
-  (let [blocks' (map #(dissoc % :block/level :block/children) blocks)
+  (let [blocks' (map #(db/pull (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)
@@ -38,7 +39,7 @@
                           :clear? true}])
 
 
-      (every? map? (conj blocks target-block))
+      (every? map? (conj blocks' target-block))
       (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
           {:outliner-op :move-blocks}
@@ -49,10 +50,10 @@
                      (tree/-get-left-id target-node))]
               (if first-child?
                 (let [parent (tree/-get-parent target-node)]
-                  (outliner-core/move-blocks! blocks (:data parent) false))
+                  (outliner-core/move-blocks! blocks' (:data parent) false))
                 (let [before-node (tree/-get-left target-node)]
-                  (outliner-core/move-blocks! blocks (:data before-node) true))))
-            (outliner-core/move-blocks! blocks target-block (not nested?)))))
+                  (outliner-core/move-blocks! blocks' (:data before-node) true))))
+            (outliner-core/move-blocks! blocks' target-block (not nested?)))))
 
       :else
       nil)))

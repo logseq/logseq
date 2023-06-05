@@ -63,41 +63,28 @@
            str)))
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
-(defn- get-blocks
+(defn- get-block
   [repo page-name block-id]
   (when page-name
-    (let [root (if block-id
-                 (db/pull [:block/uuid block-id])
-                 (model/get-page page-name))
-          opts (if block-id
-                 {:scoped-block-id (:db/id root)}
-                 {})]
-      (db/get-paginated-blocks repo (:db/id root) opts))))
+    (when-let [block (model/get-page page-name)]
+      (model/sub-block (:db/id block)))))
 
-(defn- open-first-block!
+(defn- open-root-block!
   [state]
-  (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
+  (let [[_ block _ sidebar? preview?] (:rum/args state)]
     (when (and
            (or preview?
                (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
            (not sidebar?))
-      (let [block (first blocks)]
-        (when (and (= (count blocks) 1)
-                   (string/blank? (:block/content block))
-                   (not preview?))
-          (editor-handler/edit-block! block :max (:block/uuid block))))))
+      (when (and (string/blank? (:block/content block))
+                 (not preview?))
+        (editor-handler/edit-block! block :max (:block/uuid block)))))
   state)
 
 (rum/defc page-blocks-inner <
-  {:did-mount  open-first-block!
-   :did-update open-first-block!
-   :should-update (fn [prev-state state]
-                    (let [[old-page-name _ old-hiccup _ old-block-uuid] (:rum/args prev-state)
-                          [page-name _ hiccup _ block-uuid] (:rum/args state)]
-                      (or (not= page-name old-page-name)
-                          (not= hiccup old-hiccup)
-                          (not= block-uuid old-block-uuid))))}
-  [page-name _blocks hiccup sidebar? whiteboard? _block-uuid]
+  {:did-mount  open-root-block!
+   :did-update open-root-block!}
+  [page-name _block hiccup sidebar? whiteboard? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
    (rum/with-key
      (content/content page-name
@@ -151,16 +138,14 @@
                         (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          page-blocks (get-blocks repo page-name block-id)
-          block-entity (db/entity (if block-id
-                                    [:block/uuid block-id]
-                                    [:block/name page-name]))
-          block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block-entity))]
+          block (get-block repo page-name block-id)
+          block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block))]
       (cond
         block-unloaded?
         (ui/loading "Loading...")
 
-        (empty? page-blocks)
+        (and (not block?)
+             (empty? (:block/_parent block)))
         (dummy-block page-name)
 
         :else
@@ -168,15 +153,16 @@
               hiccup-config (merge
                              {:infinite-list? true
                               :id (if block? (str block-id) page-name)
-                              :db/id (:db/id block-entity)
+                              :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
                               :document/mode? document-mode?}
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
-              hiccup (component-block/->hiccup page-blocks hiccup-config {})]
+              blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))
+              hiccup (component-block/->hiccup blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? whiteboard? block-id)
+           (page-blocks-inner page-name block hiccup sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}

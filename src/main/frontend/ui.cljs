@@ -1078,24 +1078,27 @@
       [:div.h-2.rounded]]]]])
 
 (rum/defc lazy-visible-inner
-  [visible? content-fn ref]
+  [visible? content-fn ref fade-in?]
   (let [[set-ref rect] (r/use-bounding-client-rect)
         placeholder-height (or (when rect (.-height rect)) 88)]
     [:div.lazy-visibility {:ref ref}
      [:div {:ref set-ref}
       (if visible?
         (when (fn? content-fn)
-          [:div.fade-enter
-           {:ref #(when-let [^js cls (and % (.-classList %))]
-                    (.add cls "fade-enter-active"))}
-           (content-fn)])
+          (if fade-in?
+            [:div.fade-enter
+             {:ref #(when-let [^js cls (and % (.-classList %))]
+                      (.add cls "fade-enter-active"))}
+             (content-fn)]
+            (content-fn)))
         (lazy-loading-placeholder placeholder-height))]]))
 
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+  ([content-fn {:keys [trigger-once? fade-in? _debug-id]
+                :or {trigger-once? false
+                     fade-in? true}}]
    (let [[visible? set-visible!] (rum/use-state false)
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")
@@ -1106,7 +1109,7 @@
                                                              (and visible? (not in-view?)))
                                                      (set-visible! in-view?))))})
          ref (.-ref inViewState)]
-     (lazy-visible-inner visible? content-fn ref))))
+     (lazy-visible-inner visible? content-fn ref fade-in?))))
 
 (rum/defc portal
   ([children]

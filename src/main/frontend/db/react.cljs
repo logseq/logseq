@@ -17,9 +17,6 @@
 ;; ::block
 ;; pull-block react-query
 (s/def ::block (s/tuple #(= ::block %) int?))
-;; ::page-blocks
-;; get page-blocks react-query
-(s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))
 ;; ::block-and-children
 ;; get block&children react-query
 (s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
@@ -37,7 +34,6 @@
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
-                                :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
                                 :journals ::journals
                                 :page<-pages ::page<-pages
@@ -264,16 +260,15 @@
                           (let [page-id (or
                                          (when (:block/name block) (:db/id block))
                                          (:db/id (:block/page block)))
-                                blocks [[::block (:db/id block)]]
+                                blocks [[::block (:db/id block)]
+                                        [::block (:db/id (:block/parent block))]]
                                 path-refs (:block/path-refs block)
                                 path-refs' (->> (keep (fn [ref]
                                                         (when-not (= (:db/id ref) page-id)
                                                           [[::refs (:db/id ref)]
                                                            [::block (:db/id ref)]])) path-refs)
-                                                (apply concat))
-                                page-blocks (when page-id
-                                              [[::page-blocks page-id]])]
-                            (concat blocks page-blocks path-refs')))
+                                                (apply concat))]
+                            (concat blocks path-refs')))
                         block-entities)
 
                        (mapcat

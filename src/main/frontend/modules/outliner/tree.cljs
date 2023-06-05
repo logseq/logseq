@@ -93,7 +93,8 @@
    :block/left {:db/id (:db/id (:block/left e))}
    :block/page (:block/page e)
    :block/refs (:block/refs e)
-   :block/children (:block/children e)})
+   :block/children (:block/children e)
+   :block/content (:block/content e)})
 
 (defn filter-top-level-blocks
   [blocks]
