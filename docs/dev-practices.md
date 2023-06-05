@@ -282,7 +282,7 @@ point out:
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
 
   ```sh
-  bb dev:validate-repo-config-edn templates/config.edn
+  bb dev:validate-repo-config-edn src/resources/templates/config.edn
   ```
 
 * `dev:publishing` - Build a publishing app for a given graph dir. If the

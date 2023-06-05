@@ -589,7 +589,7 @@
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath (str root "/preferences.json")))}}
-                   {:title   [:span.flex.items-center (ui/icon "bug") "Open " [:code " ~/.logseq"]]
+                   {:title   [:span.flex.items-center (ui/icon "bug") "Open\u00A0" [:code "~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath root))}}]))

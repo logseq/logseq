@@ -1,4 +1,4 @@
-{:paths ["scripts/src" "src/main"]
+{:paths ["scripts/src" "src/main" "src/resources"]
  :deps
  {metosin/malli
   {:mvn/version "0.10.0"}
@@ -108,9 +108,6 @@
 
   lang:missing
   logseq.tasks.lang/list-missing
-
-  lang:duplicates
-  logseq.tasks.lang/list-duplicates
 
   lang:validate-translations
   logseq.tasks.lang/validate-translations

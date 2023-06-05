@@ -8,6 +8,7 @@ import { BlockLink } from '../BlockLink'
 export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ shape }) => {
   const app = useApp()
   const { handlers } = React.useContext(LogseqContext)
+  const t = handlers.t
   const links = React.useMemo(() => {
     const links = [...(shape.props.refs ?? [])].map<[ref: string, showReferenceContent: boolean]>(
       // user added links should show the referenced block content
@@ -25,12 +26,12 @@ export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ shape }) => 
         link[0].toLowerCase() !== app.currentPage.name &&
         handlers.getBlockPageName(link[0]) !== app.currentPage.name
     )
-  }, [shape.props.type, shape.props.parentId, shape.props.refs])
+  }, [shape.props.id, shape.props.type, shape.props.parentId, shape.props.refs])
 
   if (links.length === 0) return null
 
   return (
-    <div className="tl-quick-links" title="Shape Quick Links">
+    <div className="tl-quick-links" title={t('whiteboard/shape-quick-links')}>
       {links.map(([ref, showReferenceContent]) => {
         return (
           <div key={ref} className="tl-quick-links-row">

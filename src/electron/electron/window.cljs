@@ -26,10 +26,11 @@
    (create-main-window! url nil))
   ([url opts]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
+         native-titlebar? (cfgs/get-item :window/native-titlebar?)
          win-opts  (cond->
                      {:width                (.-width win-state)
                       :height               (.-height win-state)
-                      :frame                true
+                      :frame                (or mac? native-titlebar?)
                       :titleBarStyle        "hiddenInset"
                       :trafficLightPosition {:x 16 :y 16}
                       :autoHideMenuBar      (not mac?)
@@ -187,7 +188,9 @@
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
+        (.on "maximize" #(.send web-contents "maximize" true))
+        (.on "unmaximize" #(.send web-contents "maximize" false)))
 
       ;; clear
       (fn []
