@@ -80,27 +80,13 @@ $ bb lang:missing es --copy
 
 Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
 
-## Fix Untranslated
-
-There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left for your language use :
-
-```shell
-$ bb lang:duplicates LOCALE
-
-Keys with duplicate values found:
-
-|                  :translation-key | :duplicate-value |
-|-----------------------------------+------------------|
-|                          :general |          General |
-|                           :logseq |           Logseq |
-|                               :no |               No |
-```
-
 ## Fix Mistakes
 
-Sometimes, we typo a translation key or forget to use it. If this happens,
-the github CI step of `bb lang:validate-translations` will detect these errors
-and tell you what's wrong.
+Sometimes, we typo a translation key or forget to use it. If this happens, the
+github CI step of `bb lang:validate-translations` will detect these errors and
+tell you what's wrong. If you get an error about duplicate translations and this
+is a valid duplication for the language, then add it to `allowed-duplicates` in
+[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj).
 
 ## Add a Language
 
