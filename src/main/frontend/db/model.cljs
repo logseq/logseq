@@ -26,7 +26,7 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 500)
+(def initial-blocks-length 50000)
 
 (def step-loading-blocks 250)
 
@@ -738,10 +738,10 @@ independent of format as format specific heading characters are stripped"
                               (let [limit (if (and result @result)
                                             (max (+ (count (first @result)) 10) limit)
                                             limit)
-                                    entities (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
-                                                                                                             :include-start? (not page?)
-                                                                                                             :scoped-block-id scoped-block-id})]
-                                [entities (mapv (juxt :block/parent :block/left :block/collapsed?) entities)]))}
+                                    entities (util/profile "get-paginated-blocks-no-cache" (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
+                                                                                                              :include-start? (not page?)
+                                                                                                              :scoped-block-id scoped-block-id}))]
+                                [entities (util/profile "get other attributes" (mapv (juxt :block/parent :block/left :block/collapsed?) entities))]))}
                  nil)
         react
         first)))))

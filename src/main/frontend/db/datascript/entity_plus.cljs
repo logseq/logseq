@@ -1,7 +1,8 @@
 (ns frontend.db.datascript.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity"
   (:require [datascript.impl.entity :as entity :refer [Entity]]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [cljs.core]))
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
@@ -11,6 +12,9 @@
        (lookup-entity e k default-value))))
 
 (extend-type Entity
+  cljs.core/IEncodeJS
+  (-clj->js [this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
+
   IAssociative
   (-assoc [this k v]
     (assert (keyword? k) "attribute must be keyword")
