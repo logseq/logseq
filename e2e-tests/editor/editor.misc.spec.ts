@@ -217,20 +217,20 @@ test('press escape when link/image dialog is open, should restore focus to input
   block,
 }) => {
   await createRandomPage(page)
-  let command = '/link'
 
   // Step 1: Open the slash command menu
   let dataModalSelector = '[data-modal-name="commands"]'
   test.step('Open the slash command menu', async () => {
-    await page.type('textarea >> nth=0', command, {
-      delay: STD_DELAY,
-    })
+    await page.keyboard.press('/', { delay: STD_DELAY })
+    // wait for the slash command menu to appear
     await expect(page.locator(dataModalSelector)).toBeVisible()
   })
 
   // Step 2: Open & close the link dialog
   dataModalSelector = '[data-modal-name="input"]'
   test.step('Open & close the link dialog', async () => {
+    // Open the link dialog
+    await page.keyboard.type('link', { delay: STD_DELAY })
     await page.keyboard.press('Enter', { delay: STD_DELAY })
     // wait for the link dialog to appear
     await expect(page.locator(dataModalSelector)).toBeVisible()
