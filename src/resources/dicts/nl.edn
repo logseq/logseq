@@ -36,6 +36,7 @@
  :open-new-window "Nieuwe venster"
  :page-search "Zoek in de huidige pagina"
  :parsing-files "Bestanden analyseren"
+ :plugins "Plugins"
  :port "Poort"
  :re-index "Herindexeren"
  :re-index-detail "Grafiek herbouwen"
@@ -54,6 +55,7 @@
  :sync-from-local-files "Bijwerken"
  :sync-from-local-files-detail "Importeer veranderingen uit lokale bestanden"
  :themes "Thema's"
+ :type "Type"
  :yes "Ja"
 
  :asset/confirm-delete "Weet u zeker dat u dit wilt verwijderen {1}?"
@@ -99,7 +101,6 @@
  :help/shortcut "Snelkoppeling"
  :help/shortcut-page-title "Toetsenbord snelkoppelingen"
  :help/shortcuts "Toetsenbord snelkoppelingen"
- :help/shortcuts-triggers "Triggers"
  :help/slash-autocomplete "Slash-Autocomplete"
  :help/start "Aan de slag"
  :help/terms "Voorwaarden"
@@ -107,6 +108,7 @@
 
  :left-side-bar/journals "Journalen"
  :left-side-bar/nav-favorites "Favorieten"
+ :left-side-bar/nav-recent-pages "Recent"
  :left-side-bar/new-page "Nieuwe pagina"
 
  :linked-references/filter-search "Zoeken in gelinkte pagina's"
@@ -148,7 +150,6 @@
 
  :plugin/all "Alle"
  :plugin/check-all-updates "Check alle updates"
- :plugin/check-update "Check update"
  :plugin/contribute "✨ Schrijf en dien nieuwe plugin in"
  :plugin/custom-js-alert "custom.js bestand gevonden, mag deze uitgevoerd worden? (Als je niet begrijpt wat dit bestand inhoud is het aangeraden om het uivoeren hiervan niet toe te staan, dit is in verband met beveiligings risico's.)" ;; TODO
  :plugin/delete-alert "Weet je zeker dat je plugin [{1}] wilt verwijderen?"
@@ -158,7 +159,6 @@
  :plugin/installed "Geïnstalleerd"
  :plugin/installing "Installeren"
  :plugin/load-unpacked "Laad uitgepakte plugin"
- :plugin/marketplace "Marketplace"
  :plugin/not-installed "Niet geïnstalleerd"
  :plugin/open-package "Open pakket"
  :plugin/open-settings "Open instellingen"
@@ -325,6 +325,7 @@
  :command.graph/re-index                 "Huidige grafiek opnieuw indexeren"
  :command.graph/remove                   "Verwijder een grafiek"
  :command.graph/save                     "Huidige grafiek opslaan op schijf"
+ :command.misc/copy                      "Kopieer"
  :command.pdf/close                      "Huidige pdf-viewer sluiten"
  :command.pdf/next-page                  "Volgende pagina van huidige pdf doc"
  :command.pdf/previous-page              "Vorige pagina van huidige pdf doc"
@@ -339,7 +340,6 @@
  :command.ui/toggle-document-mode        "Schakel tussen documentmodus"
  :command.ui/toggle-left-sidebar         "Toggle linker zijbalk"
  :command.ui/toggle-right-sidebar        "Toggle rechter zijbalk"
- :command.ui/toggle-settings             "Toggle settings"
  :command.ui/toggle-theme                "Toggle tussen donker/licht thema"
  :command.ui/toggle-wide-mode            "Toggle brede modus"
  :shortcut.category/basics               "Basis"

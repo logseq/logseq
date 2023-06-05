@@ -234,8 +234,6 @@
  :paginates/prev "前"
  :paginates/next "次"
 
- :tips/all-done "All Done"
-
  :command-palette/prompt "コマンドを入力"
  :select/default-prompt "選択してください"
  :select.graph/prompt "グラフを選んでください"
@@ -301,6 +299,7 @@
  :command.search/re-index                 "インデックス再構築"
  :command.editor/bold                     "太字"
  :command.editor/italics                  "斜体"
+ :command.editor/insert-link              "リンク挿入"
  :command.editor/highlight                "ハイライト"
  :command.editor/undo                     "元に戻す"
  :command.editor/redo                     "やり直し"
@@ -368,5 +367,6 @@
  :command.editor/open-file-in-default-app         "ファイルを規定のアプリで開く"
  :command.editor/open-file-in-directory           "ファイルをディレクトリで開く"
  :command.editor/strike-through                   "打ち消し線"
+ :command.misc/copy                               "コピー"
  :command.ui/goto-plugins                         "プラグインへ"
  :command.ui/select-theme-color                   "利用可能なテーマ色を選択"}

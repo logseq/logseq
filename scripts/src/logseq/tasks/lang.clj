@@ -156,8 +156,20 @@
 
 (def allowed-duplicates
   "Allows certain keys in a language to have the same translation
-   as English. Rare but it does happen"
-  {:fr #{:port}})
+   as English. Happens more in romance languages but pretty rare otherwise"
+  {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
+         :settings-of-plugins}
+   :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
+         :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
+         :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
+   :es #{:settings-page/tab-general :settings-page/tab-editor}
+   :it #{:plugins}
+   :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
+   :pl #{:port}
+   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards}
+   :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
+            :settings-page/enable-flashcards :settings-page/plugin-system}
+   })
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"

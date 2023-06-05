@@ -423,6 +423,7 @@
  :command.search/re-index                 "重新建立搜索索引"
  :command.editor/bold                     "粗体"
  :command.editor/italics                  "斜体"
+ :command.editor/insert-link              "Html 链接"
  :command.editor/highlight                "高亮"
  :command.editor/undo                     "撤销"
  :command.editor/redo                     "重做"

@@ -440,6 +440,7 @@
  :command.editor/cut                     "Kes"
  :command.editor/undo                    "Geri al"
  :command.editor/redo                    "Tinele"
+ :command.editor/insert-link             "HTML Bağlantısı"
  :command.editor/select-all-blocks       "Tüm blokları seç"
  :command.editor/zoom-in                 "Düzenlenen bloğu yakınlaştır / Aksi takdirde ileri git"
  :command.editor/zoom-out                "Düzenlenen bloğu uzaklaştır / Aksi takdirde geri git"

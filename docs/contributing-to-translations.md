@@ -82,9 +82,11 @@ Almost all translations are small. The only exceptions to this are the keys `:tu
 
 ## Fix Mistakes
 
-Sometimes, we typo a translation key or forget to use it. If this happens,
-the github CI step of `bb lang:validate-translations` will detect these errors
-and tell you what's wrong.
+Sometimes, we typo a translation key or forget to use it. If this happens, the
+github CI step of `bb lang:validate-translations` will detect these errors and
+tell you what's wrong. If you get an error about duplicate translations and this
+is a valid duplication for the language, then add it to `allowed-duplicates` in
+[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj).
 
 ## Add a Language
 

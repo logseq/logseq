@@ -162,6 +162,7 @@
  :all-journals "Tutte le pagine di diario"
  :settings "Impostazioni"
  :settings-of-plugins "Impostazioni plugin"
+ :plugins "Plugins"
  :themes "Temi"
  :relaunch-confirm-to-work "È necessario riavviare l'app per farla funzionare. Vuoi riavviarla ora?"
  :import "Importa"

@@ -355,6 +355,7 @@
  :settings-page/tab-assets "Ressurser"
  :whiteboard/link-whiteboard-or-block "Lenk whiteboard/side/blokk"
 
+ :shortcut.category/formatting            "Formatering"
  :shortcut.category/basics                "Basis"
  :shortcut.category/navigating            "Navigasjon"
  :shortcut.category/block-editing         "Blokkredigering generelt"
@@ -393,6 +394,7 @@
  :command.search/re-index                 "Gjenoppbygg søkeindeks"
  :command.editor/bold                     "Fet"
  :command.editor/italics                  "Kursiv"
+ :command.editor/insert-link              "HTML lenke"
  :command.editor/highlight                "Markering"
  :command.editor/undo                     "Angre"
  :command.editor/redo                     "Gjør om"

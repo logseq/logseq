@@ -365,9 +365,9 @@
  :file-sync/other-user-graph "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
  :file-sync/graph-deleted "Текущий удаленный граф был удален"
  :file-sync/rsapi-cannot-upload-err "Невозможно начать синхронизацию, пожалуйста, проверьте правильное ли установлено локальное время."
- 
+
  :notification/clear-all "Очистить всё"
- 
+
  :shortcut.category/basics                "Базовые"
  :shortcut.category/formatting            "Форматирование"
  :shortcut.category/navigating            "Навигация"
@@ -443,6 +443,7 @@
  :command.editor/cut                      "Вырезать"
  :command.editor/undo                     "Отменить"
  :command.editor/redo                     "Вернуть"
+ :command.editor/insert-link              "HTML ссылка"
  :command.editor/select-all-blocks        "Выбрать все блоки"
  :command.editor/select-parent            "Выбрать родительский блок"
  :command.editor/zoom-in                  "Увеличить / Вперед"
