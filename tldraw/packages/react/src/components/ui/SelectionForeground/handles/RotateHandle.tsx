@@ -1,5 +1,4 @@
 import { observer } from 'mobx-react-lite'
-import * as React from 'react'
 import { useBoundsEvents } from '../../../../hooks'
 
 interface RotateHandleProps {

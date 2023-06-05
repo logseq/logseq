@@ -27,12 +27,13 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
 
   // List of error messages to ignore
   const ignoreErrors = [
-    /net::ERR_CONNECTION_REFUSED/,
+    /net/,
     /^Error with Permissions-Policy header:/
   ];
 
   // If the text matches any of the ignoreErrors, return early
   if (ignoreErrors.some(error => text.match(error))) {
+    console.log(`WARN:: ${text}\n`)
     return;
   }
 

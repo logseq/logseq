@@ -70,7 +70,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
                 height="100%"
                 src={`${this.props.url}`}
                 frameBorder="0"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
               />
             </div>
           )}
