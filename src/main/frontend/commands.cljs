@@ -370,7 +370,8 @@
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
                                              (string/starts-with? last-pattern gp-property/colons)))))))]
-                   (if (and space? (string/starts-with? last-pattern "#[["))
+                   (if (and space? (or (string/starts-with? last-pattern "#[[")
+                                       (string/starts-with? last-pattern "```")))
                      false
                      space?))
           prefix (cond
