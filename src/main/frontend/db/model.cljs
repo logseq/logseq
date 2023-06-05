@@ -734,14 +734,14 @@ independent of format as format specific heading characters are stripped"
        (some->
         (react/q repo-url [query-key block-id]
                  {:use-cache? use-cache?
-                  :query-fn (fn [db _tx-report result]
+                  :query-fn (fn [db tx-report result]
                               (let [limit (if (and result @result)
                                             (max (+ (count (first @result)) 10) limit)
                                             limit)
                                     entities (util/profile "get-paginated-blocks-no-cache" (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
                                                                                                               :include-start? (not page?)
                                                                                                               :scoped-block-id scoped-block-id}))]
-                                [entities (util/profile "get other attributes" (mapv (juxt :block/parent :block/left :block/collapsed?) entities))]))}
+                                [entities (:tx-data tx-report)]))}
                  nil)
         react
         first)))))

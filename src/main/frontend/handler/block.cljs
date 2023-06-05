@@ -67,12 +67,11 @@
                    start-id)
         more-data (db-model/get-paginated-blocks-no-cache db start-id' option)]
     (react/swap-new-result! query-k
-                            (fn [[entities structure-map]]
+                            (fn [[entities _tx-data]]
                               (let [entities' (->> (concat entities more-data)
                                                    (util/distinct-by :block/uuid))
-                                    structure-map' (->> (concat structure-map (map (juxt :block/parent :block/left :block/collapsed?) more-data))
-                                                        (util/distinct-by :block/uuid))]
-                                [entities' structure-map'])))))
+                                    tx-data' (mapv (juxt :block/parent :block/left :block/collapsed?) more-data)]
+                                [entities' tx-data'])))))
 
 (defn indentable?
   [{:block/keys [parent left]}]
