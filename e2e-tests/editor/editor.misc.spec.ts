@@ -217,16 +217,12 @@ test('press escape when link/image dialog is open, should restore focus to input
   block,
 }) => {
   await createRandomPage(page)
-  let textSelector = 'textarea >> nth=0'
   let command = '/link'
 
   // Step 1: Open the slash command menu
   let dataModalSelector = '[data-modal-name="commands"]'
   test.step('Open the slash command menu', async () => {
-    await page.type(textSelector, command, {
-      delay: STD_DELAY,
-    })
-    // wait for the Command menu modal to appear
+    await block.mustType(command, { delay: STD_DELAY * 30, toBe: command})
     await expect(page.locator(dataModalSelector)).toBeVisible()
   })
 
@@ -301,7 +297,7 @@ test('should not erase typed text when expanding block quickly after typing #389
   await block.mustFill('initial text,')
   await page.waitForTimeout(500)
   await page.type('textarea >> nth=0', ' then expand', { delay: STD_DELAY })
-  // A quick cmd-down must not destroy the typed text
+  // A quick cmd-down mus * 2t not destroy the typed text
   await page.keyboard.press(modKey + '+ArrowDown', { delay: STD_DELAY * 5 })
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text, then expand'
