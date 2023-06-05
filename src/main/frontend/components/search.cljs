@@ -396,7 +396,7 @@
   [in-page-search?]
   [:div.recent-search
    [:div.wrap.px-4.pb-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
-    [:div (t :search/result-for)]
+    [:div (t :search/recent)]
     [:div.hidden.md:flex
      (ui/with-shortcut :go/search-in-page "bottom"
        [:div.flex-row.flex.align-items
