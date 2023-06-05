@@ -547,20 +547,20 @@ test('press escape when link/image dialog is open, should restore focus to input
   block,
 }) => {
   await createRandomPage(page)
+  let dataModalSelector : string
 
-  // Step 1: Open the slash command menu
-  let dataModalSelector = '[data-modal-name="commands"]'
+
   test.step('Open the slash command menu', async () => {
-    await page.keyboard.press('/', { delay: STD_DELAY })
+    let dataModalSelector = '[data-modal-name="commands"]'
+    await page.type('textarea >> nth=0', ' /', { delay: STD_DELAY }) // the space is needed to trigger the slash command menu in the CI environment
     // wait for the slash command menu to appear
     await expect(page.locator(dataModalSelector)).toBeVisible()
   })
 
-  // Step 2: Open & close the link dialog
-  dataModalSelector = '[data-modal-name="input"]'
   test.step('Open & close the link dialog', async () => {
+      dataModalSelector = '[data-modal-name="input"]'
     // Open the link dialog
-    await page.keyboard.type('link', { delay: STD_DELAY })
+    await page.type('textarea >> nth=0', 'link', { delay: STD_DELAY })
     await page.keyboard.press('Enter', { delay: STD_DELAY })
     // wait for the link dialog to appear
     await expect(page.locator(dataModalSelector)).toBeVisible()
@@ -569,7 +569,6 @@ test('press escape when link/image dialog is open, should restore focus to input
     await expect(page.locator(dataModalSelector)).not.toBeVisible()
   })
 
-  // step 3: Check if the block textarea is focused
   test.step('Check if the block textarea is focused', async () => {
     expect(await block.isEditing()).toBe(true)
   })
