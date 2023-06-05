@@ -65,12 +65,14 @@
         start-id' (or
                    (when query-result (:db/id (last @query-result)))
                    start-id)
-        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id' option)
-                       (map #(db/pull (:db/id %))))]
+        more-data (db-model/get-paginated-blocks-no-cache db start-id' option)]
     (react/swap-new-result! query-k
-                            (fn [result]
-                              (->> (concat result more-data)
-                                   (util/distinct-by :db/id))))))
+                            (fn [[entities structure-map]]
+                              (let [entities' (->> (concat entities more-data)
+                                                   (util/distinct-by :block/uuid))
+                                    structure-map' (->> (concat structure-map (map (juxt :block/parent :block/left :block/collapsed?) more-data))
+                                                        (util/distinct-by :block/uuid))]
+                                [entities' structure-map'])))))
 
 (defn indentable?
   [{:block/keys [parent left]}]

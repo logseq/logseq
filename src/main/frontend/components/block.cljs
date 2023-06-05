@@ -2748,15 +2748,12 @@
     (text-util/build-data-value refs)))
 
 (defn- get-children-refs
-  [children]
-  (let [refs (atom [])]
-    (walk/postwalk
-     (fn [m]
-       (when (and (map? m) (:block/refs m))
-         (swap! refs concat (:block/refs m)))
-       m)
-     children)
-    (distinct @refs)))
+  [block]
+  (when-let [children (seq (:block/children block))]
+    (set
+     (lazy-seq
+      (concat (map :block/refs children)
+              (mapcat get-children-refs children))))))
 
 (defn- root-block?
   [config block]
@@ -2784,9 +2781,8 @@
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
                 block)
-        block (if ref?
-                (merge block (db/sub-block (:db/id block)))
-                block)
+        block (merge (db/sub-block (:db/id block))
+                     (select-keys block [:block/level :block/children]))
         {:block/keys [uuid children pre-block? refs level format content properties]} block
         {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
@@ -2818,7 +2814,7 @@
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
-        children-refs (get-children-refs children)
+        children-refs (get-children-refs block)
         data-refs (build-refs-data-value children-refs)
         data-refs-self (build-refs-data-value refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
@@ -2904,6 +2900,31 @@
     (assoc cp-state
       :rum/args (assoc (vec args) 0 (block-handler/attach-order-list-state (first args) (second args))))))
 
+(defn- get-children-ids
+  [entity]
+  (when-let [children (seq (:block/children entity))]
+    (set
+     (lazy-seq
+      (concat (map (juxt :db/id (comp :db/id :block/left)
+                         (comp :db/id :block/parent)) children)
+              (mapcat get-children-ids children))))))
+
+(defn- block-changed?
+  [old-block new-block]
+  (let [ks [:block/uuid :block/content :block/collapsed?
+            :block/properties :block.temp/bottom? :block.temp/top?]]
+    (not
+     (and (= (select-keys old-block ks)
+             (select-keys new-block ks))
+          (= (:db/id (:block/left old-block))
+             (:db/id (:block/left new-block)))
+          (= (:db/id (:block/parent old-block))
+             (:db/id (:block/parent new-block)))
+          (= (get-children-ids old-block)
+             (get-children-ids new-block))
+          (= (map :db/id (:block/_refs old-block))
+             (map :db/id (:block/_refs new-block)))))))
+
 (rum/defcs block-container < rum/reactive
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
@@ -2930,16 +2951,14 @@
                        (attach-order-list-state!)))
 
    :should-update (fn [old-state new-state]
-                    (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
-                                               :block/properties :block/left :block/children :block/_refs :block.temp/bottom? :block.temp/top?]
-                          config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
+                    (let [config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
-                                                (not= (select-keys b1 compare-keys)
-                                                      (select-keys b2 compare-keys))
-                                                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                                               (block-changed? b1 b2)
+                                               ;; config changed
+                                               (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                                     (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
@@ -2949,10 +2968,18 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo          (state/get-current-repo)]
+  (let [repo          (state/get-current-repo)
+        ref?          (:ref? config)
+        custom-query? (boolean (:custom-query? config))]
     (ui/lazy-visible
      (fn [] (block-container-inner state repo config block))
-     {:debug-id (str "block-container-ref " (:db/id block))})))
+     {:debug-id (str "block-container-ref " (:db/id block))})
+    ;; (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
+    ;;   (ui/lazy-visible
+    ;;    (fn [] (block-container-inner state repo config block))
+    ;;    {:debug-id (str "block-container-ref " (:db/id block))})
+    ;;   (block-container-inner state repo config block))
+    ))
 
 (defn divide-lists
   [[f & l]]

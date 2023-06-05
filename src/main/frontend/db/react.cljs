@@ -300,8 +300,9 @@
 (defn- execute-query!
   [graph db k tx {:keys [query query-time inputs transform-fn query-fn inputs-fn result]}
    {:keys [skip-query-time-check?]}]
-  (when (or skip-query-time-check?
-            (<= (or query-time 0) 80))
+  (when true
+      ;; (or skip-query-time-check?
+      ;;       (<= (or query-time 0) 80))
     (let [new-result (->
                      (cond
                        query-fn

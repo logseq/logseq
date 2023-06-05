@@ -3,12 +3,12 @@
   (:require [datascript.impl.entity :as entity :refer [Entity]]
             [datascript.core :as d]))
 
+(def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
-   (if-let [[_ v] (get (.-kv e) k)]
-     v
-     (get e k default-value))))
+   (or (get (.-kv e) k)
+       (lookup-entity e k default-value))))
 
 (extend-type Entity
   IAssociative
@@ -29,4 +29,9 @@
     (if (map? kv)
       (reduce (fn [this [k v]]
                 (assoc this k v)) this kv)
-      this)))
+      this))
+
+  ILookup
+  (-lookup
+    ([this attr] (lookup-kv-then-entity this attr))
+    ([this attr not-found] (lookup-kv-then-entity this attr not-found))))
