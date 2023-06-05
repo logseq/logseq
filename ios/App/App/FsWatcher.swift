@@ -56,7 +56,7 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.notifyListeners("watcher", data: ["event": "unlink",
                                                        "dir": baseUrl.description as Any,
-                                                       "path": url.description
+                                                       "path": url.relativePath(from: baseUrl)?.precomposedStringWithCanonicalMapping as Any
                 ])
             }
         case .Add, .Change:
@@ -173,11 +173,11 @@ public class PollingWatcher {
     public init?(at: URL) {
         url = at
     }
-    
+
     public func start() {
-        
+
         self.tick(notify: false)
-        
+
         let queue = DispatchQueue(label: Bundle.main.bundleIdentifier! + ".timer")
         timer = DispatchSource.makeTimerSource(queue: queue)
         timer!.setEventHandler(qos: .background, flags: []) { [weak self] in
@@ -278,9 +278,17 @@ extension URL {
             return nil
         }
 
+        // NOTE: standardizedFileURL will remove `/private` prefix
+        // If the file is not exist, it won't remove the prefix.
+
         // Remove/replace "." and "..", make paths absolute:
-        let destComponents = self.standardizedFileURL.pathComponents
+        var destComponents = self.standardizedFileURL.pathComponents
         let baseComponents = base.standardizedFileURL.pathComponents
+
+        // replace "private" when needed
+        if destComponents.count > 1 && destComponents[1] == "private" && baseComponents.count > 1 && baseComponents[1] != "private" {
+            destComponents.remove(at: 1)
+        }
 
         // Find number of common path components:
         var i = 0
