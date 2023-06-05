@@ -9,6 +9,7 @@ import {
   selectCharacters,
   getSelection,
   getCursorPos,
+  textAreaSelector,
   STD_DELAY,
 } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
@@ -17,36 +18,36 @@ import * as kb_events from './util/keyboard-events'
 test('hashtag and square brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.type('textarea >> nth=0', '#foo bar')
+  await page.type(textAreaSelector, '#foo bar')
   await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: STD_DELAY })
+  await page.type(textAreaSelector, 'bar [[blah]]', { delay: STD_DELAY })
 
   await repeatKeyPress(page, 'ArrowLeft', 12)
 
-  await page.type('textarea >> nth=0', ' ')
-  await page.press('textarea >> nth=0', 'ArrowLeft')
+  await page.type(textAreaSelector, ' ')
+  await page.press(textAreaSelector, 'ArrowLeft')
 
-  await page.type('textarea >> nth=0', '#')
+  await page.type(textAreaSelector, '#')
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
 
-  await page.type('textarea >> nth=0', 'fo')
+  await page.type(textAreaSelector, 'fo')
 
   await page.click('.absolute >> text=' + 'foo')
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe('#foo bar [[blah]]')
+  expect(await page.inputValue(textAreaSelector)).toBe('#foo bar [[blah]]')
 })
 
 test('hashtag search page auto-complete', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.type('textarea >> nth=0', '#', { delay: STD_DELAY })
+  await page.type(textAreaSelector, '#', { delay: STD_DELAY })
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: STD_DELAY })
 
   await block.mustFill('done')
 
   await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'Some #', { delay: STD_DELAY })
+  await page.type(textAreaSelector, 'Some #', { delay: STD_DELAY })
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: STD_DELAY })
 
@@ -58,7 +59,7 @@ test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
 
   await block.activeEditing(0)
 
-  await page.type('textarea >> nth=0', '#[[', { delay: STD_DELAY })
+  await page.type(textAreaSelector, '#[[', { delay: STD_DELAY })
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: STD_DELAY })
 })
@@ -75,7 +76,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
     // First, left arrow
     await createRandomPage(page)
 
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -85,7 +86,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
     // Then, right arrow
     await createRandomPage(page)
 
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -128,7 +129,7 @@ test.skip('next block and cursor position', async ({ page, block }) => {
   await block.enterNext()
   expect(await block.selectionStart()).toBe(0) // should at the beginning of the next block
 
-  const locator = page.locator('textarea >> nth=0')
+  const locator = page.locator(textAreaSelector)
   await expect(locator).toHaveText('`12345`', { timeout: STD_DELAY * 5 })
 })
 
@@ -142,9 +143,9 @@ test('#6266 moving cursor outside of parens immediately after searching should s
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
-    await page.type('textarea >> nth=0', 'some block search text', {
+    await page.type(textAreaSelector, 'some block search text', {
       delay: STD_DELAY,
     })
     await autocompleteMenu.expectVisible(modalName)
@@ -167,7 +168,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
     const cursorPos = await block.selectionStart()
@@ -243,13 +244,13 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
 
     // Open the autocomplete menu
     await block.mustType('test ')
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     if (commandTrigger === '[[') {
       await autocompleteMenu.expectVisible(modalName)
     }
 
-    await page.type('textarea >> nth=0', 'search', { delay: STD_DELAY })
+    await page.type(textAreaSelector, 'search', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor, still inside the brackets
@@ -268,7 +269,7 @@ test('copy & paste block ref and replace its content', async ({
 
   await page.keyboard.press(modKey + '+c')
 
-  await page.press('textarea >> nth=0', 'Enter', { delay: STD_DELAY })
+  await page.press(textAreaSelector, 'Enter', { delay: STD_DELAY })
   await block.waitForBlocks(2)
   await page.keyboard.press(modKey + '+v', { delay: STD_DELAY })
   await page.keyboard.press('Enter')
@@ -281,7 +282,7 @@ test('copy & paste block ref and replace its content', async ({
   // Move cursor into the block ref
   repeatKeyPress(page, 'ArrowLeft', 4)
 
-  await expect(page.locator('textarea >> nth=0')).not.toHaveValue(
+  await expect(page.locator(textAreaSelector)).not.toHaveValue(
     'Some random text'
   )
 
@@ -291,9 +292,7 @@ test('copy & paste block ref and replace its content', async ({
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r')
 
-  await expect(page.locator('textarea >> nth=0')).toHaveValue(
-    'Some random text'
-  )
+  await expect(page.locator(textAreaSelector)).toHaveValue('Some random text')
 
   await block.escapeEditing()
 
@@ -313,7 +312,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -331,7 +330,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await autocompleteMenu.expectHidden(modalName)
 
     // Type a letter, this should open the autocomplete menu
-    await page.type('textarea >> nth=0', 'z', { delay: STD_DELAY })
+    await page.type(textAreaSelector, 'z', { delay: STD_DELAY })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -348,11 +347,11 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.type('textarea >> nth=0', 'some page search text', {
+    await page.type(textAreaSelector, 'some page search text', {
       delay: STD_DELAY,
     })
     await autocompleteMenu.expectVisible(modalName)
@@ -375,11 +374,11 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.type('textarea >> nth=0', 'some page search text', {
+    await page.type(textAreaSelector, 'some page search text', {
       delay: STD_DELAY,
     })
     await autocompleteMenu.expectVisible(modalName)
@@ -401,7 +400,7 @@ test('press escape when autocomplete menu is open, should close autocomplete men
     await createRandomPage(page)
 
     // Open the action modal
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible({
       timeout: STD_DELAY,
@@ -435,10 +434,10 @@ test.describe('Auto-pair symbols only with text selection', () => {
       await createRandomPage(page)
 
       // type the symbol
-      page.type('textarea >> nth=0', symbol.prefix, { delay: STD_DELAY })
+      page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
 
       // Verify that there is no auto-pairing
-      await expect(page.locator('textarea >> nth=0')).toHaveText(symbol.prefix)
+      await expect(page.locator(textAreaSelector)).toHaveText(symbol.prefix)
 
       // remove prefix
       await page.keyboard.press('Backspace')
@@ -449,10 +448,10 @@ test.describe('Auto-pair symbols only with text selection', () => {
       await page.keyboard.press(modKey + '+a')
 
       // Type the prefix
-      await page.type('textarea >> nth=0', symbol.prefix, { delay: STD_DELAY })
+      await page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
 
       // Verify that an additional postfix was automatically added around 'Lorem'
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
+      await expect(page.locator(textAreaSelector)).toHaveText(
         `${symbol.prefix}Lorem${symbol.postfix}`
       )
 
@@ -480,8 +479,8 @@ test.describe('Always auto-pair symbols', () => {
       await createRandomPage(page)
 
       // Type prefix and check that the postfix is automatically added
-      page.type('textarea >> nth=0', symbol.prefix, { delay: STD_DELAY })
-      await expect(page.locator('textarea >> nth=0')).toHaveText(
+      page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
+      await expect(page.locator(textAreaSelector)).toHaveText(
         `${symbol.prefix}${symbol.postfix}`
       )
 
@@ -536,7 +535,6 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
   })
 })
 
-
 test('copy and paste block after editing new block #5962', async ({
   page,
   block,
@@ -552,7 +550,7 @@ test('copy and paste block after editing new block #5962', async ({
 
   await page.keyboard.press('Enter')
   await expect(page.locator('.ls-block.selected')).toHaveCount(0)
-  await expect(page.locator('textarea >> nth=0')).toBeVisible()
+  await expect(page.locator(textAreaSelector)).toBeVisible()
   await page.keyboard.press('Enter')
   await block.waitForBlocks(2)
 
@@ -570,29 +568,26 @@ test('press escape when link/image dialog is open, should restore focus to input
   await createRandomPage(page)
   let dataModalSelector: string // open modal/dialog selector
 
-  test.step('Open the slash command menu', async () => {
-    let dataModalSelector = '[data-modal-name="commands"]'
-    // the space is needed to trigger the slash command menu in the CI environment
-    await page.type('textarea >> nth=0', ' /', { delay: STD_DELAY })
-    // wait for the slash command menu to appear
-    await expect(page.locator(dataModalSelector)).toBeVisible()
-  })
+  // Step 1: Open & close the slash command menu
+  dataModalSelector = '[data-modal-name="commands"]'
+  // the space is needed to trigger the slash command menu in the CI environment
+  await page.type(textAreaSelector, ' /', { delay: STD_DELAY })
+  // wait for the slash command menu to appear
+  await expect(page.locator(dataModalSelector)).toBeVisible()
 
-  test.step('Open & close the link dialog', async () => {
-    dataModalSelector = '[data-modal-name="input"]'
-    // Open the link dialog
-    await page.type('textarea >> nth=0', 'link', { delay: STD_DELAY })
-    await page.keyboard.press('Enter', { delay: STD_DELAY })
-    // wait for the link dialog to appear
-    await expect(page.locator(dataModalSelector)).toBeVisible()
-    // Press escape; should close link dialog and restore focus to the block textarea
-    await page.keyboard.press('Escape', { delay: STD_DELAY })
-    await expect(page.locator(dataModalSelector)).not.toBeVisible()
-  })
+  // Step 2: Open & close the link dialog
+  dataModalSelector = '[data-modal-name="input"]'
+  // Open the link dialog
+  await page.type(textAreaSelector, 'link', { delay: STD_DELAY })
+  await page.keyboard.press('Enter', { delay: STD_DELAY })
+  // wait for the link dialog to appear
+  await expect(page.locator(dataModalSelector)).toBeVisible()
+  // Press escape; should close link dialog and restore focus to the block textarea
+  await page.keyboard.press('Escape', { delay: STD_DELAY })
+  await expect(page.locator(dataModalSelector)).not.toBeVisible()
 
-  test.step('Check if the block textarea is focused', async () => {
-    expect(await block.isEditing()).toBe(true)
-  })
+  // Step 3: Open & close the image dialog
+  expect(await block.isEditing()).toBe(true)
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({
@@ -601,11 +596,11 @@ test('should show text after soft return when node is collapsed #5074', async ({
 }) => {
   await createRandomPage(page)
 
-  await page.type('textarea >> nth=0', 'Before soft return', {
+  await page.type(textAreaSelector, 'Before soft return', {
     delay: STD_DELAY,
   })
   await page.keyboard.press('Shift+Enter', { delay: STD_DELAY })
-  await page.type('textarea >> nth=0', 'After soft return', {
+  await page.type(textAreaSelector, 'After soft return', {
     delay: STD_DELAY,
   })
 
@@ -621,7 +616,7 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('ArrowDown', { delay: STD_DELAY })
   await page.keyboard.press('Enter', { delay: STD_DELAY })
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
+  await expect(page.locator(textAreaSelector)).toHaveText(
     'Before soft return\nAfter soft return'
   )
 
@@ -633,7 +628,7 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('ArrowDown', { delay: STD_DELAY })
   await page.keyboard.press('Enter', { delay: STD_DELAY })
 
-  await expect(page.locator('textarea >> nth=0')).toHaveText(
+  await expect(page.locator(textAreaSelector)).toHaveText(
     'Before soft return\nAfter soft return'
   )
 })
@@ -646,19 +641,19 @@ test('should not erase typed text when expanding block quickly after typing #389
 
   await block.mustFill('initial text,')
   await page.waitForTimeout(500)
-  await page.type('textarea >> nth=0', ' then expand', { delay: STD_DELAY })
+  await page.type(textAreaSelector, ' then expand', { delay: STD_DELAY })
   // A quick cmd-down mus * 2t not destroy the typed text
   await page.keyboard.press(modKey + '+ArrowDown', { delay: STD_DELAY * 5 })
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
+  expect(await page.inputValue(textAreaSelector)).toBe(
     'initial text, then expand'
   )
 
   // First undo should delete the last typed information, not undo a no-op expand action
   await page.keyboard.press(modKey + '+z')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('initial text,')
+  expect(await page.inputValue(textAreaSelector)).toBe('initial text,')
 
   await page.keyboard.press(modKey + '+z')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('')
+  expect(await page.inputValue(textAreaSelector)).toBe('')
 })
 
 test.describe('Text Formatting', () => {
@@ -697,7 +692,7 @@ test.describe('Text Formatting', () => {
         // Apply formatting
         await page.keyboard.press(format.shortcut)
 
-        await expect(page.locator('textarea >> nth=0')).toHaveText(
+        await expect(page.locator(textAreaSelector)).toHaveText(
           `Lorem ${format.prefix}${format.postfix} ipsum`
         )
 
@@ -721,7 +716,7 @@ test.describe('Text Formatting', () => {
         // Apply formatting
         await page.keyboard.press(format.shortcut)
 
-        await expect(page.locator('textarea >> nth=0')).toHaveText(
+        await expect(page.locator(textAreaSelector)).toHaveText(
           `${format.prefix}${text}${format.postfix}`
         )
 
@@ -749,7 +744,7 @@ test.describe('Text Formatting', () => {
         await page.keyboard.press(format.shortcut)
 
         // Verify that 'ipsum' is formatted
-        await expect(page.locator('textarea >> nth=0')).toHaveText(
+        await expect(page.locator(textAreaSelector)).toHaveText(
           `Lorem ${format.prefix}ipsum${format.postfix}-dolor sit.`
         )
 
@@ -762,7 +757,7 @@ test.describe('Text Formatting', () => {
 
         // Remove formatting
         await page.keyboard.press(format.shortcut)
-        await expect(page.locator('textarea >> nth=0')).toHaveText(
+        await expect(page.locator(textAreaSelector)).toHaveText(
           'Lorem ipsum-dolor sit.'
         )
 
@@ -815,7 +810,7 @@ test('undo after starting an action should close the action menu #6269', async (
     await createRandomPage(page)
 
     // Open the action modal
-    await page.type('textarea >> nth=0', commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
 
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
@@ -837,47 +832,47 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await block.mustFill('foo')
 
   await page.keyboard.press('Enter')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('')
+  await expect(page.locator(textAreaSelector)).toHaveText('')
   await block.indent()
   await block.mustFill('bar')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('bar')
+  await expect(page.locator(textAreaSelector)).toHaveText('bar')
 
   await page.keyboard.press(modKey + '+z')
   // should undo "bar" input
-  await expect(page.locator('textarea >> nth=0')).toHaveText('')
+  await expect(page.locator(textAreaSelector)).toHaveText('')
   await page.keyboard.press(modKey + '+Shift+z')
   // should redo "bar" input
-  await expect(page.locator('textarea >> nth=0')).toHaveText('bar')
+  await expect(page.locator(textAreaSelector)).toHaveText('bar')
   await page.keyboard.press('Shift+Tab')
 
   await page.keyboard.press('Enter')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('')
+  await expect(page.locator(textAreaSelector)).toHaveText('')
   // swap input seq
   await block.mustFill('baz')
   await block.indent()
 
   await page.keyboard.press(modKey + '+z')
   // should undo indention
-  await expect(page.locator('textarea >> nth=0')).toHaveText('baz')
+  await expect(page.locator(textAreaSelector)).toHaveText('baz')
   await page.keyboard.press('Shift+Tab')
 
   await page.keyboard.press('Enter')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('')
+  await expect(page.locator(textAreaSelector)).toHaveText('')
   // #7615
   await page.keyboard.type('aaa')
   await block.indent()
   await page.keyboard.type(' bbb')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa bbb')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa bbb')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa')
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('')
+  await expect(page.locator(textAreaSelector)).toHaveText('')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa')
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('aaa bbb')
+  await expect(page.locator(textAreaSelector)).toHaveText('aaa bbb')
 })

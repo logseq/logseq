@@ -8,6 +8,8 @@ export const IsLinux = process.platform === 'linux'
 export const IsWindows = process.platform === 'win32'
 export const IsCI = process.env.CI === 'true'
 export const modKey = IsMac ? 'Meta' : 'Control'
+export const textAreaSelector = 'textarea >> nth=0'
+export const STD_DELAY = 100 // ms. Standard delay between actions
 
 export function randomString(length: number) {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
