@@ -21,7 +21,8 @@
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]
             [cljs-time.core :as t]
-            [cljs-time.format :as tf]))
+            [cljs-time.format :as tf]
+            [frontend.db.datascript.entity-plus :as entity-plus]))
 
 ;; lazy loading
 
@@ -808,49 +809,19 @@ independent of format as format specific heading characters are stripped"
      (assert (integer? block-id) (str "wrong block-id: " block-id))
      (let [entity (db-utils/entity repo-url block-id)
            page? (some? (:block/name entity))
-           page-entity (if page? entity (:block/page entity))
-           page-id (:db/id page-entity)
-           bare-page-map {:db/id page-id
-                          :block/name (:block/name page-entity)
-                          :block/original-name (:block/original-name page-entity)
-                          :block/journal-day (:block/journal-day page-entity)}
            query-key (if page?
                        :frontend.db.react/page-blocks
                        :frontend.db.react/block-and-children)]
        (some->
         (react/q repo-url [query-key block-id]
                  {:use-cache? use-cache?
-                  :query-fn (fn [db tx-report result]
-                              (let [tx-data (:tx-data tx-report)
-                                    refs (some->> (filter #(= :block/refs (:a %)) tx-data)
-                                                  (map :v))
-                                    tx-block-ids (distinct (-> (map :e tx-data)
-                                                               (concat refs)))
-                                    [tx-id->block cached-id->block] (when (and tx-report result)
-                                                                      (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
-                                                                                        (remove nil?))]
-                                                                        [(zipmap (mapv :db/id blocks) blocks)
-                                                                         (zipmap (mapv :db/id @result) @result)]))
-                                    limit (if (and result @result)
+                  :query-fn (fn [db _tx-report result]
+                              (let [limit (if (and result @result)
                                             (max (+ (count @result) 5) limit)
-                                            limit)
-                                    outliner-op (get-in tx-report [:tx-meta :outliner-op])
-                                    blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
-                                    blocks (or blocks
-                                               (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
-                                                                                                               :include-start? (not page?)
-                                                                                                               :scoped-block-id scoped-block-id}))
-                                    block-eids (map :db/id blocks)
-                                    blocks (if (and (seq tx-id->block)
-                                                    (not (contains? #{:move-blocks} outliner-op)))
-                                             (map (fn [id]
-                                                    (or (get tx-id->block id)
-                                                        (get cached-id->block id)
-                                                        (db-utils/pull repo-url pull-keys id))) block-eids)
-                                             (db-utils/pull-many repo-url pull-keys block-eids))
-                                    blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
-
-                                (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
+                                            limit)]
+                                (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
+                                                                                                :include-start? (not page?)
+                                                                                                :scoped-block-id scoped-block-id})))}
                  nil)
         react)))))
 

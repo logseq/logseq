@@ -27,22 +27,21 @@
 
 (defn- blocks->vec-tree-aux
   [blocks root]
-  (let [id-map (fn [m] {:db/id (:db/id m)})
-        root (id-map root)
+  (let [root-id (:db/id root)
         blocks (remove gp-whiteboard/shape-block? blocks)
-        parent-blocks (group-by :block/parent blocks) ;; exclude whiteboard shapes
+        parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
-                  (db/sort-by-left (get parent-blocks parent) parent))
+                  (db/sort-by-left (get parent-blocks parent) {:db/id parent}))
         block-children (fn block-children [parent level]
                          (map (fn [m]
-                                (let [parent (id-map m)
-                                      children (-> (block-children parent (inc level))
-                                                   (db/sort-by-left parent))]
+                                (let [id (:db/id m)
+                                      children (-> (block-children id (inc level))
+                                                   (db/sort-by-left m))]
                                   (assoc m
                                          :block/level level
                                          :block/children children)))
-                              (sort-fn parent)))]
-    (block-children root 1)))
+                           (sort-fn parent)))]
+    (block-children root-id 1)))
 
 (defn- get-root-and-page
   [repo root-id]
