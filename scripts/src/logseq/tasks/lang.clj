@@ -154,31 +154,49 @@
           (task-util/print-table (map #(hash-map :invalid-key %) expected-only)))
         (System/exit 1)))))
 
+(def allowed-duplicates
+  "Allows certain keys in a language to have the same translation
+   as English. Happens more in romance languages but pretty rare otherwise"
+  {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
+         :settings-of-plugins}
+   :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
+         :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
+         :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
+   :es #{:settings-page/tab-general :settings-page/tab-editor}
+   :it #{:plugins}
+   :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
+   :pl #{:port}
+   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards}
+   :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
+            :settings-page/enable-flashcards :settings-page/plugin-system}
+   })
+
+(defn- validate-languages-dont-have-duplicates
+  "Looks up duplicates for all languages"
+  []
+  (let [dicts (get-dicts)
+        en-dicts (dicts :en)
+        invalid-dicts
+        (->> (dissoc dicts :en)
+             (mapcat
+              (fn [[lang lang-dicts]]
+                (keep
+                 #(when (= (en-dicts %) (lang-dicts %))
+                    {:translation-key %
+                     :lang lang
+                     :duplicate-value (shorten (lang-dicts %) 70)})
+                 (keys (apply dissoc lang-dicts (allowed-duplicates lang))))))
+             (sort-by (juxt :lang :translation-key)))]
+    (if (empty? invalid-dicts)
+      (println "All languages have no duplicate English values!")
+      (do
+        (println "These translations keys are invalid because they are just copying the English value:")
+        (task-util/print-table invalid-dicts)
+        (System/exit 1)))))
+
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   []
   (validate-non-default-languages)
-  (validate-ui-translations-are-used))
-
-(defn list-duplicates
-  "Lists translations that are the same as the one in English"
-  [& args]
-  (let [dicts (get-dicts)
-        en-dicts (dicts :en)
-        lang (or (keyword (first args))
-                 (task-util/print-usage "LOCALE"))
-        lang-dicts (dicts lang)
-        invalid-dicts
-        (sort-by
-         :translation-key
-         (keep
-          #(when (= (en-dicts %) (lang-dicts %))
-             {:translation-key %
-              :duplicate-value (shorten (lang-dicts %) 70)})
-          (keys lang-dicts)))]
-    (if (empty? invalid-dicts)
-      (println "No duplicated keys found!")
-      (do
-        (println "Keys with duplicate values found:")
-        (task-util/print-table invalid-dicts)
-        (System/exit 1)))))
+  (validate-ui-translations-are-used)
+  (validate-languages-dont-have-duplicates))
