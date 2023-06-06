@@ -1096,18 +1096,24 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [trigger-once? fade-in? _debug-id]
-                :or {trigger-once? false
+  ([content-fn {:keys [initial-state trigger-once? fade-in? debug-id]
+                :or {initial-state false
+                     trigger-once? false
                      fade-in? true}}]
-   (let [[visible? set-visible!] (rum/use-state false)
+   (let [[visible? set-visible!] (rum/use-state initial-state)
          root-margin 100
-         inViewState (useInView #js {:rootMargin (str root-margin "px")
+         inViewState (useInView #js {:initialInView initial-state
+                                     :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? entry]
+                                                 (when in-view?
+                                                   (prn :debug "render: " debug-id))
                                                  (let [self-top (.-top (.-boundingClientRect entry))]
                                                    (when (or (and (not visible?) in-view?)
                                                              ;; hide only the components below the current top for better ux
-                                                             (and visible? (not in-view?) (> self-top root-margin)))
+                                                             ;; visible?
+                                                             (and visible? (not in-view?) (> self-top root-margin))
+                                                             )
                                                      (set-visible! in-view?))))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))

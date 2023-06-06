@@ -26,9 +26,9 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 50000)
+(def initial-blocks-length 100)
 
-(def step-loading-blocks 250)
+(def step-loading-blocks 50)
 
 
 ;; TODO: extract to specific models and move data transform logic to the

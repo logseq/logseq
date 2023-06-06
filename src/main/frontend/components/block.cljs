@@ -2764,7 +2764,7 @@
           (str (:block/uuid block)))))
 
 (rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config block]
+  [state repo config block {:keys [edit? edit-input-id]}]
   (let [ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
         ref-or-custom-query? (or ref? custom-query?)
@@ -2808,8 +2808,6 @@
         children-refs (get-children-refs block)
         data-refs (build-refs-data-value children-refs)
         data-refs-self (build-refs-data-value refs)
-        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
-        edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
         selected? (when-not slide?
@@ -2950,11 +2948,17 @@
                        (state/set-collapsed-block! block-id nil)))
                    state)}
   [state config block]
-  (let [repo          (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        blocks-container-id (:blocks-container-id config)
+        edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
+        edit? (state/sub [:editor/editing? edit-input-id])
+        opts {:edit? edit?
+              :edit-input-id edit-input-id}]
     (ui/lazy-visible
-     (fn [] (block-container-inner state repo config block))
+     (fn [] (block-container-inner state repo config block opts))
      {:debug-id (str "block-container-ref " (:db/id block))
-      :fade-in? false})))
+      :fade-in? false
+      :initial-state edit?})))
 
 (defn divide-lists
   [[f & l]]
