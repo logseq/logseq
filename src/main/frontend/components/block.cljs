@@ -2779,7 +2779,7 @@
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
-        config (update config :block merge block)
+        config (assoc config :block block)
         ;; Each block might have multiple queries, but we store only the first query's result
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
