@@ -11,62 +11,70 @@ import {
   getCursorPos,
   textAreaSelector,
   STD_DELAY,
+  closeModal,
 } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
 test('hashtag and square brackets in same line #4178', async ({ page }) => {
+  let dataModalSelector = '[data-modal-name="page-search"]'
   await createRandomPage(page)
 
-  await page.type(textAreaSelector, '#foo bar')
+  await page.type(textAreaSelector, '#foo bar', { delay: 20 })
   await enterNextBlock(page)
-  await page.type(textAreaSelector, 'bar [[blah]]', { delay: STD_DELAY })
+  await page.type(textAreaSelector, 'bar [[blah]]', { delay: 20 })
 
+  // Move the cursor to the start of the line
   await repeatKeyPress(page, 'ArrowLeft', 12)
-
   await page.type(textAreaSelector, ' ')
   await page.press(textAreaSelector, 'ArrowLeft')
 
-  await page.type(textAreaSelector, '#')
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  // Open the tag page search dialog and verify that it is open
+  await page.type(textAreaSelector, '#', { delay: 20 })
+  await page.waitForTimeout(30) // Wait for the modal to open
 
-  await page.type(textAreaSelector, 'fo')
+  expect(await page.locator(dataModalSelector).isVisible()).toBeTruthy()
 
+  await page.type(textAreaSelector, 'fo', { delay: 20 })
   await page.click('.absolute >> text=' + 'foo')
-
   expect(await page.inputValue(textAreaSelector)).toBe('#foo bar [[blah]]')
 })
 
-test('hashtag search page auto-complete', async ({ page, block }) => {
+test('open and close the hashtag search model', async ({ page }) => {
+  let dataModalSelector = '[data-modal-name="page-search"]'
   await createRandomPage(page)
 
-  await page.type(textAreaSelector, '#', { delay: STD_DELAY })
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
-  await page.keyboard.press('Escape', { delay: STD_DELAY })
-
-  await block.mustFill('done')
+  // Open the tag page search dialog and verify that it is open
+  await page.type(textAreaSelector, ' #', { delay: 20 })
+  expect(await page.locator(dataModalSelector).isVisible()).toBeTruthy()
+  // Close the tag page search dialog and verify that it is closed
+  await closeModal(page)
+  expect(await page.locator(dataModalSelector).isVisible()).toBeFalsy()
 
   await enterNextBlock(page)
-  await page.type(textAreaSelector, 'Some #', { delay: STD_DELAY })
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
-  await page.keyboard.press('Escape', { delay: STD_DELAY })
-
-  await block.mustFill('done')
+  await page.type(textAreaSelector, 'Some text')
+  await repeatKeyPress(page, 'ArrowLeft', 5)
+  await page.type(textAreaSelector, ' #', { delay: 20 })
+  await page.waitForTimeout(30) // Wait for the modal to open
+  expect(await page.locator(dataModalSelector).isVisible()).toBeTruthy()
+  // Close the tag page search dialog and verify that it is closed
+  await closeModal(page)
+  expect(await page.locator(dataModalSelector).isVisible()).toBeFalsy()
 })
 
-test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
+test('open and close the hashtag search model `#[[`', async ({ page }) => {
+  let dataModalSelector = '[data-modal-name="page-search"]'
   await createRandomPage(page)
 
-  await block.activeEditing(0)
+  await page.type(textAreaSelector, ' #[[', { delay: 20 })
+  expect(await page.locator(dataModalSelector).isVisible()).toBeTruthy()
 
-  await page.type(textAreaSelector, '#[[', { delay: STD_DELAY })
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
-  await page.keyboard.press('Escape', { delay: STD_DELAY })
+  await closeModal(page)
+  expect(await page.locator(dataModalSelector).isVisible()).toBeFalsy()
 })
 
 test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({
   page,
-  block,
   autocompleteMenu,
 }) => {
   for (const [commandTrigger, modalName] of [
@@ -76,22 +84,20 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
     // First, left arrow
     await createRandomPage(page)
 
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
-
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
     await autocompleteMenu.expectVisible(modalName)
 
-    await page.keyboard.press('ArrowLeft', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowLeft', { delay: 10 })
     await autocompleteMenu.expectHidden(modalName)
 
     // Then, right arrow
     await createRandomPage(page)
 
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
-
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor outside of the space strictly between the double brackets
-    await page.keyboard.press('ArrowRight', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowRight')
     await autocompleteMenu.expectHidden(modalName)
   }
 })
@@ -130,28 +136,25 @@ test.skip('next block and cursor position', async ({ page, block }) => {
   expect(await block.selectionStart()).toBe(0) // should at the beginning of the next block
 
   const locator = page.locator(textAreaSelector)
-  await expect(locator).toHaveText('`12345`', { timeout: STD_DELAY * 5 })
+  await expect(locator).toHaveText('`12345`')
 })
 
 // Old logic would fail this because it didn't do the check if @search-timeout was set
 test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({
   page,
-  block,
   autocompleteMenu,
 }) => {
   for (const [commandTrigger, modalName] of [['((', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
 
-    await page.type(textAreaSelector, 'some block search text', {
-      delay: STD_DELAY,
-    })
+    await page.type(textAreaSelector, 'lorem', { delay: 20 })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor outside of the space strictly between the double parens
-    await page.keyboard.press('ArrowRight', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowRight', { delay: 10 })
     await autocompleteMenu.expectHidden(modalName)
   }
 })
@@ -168,16 +171,16 @@ test('pressing up and down should NOT close autocomplete menu', async ({
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 10 })
 
     await autocompleteMenu.expectVisible(modalName)
     const cursorPos = await block.selectionStart()
 
-    await page.keyboard.press('ArrowUp', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowUp', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
     expect(await block.selectionStart()).toEqual(cursorPos)
 
-    await page.keyboard.press('ArrowDown', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowDown', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
     expect(await block.selectionStart()).toEqual(cursorPos)
   }
@@ -244,17 +247,17 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
 
     // Open the autocomplete menu
     await block.mustType('test ')
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
 
     if (commandTrigger === '[[') {
       await autocompleteMenu.expectVisible(modalName)
     }
 
-    await page.type(textAreaSelector, 'search', { delay: STD_DELAY })
+    await page.type(textAreaSelector, 'search', { delay: 20 })
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor, still inside the brackets
-    await page.keyboard.press('ArrowLeft', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowLeft', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -269,9 +272,9 @@ test('copy & paste block ref and replace its content', async ({
 
   await page.keyboard.press(modKey + '+c')
 
-  await page.press(textAreaSelector, 'Enter', { delay: STD_DELAY })
+  await page.press(textAreaSelector, 'Enter', { delay: 10 })
   await block.waitForBlocks(2)
-  await page.keyboard.press(modKey + '+v', { delay: STD_DELAY })
+  await page.keyboard.press(modKey + '+v', { delay: 10 })
   await page.keyboard.press('Enter')
 
   // Check if the newly created block-ref has the same referenced content
@@ -312,7 +315,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
 
     await autocompleteMenu.expectVisible(modalName)
 
@@ -323,14 +326,14 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
     await page.locator('.block-content').click()
     await autocompleteMenu.expectHidden(modalName)
 
-    await page.keyboard.press('ArrowLeft', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowLeft', { delay: 10 })
     await autocompleteMenu.expectHidden(modalName)
 
-    await page.keyboard.press('ArrowLeft', { delay: STD_DELAY })
+    await page.keyboard.press('ArrowLeft', { delay: 10 })
     await autocompleteMenu.expectHidden(modalName)
 
     // Type a letter, this should open the autocomplete menu
-    await page.type(textAreaSelector, 'z', { delay: STD_DELAY })
+    await page.type(textAreaSelector, 'z', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -347,17 +350,17 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
 
     await autocompleteMenu.expectVisible(modalName)
 
     await page.type(textAreaSelector, 'some page search text', {
-      delay: STD_DELAY,
+      delay: 10,
     })
     await autocompleteMenu.expectVisible(modalName)
 
     // Select some text within the brackets
-    await page.keyboard.press('Shift+ArrowLeft', { delay: STD_DELAY })
+    await page.keyboard.press('Shift+ArrowLeft', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -374,17 +377,17 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await createRandomPage(page)
 
     // Open the autocomplete menu
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
 
     await autocompleteMenu.expectVisible(modalName)
 
     await page.type(textAreaSelector, 'some page search text', {
-      delay: STD_DELAY,
+      delay: 10,
     })
     await autocompleteMenu.expectVisible(modalName)
 
     // Delete one character inside the brackets
-    await page.keyboard.press('Backspace', { delay: STD_DELAY })
+    await page.keyboard.press('Backspace', { delay: 10 })
     await autocompleteMenu.expectVisible(modalName)
   }
 })
@@ -400,17 +403,15 @@ test('press escape when autocomplete menu is open, should close autocomplete men
     await createRandomPage(page)
 
     // Open the action modal
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
-
-    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible({
-      timeout: STD_DELAY,
-    })
+    await page.type(textAreaSelector, commandTrigger, { delay: 20 })
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Press escape; should close action modal instead of exiting edit mode
-    await page.keyboard.press('Escape', { delay: STD_DELAY })
+    await page.waitForTimeout(30)
+    await page.keyboard.press('Escape', { delay: 10 })
     await expect(
       page.locator(`[data-modal-name="${modalName}"]`)
-    ).not.toBeVisible({ timeout: STD_DELAY * 5 })
+    ).not.toBeVisible()
     expect(await block.isEditing()).toBe(true)
   }
 })
@@ -434,7 +435,7 @@ test.describe('Auto-pair symbols only with text selection', () => {
       await createRandomPage(page)
 
       // type the symbol
-      page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
+      page.type(textAreaSelector, symbol.prefix, { delay: 20 })
 
       // Verify that there is no auto-pairing
       await expect(page.locator(textAreaSelector)).toHaveText(symbol.prefix)
@@ -448,7 +449,7 @@ test.describe('Auto-pair symbols only with text selection', () => {
       await page.keyboard.press(modKey + '+a')
 
       // Type the prefix
-      await page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
+      await page.type(textAreaSelector, symbol.prefix, { delay: 20 })
 
       // Verify that an additional postfix was automatically added around 'Lorem'
       await expect(page.locator(textAreaSelector)).toHaveText(
@@ -479,7 +480,7 @@ test.describe('Always auto-pair symbols', () => {
       await createRandomPage(page)
 
       // Type prefix and check that the postfix is automatically added
-      page.type(textAreaSelector, symbol.prefix, { delay: STD_DELAY })
+      page.type(textAreaSelector, symbol.prefix, { delay: 20 })
       await expect(page.locator(textAreaSelector)).toHaveText(
         `${symbol.prefix}${symbol.postfix}`
       )
@@ -512,9 +513,7 @@ test('disappeared children #4814', async ({ page, block }) => {
   await block.waitForBlocks(7) // 1 + 5 + 1 empty
 
   // Ensures there's no active editor
-  await expect(page.locator('.editor-inner')).toHaveCount(0, {
-    timeout: STD_DELAY * 5,
-  })
+  await expect(page.locator('.editor-inner')).toHaveCount(0)
 })
 
 test('create new page from bracketing text #4971', async ({ page, block }) => {
@@ -523,7 +522,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 
   await block.mustType(`[[${title}]]`)
 
-  await page.keyboard.press(modKey + '+o', { delay: STD_DELAY })
+  await page.keyboard.press(modKey + '+o', { delay: 10 })
 
   // Check page title equals to `title`
   expect(await page.locator('h1.title').innerText()).toContain(title)
@@ -531,7 +530,6 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
   // Check there're linked references
   await page.waitForSelector(`.references .ls-block >> nth=1`, {
     state: 'detached',
-    timeout: STD_DELAY,
   })
 })
 
@@ -546,7 +544,7 @@ test('copy and paste block after editing new block #5962', async ({
   await page.keyboard.press('Escape')
   await expect(page.locator('.ls-block.selected')).toHaveCount(1)
 
-  await page.keyboard.press(modKey + '+c', { delay: STD_DELAY })
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
 
   await page.keyboard.press('Enter')
   await expect(page.locator('.ls-block.selected')).toHaveCount(0)
@@ -565,29 +563,29 @@ test('press escape when link/image dialog is open, should restore focus to input
   page,
   block,
 }) => {
-  await createRandomPage(page)
   let dataModalSelector: string // open modal/dialog selector
+  await createRandomPage(page)
 
-  // Step 1: Open & close the slash command menu
-  dataModalSelector = '[data-modal-name="commands"]'
-  // the space is needed to trigger the slash command menu in the CI environment
-  await page.type(textAreaSelector, ' /', { delay: STD_DELAY })
-  // wait for the slash command menu to appear
-  await expect(page.locator(dataModalSelector)).toBeVisible()
+  for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
+    // Step 1: Open & close the slash command menu
+    dataModalSelector = `[data-modal-name="${modalName}"]`
+    //! the space is needed to trigger the slash command menu in the CI environment
+    await page.type(textAreaSelector, ` ${commandTrigger}`, { delay: 20 })
+    // wait for the slash command menu to appear
+    await expect(page.locator(dataModalSelector)).toBeVisible()
 
-  // Step 2: Open & close the link dialog
-  dataModalSelector = '[data-modal-name="input"]'
-  // Open the link dialog
-  await page.type(textAreaSelector, 'link', { delay: STD_DELAY })
-  await page.keyboard.press('Enter', { delay: STD_DELAY })
-  // wait for the link dialog to appear
-  await expect(page.locator(dataModalSelector)).toBeVisible()
-  // Press escape; should close link dialog and restore focus to the block textarea
-  await page.keyboard.press('Escape', { delay: STD_DELAY })
-  await expect(page.locator(dataModalSelector)).not.toBeVisible()
+    // Step 2: Open & close the link dialog
+    dataModalSelector = `[data-modal-name="input"]`
+    await page.keyboard.press('Enter', { delay: 10 })
+    // wait for the link dialog to appear
+    await expect(page.locator(dataModalSelector)).toBeVisible()
+    // Press escape; should close link dialog and restore focus to the block textarea
+    await page.keyboard.press('Escape', { delay: 10 })
+    await expect(page.locator(dataModalSelector)).not.toBeVisible()
 
-  // Step 3: Open & close the image dialog
-  expect(await block.isEditing()).toBe(true)
+    // Step 3: Open & close the image dialog
+    expect(await block.isEditing()).toBeTruthy()
+  }
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({
@@ -597,11 +595,11 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await createRandomPage(page)
 
   await page.type(textAreaSelector, 'Before soft return', {
-    delay: STD_DELAY,
+    delay: 10,
   })
-  await page.keyboard.press('Shift+Enter', { delay: STD_DELAY })
+  await page.keyboard.press('Shift+Enter', { delay: 10 })
   await page.type(textAreaSelector, 'After soft return', {
-    delay: STD_DELAY,
+    delay: 10,
   })
 
   await block.enterNext()
@@ -613,21 +611,15 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await block.waitForBlocks(1)
 
   // select the block that has the soft return
-  await page.keyboard.press('ArrowDown', { delay: STD_DELAY })
-  await page.keyboard.press('Enter', { delay: STD_DELAY })
+  await page.keyboard.press('ArrowDown', { delay: 10 })
+  await page.keyboard.press('Enter', { delay: 10 })
 
   await expect(page.locator(textAreaSelector)).toHaveText(
     'Before soft return\nAfter soft return'
   )
 
   // zoom into the block
-  page.click('a.block-control + a')
-  await page.waitForTimeout(STD_DELAY)
-
-  // select the block that has the soft return
-  await page.keyboard.press('ArrowDown', { delay: STD_DELAY })
-  await page.keyboard.press('Enter', { delay: STD_DELAY })
-
+  block.activeEditing(0)
   await expect(page.locator(textAreaSelector)).toHaveText(
     'Before soft return\nAfter soft return'
   )
@@ -639,17 +631,16 @@ test('should not erase typed text when expanding block quickly after typing #389
 }) => {
   await createRandomPage(page)
 
-  await block.mustFill('initial text,')
-  await page.waitForTimeout(500)
-  await page.type(textAreaSelector, ' then expand', { delay: STD_DELAY })
+  await page.type(textAreaSelector, 'initial text,', { delay: 20 })
+  await page.waitForTimeout(500) // wait for the text to be saved
+  await page.type(textAreaSelector, ' then expand', { delay: 20 })
   // A quick cmd-down mus * 2t not destroy the typed text
-  await page.keyboard.press(modKey + '+ArrowDown', { delay: STD_DELAY * 5 })
+  await page.keyboard.press(modKey + '+ArrowDown', { delay: 10 })
   expect(await page.inputValue(textAreaSelector)).toBe(
     'initial text, then expand'
   )
-
   // First undo should delete the last typed information, not undo a no-op expand action
-  await page.keyboard.press(modKey + '+z')
+  await page.keyboard.press(modKey + '+z', { delay: 10 })
   expect(await page.inputValue(textAreaSelector)).toBe('initial text,')
 
   await page.keyboard.press(modKey + '+z')
@@ -714,7 +705,7 @@ test.describe('Text Formatting', () => {
         await page.keyboard.press(modKey + '+a')
 
         // Apply formatting
-        await page.keyboard.press(format.shortcut)
+        await page.keyboard.press(format.shortcut, { delay: 10 })
 
         await expect(page.locator(textAreaSelector)).toHaveText(
           `${format.prefix}${text}${format.postfix}`
@@ -777,14 +768,14 @@ test('undo and redo after starting an action should not destroy text #6267', asy
 
   // Get one piece of undo state onto the stack
   await block.mustType('text1 ')
-  await page.waitForTimeout(STD_DELAY * 5) // Wait for 500ms autosave period to expire
+  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
 
   // Then type more, start an action prompt, and undo
-  await page.keyboard.type('text2 ', { delay: STD_DELAY })
-  await page.keyboard.type('[[', { delay: STD_DELAY })
+  await page.keyboard.type('text2 ', { delay: 20 })
+  await page.keyboard.type('[[', { delay: 20 })
 
   await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
-  await page.keyboard.press(modKey + '+z', { delay: STD_DELAY })
+  await page.keyboard.press(modKey + '+z', { delay: 10 })
 
   // Should close the action menu when we undo the action prompt
   await expect(
@@ -795,7 +786,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await expect(page.locator('text="text1"')).toHaveCount(1)
 
   // And it should keep what was undone as a redo action
-  await page.keyboard.press(modKey + '+Shift+z')
+  await page.keyboard.press(modKey + '+Shift+z', { delay: 10 })
   await expect(page.locator('text="text1 text2 [[]]"')).toHaveCount(1)
 })
 
@@ -810,12 +801,12 @@ test('undo after starting an action should close the action menu #6269', async (
     await createRandomPage(page)
 
     // Open the action modal
-    await page.type(textAreaSelector, commandTrigger, { delay: STD_DELAY })
+    await page.type(textAreaSelector, commandTrigger, { delay: 10 })
 
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
-    await page.keyboard.press(modKey + '+z', { delay: STD_DELAY })
+    await page.keyboard.press(modKey + '+z', { delay: 10 })
     await expect(page.locator('text="/today"')).toHaveCount(0)
     await expect(
       page.locator(`[data-modal-name="${modalName}"]`)

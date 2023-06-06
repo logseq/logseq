@@ -303,3 +303,14 @@ export async function getCursorPos(page: Page): Promise<number | null> {
 
   return cursorPosition;
 }
+
+/**
+ * Close the modal or dialog, if it is open
+ * @param {Page} page - The page object.
+ * @return {Promise<void>} - Promise which resolves when the modal is closed.
+ */
+export async function closeModal(page: Page): Promise<void> {
+  await page.waitForTimeout(30) // wait for modal to open
+  // await page.keyboard.press("Escape", {delay: 10}) // escape (potential) dialog typing
+  await page.keyboard.press("Escape", { delay: 10}) // escape modal
+}
