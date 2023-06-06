@@ -218,7 +218,7 @@
          (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
-              {:title (t :ui/go-back) :on-click #(js/window.history.back)}
+              {:title (t :header/go-back) :on-click #(js/window.history.back)}
               (ui/icon "chevron-left" {:size 26})]))
          ;; search button for non-mobile
          (when current-repo
