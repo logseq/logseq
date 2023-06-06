@@ -191,10 +191,7 @@
   (ui/admonition
     :warning
     [:p.text-md
-     "Plugins can access your graph and your local files, issue network requests.
-       They can also cause data corruption or loss. We're working on proper access rules for your graphs.
-       Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
-       understand the source code."]))
+     (t :plugin/security-warning)]))
 
 (rum/defc card-ctls-of-market < rum/static
   [item stat installed? installing-or-updating?]
@@ -365,7 +362,7 @@
                     (.focus target))}
       (ui/icon "x")])
    [:input.form-input.is-small
-    {:placeholder "Search plugins"
+    {:placeholder (t :plugin/search-plugin)
      :ref         *search-ref
      :auto-focus  true
      :on-key-down (fn [^js e]
@@ -585,11 +582,11 @@
 
                 (when (state/developer-mode?)
                   [{:hr true}
-                   {:title   [:span.flex.items-center (ui/icon "file-code") "Open Preferences"]
+                   {:title   [:span.flex.items-center (ui/icon "file-code") (t :plugin/open-preferences)]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath (str root "/preferences.json")))}}
-                   {:title   [:span.flex.items-center (ui/icon "bug") "Open\u00A0" [:code "~/.logseq"]]
+                   {:title   [:span.flex.items-center (ui/icon "bug") (str (t :plugin/open-logseq-dir) "\u00A0") [:code "~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath root))}}]))
@@ -730,7 +727,7 @@
        [:p.flex.justify-center.py-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error) (.-message @*error)]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -895,7 +892,7 @@
                 [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")]))]])]
 
        ;; all done
-       [:div.py-4 [:strong.text-4xl "\uD83C\uDF89 All updated!"]])
+       [:div.py-4 [:strong.text-4xl (str "\uD83C\uDF89 " (t :plugin/all-updated))]])
 
      ;; actions
      (when (seq updates)
@@ -1183,7 +1180,7 @@
         [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
         notify! (fn [content status]
                   (if auto-checking?
-                    (println "Plugin Updates: " content)
+                    (println (t :plugin/list-of-updates) content)
                     (let [cb #(plugin-handler/cancel-user-checking!)]
                       (try
                         (set-uid (notification/show! content status false uid nil cb))
@@ -1195,7 +1192,7 @@
         (if check-pending?
           (notify!
             [:div
-             [:div (str "Checking for plugin updates ...")]
+             [:div (str (t :plugin/checking-for-updates))]
              (when sub-content [:p.opacity-60 sub-content])]
             (ui/loading ""))
           (when uid (notification/clear! uid))))
