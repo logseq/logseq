@@ -48,7 +48,6 @@
  :search/page-names "Search page names"
  :search/recent "Recent search:"
  :search/blocks-in-page "Search blocks in page:"
- :search/non-existing-uuid "search result with non-existing uuid: "
  :search/cache-outdated "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."
  :search-item/whiteboard "Whiteboard"
  :search-item/page "Page"

@@ -311,7 +311,7 @@
                                 content'
 
                                 :else
-                                (do (log/error (t :search/non-existing-uuid) data)
+                                (do (log/error "search result with non-existing uuid: " data)
                                     (str (t :search/cache-outdated)))))])
 
        :page-content
@@ -326,7 +326,7 @@
                                  :extension? true}
                                 (if page
                                   (page-content-search-result-item repo uuid format snippet search-q search-mode)
-                                  (do (log/error (t :search/non-existing-uuid) data)
+                                  (do (log/error "search result with non-existing uuid: " data)
                                       (str (t :search/cache-outdated)))))]))
 
        nil)]))
