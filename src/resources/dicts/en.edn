@@ -76,6 +76,7 @@
  :right-side-bar/new-page "New page"
  :right-side-bar/show-journals "Show Journals"
  :right-side-bar/separator "Right sidebar resize handler"
+ :right-side-bar/toggle-right-sidebar "Toggle right sidebar"
  :left-side-bar/journals "Journals"
  :left-side-bar/create "Create"
  :left-side-bar/new-page "New page"
@@ -493,12 +494,11 @@
  :window/close "Close"
  :window/exit-fullscreen "Exit full screen"
 
- :ui/toggle-right-sidebar "Toggle right sidebar"
- :ui/toggle-left-sidebar  "Toggle left sidebar"
- :ui/search               "Search"
- :ui/more                 "More"
- :ui/go-back              "Go back"
- :ui/go-forward           "Go forward"
+ :header/toggle-left-sidebar         "Toggle left sidebar"
+ :header/search                      "Search"
+ :header/more                        "More"
+ :header/go-back                     "Go back"
+ :header/go-forward                  "Go forward"
    ;; Commands are nested for now to stay in sync with the shortcuts system.
    ;; Other languages should not nest keys under :commands
  :commands

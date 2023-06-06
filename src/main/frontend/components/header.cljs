@@ -58,7 +58,7 @@
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:title (t :ui/toggle-left-sidebar)
+     {:title (t :header/toggle-left-sidebar)
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
@@ -86,7 +86,7 @@
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
-         :title (t :ui/more)}
+         :title (t :header/more)}
         (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
@@ -148,12 +148,12 @@
 
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
-      {:title (t :ui/go-back) :on-click #(js/window.history.back)}
+      {:title (t :header/go-back) :on-click #(js/window.history.back)}
       (ui/icon "arrow-left" {:size ui/icon-size})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
-      {:title (t :ui/go-forward) :on-click #(js/window.history.forward)}
+      {:title (t :header/go-forward) :on-click #(js/window.history.forward)}
       (ui/icon "arrow-right" {:size ui/icon-size})])])
 
 (rum/defc updater-tips-new-version
@@ -224,7 +224,7 @@
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title (t :ui/search)
+              {:title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
