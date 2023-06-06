@@ -29,11 +29,12 @@
     this)
 
   ICollection
-  (-conj [this kv]
-    (if (map? kv)
+  (-conj [this entry]
+    (if (vector? entry)
+      (let [[k v] entry]
+        (-assoc this k v))
       (reduce (fn [this [k v]]
-                (assoc this k v)) this kv)
-      this))
+                (-assoc this k v)) this entry)))
 
   ILookup
   (-lookup

@@ -1106,7 +1106,8 @@
                                      :onChange (fn [in-view? entry]
                                                  (let [self-top (.-top (.-boundingClientRect entry))]
                                                    (when (or (and (not visible?) in-view?)
-                                                             (and visible? (not in-view?)))
+                                                             ;; hide only the components below the current top for better ux
+                                                             (and visible? (not in-view?) (> self-top root-margin)))
                                                      (set-visible! in-view?))))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
