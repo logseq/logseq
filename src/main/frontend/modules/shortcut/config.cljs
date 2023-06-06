@@ -440,12 +440,16 @@
 
    :go/keyboard-shortcuts          {:binding "g s"
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
+
    :go/yesterday                   {:binding "g y"
                                     :fn      journal-handler/go-to-yesterday!}
-   :go/today                       {:binding (if mac? "mod+j" "alt+j")
+
+   :go/today                       {:binding "g u"
                                     :fn      journal-handler/go-to-today!}
+
    :go/tomorrow                    {:binding "g t"
                                     :fn      journal-handler/go-to-tomorrow!}
+
 
    :go/next-journal                {:binding "g n"
                                     :fn      journal-handler/go-to-next-journal!}
