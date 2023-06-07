@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
-import { createPage, randomLowerString, randomString, renamePage } from './utils'
+import { closeSearchBox, createPage, randomLowerString, randomString, renamePage, searchPage } from './utils'
 
 /***
  * Test rename feature
@@ -64,6 +64,16 @@ test('page rename test', async ({ page }) => {
   await page_rename_test(page, "abcd", "a.b.c.d")
   await page_rename_test(page, "abcd", "a/b/c/d")
 
+  // The page name in page search are not updated after changing the capitalization of the page name #9577
+  // https://github.com/logseq/logseq/issues/9577
+  // Expect the page name to be updated in the search results
+  await page_rename_test(page, "DcBA_", "dCBA_")
+  const results = await searchPage(page, "DcBA_")
+  // search result 0 is the new page & 1 is the new whiteboard
+  const thirdResultRow = await results[2].innerText()
+  expect(thirdResultRow).toContain("dCBA_");
+  expect(thirdResultRow).not.toContain("DcBA_");
+  await closeSearchBox(page)
 })
 
 // TODO introduce more samples when #4722 is fixed

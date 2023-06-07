@@ -12,6 +12,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -37,13 +38,11 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -1243,17 +1242,7 @@
 (defn- macro-function-cp
   [config arguments]
   (or
-   (when (:query-result config)
-     (when-let [query-result (rum/react (:query-result config))]
-       (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
-                           (common-handler/safe-read-string "failed to parse function")
-                           (query-handler/normalize-query-function query-result)
-                           (str))
-             f (sci/eval-string fn-string)]
-         (when (fn? f)
-           (try (f query-result)
-                (catch :default e
-                  (js/console.error e)))))))
+   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
