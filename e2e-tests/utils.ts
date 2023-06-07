@@ -2,6 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as pathlib from 'path'
 import { modKey } from './util/basic'
+import { Block } from './types'
 
 // TODO: The file should be a facade of utils in the /util folder
 // No more additional functions should be added to this file

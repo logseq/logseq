@@ -5,6 +5,7 @@ import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
 import { Tooltip } from '../Tooltip'
 import React from 'react'
+import { LogseqContext } from '../../lib/logseq-context'
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -22,6 +23,10 @@ export function ColorInput({
   setOpacity,
   ...rest
 }: ColorInputProps) {
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
+
   function renderColor(color?: string) {
     return color ? (
       <div className="tl-color-bg" style={{ backgroundColor: color }}>
@@ -32,6 +37,10 @@ export function ColorInput({
         <TablerIcon name="color-swatch" />
       </div>
     )
+  }
+
+  function isHexColor(color: string) {
+    return /^#(?:[0-9a-f]{3}){1,2}$/i.test(color)
   }
 
   const handleChangeDebounced = React.useMemo(() => {
@@ -53,7 +62,7 @@ export function ColorInput({
       arrow
       side={popoverSide}
       label={
-        <Tooltip content={'Color'} side={popoverSide} sideOffset={14}>
+        <Tooltip content={t('whiteboard/color')} side={popoverSide} sideOffset={14}>
           {renderColor(color)}
         </Tooltip>
       }
@@ -78,15 +87,15 @@ export function ColorInput({
                 className="color-input cursor-pointer"
                 id="tl-custom-color-input"
                 type="color"
-                value={color}
+                value={isHexColor(color) ? color : '#000000'}
                 onChange={handleChangeDebounced}
                 style={{ opacity: isBuiltInColor(color) ? 0 : 1 }}
                 {...rest}
               />
             </div>
           </div>
-          <label for="tl-custom-color-input" className="cursor-pointer">
-            Select custom color
+          <label htmlFor="tl-custom-color-input" className="cursor-pointer">
+            {t('whiteboard/select-custom-color')}
           </label>
         </div>
 
@@ -97,7 +106,7 @@ export function ColorInput({
               onValueCommit={value => setOpacity(value[0])}
               max={1}
               step={0.1}
-              aria-label="Opacity"
+              aria-label={t('whiteboard/opacity')}
               className="tl-slider-root"
             >
               <Slider.Track className="tl-slider-track">

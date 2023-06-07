@@ -1,9 +1,10 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, lastBlock, modKey, IsLinux } from './utils'
+import { createRandomPage, enterNextBlock, lastBlock, modKey, IsLinux, closeSearchBox } from './utils'
 
 test('open search dialog', async ({ page }) => {
   await page.waitForTimeout(200)
+  await closeSearchBox(page)
   await page.keyboard.press(modKey + '+k')
 
   await page.waitForSelector('[placeholder="Search or create page"]')

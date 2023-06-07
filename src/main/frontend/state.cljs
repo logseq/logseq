@@ -73,9 +73,9 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
-     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
+     :ui/sidebar-width                      "40%"
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
@@ -165,6 +165,8 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
      :electron/server                       nil
+     :electron/window-maximized?            false
+     :electron/window-fullscreen?           false
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
@@ -423,15 +425,6 @@ should be done through this fn in order to get global config and config defaults
          (string/lower-case (name fmt)))
 
        (get-in @state [:me :preferred_format] "markdown")))))
-
-;; TODO: consider adding a pane in Settings to set this through the GUI (rather
-;; than having to go through the config.edn file)
-(defn get-editor-command-trigger
-  ([] (get-editor-command-trigger (get-current-repo)))
-  ([repo-url]
-   (or
-     (:editor/command-trigger (get-config repo-url))        ;; Get from user config
-     "/")))                                                 ;; Set the default
 
 (defn markdown?
   []
@@ -1808,7 +1801,7 @@ Similar to re-frame subscriptions"
             container (util/get-block-container block-element)
             block (if container
                     (assoc block
-                           :block/container (gobj/get container "id"))
+                           :block.temp/container (gobj/get container "id"))
                     block)
             content (string/trim (or content ""))]
         (swap! state

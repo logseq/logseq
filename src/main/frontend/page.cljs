@@ -88,6 +88,7 @@
   {:did-mount    (fn [state]
                    (state/set-root-component! (:rum/react-component state))
                    (state/setup-electron-updater!)
+                   (state/load-app-user-cfgs)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (quick-tour/init)

@@ -6,7 +6,9 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.model :as model]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]))
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [frontend.util :as util]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -255,3 +257,69 @@
 
       (editor/save-block! repo block-uuid "# bar")
       (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid)))))))
+
+(defn- delete-block
+  [db block {:keys [embed?]}]
+  (let [sibling-block (d/entity db (get-in block [:block/left :db/id]))
+        first-block (d/entity db (get-in sibling-block [:block/left :db/id]))
+        block-dom-id "ls-block-block-to-delete"]
+    (with-redefs [editor/get-state (constantly {:block-id (:block/uuid block)
+                                                :block-parent-id block-dom-id
+                                                :config {:embed? embed?}})
+                ;; stub for delete-block
+                  gdom/getElement (constantly #js {:id block-dom-id})
+                ;; stub since not testing moving
+                  editor/edit-block! (constantly nil)
+                  util/get-blocks-noncollapse (constantly (mapv
+                                                           (fn [m]
+                                                             #js {:id (:id m)
+                                                                  ;; for dom/attr
+                                                                  :getAttribute #({"blockid" (str (:block-uuid m))
+                                                                                   "data-embed" (if embed? "true" "false")} %)})
+                                                           [{:id "ls-block-first-block"
+                                                             :block-uuid (:block/uuid first-block)}
+                                                            {:id "ls-block-sibling-block"
+                                                             :block-uuid (:block/uuid sibling-block)}
+                                                            {:id block-dom-id
+                                                             :block-uuid (:block/uuid block)}]))]
+      (editor/delete-block! test-helper/test-db false))))
+
+(deftest ^:focus delete-block!
+  (testing "backspace deletes empty block"
+    (load-test-files [{:file/path "pages/page1.md"
+                       :file/content "\n
+- b1
+- b2
+-"}])
+    (let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                          @conn)
+                     ffirst)
+          _ (delete-block @conn block {})
+          updated-blocks (->> (d/q '[:find (pull ?b [*])
+                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                   @conn)
+                              (map (comp :block/content first)))]
+      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))
+    (test-helper/reset-test-db!))
+
+  (testing "backspace deletes empty block in embedded context"
+    ;; testing embed at this layer doesn't require an embed block since
+    ;; delete-block handles all the embed setup
+    (load-test-files [{:file/path "pages/page1.md"
+                       :file/content "\n
+- b1
+- b2
+-"}])
+    (let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                          @conn)
+                     ffirst)
+          _ (delete-block @conn block {:embed? true})
+          updated-blocks (->> (d/q '[:find (pull ?b [*])
+                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                   @conn)
+                              (map (comp :block/content first)))]
+      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))))
