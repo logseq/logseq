@@ -111,8 +111,7 @@
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (test-helper/with-reset
         reset
-        [state/get-input (constantly #js {:value "block"})
-         ;; paste-copied-blocks-or-text mocks below
+        [;; paste-copied-blocks-or-text mocks below
          commands/delete-selection! (constantly nil)
          commands/simple-insert! (fn [_input text] (p/resolved text))
          util/stop (constantly nil)
@@ -123,28 +122,42 @@
           (is (= expected-paste result))
           (reset))))))
 
-(deftest-async editor-on-paste-with-selected-text-and-link
+(deftest-async editor-on-paste-with-selected-text-and-special-link
   (testing "Formatted paste with special link on selected text pastes a formatted link"
     (let [actual-text (atom nil)
           clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           selected-text "great song"
-          block (str selected-text " - Obaluaê!")
+          block-content (str selected-text " - Obaluaê!")
           expected-paste "[great song](https://www.youtube.com/watch?v=xu9p5ynlhZk) - Obaluaê!"]
       (test-helper/with-reset
         reset
-        [state/get-input (constantly #js {:value block})
-         ;; paste-copied-blocks-or-text mocks below
+        [;; paste-copied-blocks-or-text mocks below
          util/stop (constantly nil)
-         util/get-selected-text (constantly "title")
+         util/get-selected-text (constantly selected-text)
          editor-handler/get-selection-and-format
          (constantly {:selection-start 0 :selection-end (count selected-text)
-                      :selection selected-text :format :markdown :value block})
+                      :selection selected-text :format :markdown :value block-content})
          state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
          cursor/move-cursor-to (constantly nil)]
         (p/let [_ ((paste-handler/editor-on-paste! nil)
-                        #js {:clipboardData #js {:getData (constantly clipboard)}})]
+                   #js {:clipboardData #js {:getData (constantly clipboard)}})]
           (is (= expected-paste @actual-text))
           (reset))))))
+
+(deftest-async editor-on-paste-with-block-ref-in-between-parens
+  (let [clipboard "((647f90f4-d733-4ee2-bbf5-907e820a23d3))"
+        expected-paste "647f90f4-d733-4ee2-bbf5-907e820a23d3"]
+    (test-helper/with-reset
+      reset
+      [;; paste-copied-blocks-or-text mocks below
+       util/stop (constantly nil)
+       state/get-input (constantly #js {:value "(())"})
+       cursor/pos (constantly 2)
+       commands/simple-insert! (fn [_input text] (p/resolved text))]
+      (p/let [result ((paste-handler/editor-on-paste! nil)
+                      #js {:clipboardData #js {:getData (constantly clipboard)}})]
+        (is (= expected-paste result))
+        (reset)))))
 
 (deftest-async editor-on-paste-with-copied-blocks
   (let [actual-blocks (atom nil)
@@ -154,15 +167,14 @@
         clipboard "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
     (test-helper/with-reset
       reset
-      [state/get-input (constantly #js {:value "block"})
-       ;; paste-copied-blocks-or-text mocks below
+      [;; paste-copied-blocks-or-text mocks below
        util/stop (constantly nil)
        paste-handler/get-copied-blocks (constantly (p/resolved expected-blocks))
        editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
-                      #js {:clipboardData #js {:getData (constantly clipboard)}})]
-             (is (= expected-blocks @actual-blocks))
-             (reset)))))
+                 #js {:clipboardData #js {:getData (constantly clipboard)}})]
+        (is (= expected-blocks @actual-blocks))
+        (reset)))))
 
 (deftest-async editor-on-paste-with-selection-in-property
   (let [clipboard "after"
@@ -208,8 +220,7 @@
         text "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
     (test-helper/with-reset
       reset
-      [state/get-input (constantly #js {:value "block"})
-       ;; paste-copied-blocks-or-text mocks below
+      [;; paste-copied-blocks-or-text mocks below
        util/stop (constantly nil)
        html-parser/convert (constantly "**bold text**")
        paste-handler/get-copied-blocks (constantly (p/resolved nil))
