@@ -21,9 +21,8 @@ export const ContextMenu = observer(function ContextMenu({
   collisionRef,
 }: ContextMenuProps) {
   const app = useApp()
-  const {
-    handlers: { t },
-  } = React.useContext(LogseqContext)
+  const { handlers } = React.useContext(LogseqContext)
+  const t = handlers.t
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {

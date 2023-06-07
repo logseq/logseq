@@ -365,9 +365,9 @@
  :file-sync/other-user-graph "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
  :file-sync/graph-deleted "Текущий удаленный граф был удален"
  :file-sync/rsapi-cannot-upload-err "Невозможно начать синхронизацию, пожалуйста, проверьте правильное ли установлено локальное время."
- 
+
  :notification/clear-all "Очистить всё"
- 
+
  :shortcut.category/basics                "Базовые"
  :shortcut.category/formatting            "Форматирование"
  :shortcut.category/navigating            "Навигация"
@@ -487,7 +487,6 @@
  :command.sidebar/open-today-page         "Открыть сегодняшнюю страницу в правой боковой панели"
  :command.sidebar/close-top               "Закрыть верхний элемент в правой боковой панели"
  :command.sidebar/clear                   "Очистить правую панель"
- :command.misc/copy                       "mod+c"
  :command.command-palette/toggle          "Показать палитру команд"
  :command.graph/export-as-html            "Экспорт публичных страниц графов в формате html"
  :command.graph/open                      "Выберите граф для открытия"
@@ -513,7 +512,6 @@
  :command.ui/toggle-help                  "Переключить помощь"
  :command.ui/toggle-theme                 "Переключение между темной/светлой темой"
  :command.ui/toggle-contents              "Переключить Контент на боковой панели"
-  ;;  :command.ui/open-new-window                  "Открыть новое окно"
  :command.command/toggle-favorite         "Добавить или удалить из избранного"
  :command.editor/open-file-in-default-app "Открыть файл в программе по умолчанию"
  :command.editor/open-file-in-directory   "Открыть файл в родительском каталоге"

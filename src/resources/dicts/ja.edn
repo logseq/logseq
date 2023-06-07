@@ -18,7 +18,6 @@
  :help/docs "ドキュメント"
  :help/privacy "プライバシーポリシー"
  :help/terms "利用規約"
- :help/awesome-logseq "Awesome Logseq"
  :help/shortcuts "キーボードショートカット"
  :help/shortcuts-triggers "トリガー"
  :help/shortcut "ショートカット"
@@ -28,8 +27,6 @@
  :help/block-reference "ブロック参照"
  :help/open-link-in-sidebar "サイドバーでリンクを開く"
  :more "詳細"
- :search/result-for "Search result for "
- :search/items "items"
  :search/page-names "ページ名で検索"
  :help/context-menu "ブロックのコンテキストメニュー"
  :help/markdown-syntax "マークダウン文法"
@@ -237,8 +234,6 @@
  :paginates/prev "前"
  :paginates/next "次"
 
- :tips/all-done "All Done"
-
  :command-palette/prompt "コマンドを入力"
  :select/default-prompt "選択してください"
  :select.graph/prompt "グラフを選んでください"
@@ -289,7 +284,6 @@
  :command.go/next-journal                 "次の日誌へ移動"
  :command.go/prev-journal                 "前の日誌へ移動"
  :command.go/keyboard-shortcuts           "キーボードショートカットへ移動"
-             ;;  :command.ui/open-new-window              "別のウィンドウを開く"
  :command.go/search-in-page               "ページ内を検索"
  :command.go/electron-find-in-page        "ページ内で文字列検索"
  :command.go/electron-jump-to-the-next   "文字列検索で次を検索"
