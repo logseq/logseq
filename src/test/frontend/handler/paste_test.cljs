@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.commands :as commands]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [promesa.core :as p]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.handler.editor :as editor-handler]
@@ -105,7 +106,7 @@
              (reset)))))
 
 (deftest-async editor-on-paste-with-link
-  (testing "Formatted paste for link should paste macro wrapped link"
+  (testing "Formatted paste for special link should paste macro wrapped link"
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (test-helper/with-reset
@@ -115,11 +116,35 @@
          commands/delete-selection! (constantly nil)
          commands/simple-insert! (fn [_input text] (p/resolved text))
          util/stop (constantly nil)
+         util/get-selected-text (constantly "")
          html-parser/convert (constantly nil)]
         (p/let [result ((paste-handler/editor-on-paste! nil)
                         #js {:clipboardData #js {:getData (constantly clipboard)}})]
-               (is (= expected-paste result))
-               (reset))))))
+          (is (= expected-paste result))
+          (reset))))))
+
+(deftest-async editor-on-paste-with-selected-text-and-link
+  (testing "Formatted paste with special link on selected text pastes a formatted link"
+    (let [actual-text (atom nil)
+          clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
+          selected-text "great song"
+          block (str selected-text " - Obaluaê!")
+          expected-paste "[great song](https://www.youtube.com/watch?v=xu9p5ynlhZk) - Obaluaê!"]
+      (test-helper/with-reset
+        reset
+        [state/get-input (constantly #js {:value block})
+         ;; paste-copied-blocks-or-text mocks below
+         util/stop (constantly nil)
+         util/get-selected-text (constantly "title")
+         editor-handler/get-selection-and-format
+         (constantly {:selection-start 0 :selection-end (count selected-text)
+                      :selection selected-text :format :markdown :value block})
+         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
+         cursor/move-cursor-to (constantly nil)]
+        (p/let [_ ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (constantly clipboard)}})]
+          (is (= expected-paste @actual-text))
+          (reset))))))
 
 (deftest-async editor-on-paste-with-copied-blocks
   (let [actual-blocks (atom nil)

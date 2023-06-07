@@ -172,7 +172,10 @@
                                (if (string/blank? result) nil result))
                    text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
                    blocks? (text-blocks? text)
-                   text' (or html-text text)]
+                   text' (or html-text
+                             (when (gp-util/url? text)
+                               (wrap-macro-url text))
+                             text)]
                (cond
                  blocks?
                  (paste-text-parseable format text)
@@ -248,10 +251,7 @@
         (paste-file-if-exists id e)
 
         :else
-        (let [text' (or (when (gp-util/url? text)
-                          (wrap-macro-url text))
-                        text)]
-          (paste-text-or-blocks-aux (state/get-input) e text' html))))))
+        (paste-text-or-blocks-aux (state/get-input) e text html)))))
 
 (defn editor-on-paste-raw!
   "Raw pastes without _any_ formatting. Can also replace selected text with a paste"
