@@ -2,6 +2,8 @@
   "Provides db fns and associated util fns for publishing"
   (:require [datascript.core :as d]
             [logseq.db.schema :as db-schema]
+            [logseq.db.rules :as rules]
+            [clojure.set :as set]
             [clojure.string :as string]))
 
 (defn ^:api get-area-block-asset-url
@@ -92,6 +94,20 @@
      flatten
      distinct)))
 
+(defn- get-aliases-for-page-ids
+  [db page-ids]
+  (->> (d/q '[:find ?e
+              :in $ ?pages %
+              :where
+              [?page :block/name]
+              [(contains? ?pages ?page)]
+              (alias ?page ?e)]
+            db
+            (set page-ids)
+            (:alias rules/rules))
+       (map first)
+       set))
+
 (defn clean-export!
   "Prepares a database assuming all pages are public unless a page has a 'public:: false'"
   [db]
@@ -113,7 +129,8 @@
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
   [db]
   (when-let [public-pages* (seq (get-public-pages db))]
-    (let [public-pages (set public-pages*)
+    (let [public-pages (set/union (set public-pages*)
+                                  (get-aliases-for-page-ids db public-pages*))
           exported-namespace? #(contains? #{"block" "recent"} %)
           filtered-db (d/filter db
                                 (fn [db datom]
