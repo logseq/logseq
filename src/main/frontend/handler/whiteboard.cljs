@@ -209,13 +209,13 @@
    (create-new-whiteboard-page! nil))
   ([name]
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
-         page-name (or name (str uuid))]
+         page (or name (str uuid))]
      (db/transact! (get-default-new-whiteboard-tx name (str uuid)))
-     (let [entity (get-whiteboard-entity page-name)
+     (let [entity (get-whiteboard-entity page)
            tx (assoc (select-keys entity [:db/id])
                      :block/uuid uuid)]
        (db-utils/transact! [tx])
-       (let [page-entity (get-whiteboard-entity page-name)]
+       (let [page-entity (get-whiteboard-entity page)]
          (when (and page-entity (nil? (:block/file page-entity)))
            (outliner-file/sync-to-file page-entity)))))))
 
