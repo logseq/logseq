@@ -58,7 +58,7 @@
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:title "Toggle left menu"
+     {:title (t :header/toggle-left-sidebar)
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
@@ -86,7 +86,7 @@
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
-         :title "More"}
+         :title (t :header/more)}
         (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
@@ -148,12 +148,12 @@
 
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
-      {:title "Go back" :on-click #(js/window.history.back)}
+      {:title (t :header/go-back) :on-click #(js/window.history.back)}
       (ui/icon "arrow-left" {:size ui/icon-size})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
-      {:title "Go forward" :on-click #(js/window.history.forward)}
+      {:title (t :header/go-forward) :on-click #(js/window.history.forward)}
       (ui/icon "arrow-right" {:size ui/icon-size})])])
 
 (rum/defc updater-tips-new-version
@@ -218,13 +218,13 @@
          (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
-              {:title "Go back" :on-click #(js/window.history.back)}
+              {:title (t :header/go-back) :on-click #(js/window.history.back)}
               (ui/icon "chevron-left" {:size 26})]))
          ;; search button for non-mobile
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title "Search"
+              {:title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
