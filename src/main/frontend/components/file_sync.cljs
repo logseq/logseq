@@ -598,7 +598,7 @@
 
     [:div.version-list
      (if loading?
-       [:div.p-4 (ui/loading "Loading...")]
+       [:div.p-4 (ui/loading)]
        (for [version version-files]
          (let [version-uuid (get-version-key version)
                local?       (some? (:relative-path version))]
@@ -704,7 +704,7 @@
 
      ;; ready loading
      [:div.flex.items-center.h-full.justify-center.w-full.absolute.ready-loading
-      (ui/loading "Loading...")]]))
+      (ui/loading)]]))
 
 (defn pick-page-histories-panel [graph-uuid page-name]
   (fn []

@@ -152,7 +152,7 @@
        ;; wait for content load
        (and format
             (contains? (gp-config/text-formats) format))
-       (ui/loading "Loading ...")
+       (ui/loading)
 
        :else
        [:div (t :file/format-not-supported (name format))])]))

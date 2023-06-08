@@ -1041,7 +1041,7 @@
          [:div.r.flex.items-center.justify-between
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-whiteboards) " ?")]
+            {:html  [:small (t :page/show-whiteboards)]
              :arrow true}
             [:a.button.whiteboard
              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
@@ -1049,7 +1049,7 @@
              (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-journals) " ?")]
+            {:html  [:small (t :page/show-journals)]
              :arrow true}
             [:a.button.journal
              {:class    (util/classnames [{:active (boolean @*journal?)}])
