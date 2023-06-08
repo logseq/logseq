@@ -437,3 +437,59 @@ test('go to another board and check reference', async ({ page }) => {
   const pageRefCount$ = page.locator('.whiteboard-page-refs-count')
   await expect(pageRefCount$.locator('.open-page-ref-link')).toContainText('1')
 })
+
+test('Create an embedded whiteboard', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  await canvas.dblclick({
+    position: {
+      x: 150,
+      y: 150,
+    },
+  })
+
+  const quickAdd$ = page.locator('.tl-quick-search')
+  await expect(quickAdd$).toBeVisible()
+
+  await page.fill('.tl-quick-search input', 'My embedded whiteboard')
+  await quickAdd$
+    .locator('div[data-index="2"] .tl-quick-search-option')
+    .first()
+    .click()
+
+  await expect(quickAdd$).toBeHidden()
+  await expect(page.locator('.tl-logseq-portal-header a')).toContainText('My embedded whiteboard')
+})
+
+test('New whiteboard should have the correct name', async ({ page }) => {
+  page.locator('.tl-logseq-portal-header a').click()
+
+  await expect(page.locator('.whiteboard-page-title')).toContainText('My embedded whiteboard')
+})
+
+test('Create an embedded page', async ({ page }) => {
+  const canvas = await page.waitForSelector('.logseq-tldraw')
+  await canvas.dblclick({
+    position: {
+      x: 150,
+      y: 150,
+    },
+  })
+
+  const quickAdd$ = page.locator('.tl-quick-search')
+  await expect(quickAdd$).toBeVisible()
+
+  await page.fill('.tl-quick-search input', 'My page')
+  await quickAdd$
+    .locator('div[data-index="1"] .tl-quick-search-option')
+    .first()
+    .click()
+
+  await expect(quickAdd$).toBeHidden()
+  await expect(page.locator('.tl-logseq-portal-header a')).toContainText('My page')
+})
+
+test('New page should have the correct name', async ({ page }) => {
+  page.locator('.tl-logseq-portal-header a').click()
+
+  await expect(page.locator('.ls-page-title')).toContainText('My page')
+})
