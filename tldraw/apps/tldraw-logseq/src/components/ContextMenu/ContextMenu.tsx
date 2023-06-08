@@ -22,6 +22,7 @@ export const ContextMenu = observer(function ContextMenu({
 }: ContextMenuProps) {
   const app = useApp()
   const { handlers } = React.useContext(LogseqContext)
+  const t = handlers.t
   const rContent = React.useRef<HTMLDivElement>(null)
 
   const runAndTransition = (f: Function) => {
@@ -64,26 +65,26 @@ export const ContextMenu = observer(function ContextMenu({
                 <ReactContextMenu.Item>
                   <div className="tl-menu-button-row pb-0">
                     <Button
-                      tooltip="Align left"
+                      tooltip={t('whiteboard/align-left')}
                       onClick={() => runAndTransition(() => app.align(AlignType.Left))}
                     >
                       <TablerIcon name="layout-align-left" />
                     </Button>
                     <Button
-                      tooltip="Align center horizontally"
+                      tooltip={t('whiteboard/align-center-horizontally')}
                       onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
                     >
                       <TablerIcon name="layout-align-center" />
                     </Button>
                     <Button
-                      tooltip="Align right"
+                      tooltip={t('whiteboard/align-right')}
                       onClick={() => runAndTransition(() => app.align(AlignType.Right))}
                     >
                       <TablerIcon name="layout-align-right" />
                     </Button>
                     <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                     <Button
-                      tooltip="Distribute horizontally"
+                      tooltip={t('whiteboard/distribute-horizontally')}
                       onClick={() =>
                         runAndTransition(() => app.distribute(DistributeType.Horizontal))
                       }
@@ -93,26 +94,26 @@ export const ContextMenu = observer(function ContextMenu({
                   </div>
                   <div className="tl-menu-button-row pt-0">
                     <Button
-                      tooltip="Align top"
+                      tooltip={t('whiteboard/align-top')}
                       onClick={() => runAndTransition(() => app.align(AlignType.Top))}
                     >
                       <TablerIcon name="layout-align-top" />
                     </Button>
                     <Button
-                      tooltip="Align center vertically"
+                      tooltip={t('whiteboard/align-center-vertically')}
                       onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
                     >
                       <TablerIcon name="layout-align-middle" />
                     </Button>
                     <Button
-                      tooltip="Align bottom"
+                      tooltip={t('whiteboard/align-bottom')}
                       onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
                     >
                       <TablerIcon name="layout-align-bottom" />
                     </Button>
                     <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                     <Button
-                      tooltip="Distribute vertically"
+                      tooltip={t('whiteboard/distribute-vertically')}
                       onClick={() =>
                         runAndTransition(() => app.distribute(DistributeType.Vertical))
                       }
@@ -127,7 +128,7 @@ export const ContextMenu = observer(function ContextMenu({
                   onClick={() => runAndTransition(app.packIntoRectangle)}
                 >
                   <TablerIcon className="tl-menu-icon" name="layout-grid" />
-                  Pack into rectangle
+                  {t('whiteboard/pack-into-rectangle')}
                 </ReactContextMenu.Item>
                 <ReactContextMenu.Separator className="menu-separator" />
               </>
@@ -138,7 +139,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-menu-item"
                 onClick={() => runAndTransition(app.api.zoomToSelection)}
               >
-                Zoom to fit
+                {t('whiteboard/zoom-to-fit')}
                 <KeyboardShortcut action="whiteboard/zoom-to-fit" />
               </ReactContextMenu.Item>
               <ReactContextMenu.Separator className="menu-separator" />
@@ -155,7 +156,7 @@ export const ContextMenu = observer(function ContextMenu({
                     onClick={() => runAndTransition(app.api.unGroup)}
                   >
                     <TablerIcon className="tl-menu-icon" name="ungroup" />
-                    Ungroup
+                    {t('whiteboard/ungroup')}
                     <KeyboardShortcut action="whiteboard/ungroup" />
                   </ReactContextMenu.Item>
                 )}
@@ -166,7 +167,7 @@ export const ContextMenu = observer(function ContextMenu({
                       onClick={() => runAndTransition(app.api.doGroup)}
                     >
                       <TablerIcon className="tl-menu-icon" name="group" />
-                      Group
+                      {t('whiteboard/group')}
                       <KeyboardShortcut action="whiteboard/group" />
                     </ReactContextMenu.Item>
                   )}
@@ -181,7 +182,7 @@ export const ContextMenu = observer(function ContextMenu({
                   onClick={() => runAndTransition(app.cut)}
                 >
                   <TablerIcon className="tl-menu-icon" name="cut" />
-                  Cut
+                  {t('whiteboard/cut')}
                 </ReactContextMenu.Item>
               )}
               <ReactContextMenu.Item
@@ -189,7 +190,7 @@ export const ContextMenu = observer(function ContextMenu({
                 onClick={() => runAndTransition(app.copy)}
               >
                 <TablerIcon className="tl-menu-icon" name="copy" />
-                Copy
+                {t('whiteboard/copy')}
                 <KeyboardShortcut action="editor/copy" />
               </ReactContextMenu.Item>
             </>
@@ -200,7 +201,7 @@ export const ContextMenu = observer(function ContextMenu({
               onClick={() => runAndTransition(app.paste)}
             >
               <TablerIcon className="tl-menu-icon" name="clipboard" />
-              Paste
+              {t('whiteboard/paste')}
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
                   <code>{MOD_KEY}</code> <code>v</code>
@@ -213,7 +214,7 @@ export const ContextMenu = observer(function ContextMenu({
               className="tl-menu-item"
               onClick={() => runAndTransition(() => app.paste(undefined, true))}
             >
-              Paste as link
+              {t('whiteboard/paste-as-link')}
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
                   <code>{MOD_KEY}</code> <code>⇧</code> <code>v</code>
@@ -239,7 +240,7 @@ export const ContextMenu = observer(function ContextMenu({
                 }
               >
                 <TablerIcon className="tl-menu-icon" name="file-export" />
-                Export
+                {t('whiteboard/export')}
                 <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut"></span>
                 </div>
@@ -251,7 +252,7 @@ export const ContextMenu = observer(function ContextMenu({
             className="tl-menu-item"
             onClick={() => runAndTransition(app.api.selectAll)}
           >
-            Select all
+            {t('whiteboard/select-all')}
             <KeyboardShortcut action="editor/select-parent" />
           </ReactContextMenu.Item>
           {app.selectedShapes?.size > 1 && (
@@ -259,29 +260,33 @@ export const ContextMenu = observer(function ContextMenu({
               className="tl-menu-item"
               onClick={() => runAndTransition(app.api.deselectAll)}
             >
-              Deselect all
+              {t('whiteboard/deselect-all')}
             </ReactContextMenu.Item>
           )}
-          {!app.readOnly && app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => !s.props.isLocked) && (
-            <ReactContextMenu.Item
-              className="tl-menu-item"
-              onClick={() => runAndTransition(() => app.setLocked(true))}
-            >
-              <TablerIcon className="tl-menu-icon" name="lock" />
-              Lock
-              <KeyboardShortcut action="whiteboard/lock" />
-            </ReactContextMenu.Item>
-          )}
-          {!app.readOnly && app.selectedShapes?.size > 0 && app.selectedShapesArray?.some(s => s.props.isLocked) && (
-            <ReactContextMenu.Item
-              className="tl-menu-item"
-              onClick={() => runAndTransition(() => app.setLocked(false))}
-            >
-              <TablerIcon className="tl-menu-icon" name="lock-open" />
-              Unlock
-              <KeyboardShortcut action="whiteboard/unlock" />
-            </ReactContextMenu.Item>
-          )}
+          {!app.readOnly &&
+            app.selectedShapes?.size > 0 &&
+            app.selectedShapesArray?.some(s => !s.props.isLocked) && (
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(() => app.setLocked(true))}
+              >
+                <TablerIcon className="tl-menu-icon" name="lock" />
+                {t('whiteboard/lock')}
+                <KeyboardShortcut action="whiteboard/lock" />
+              </ReactContextMenu.Item>
+            )}
+          {!app.readOnly &&
+            app.selectedShapes?.size > 0 &&
+            app.selectedShapesArray?.some(s => s.props.isLocked) && (
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(() => app.setLocked(false))}
+              >
+                <TablerIcon className="tl-menu-icon" name="lock-open" />
+                {t('whiteboard/unlock')}
+                <KeyboardShortcut action="whiteboard/unlock" />
+              </ReactContextMenu.Item>
+            )}
           {app.selectedShapes?.size > 0 &&
             !app.readOnly &&
             app.selectedShapesArray?.some(s => !s.props.isLocked) && (
@@ -291,7 +296,7 @@ export const ContextMenu = observer(function ContextMenu({
                   onClick={() => runAndTransition(app.api.deleteShapes)}
                 >
                   <TablerIcon className="tl-menu-icon" name="backspace" />
-                  Delete
+                  {t('whiteboard/delete')}
                   <KeyboardShortcut action="editor/delete" />
                 </ReactContextMenu.Item>
                 {app.selectedShapes?.size > 1 && !app.readOnly && (
@@ -302,14 +307,14 @@ export const ContextMenu = observer(function ContextMenu({
                       onClick={() => runAndTransition(app.flipHorizontal)}
                     >
                       <TablerIcon className="tl-menu-icon" name="flip-horizontal" />
-                      Flip horizontally
+                      {t('whiteboard/flip-horizontally')}
                     </ReactContextMenu.Item>
                     <ReactContextMenu.Item
                       className="tl-menu-item"
                       onClick={() => runAndTransition(app.flipVertical)}
                     >
                       <TablerIcon className="tl-menu-icon" name="flip-vertical" />
-                      Flip vertically
+                      {t('whiteboard/flip-vertically')}
                     </ReactContextMenu.Item>
                   </>
                 )}
@@ -320,14 +325,14 @@ export const ContextMenu = observer(function ContextMenu({
                       className="tl-menu-item"
                       onClick={() => runAndTransition(app.bringToFront)}
                     >
-                      Move to front
+                      {t('whiteboard/move-to-front')}
                       <KeyboardShortcut action="whiteboard/bring-to-front" />
                     </ReactContextMenu.Item>
                     <ReactContextMenu.Item
                       className="tl-menu-item"
                       onClick={() => runAndTransition(app.sendToBack)}
                     >
-                      Move to back
+                      {t('whiteboard/move-to-back')}
                       <KeyboardShortcut action="whiteboard/send-to-back" />
                     </ReactContextMenu.Item>
                   </>
@@ -344,7 +349,7 @@ export const ContextMenu = observer(function ContextMenu({
                       }
                     }}
                   >
-                    (Dev) Print shape props
+                    {t('whiteboard/dev-print-shape-props')}
                   </ReactContextMenu.Item>
                 )}
               </>

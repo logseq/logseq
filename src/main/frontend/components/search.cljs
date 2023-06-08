@@ -312,7 +312,7 @@
 
                                 :else
                                 (do (log/error "search result with non-existing uuid: " data)
-                                    (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
+                                    (str (t :search/cache-outdated)))))])
 
        :page-content
        (let [{:block/keys [snippet uuid]} data  ;; content here is normalized
@@ -327,7 +327,7 @@
                                 (if page
                                   (page-content-search-result-item repo uuid format snippet search-q search-mode)
                                   (do (log/error "search result with non-existing uuid: " data)
-                                      (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))]))
+                                      (str (t :search/cache-outdated)))))]))
 
        nil)]))
 
@@ -396,11 +396,11 @@
   [in-page-search?]
   [:div.recent-search
    [:div.wrap.px-4.pb-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
-    [:div "Recent search:"]
+    [:div (t :search/recent)]
     [:div.hidden.md:flex
      (ui/with-shortcut :go/search-in-page "bottom"
        [:div.flex-row.flex.align-items
-        [:div.mr-3.flex "Search blocks in page:"]
+        [:div.mr-3.flex (t :search/blocks-in-page)]
         [:div.flex.items-center
          (ui/toggle in-page-search?
                     (fn [_value]

@@ -5,6 +5,7 @@ import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
 import { Tooltip } from '../Tooltip'
 import React from 'react'
+import { LogseqContext } from '../../lib/logseq-context'
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -22,6 +23,10 @@ export function ColorInput({
   setOpacity,
   ...rest
 }: ColorInputProps) {
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
+
   function renderColor(color?: string) {
     return color ? (
       <div className="tl-color-bg" style={{ backgroundColor: color }}>
@@ -57,7 +62,7 @@ export function ColorInput({
       arrow
       side={popoverSide}
       label={
-        <Tooltip content={'Color'} side={popoverSide} sideOffset={14}>
+        <Tooltip content={t('whiteboard/color')} side={popoverSide} sideOffset={14}>
           {renderColor(color)}
         </Tooltip>
       }
@@ -82,7 +87,7 @@ export function ColorInput({
                 className="color-input cursor-pointer"
                 id="tl-custom-color-input"
                 type="color"
-                value={isHexColor(color) ? color : "#000000"}
+                value={isHexColor(color) ? color : '#000000'}
                 onChange={handleChangeDebounced}
                 style={{ opacity: isBuiltInColor(color) ? 0 : 1 }}
                 {...rest}
@@ -90,7 +95,7 @@ export function ColorInput({
             </div>
           </div>
           <label htmlFor="tl-custom-color-input" className="cursor-pointer">
-            Select custom color
+            {t('whiteboard/select-custom-color')}
           </label>
         </div>
 
@@ -101,7 +106,7 @@ export function ColorInput({
               onValueCommit={value => setOpacity(value[0])}
               max={1}
               step={0.1}
-              aria-label="Opacity"
+              aria-label={t('whiteboard/opacity')}
               className="tl-slider-root"
             >
               <Slider.Track className="tl-slider-track">
