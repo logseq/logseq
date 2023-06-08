@@ -985,7 +985,7 @@
 (defn ^:export search
   [q]
   (-> (search-handler/search q)
-      (p/then #(bean/->js %))))
+      (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers
 (defn ^:export query_element_by_id
