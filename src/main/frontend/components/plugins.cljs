@@ -1069,7 +1069,8 @@
             :icon    (ui/icon "download")})]
 
         [{:hr true :key "dropdown-more"}
-         {:title (auto-check-for-updates-control)}])
+         {:title (auto-check-for-updates-control)
+          :options {:no-padding? true}}])
       {:trigger-class "toolbar-plugins-manager-trigger"})))
 
 (rum/defc header-ui-items-list-wrap

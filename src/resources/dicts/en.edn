@@ -444,6 +444,7 @@
  :plugin/remote-error "Remote error: "
  :plugin/checking-for-updates "Checking for plugin updates ..."
  :plugin/list-of-updates "Plugin Updates: "
+ :plugin/auto-check-for-updates "Auto check for updates"
  :plugin.install-from-file/menu-title "Install from plugins.edn"
  :plugin.install-from-file/title "Install plugins from plugins.edn"
  :plugin.install-from-file/notice "The following plugins will replace your plugins:"

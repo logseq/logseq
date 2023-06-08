@@ -41,6 +41,12 @@
   }
 }
 
+.menu-link {
+  &.no-padding {
+    padding: 0 !important;
+  }
+}
+
 .ui__ac-group-name {
   @apply p-2 text-xs;
   color: var(--ls-block-ref-link-text-color);
