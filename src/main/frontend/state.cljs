@@ -2013,9 +2013,10 @@ Similar to re-frame subscriptions"
                    (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
-    (when (every? not-empty (vals agent-opts))
-      (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
+  (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
+    (when (and  (not (contains? #{"system"} type))
+                (every? not-empty (vals agent-opts)))
+      (str protocol "://" host ":" port))))
 
 (defn set-mobile-app-state-change
   [is-active?]
