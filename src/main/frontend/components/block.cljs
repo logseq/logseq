@@ -551,7 +551,7 @@
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-down (fn [_e] (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
@@ -1675,7 +1675,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal? (.-target e))
+    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
