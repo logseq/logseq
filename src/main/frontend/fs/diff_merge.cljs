@@ -119,9 +119,11 @@
          ops-fn (fn [ops]
                   (map (fn [[op {:keys [body level]}]]
                          (when (or (= op 0) (= op 1)) ;; equal or insert
-                           (prepend-block-lines (heading-prefix-fn level)
-                                                (level-prefix-fn level)
-                                                body)))
+                           (if (= format :org)
+                             (str (apply str (repeat level "*")) " " body)
+                             (prepend-block-lines (heading-prefix-fn level)
+                                                  (level-prefix-fn level)
+                                                  body))))
                        ops))]
     (->> diffs
          (mapcat ops-fn)
@@ -133,13 +135,16 @@
   (let [->ast (fn [text] (if (= format :org)
                            (gp-mldoc/->edn text (gp-mldoc/default-config :org))
                            (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))))
+        options (if (= format :org)
+                  {:block-pattern "*"}
+                  {:block-pattern "-"})
         merger (Merger.)
         base-ast (->ast base)
-        base-diffblocks (ast->diff-blocks base-ast base format {:block-pattern "-"})
+        base-diffblocks (ast->diff-blocks base-ast base format options)
         income-ast (->ast income)
-        income-diffblocks (ast->diff-blocks income-ast income format {:block-pattern "-"})
+        income-diffblocks (ast->diff-blocks income-ast income format options)
         current-ast (->ast current)
-        current-diffblocks (ast->diff-blocks current-ast current format {:block-pattern "-"})
+        current-diffblocks (ast->diff-blocks current-ast current format options)
         branch-diffblocks [income-diffblocks current-diffblocks]
         merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
         merged-diff (bean/->clj merged)
