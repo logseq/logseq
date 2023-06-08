@@ -52,27 +52,21 @@
          shortcut)
        (mapv mod-key)))))
 
-(defn normalize-user-keyname
-  [k]
-  (let [keynames {";" "semicolon"
-                  "=" "equals"
-                  "-" "dash"
-                  "[" "open-square-bracket"
-                  "]" "close-square-bracket"
-                  "'" "single-quote"}]
-    (some-> k
-            (util/safe-lower-case)
-            (str/replace #"[;=-\[\]']" (fn [s]
-                                         (get keynames s))))))
+(defn shortcut-cmd
+  [id]
+  (get @shortcut-config/*shortcut-cmds id))
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict (->> (vals @shortcut-config/config)
-                  (apply merge)
-                  (map (fn [[k _]]
-                         {k {:binding (shortcut-binding k)}}))
-                  (into {}))]
-    (->> (shortcut-config/category name)
+  (let [dict    (->> (vals @shortcut-config/config)
+                     (apply merge)
+                     (map (fn [[k _]]
+                            {k {:binding (shortcut-binding k)}}))
+                     (into {}))
+        plugin? (= name :shortcut.category/plugins)]
+    (->> (if plugin?
+           (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
+           (shortcut-config/category name))
          (mapv (fn [k] [k (k dict)])))))
 
 (defn shortcut-map
@@ -148,13 +142,14 @@
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
         path (config/get-repo-config-path)]
-    (when-let [content (db/get-file path)]
-      (let [result (config-handler/parse-repo-config content)
-            new-result (rewrite/update
-                        result
-                        :shortcuts
-                        #(dissoc (rewrite/sexpr %) k))
-            new-content (str new-result)]
+    (when-let [result (some-> (db/get-file path)
+                              (config-handler/parse-repo-config))]
+      (when-let [new-content (and (:shortcuts result)
+                                  (-> (rewrite/update
+                                        result
+                                        :shortcuts
+                                        #(dissoc (rewrite/sexpr %) k))
+                                      (str)))]
         (repo-config-handler/set-repo-config-state! repo new-content)
         (file/set-file-content! repo path new-content)))))
 
