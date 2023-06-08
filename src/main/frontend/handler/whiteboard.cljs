@@ -187,6 +187,7 @@
 (defn get-default-new-whiteboard-tx
   [page-name id]
   [#:block{:name (util/page-name-sanity-lc page-name),
+           :original-name page-name
            :type "whiteboard",
            :properties
            {:ls-type :whiteboard-page,

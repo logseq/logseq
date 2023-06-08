@@ -168,7 +168,6 @@
   ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-           cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
            selection-link? (and selection (gp-mldoc/mldoc-link? format selection))
            [content forward-pos] (cond
@@ -190,7 +189,7 @@
                       (subs value 0 selection-start)
                       content
                       (subs value selection-end))
-           cur-pos (or selection-start cur-pos)]
+           cur-pos (or selection-start (cursor/pos input))]
        (state/set-edit-content! edit-id new-value)
        (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
