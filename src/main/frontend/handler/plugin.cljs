@@ -7,6 +7,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as medley]
@@ -186,8 +187,6 @@
   []
   (let [channel  (name :lsp-updates)
         listener (fn [_ ^js e]
-                   (js/console.debug (str :lsp-updates) e)
-
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (case (keyword status)
 
@@ -629,6 +628,14 @@
            (state/set-state! :plugin/updates-pending))
       (state/pub-event! [:plugin/consume-updates])
       (set-auto-checking! true))))
+
+(defn get-enabled-auto-check-for-updates?
+  []
+  (not (false? (storage/get :lsp-last-auto-updates))))
+
+(defn set-enabled-auto-check-for-updates
+  [v?]
+  (storage/set :lsp-last-auto-updates (boolean v?)))
 
 (defn call-plugin
   [^js pl type payload]
