@@ -1675,7 +1675,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal? (.-target e))
+    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
