@@ -91,25 +91,37 @@
                   (reverse headings))))))))
 
 
-(defn- prepend-lines
-  "prepend prefix to every lines of content"
-  [prefix content]
-  (->> content
-       (string/split-lines)
-       (map (fn [line] (str prefix line)))
-       (string/join "\n")))
+(defn- prepend-block-lines
+  "prepend prefix to every lines of content except first"
+  [fisrt-prefix prefix content]
+  (let [lines (string/split-lines content)]
+    (if (<= (count lines) 1)
+      (str fisrt-prefix content)
+      (str (str fisrt-prefix (first lines))
+           "\n"
+           (->> (rest lines)
+                (map (fn [line] (str prefix line)))
+                (string/join "\n")))
+      )))
 
 (defn- rebuild-content
   "translate [[[op block]]] to merged content"
   [_base-diffblocks diffs format]
   ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
   (let  [level-prefix-fn (fn [level]
-                           (when (and (= format :markdown) (not= level 1))
-                             (apply str (repeat (dec level) "\t"))))
+                           (when (= format :markdown)
+                             (str (apply str (repeat (dec level) "\t"))
+                                  "  ")))
+         heading-prefix-fn (fn [level]
+                             (when (= format :markdown)
+                               (str (apply str (repeat (dec level) "\t"))
+                                    "- ")))
          ops-fn (fn [ops]
                   (map (fn [[op {:keys [body level]}]]
                          (when (or (= op 0) (= op 1)) ;; equal or insert
-                           (str (level-prefix-fn level) "-" (prepend-lines " " body))))
+                           (prepend-block-lines (heading-prefix-fn level)
+                                                (level-prefix-fn level)
+                                                body)))
                        ops))]
     (->> diffs
          (mapcat ops-fn)
