@@ -146,7 +146,7 @@
               [:a.flex {:tabIndex "0" :on-click #(on-select (:key c))}
                (or (:title c) (:key c))]]))])]]))
 
-(rum/defc pane-topic-detail
+(rum/defc ^:large-vars/cleanup-todo pane-topic-detail
   [handbook-nodes pane-state nav!]
 
   (let [[deps-pending?, set-deps-pending?] (rum/use-state false)
