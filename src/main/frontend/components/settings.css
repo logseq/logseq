@@ -2,8 +2,7 @@
 
   &-main {
     > header {
-      padding: 10px;
-      padding-top: 0;
+      padding: 0 10px 10px;
       border-bottom: 1px solid var(--ls-quaternary-background-color);
 
       h1 {

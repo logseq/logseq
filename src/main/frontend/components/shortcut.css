@@ -1,0 +1,28 @@
+.ui__modal {
+  &[label="keymap-manager"] {
+    .panel-content {
+      @apply m-[-16px];
+    }
+
+    @screen lg {
+      .panel-content {
+        width: 980px;
+      }
+    }
+  }
+}
+
+.cp__shortcut {
+  &-table-wrap {
+    @apply relative;
+
+    a.fold {
+      @apply absolute right-0 top-0 w-full pt-3 pr-3
+      pb-3 flex items-center justify-end select-none;
+
+      &:active {
+        @apply bg-white/50 opacity-60;
+      }
+    }
+  }
+}
