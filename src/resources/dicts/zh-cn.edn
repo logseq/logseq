@@ -283,6 +283,18 @@
  :plugin/up-to-date "已经是最新了"
  :plugin/custom-js-alert "发现 custom.js 自定义脚本，是否允许执行？（如果您对该文件的内容不了解 或 来源不可靠，建议不要允许执行）"
 
+ :plugin/search-plugin "搜索插件"
+ :plugin/open-preferences "打开插件偏好设置"
+ :plugin/open-logseq-dir "打开"
+ :plugin/remote-error "远端错误: "
+ :plugin/checking-for-updates "正在检查插件更新 ..."
+ :plugin/list-of-updates "可用的插件更新: "
+ :plugin/auto-check-for-updates "是否自动检查更新"
+ :plugin.install-from-file/menu-title "从 plugins.edn 安装"
+ :plugin.install-from-file/title "从 plugins.edn 配置中安装插件"
+ :plugin.install-from-file/notice "以下插件会替换已安装的插件:"
+ :plugin.install-from-file/success "插件全部安装完毕!"
+
  :pdf/copy-ref "复制引用"
  :pdf/copy-text "复制文本"
  :pdf/linked-ref "转到注解"
