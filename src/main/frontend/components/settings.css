@@ -501,7 +501,7 @@ svg.cmd {
   width: 2rem;
   height: 2rem;
   background: var(--background);
-  border: 4px solid var(--border);
+  /* border: 4px solid var(--border); */
   /* border: 3px solid orange; */
 }
 
@@ -514,4 +514,21 @@ svg.cmd {
 .cp__settings-main .selected .theme-row--color-swatch:hover {
   background: var(--background-active);
   border-color: var(--border-active);
+}
+
+.cp__settings-main .theme-gradient-row--gradient-swatch {
+  @apply rounded-full;
+  width: 2rem;
+  height: 2rem;
+
+  background: var(--background);
+}
+
+.cp__settings-main .theme-gradient-row--gradient-swatch:hover {
+  background: var(--background-hover);
+}
+
+.cp__settings-main .selected.theme-gradient-row--gradient-swatch,
+.cp__settings-main .selected.theme-gradient-row--gradient-swatch:hover {
+  background: var(--background-active);
 }

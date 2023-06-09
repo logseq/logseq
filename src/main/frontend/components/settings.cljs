@@ -317,12 +317,12 @@
                                        :padding-left "0.25rem"}}
                     [:div.theme-row--color {:on-click #(state/unset-color-accent!)
                                             :class (when (nil? color-accent) "selected")}
-                     [:div.theme-row--color-swatch {:style {"--background"        "#0F2A35"
-                                                            "--background-hover"  "#163542"
-                                                            "--background-active" "#274E5E"
-                                                            "--border"            "#0369a1"
-                                                            "--border-hover"      "#38bdf8" ;; TODO what is the hover color?
-                                                            "--border-active"      "#0ea5e9"} ;; TODO what is the hover color?
+                     [:div.theme-row--color-swatch {:style {;; "--background"        "#0F2A35"
+                                                            ;; "--background-hover"  "#163542"
+                                                            ;; "--background-active" "#274E5E"
+                                                            "--background"            "#0369a1"
+                                                            "--background-hover"      "#38bdf8" ;; TODO what is the hover color?
+                                                            "--background-active"      "#0ea5e9"} ;; TODO what is the hover color?
                                                            :border-right "1px solid rgba(255,255,255,0.4)"}] 
                      [:div.text-xs {:style {:margin "0 -0.5rem" 
                                             :opacity 0.5 
@@ -331,28 +331,43 @@
                     [:div.theme-row--color-separator]
                     (for [color colors/color-list
                           :let [gray (get colors/gray-pairing-map color)]]
-                      [:div.theme-row--color {:on-click #(state/toggle-color-accent! color) 
+                      [:div.theme-row--color {:on-click #(state/set-color-accent! color) 
                                               :class (when (= color-accent color) "selected")}
-                       [:div.theme-row--color-swatch {:style {"--background"        (str "var(--rx-" (name gray) "-02-alpha)")
-                                                              "--background-hover"  (str "var(--rx-" (name gray) "-03)")
-                                                              "--background-active" (str "var(--rx-" (name gray) "-06)")
-                                                              "--border"            (str "var(--rx-" (name color) "-07)")
-                                                              "--border-hover"      (str "var(--rx-" (name color) "-10)")
-                                                              "--border-active"     (str "var(--rx-" (name color) "-09) ")}}]])]
+                       [:div.theme-row--color-swatch {:style {"--background"            (str "var(--rx-" (name color) "-07)")
+                                                              "--background-hover"      (str "var(--rx-" (name color) "-10)")
+                                                              "--background-active"     (str "var(--rx-" (name color) "-09) ")}}]])]
                                                               ; "--border-hover"     (str "var(--rx-" (name color) "-08)")}}]
         display-theme [:button {:style {:background "var(--lx-accent-03)" 
                                         :border "1px solid var(--lx-accent-07)"
                                         :color "var(--lx-accent-11)"}}
                         (if color-accent (name color-accent) "default")]]
     [:<>
-     (row-with-button-action {:left-label "Logseq color theme"
+     (row-with-button-action {:left-label "Theme color"
                               :-for       "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})])) 
-     ; (row-with-button-action {:left-label "Preview color theme"
-     ;                          :-for       "display_radix_theme"
-     ;                          :stretch    true
-     ;                          :action     display-theme})])) 
+
+(defn theme-gradient-row [t dark? color-accent]
+  (let [color-gradient (state/sub :color/gradient)
+        pick-gradient [:div {:class "grid grid-cols-7 gap-2 overflow-x-auto"}
+                       [:div {:class (cond-> "theme-gradient-row--gradient-swatch" 
+                                       (= 1 color-gradient) (str " selected"))
+                              :style {"--background" (str "var(--rx-" (name color-accent) "-07)")
+                                      "--background-hover" (str "var(--rx-" (name color-accent) "-08)") 
+                                      "--background-active" (str "var(--rx-" (name color-accent) "-09)")}
+                              :on-click #(state/unset-color-gradient!)}]
+                       (for [n (range 2 8)
+                             :let [active? (= n color-gradient)]] 
+                        [:div {:class (cond-> "bg-white theme-gradient-row--gradient-swatch" 
+                                        active? (str " selected"))
+                               :key n 
+                               :style {"--background" (colors/linear-gradient color-accent :07 n)
+                                       "--background-hover" (colors/linear-gradient color-accent :08 n) 
+                                       "--background-active" (colors/linear-gradient color-accent :09 n)}
+                               :on-click #(state/set-color-gradient! n)}])]]
+   (row-with-button-action {:left-label "Theme gradient"
+                            :stretch true 
+                            :action pick-gradient})))
                              
 
 (defn file-format-row [t preferred-format]
@@ -680,13 +695,15 @@
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "light" "dark")]
+        switch-theme (if dark? "light" "dark")
+        color-accent (state/sub :color/accent)]
     [:div.panel-wrap.is-general
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
-     (theme-row t dark?)
+     ; (theme-row t dark?)
+     ; (when color-accent (theme-gradient-row t dark? color-accent))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

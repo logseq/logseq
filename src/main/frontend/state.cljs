@@ -2130,17 +2130,25 @@ Similar to re-frame subscriptions"
   []
   (storage/remove :user-groups))
 
-(defn toggle-color-accent! [color]
-  (if (= color (get @state :color/accent))
-    (do (swap! state assoc :color/accent nil)
-        (colors/unset-radix))
-    (do (swap! state assoc :color/accent color)
-        (colors/set-radix color))))
+(defn get-color-accent []
+  (get @state :color/accent))
+
+(defn get-color-gradient []
+  (get @state :color/gradient 1))
+
+(defn set-color-accent! [color]
+  (swap! state assoc :color/accent color)
+  (colors/set-radix color (get-color-gradient)))
+
+(defn set-color-gradient! [steps]
+  (swap! state assoc :color/gradient steps)
+  (colors/set-radix (get-color-accent) steps))
 
 (defn unset-color-accent! []
   (swap! state assoc :color/accent nil)
   (colors/unset-radix))
- 
 
-(defn get-color-accent []
-  (get @state :color/accent))
+(defn unset-color-gradient! []
+  (swap! state assoc :color/gradient nil)
+  (colors/unset-radix))
+
