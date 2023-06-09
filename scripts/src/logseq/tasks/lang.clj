@@ -3,18 +3,13 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [logseq.tasks.util :as task-util]
             [babashka.cli :as cli]
             [babashka.process :refer [shell]]))
 
 (defn- get-dicts
   []
-  (dissoc dicts/dicts :tongue/fallback))
-
-(defn- get-all-dicts
-  []
-  (merge-with merge (get-dicts) shortcut-dicts/dicts))
+  dicts/dicts)
 
 (defn- get-languages
   []
@@ -25,7 +20,7 @@
 (defn list-langs
   "List translated langagues with their number of translations"
   []
-  (let [dicts (get-all-dicts)
+  (let [dicts (get-dicts)
         en-count (count (dicts :en))
         langs (get-languages)]
     (->> dicts
@@ -41,7 +36,9 @@
 (defn- shorten [s length]
   (if (< (count s) length)
     s
-    (str (subs s 0 length) "...")))
+    (string/replace (str (subs s 0 length) "...")
+                    ;; Escape newlines for multi-line translations like tutorials
+                    "\n" "\\n")))
 
 (defn list-missing
   "List missing translations for a given language"
@@ -50,26 +47,22 @@
                  (task-util/print-usage "LOCALE [--copy]"))
         options (cli/parse-opts (rest args) {:coerce {:copy :boolean}})
         _ (when-not (contains? (get-languages) lang)
-            (println "Language" lang "does not have an entry in dicts.cljs")
+            (println "Language" lang "does not have an entry in dicts/core.cljs")
             (System/exit 1))
-        all-dicts [[(get-dicts) "frontend/dicts.cljs"]
-                   [shortcut-dicts/dicts "shortcut/dicts.cljs"]]
-        all-missing (map (fn [[dicts file]]
-                           [(select-keys (dicts :en)
-                                         (set/difference (set (keys (dicts :en)))
-                                                         (set (keys (dicts lang)))))
-                            file])
-                         all-dicts)]
-    (if (every? (comp zero? count first) all-missing)
+        dicts (get-dicts)
+        all-missing (select-keys (dicts :en)
+                                 (set/difference (set (keys (dicts :en)))
+                                                 (set (keys (dicts lang)))))]
+    (if (-> all-missing count zero?)
       (println "Language" lang "is fully translated!")
       (let [sorted-missing (->> all-missing
-                                (mapcat (fn [[m file]]
-                                          (map (fn [[k v]]
-                                                 {:translation-key k
+                                (map (fn [[k v]]
+                                       {:translation-key k
                                                   ;; Shorten values
-                                                  :string-to-translate (shorten v 50)
-                                                  :file file})
-                                               m)))
+                                        :string-to-translate (shorten v 50)
+                                        :file (if (= "tutorial" (namespace k))
+                                                (str "Under tutorials/")
+                                                (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
                                 (sort-by (juxt :file :translation-key)))]
         (if (:copy options)
           (doseq [[file missing-for-file] (group-by :file sorted-missing)]
@@ -84,7 +77,7 @@
   language. This catches mistakes where another language has accidentally typoed
   keys or added ones without updating :en"
   []
-  (let [dicts (get-all-dicts)
+  (let [dicts (get-dicts)
         ;; For now defined as :en but clj-kondo analysis could be more thorough
         valid-keys (set (keys (dicts :en)))
         invalid-dicts
@@ -122,6 +115,14 @@
    "(t title" []
    "(t subtitle" [:asset/physical-delete]})
 
+(defn- whiteboard-dicts
+  []
+  (->> (shell {:out :string}
+              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "tldraw/apps/tldraw-logseq/src/components")
+       :out
+       string/split-lines
+       (map #(keyword (subs % 3)))))
+
 (defn- validate-ui-translations-are-used
   "This validation checks to see that translations done by (t ...) are equal to
   the ones defined for the default :en lang. This catches translations that have
@@ -136,8 +137,10 @@
                           string/split-lines
                           (map #(keyword (subs % 4)))
                           (concat (mapcat val manual-ui-dicts))
+                          (concat (whiteboard-dicts))
                           set)
-        expected-dicts (set (keys (:en (get-dicts))))
+        expected-dicts (set (remove #(re-find #"^(command|shortcut)\." (str (namespace %)))
+                                    (keys (:en (get-dicts)))))
         actual-only (set/difference actual-dicts expected-dicts)
         expected-only (set/difference expected-dicts actual-dicts)]
     (if (and (empty? actual-only) (empty? expected-only))
@@ -151,31 +154,49 @@
           (task-util/print-table (map #(hash-map :invalid-key %) expected-only)))
         (System/exit 1)))))
 
+(def allowed-duplicates
+  "Allows certain keys in a language to have the same translation
+   as English. Happens more in romance languages but pretty rare otherwise"
+  {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
+         :settings-of-plugins}
+   :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
+         :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
+         :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
+   :es #{:settings-page/tab-general :settings-page/tab-editor}
+   :it #{:plugins}
+   :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
+   :pl #{:port}
+   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards}
+   :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
+            :settings-page/enable-flashcards :settings-page/plugin-system}
+   })
+
+(defn- validate-languages-dont-have-duplicates
+  "Looks up duplicates for all languages"
+  []
+  (let [dicts (get-dicts)
+        en-dicts (dicts :en)
+        invalid-dicts
+        (->> (dissoc dicts :en)
+             (mapcat
+              (fn [[lang lang-dicts]]
+                (keep
+                 #(when (= (en-dicts %) (lang-dicts %))
+                    {:translation-key %
+                     :lang lang
+                     :duplicate-value (shorten (lang-dicts %) 70)})
+                 (keys (apply dissoc lang-dicts (allowed-duplicates lang))))))
+             (sort-by (juxt :lang :translation-key)))]
+    (if (empty? invalid-dicts)
+      (println "All languages have no duplicate English values!")
+      (do
+        (println "These translations keys are invalid because they are just copying the English value:")
+        (task-util/print-table invalid-dicts)
+        (System/exit 1)))))
+
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   []
   (validate-non-default-languages)
-  (validate-ui-translations-are-used))
-
-(defn list-duplicates
-  "Lists translations that are the same as the one in English"
-  [& args]
-  (let [dicts (get-all-dicts)
-        en-dicts (dicts :en)
-        lang (or (keyword (first args))
-                 (task-util/print-usage "LOCALE"))
-        lang-dicts (dicts lang)
-        invalid-dicts
-        (sort-by
-         :translation-key
-         (keep
-          #(when (= (en-dicts %) (lang-dicts %))
-             {:translation-key %
-              :duplicate-value (shorten (lang-dicts %) 70)})
-          (keys lang-dicts)))]
-    (if (empty? invalid-dicts)
-      (println "No duplicated keys found!")
-      (do
-        (println "Keys with duplicate values found:")
-        (task-util/print-table invalid-dicts)
-        (System/exit 1)))))
+  (validate-ui-translations-are-used)
+  (validate-languages-dont-have-duplicates))

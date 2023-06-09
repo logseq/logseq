@@ -49,6 +49,7 @@
     :block/marker
     :block/priority
     :block/properties
+    :block/properties-order
     :block/properties-text-values
     :block/pre-block?
     :block/scheduled

@@ -171,6 +171,57 @@ jobs:
           name: static
           path: static
 
+  e2e-test:
+    name: E2E Test Shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
+    needs: [ compile-cljs ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v3
+        with:
+          name: static
+          path: static
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            yarn.lock
+            static/yarn.lock
+
+      - name: Fetch yarn deps for E2E test
+        run: |
+          yarn install
+          (cd static && yarn install && yarn rebuild:all)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: Install Fluxbox
+        run: sudo apt-get update && sudo apt-get install -y fluxbox
+
+      # Emulate a virtual framebuffer on machines with no display hardware
+      - name: Run XVFB
+        run: Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
+
+      # Start a lightweight window manager to simulate window actions (maximize,restore etc)
+      - name: Start Fluxbox
+        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
+
+      - name: Run Playwright test
+        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=${{ matrix.shard }}/3
+        env:
+          LOGSEQ_CI: true
+          DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
+
   build-linux:
     runs-on: ubuntu-20.04
     needs: [ compile-cljs ]
@@ -436,7 +487,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -503,7 +554,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts

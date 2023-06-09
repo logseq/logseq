@@ -16,7 +16,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [frontend.modules.shortcut.dicts :as dicts]
+            [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
@@ -33,7 +33,7 @@
 ;; with other config keys
 
 ;; To add a new entry to this map, first add it here and then a description for
-;; it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; it under :commands keys of frontend.dicts.en/dicts
 ;; A shortcut is a map with the following keys:
 ;;  * :binding - A string representing a keybinding. Avoid using single letter
 ;;    shortcuts to allow chords that start with those characters
@@ -113,19 +113,19 @@
    :whiteboard/zoom-out          {:binding "shift+dash"
                                   :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/zoom-in           {:binding "shift+="
+   :whiteboard/zoom-in           {:binding "shift+equals"
                                   :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/send-backward     {:binding "["
+   :whiteboard/send-backward     {:binding "open-square-bracket"
                                   :fn      #(.sendBackward ^js (state/active-tldraw-app))}
 
-   :whiteboard/send-to-back      {:binding "shift+["
+   :whiteboard/send-to-back      {:binding "shift+open-square-bracket"
                                   :fn      #(.sendToBack ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-forward     {:binding "]"
+   :whiteboard/bring-forward     {:binding "close-square-bracket"
                                   :fn      #(.bringForward ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-to-front    {:binding "shift+]"
+   :whiteboard/bring-to-front    {:binding "shift+close-square-bracket"
                                   :fn      #(.bringToFront ^js (state/active-tldraw-app))}
 
    :whiteboard/lock              {:binding "mod+l"
@@ -330,7 +330,8 @@
    :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode   {:fn      undo-redo/toggle-undo-redo-mode!}
+   :editor/toggle-undo-redo-mode   {:binding false
+                                    :fn      undo-redo/toggle-undo-redo-mode!}
    
    :editor/toggle-number-list      {:binding "t n"
                                     :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
@@ -438,7 +439,7 @@
                                      :fn      route-handler/redirect-to-whiteboard-dashboard!}
 
    :go/keyboard-shortcuts          {:binding "g s"
-                                    :fn      #(route-handler/redirect! {:to :shortcut-setting})}
+                                    :fn      #(state/pub-event! [:modal/keymap-manager])}
 
    :go/tomorrow                    {:binding "g t"
                                     :fn      journal-handler/go-to-tomorrow!}
@@ -538,12 +539,12 @@
                                     :inactive (not (state/developer-mode?))
                                     :fn :frontend.handler.common.developer/show-page-ast}})
 
-(let [keyboard-shortcuts
-      {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
-       ::dicts/keyboard-shortcuts (set (keys dicts/all-default-keyboard-shortcuts))}]
-  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts))
-          (str "Keys for keyboard shortcuts must be the same "
-               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
+(let [keyboard-commands
+      {::commands (set (keys all-default-keyboard-shortcuts))
+       ::dicts/commands dicts/abbreviated-commands}]
+  (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
+          (str "Keyboard commands must have an english label"
+               (data/diff (::commands keyboard-commands) (::commands keyboard-commands)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
@@ -754,7 +755,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dicts/category
+;; a description for it in frontend.dicts.en/dicts
 (def ^:large-vars/data-var category*
   "Full list of categories for docs purpose"
   {:shortcut.category/basics
@@ -926,12 +927,15 @@
     :dev/show-block-ast
     :dev/show-page-data
     :dev/show-page-ast
-    :ui/clear-all-notifications]})
+    :ui/clear-all-notifications]
+
+   :shortcut.category/plugins
+   []})
 
 (let [category-maps {::category (set (keys category*))
-                     ::dicts/category (set (keys dicts/category))}]
+                     ::dicts/category dicts/categories}]
   (assert (= (::category category-maps) (::dicts/category category-maps))
-          (str "Keys for category maps must be the same "
+          (str "Keys for category maps must have an english label "
                (data/diff (::category category-maps) (::dicts/category category-maps)))))
 
 (def category
@@ -941,10 +945,14 @@
    (fn [v]
      (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))))
 
+(def *shortcut-cmds (atom {}))
+
 (defn add-shortcut!
   [handler-id id shortcut-map]
-  (swap! config assoc-in [handler-id id] shortcut-map))
+  (swap! config assoc-in [handler-id id] shortcut-map)
+  (swap! *shortcut-cmds assoc id (:cmd shortcut-map)))
 
 (defn remove-shortcut!
   [handler-id id]
-  (swap! config medley/dissoc-in [handler-id id]))
+  (swap! config medley/dissoc-in [handler-id id])
+  (swap! *shortcut-cmds dissoc id))

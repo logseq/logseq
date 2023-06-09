@@ -12,6 +12,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -23,8 +24,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
+            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -37,13 +38,11 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -52,6 +51,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
+            [frontend.shui :refer [get-shui-component-version make-shui-context]]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
@@ -73,6 +73,7 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.shui.core :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -292,8 +293,8 @@
                          (js/setTimeout #(reset! *resizing-image? false) 200)))
           :onClick (fn [e]
                      (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
+         (and (:width metadata) (not (util/mobile?)))
+         (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.relative
@@ -390,7 +391,9 @@
                        (util/stop event)
                        (when (mobile-util/native-platform?)
                          ;; File URL must be legal, so filename muse be URI-encoded
+                         ;; incoming href format: "/assets/whatever.ext"
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
+                               rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
                            (.share Share (clj->js {:url asset-url
                                                    :title "Open file with your favorite app"})))))]
@@ -548,7 +551,7 @@
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-down (fn [_e] (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
@@ -926,8 +929,8 @@
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (block-ref/->block-ref id)]))
-  [:span.warning.mr-1 {:title "Block ref invalid"}
-    (block-ref/->block-ref id)]))
+    [:span.warning.mr-1 {:title "Block ref invalid"}
+      (block-ref/->block-ref id)]))
 
 (defn inline-text
   ([format v]
@@ -1106,8 +1109,8 @@
         {:href      (path/path-join "file://" path)
          :data-href path
          :target    "_blank"}
-         title
-         (assoc :title title))
+        title
+        (assoc :title title))
        (map-inline config label)))
 
     :else
@@ -1200,8 +1203,8 @@
            (cond->
             {:href (ar-url->http-url href)
              :target "_blank"}
-             title
-             (assoc :title title))
+            title
+            (assoc :title title))
            (map-inline config label))
 
           :else
@@ -1210,11 +1213,11 @@
            (cond->
             {:href href
              :target "_blank"}
-             title
-             (assoc :title title))
+            title
+            (assoc :title title))
            (map-inline config label)))))))
 
-(declare ->hiccup)
+(declare ->hiccup inline)
 
 (defn wrap-query-components
   [config]
@@ -1223,7 +1226,8 @@
           :->elem ->elem
           :page-cp page-cp
           :inline-text inline-text
-          :map-inline map-inline}))
+          :map-inline map-inline
+          :inline inline}))
 
 ;;;; Macro component render functions
 (defn- macro-query-cp
@@ -1238,17 +1242,7 @@
 (defn- macro-function-cp
   [config arguments]
   (or
-   (when (:query-result config)
-     (when-let [query-result (rum/react (:query-result config))]
-       (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
-                           (common-handler/safe-read-string "failed to parse function")
-                           (query-handler/normalize-query-function query-result)
-                           (str))
-             f (sci/eval-string fn-string)]
-         (when (fn? f)
-           (try (f query-result)
-                (catch :default e
-                  (js/console.error e)))))))
+   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
@@ -1681,7 +1675,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal? (.-target e))
+    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
@@ -1738,7 +1732,7 @@
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
-    [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
+    [:div.block-control-wrap.flex.flex-row.items-center
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?}])}
      (when (or (not fold-button-right?) collapsable?)
@@ -1778,15 +1772,17 @@
                        [:label (str order-list-idx ".")])]]]]
        (cond
          (and (or (mobile-util/native-platform?)
-                  (:ui/show-empty-bullets? (state/get-config)))
+                  (:ui/show-empty-bullets? (state/get-config))
+                  collapsed?
+                  collapsable?)
               (not doc-mode?))
          bullet
 
          (or
            (and empty-content?
                 (not edit?)
-                (not (:block/top? block))
-                (not (:block/bottom? block))
+                (not (:block.temp/top? block))
+                (not (:block.temp/bottom? block))
                 (not (util/react *control-show?)))
            (and doc-mode?
                 (not collapsed?)
@@ -2059,7 +2055,8 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  #{:logseq.query/nlp-date})
+  (into #{:logseq.query/nlp-date}
+        gp-property/editable-view-and-table-properties))
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")
@@ -2209,7 +2206,10 @@
                 (editor-handler/clear-selection!)
                 (editor-handler/unhighlight-blocks!)
                 (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                               cursor-range (util/caret-range (gdom/getElement block-id))
+                               cursor-range (some-> (gdom/getElement block-id)
+                                                    (dom/by-class "block-content-wrapper")
+                                                    first
+                                                    util/caret-range)
                                {:block/keys [content format]} block
                                content (->> content
                                             (property/remove-built-in-properties format)
@@ -2247,7 +2247,7 @@
              (and (not block-content?)
                   (seq (:block/children block))
                   (= move-to :nested)))
-          (dnd-separator move-to block-content?))))))
+         (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
   [block body]
@@ -2301,7 +2301,8 @@
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [{:block/keys [title body] :as block} (if (:block/title block) block
+  (let [content (property/remove-built-in-properties format content)
+        {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
@@ -2312,19 +2313,19 @@
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
-                         :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
-                         )
+                         :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
+
         attrs (cond->
                {:blockid       (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+               (not (string/blank? (:hl-color properties)))
+               (assoc :data-hl-color (:hl-color properties))
 
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+               (not block-ref?)
+               (assoc mouse-down-key (fn [e]
+                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [e]
@@ -2768,7 +2769,8 @@
         block (if ref?
                 (merge block (db/sub-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs level format content properties]} block
+        {:block/keys [uuid children pre-block? refs level format content properties]} block
+        {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2805,6 +2807,8 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
+        own-number-list? (:own-order-number-list? config)
+        order-list? (boolean own-number-list?)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2817,6 +2821,7 @@
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect")
+                    (when order-list? " is-order-list")
                     (when (string/blank? content) " is-blank"))
         :blockid (str uuid)
         :haschild (str (boolean has-child?))}
@@ -2845,7 +2850,7 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2
+     [:div.block-main-container.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
@@ -2911,7 +2916,7 @@
 
    :should-update (fn [old-state new-state]
                     (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
-                                               :block/properties :block/left :block/children :block/_refs :block/bottom? :block/top?]
+                                               :block/properties :block/left :block/children :block/_refs :block.temp/bottom? :block.temp/top?]
                           config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
@@ -3002,8 +3007,8 @@
          :li
          (cond->
           {:checked checked?}
-           number
-           (assoc :value number))
+          number
+          (assoc :value number))
          (vec-cat
           [(->elem
             :p
@@ -3021,52 +3026,55 @@
 
 (defn table
   [config {:keys [header groups col_groups]}]
-  (let [tr (fn [elm cols]
-             (->elem
-              :tr
-              (mapv (fn [col]
-                      (->elem
-                       elm
-                       {:scope "col"
-                        :class "org-left"}
-                       (map-inline config col)))
-                    cols)))
-        tb-col-groups (try
-                        (mapv (fn [number]
-                                (let [col-elem [:col {:class "org-left"}]]
-                                  (->elem
-                                   :colgroup
-                                   (repeat number col-elem))))
-                              col_groups)
-                        (catch :default _e
-                          []))
-        head (when header
-               [:thead (tr :th header)])
-        groups (mapv (fn [group]
-                       (->elem
-                        :tbody
-                        (mapv #(tr :td %) group)))
-                     groups)]
-    [:div.table-wrapper
-     (->elem
-      :table
-      {:class "table-auto"
-       :border 2
-       :cell-spacing 0
-       :cell-padding 6
-       :rules "groups"
-       :frame "hsides"}
-      (vec-cat
-       tb-col-groups
-       (cons head groups)))]))
+  (case (get-shui-component-version :table config)
+    2 (shui/table-v2 {:data (concat [[header]] groups)}
+                     (make-shui-context config inline))
+    1 (let [tr (fn [elm cols]
+                 (->elem
+                  :tr
+                  (mapv (fn [col]
+                          (->elem
+                           elm
+                           {:scope "col"
+                            :class "org-left"}
+                           (map-inline config col)))
+                        cols)))
+            tb-col-groups (try
+                            (mapv (fn [number]
+                                    (let [col-elem [:col {:class "org-left"}]]
+                                      (->elem
+                                       :colgroup
+                                       (repeat number col-elem))))
+                                  col_groups)
+                            (catch :default _e
+                              []))
+            head (when header
+                   [:thead (tr :th header)])
+            groups (mapv (fn [group]
+                           (->elem
+                            :tbody
+                            (mapv #(tr :td %) group)))
+                         groups)]
+        [:div.table-wrapper
+         (->elem
+          :table
+          {:class "table-auto"
+           :border 2
+           :cell-spacing 0
+           :cell-padding 6
+           :rules "groups"
+           :frame "hsides"}
+          (vec-cat
+           tb-col-groups
+           (cons head groups)))])))
 
 (defn logbook-cp
   [log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
-        clocks (reverse (sort-by str clocks))
+        clocks (reverse (sort-by str clocks))]
         ;; TODO: display states change log
         ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-        ]
+
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
@@ -3090,6 +3098,8 @@
 (defn map-inline
   [config col]
   (map #(inline config %) col))
+
+(declare ->hiccup)
 
 (rum/defc src-cp < rum/static
   [config options html-export?]
@@ -3300,8 +3310,8 @@
   [config blocks idx item]
   (let [item (->
               (dissoc item :block/meta)
-              (assoc :block/top? (zero? idx)
-                     :block/bottom? (= (count blocks) (inc idx))))
+              (assoc :block.temp/top? (zero? idx)
+                     :block.temp/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))

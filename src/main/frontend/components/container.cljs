@@ -35,12 +35,13 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.components.window-controls :as window-controls]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
@@ -284,8 +285,8 @@
                               (when (< touching-x-offset 0)
                                 (max touching-x-offset (- 0 (:width el-rect))))))
         offset-ratio (and (number? touching-x-offset)
-                            (some->> (:width el-rect)
-                                     (/ touching-x-offset)))]
+                          (some->> (:width el-rect)
+                                   (/ touching-x-offset)))]
 
     (rum/use-effect!
      #(js/setTimeout
@@ -481,7 +482,7 @@
 
 (rum/defc main <
   {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "main-content-container")]
+                (when-let [element (gdom/getElement "app-container")]
                   (dnd/subscribe!
                    element
                    :upload-files
@@ -492,19 +493,23 @@
                   (common-handler/listen-to-scroll! element)
                   (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
                     (set! (.. element -scrollTop) 0)))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (when-let [el (gdom/getElement "app-container")]
+                     (dnd/unsubscribe! el :upload-files))
+                   state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open?   (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
-        margin-less-pages? (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
+        margin-less-pages?   (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
      ;; desktop left sidebar layout
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
-                    :route-match route-match})
+                    :route-match        route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
@@ -730,6 +735,8 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
+        native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
+        window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
@@ -759,6 +766,7 @@
       {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
                                  :ls-right-sidebar-open   sidebar-open?
                                  :ls-wide-mode            wide-mode?
+                                 :ls-window-controls      window-controls?
                                  :ls-fold-button-on-right fold-button-on-right?
                                  :ls-hl-colored           ls-block-hl-colored?}])}
 
@@ -794,6 +802,9 @@
                :main-content        main-content
                :show-action-bar?    show-action-bar?
                :show-recording-bar? show-recording-bar?})]
+
+       (when window-controls?
+         (window-controls/container))
 
        (right-sidebar/sidebar)
 

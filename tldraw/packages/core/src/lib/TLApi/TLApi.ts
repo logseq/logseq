@@ -428,6 +428,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       return new ShapeClass({
         ...s.serialized,
         type: type,
+        nonce: Date.now(),
       })
     })
     this.app.currentPage.addShapes(...clones)

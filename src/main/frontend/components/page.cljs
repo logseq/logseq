@@ -208,8 +208,7 @@
          [:ul.mt-2
           (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
-             [:a {:href (rfe/href :page {:name name})}
-              original-name]])]
+             (component-block/page-cp {} {:block/name name :block/original-name original-name})])]
          {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
@@ -262,7 +261,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0.edit-input-wrapper
+    [:span.absolute.inset-0.edit-input-wrapper.z-10
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -317,16 +316,17 @@
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
-                       (.preventDefault e)
-                       (if (gobj/get e "shiftKey")
-                         (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                           (state/sidebar-add-block!
-                            repo
-                            (:db/id page)
-                            :page))
-                         (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
-                           (reset! *input-value (if untitled? "" old-name))
-                           (reset! *edit? true))))}
+                    (when-not (= (.-nodeName (.-target e)) "INPUT")
+                      (.preventDefault e)
+                      (if (gobj/get e "shiftKey")
+                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                          (state/sidebar-add-block!
+                           repo
+                           (:db/id page)
+                           :page))
+                        (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
+                          (reset! *input-value (if untitled? "" old-name))
+                          (reset! *edit? true)))))}
        (when (not= icon "") [:span.page-icon icon])
        [:div.page-title-sizer-wrapper.relative
         (when @*edit?

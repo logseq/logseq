@@ -367,8 +367,8 @@
                                (if palette?
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
-                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
-            (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
+                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd :cmd palette-cmd)]
+            (println :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
 
 (defn ^:export unregister_plugin_simple_command
@@ -384,7 +384,7 @@
         (palette-handler/unregister (:id cmd))
         ;; remove keybinding commands
         (when (seq (:shortcut cmd))
-          (js/console.debug :shortcut/unregister-shortcut cmd)
+          (println :shortcut/unregister-shortcut cmd)
           (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
 (defn ^:export register_search_service
@@ -652,13 +652,13 @@
       nil)))
 
 (def ^:export update_block
-  (fn [block-uuid content ^js _opts]
+  (fn [block-uuid content ^js opts]
     (let [repo       (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing?   (and edit-input (string/ends-with? edit-input (str block-uuid)))]
       (if editing?
         (state/set-edit-content! edit-input content)
-        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content))
+        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))
       nil)))
 
 (def ^:export move_block
@@ -700,7 +700,7 @@
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [right-sibling (outliner/get-right-sibling (:db/id block))]
-        (let [block (db/pull (:id right-sibling))]
+        (let [block (db/pull (:db/id right-sibling))]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 
 (def ^:export set_block_collapsed

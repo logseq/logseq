@@ -8,7 +8,6 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.file :as file-common-handler]
@@ -31,7 +30,8 @@
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [logseq.common.config :as common-config]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -48,8 +48,8 @@
       (let [format (state/get-preferred-format)
             file-rpath (str "pages/" "contents." (config/get-file-extension format))
             default-content (case (name format)
-                              "org" (rc/inline "contents.org")
-                              "markdown" (rc/inline "contents.md")
+                              "org" (rc/inline "templates/contents.org")
+                              "markdown" (rc/inline "templates/contents.md")
                               "")]
         (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
@@ -273,7 +273,7 @@
         ;; config should be loaded to state first
         _ (state/set-config! repo-url config)
         ;; remove :hidden files from file-objs, :hidden
-        file-objs (common-handler/remove-hidden-files file-objs config :file/path)]
+        file-objs (common-config/remove-hidden-files file-objs config :file/path)]
 
     ;; Load to db even it's empty, (will create default files)
     (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
@@ -293,8 +293,8 @@
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
-        nfs-files (common-handler/remove-hidden-files file-objs config :file/path)
-        diffs (common-handler/remove-hidden-files diffs config :path)
+        nfs-files (common-config/remove-hidden-files file-objs config :file/node-node-path)
+        diffs (common-config/remove-hidden-files diffs config :path)
         load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url

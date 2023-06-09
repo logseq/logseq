@@ -150,7 +150,7 @@
     hover:opacity-100;
 
     &-wrap {
-      @apply absolute top-0 right-0 pt-2 pr-2;
+      @apply z-10 absolute top-0 right-0 pt-2 pr-2;
     }
   }
 

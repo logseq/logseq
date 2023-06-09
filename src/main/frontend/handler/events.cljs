@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.shortcut :as shortcut]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -69,8 +70,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.common.path :as path]))
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -622,13 +622,7 @@
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)
-        dir (:dir payload)
-        payload (-> payload
-                    (update :path
-                           (fn [path]
-                             (when (string? path)
-                               (path/relative-path dir path)))))]
+        payload (js->clj event :keywordize-keys true)]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
@@ -946,6 +940,11 @@
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :modal/keymap-manager [[_]]
+  (state/set-modal!
+    #(shortcut/keymap-pane)
+    {:label "keymap-manager"}))
 
 (defmethod handle :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)

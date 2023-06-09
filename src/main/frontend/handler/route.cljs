@@ -86,7 +86,9 @@
 (defn redirect-to-whiteboard!
   ([name]
    (redirect-to-whiteboard! name nil))
-  ([name {:keys [block-id]}]
+  ([name {:keys [block-id new-whiteboard?]}]
+   ;; Always skip onboarding when loading an existing whiteboard
+   (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
    (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
    (if (= name (state/get-current-whiteboard))
      (state/focus-whiteboard-shape block-id)
@@ -99,6 +101,8 @@
   (case name
     :home
     "Logseq"
+    :whiteboards
+    (t :whiteboards)
     :repos
     "Repos"
     :repo-add
@@ -129,6 +133,15 @@
         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
           (or (util/get-page-original-name page)
               "Logseq"))))
+    :whiteboard
+    (let [name (:name path-params)
+          block? (util/uuid-string? name)]
+      (str
+       (if block?
+         (t :untitled)
+         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
+           (or (util/get-page-original-name page)
+               "Logseq"))) " - " (t :whiteboard)))
     :tag
     (str "#"  (:name path-params))
     :diff

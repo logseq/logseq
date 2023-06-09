@@ -67,6 +67,18 @@
   [parts]
   (string/join "/" parts))
 
+(defn normalize-user-keyname
+  [k]
+  (let [keynames {";" "semicolon"
+                  "=" "equals"
+                  "-" "dash"
+                  "[" "open-square-bracket"
+                  "]" "close-square-bracket"
+                  "'" "single-quote"}]
+    (some-> (str k)
+            (string/lower-case)
+            (string/replace #"[;=-\[\]']" (fn [s]
+                                            (get keynames s))))))
 
 #?(:cljs
    (defn safe-re-find
@@ -399,6 +411,23 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
+   (defn nearest-scrollable-container [^js/HTMLElement element]
+     (some #(when-let [overflow-y (.-overflowY (js/window.getComputedStyle %))]
+              (when (contains? #{"auto" "scroll" "overlay"} overflow-y)
+                %))
+           (take-while (complement nil?) (iterate #(.-parentElement %) element)))))
+
+#?(:cljs
+   (defn element-visible?
+     [element]
+     (when element
+       (when-let [r (.getBoundingClientRect element)]
+         (and (>= (.-top r) 0)
+              (<= (+ (.-bottom r) 64)
+                  (or (.-innerHeight js/window)
+                      (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -447,6 +476,19 @@
       (scroll-to (app-scroll-container-node) 0 false))
      ([animate?]
       (scroll-to (app-scroll-container-node) 0 animate?))))
+
+#?(:cljs
+   (defn scroll-to-block
+     "Scroll into the view to vertically align a non-visible block to the centre
+     of the visible area"
+     ([block]
+      (scroll-to-block block true))
+     ([block animate?]
+      (when block
+        (when-not (element-visible? block)
+          (.scrollIntoView block
+                           #js {:behavior (if animate? "smooth" "auto")
+                                :block    "center"}))))))
 
 #?(:cljs
    (defn link?
@@ -748,9 +790,13 @@
             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
 #?(:cljs
-   (defn get-blocks-noncollapse []
-     (->> (d/sel "div:not(.reveal) .ls-block")
-          (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
+   (defn get-blocks-noncollapse
+     ([]
+      (->> (d/sel "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))
+     ([blocks-container]
+      (->> (d/sel blocks-container "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))))
 
 #?(:cljs
    (defn remove-embedded-blocks [blocks]
@@ -818,14 +864,19 @@
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
-     [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (dec index)]
-             (when (>= idx 0)
-               (nth-safe blocks idx))))))))
+     "Gets previous non-collapsed block. If given a container
+      looks up blocks in that container e.g. for embed"
+     ([block] (get-prev-block-non-collapsed block {}))
+     ([block {:keys [container]}]
+      (when-let [blocks (if container
+                          (get-blocks-noncollapse container)
+                          (get-blocks-noncollapse))]
+        (let [block-id (.-id block)
+              block-ids (mapv #(.-id %) blocks)]
+          (when-let [index (.indexOf block-ids block-id)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
@@ -1269,7 +1320,7 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) mobile?))
+     (when (and el (or (mobile-util/native-platform?) (mobile?)))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
@@ -1396,16 +1447,6 @@
      (p/create
       (fn [resolve]
         (load url resolve)))))
-
-#?(:cljs
-   (defn element-visible?
-     [element]
-     (when element
-       (when-let [r (.getBoundingClientRect element)]
-         (and (>= (.-top r) 0)
-              (<= (+ (.-bottom r) 64)
-                  (or (.-innerHeight js/window)
-                      (js/document.documentElement.clientHeight))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard

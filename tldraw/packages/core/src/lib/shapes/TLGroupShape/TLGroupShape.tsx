@@ -3,6 +3,7 @@ import { computed, makeObservable } from 'mobx'
 import { BoundsUtils } from '../../../utils'
 import { TLBoxShape, TLBoxShapeProps } from '../TLBoxShape'
 import type { TLShape } from '../TLShape'
+import { useApp } from '@tldraw/react'
 
 export interface TLGroupShapeProps extends TLBoxShapeProps {
   children: string[] // shape ids
@@ -41,6 +42,21 @@ export class TLGroupShape<
   }
 
   getBounds = (): TLBounds => {
+    // A group without children needs to be removed
+    if (this.shapes.length === 0) {
+      const app = useApp<Shape>()
+      app.deleteShapes([this.id])
+
+      return {
+        minX: 0,
+        minY: 0,
+        maxX: 0,
+        maxY: 0,
+        width: 0,
+        height: 0,
+      }
+    }
+
     return BoundsUtils.getCommonBounds(this.shapes.map(s => s.getBounds()))
   }
 }

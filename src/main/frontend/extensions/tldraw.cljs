@@ -5,6 +5,7 @@
             [frontend.components.export :as export]
             [frontend.components.page :as page]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -93,7 +94,8 @@
 (def undo (fn [] (history/undo! nil)))
 (def redo (fn [] (history/redo! nil)))
 (defn get-tldraw-handlers [current-whiteboard-name]
-  {:search search-handler
+  {:t (fn [key] (t (keyword key)))
+   :search search-handler
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
@@ -128,7 +130,7 @@
 
 (rum/defc tldraw-app
   [page-name block-id]
-  (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+  (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
         data (whiteboard-handler/page-name->tldr! page-name)
         [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [^js tln]
@@ -138,7 +140,8 @@
                      (when-let [^js api (gobj/get tln "api")]
                       (p/then (when populate-onboarding?
                                 (whiteboard-handler/populate-onboarding-whiteboard api))
-                              #(do (state/focus-whiteboard-shape tln block-id)
+                              #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                   (state/focus-whiteboard-shape tln block-id)
                                    (set-loaded-app tln))))))]
     (rum/use-effect! (fn []
                        (when (and loaded-app block-id)
