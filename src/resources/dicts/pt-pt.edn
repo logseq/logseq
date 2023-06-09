@@ -253,7 +253,6 @@
  :join-community "Junte-se à comunidade"
  :discourse-title "O nosso fórum!"
  :help-shortcut-title "Clique para ver atalhos e outras dicas"
- :loading "A carregar"
  :parsing-files "A analisar ficheiros"
  :loading-files "A carregar ficheiros"
  :login "Iniciar sessão"

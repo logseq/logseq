@@ -280,7 +280,6 @@
  :join-community "Приєднатися до нас"
  :discourse-title "Наш форум!"
  :help-shortcut-title "Клацніть, щоб перевірити комбінації і інші підказки"
- :loading "Загрузка"
  :parsing-files "Розбір файлів"
  :loading-files "Загрузка файлів"
  :login "Увіти"

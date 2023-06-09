@@ -156,7 +156,6 @@
  :import "Importer"
  :join-community "Bli med i samfunnet"
  :help-shortcut-title "Klikk for å sjekke snarveier og andre tips"
- :loading "Laster"
  :parsing-files "Analyserer filer"
  :loading-files "Laster filer"
  :login "Logg inn"

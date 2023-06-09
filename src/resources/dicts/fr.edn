@@ -72,7 +72,6 @@
  :settings "Préférences"
  :import "Importer"
  :join-community "Rejoindre la communauté"
- :loading "Chargement en cours"
  :parsing-files "Analyse des fichiers"
  :loading-files "Chargement des fichiers"
  :download "Télécharger"

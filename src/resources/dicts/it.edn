@@ -166,7 +166,6 @@
  :import "Importa"
  :join-community "Unisciti alla comunità"
  :help-shortcut-title "Clicca per conoscere le scorciatoie e altri suggerimenti"
- :loading "Caricamento"
  :parsing-files "Analisi dei file"
  :loading-files "Caricamento dei file"
  :login "Accedi"

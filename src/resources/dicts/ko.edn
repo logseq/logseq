@@ -170,7 +170,6 @@
  :import "불러오기"
  :join-community "커뮤니티에 참여"
  :help-shortcut-title "다른 단축키와 도움말 확인하기"
- :loading "로딩 중"
  :parsing-files "파일 파싱 중"
  :loading-files "파일 로딩 중"
  :login "로그인"

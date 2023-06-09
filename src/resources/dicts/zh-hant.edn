@@ -253,7 +253,6 @@
  :join-community "加入社群"
  :discourse-title "我們的論壇！"
  :help-shortcut-title "點擊查看快捷鍵和其他提示。"
- :loading "讀取中"
  :parsing-files "爬取資料"
  :loading-files "讀取資料"
  :login "登入"

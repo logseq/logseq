@@ -174,7 +174,6 @@
  :join-community "Dołącz do społeczności"
  :discourse-title "Nasze forum!"
  :help-shortcut-title "Kliknij, aby sprawdzić skróty klawiszowe oraz inne porady"
- :loading "Ładuję"
  :parsing-files "Parsuję pliki"
  :loading-files "Ładuję pliki"
  :login "Zaloguj"

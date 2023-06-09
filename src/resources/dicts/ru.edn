@@ -280,7 +280,6 @@
  :join-community "Присоединиться к сообществу"
  :discourse-title "Наш форум!"
  :help-shortcut-title "Нажмите для просмотра горячих клавиш и других советов"
- :loading "Загрузка"
  :parsing-files "Анализ файлов"
  :loading-files "Загрузка файлов"
  :login "Вход в систему"

@@ -129,7 +129,6 @@
  :import "Importar"
  :join-community "Junte-se à comunidade"
  :help-shortcut-title "Clique para ver atalhos e outras dicas"
- :loading "Carregando"
  :parsing-files "Analisando arquivos"
  :loading-files "Carregando arquivos"
  :login "Iniciar sessão"

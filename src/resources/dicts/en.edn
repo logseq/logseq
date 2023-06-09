@@ -384,7 +384,7 @@
  :join-community "Join the community"
  :discourse-title "Our forum!"
  :help-shortcut-title "Click to check shortcuts and other tips"
- :loading "Loading"
+ :loading "Loading..."
  :parsing-files "Parsing files"
  :loading-files "Loading files"
  :login "Login"

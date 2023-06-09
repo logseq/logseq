@@ -243,7 +243,6 @@
  :join-community                                   "Pridať sa ku komunite"
  :discourse-title                                  "Naše fórum!"
  :help-shortcut-title                              "Kliknutím zobrazíte skratky a ďalšie tipy"
- :loading                                          "Načítava sa"
  :parsing-files                                    "Parsovanie súborov"
  :loading-files                                    "Načítavajú sa súbory"
  :login                                            "Prihlásiť sa"

@@ -173,7 +173,6 @@
  :import "インポート"
  :join-community "コミュニティへ参加"
  :help-shortcut-title "クリックしてショートカットと他のTipsを確認"
- :loading "ロード中"
  :parsing-files "ファイル解析中"
  :loading-files "ファイルロード中"
  :login "ログイン"

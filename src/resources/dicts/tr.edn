@@ -278,7 +278,6 @@
  :join-community "Topluluğa katıl"
  :discourse-title "Forum sayfamız!"
  :help-shortcut-title "Kısayolları ve diğer ipuçlarını kontrol etmek için tıklayın"
- :loading "Yükleniyor"
  :parsing-files "Dosyalar ayrıştırılıyor"
  :loading-files "Dosyalar yükleniyor"
  :login "Oturum aç"

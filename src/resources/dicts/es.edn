@@ -201,7 +201,6 @@
  :join-community "Unirse a la comunidad"
  :discourse-title "Nuestro foro!"
  :help-shortcut-title "Clic para ver atajos y otras sugerencias"
- :loading "Cargando"
  :parsing-files "Analizando archivos"
  :loading-files "Cargando archivos"
  :login "Iniciar sesión"
