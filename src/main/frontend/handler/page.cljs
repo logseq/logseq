@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
