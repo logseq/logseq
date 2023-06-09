@@ -610,7 +610,7 @@
 (defn diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
-  if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
+  if s1.path = s2.path & s1.checksum <> s2.checksum
   (except some default created files),
   keep this `FileMetadata` in result"
   [s1 s2]
@@ -635,9 +635,7 @@
                ;; higher priority in s1 when config.edn=default value or empty custom.css
                (and (contains? ignore-default-value-files path)
                     (#{config/config-default-content-md5 empty-custom-css-md5} (:etag %)))
-               false
-               (< last-modified (:last-modified %))
-               true)
+               false)
             s2)
          result
          (conj result item))))
@@ -1616,7 +1614,8 @@
                                    base-exists?
                                    (p/let [base-content (fs/read-file repo-dir base-file)
                                            current-content (-> (fs/read-file repo-dir current-change-file)
-                                                               (p/catch (fn [_] nil)))]
+                                                               (p/catch (fn [_] nil)))
+                                           incoming-content (fs/read-file repo-dir incoming-file)]
                                      (if (= base-content current-content)
                                        (do
                                          (prn "base=current, write directly")
@@ -1626,7 +1625,10 @@
                                                     (path/path-join repo-dir current-change-file))
                                           (fs/copy! repo
                                                     (path/path-join repo-dir incoming-file)
-                                                    (path/path-join repo-dir base-file))))
+                                                    (path/path-join repo-dir base-file))
+                                          (file-handler/alter-file repo current-change-file incoming-content {:re-render-root? true
+                                                                                                              :from-disk? true
+                                                                                                              :fs/event :fs/remote-file-change})))
                                        (do
                                          (prn "base!=current, should do a 3-way merge")
                                          (prn ::cur
@@ -1640,11 +1642,7 @@
                                               (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
                                               (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
                                                                                                                 :from-disk? true
-                                                                                                                :fs/event :fs/remote-file-change})))
-                                           ;; now, let fs watcher handle the rest uploading
-                                           (comment fs/copy! repo-url
-                                                    (path/path-join repo-dir incoming-file)
-                                                    (path/path-join repo-dir current-change-file))))))
+                                                                                                                :fs/event :fs/remote-file-change})))))))
 
                                    :else
                                    (do
@@ -1661,11 +1659,17 @@
                                                     (path/path-join repo-dir current-change-file))
                                           (fs/copy! repo
                                                     (path/path-join repo-dir incoming-file)
-                                                    (path/path-join repo-dir base-file)))
+                                                    (path/path-join repo-dir base-file))
+                                          (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                            :from-disk? true
+                                                                                                            :fs/event :fs/remote-file-change}))
 
                                          ;; else
                                          (p/do!
                                           (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                          (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                            :from-disk? true
+                                                                                                            :fs/event :fs/remote-file-change})
                                           (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
                                                                                                             :from-disk? true
                                                                                                             :fs/event :fs/remote-file-change})))))))))))))))
