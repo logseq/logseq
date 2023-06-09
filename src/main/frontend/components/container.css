@@ -488,7 +488,8 @@ html[data-theme='dark'] {
 }
 
 .settings-modal {
-  margin: -15px;
+  @apply -m-8 rounded-lg;
+  /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
 }
 
 .cp__sidebar-main-layout {
