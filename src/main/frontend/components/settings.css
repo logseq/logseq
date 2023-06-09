@@ -1,9 +1,7 @@
 .cp__settings {
-
   &-main {
     > header {
-      padding: 10px;
-      padding-top: 0;
+      padding: 0 10px 10px;
       border-bottom: 1px solid var(--ls-quaternary-background-color);
 
       h1 {
@@ -11,34 +9,78 @@
         margin: 0;
       }
     }
+
+    aside {
+      @apply bg-gray-400/5 p-4;
+    }
+
+    article {
+      @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
+      @apply md:max-h-[70vh] md:w-[40rem];
+      /* margin-right: -17px; */
+      /* margin-bottom: -17px; */
+
+      @screen md {
+        /* max-height: 70vh; */
+        /* width: 680px; */
+      }
+    }
+
+    aside > .cp__settings-header,
+    article > .cp__settings-header {
+      @apply h-10 py-2 flex flex-row items-center justify-start gap-2;
+    }
+
+    aside > .cp__settings-header {
+      @apply px-2;
+    }
+
+    aside > .cp__settings-header > .ui__icon {
+      @apply h-8 w-8 bg-gray-700/10 rounded grid place-items-center;
+    }
+
+    aside > .cp__settings-header > .ui__icon > svg {
+      @apply h-6 w-6;
+    }
+
+    h1.cp__settings-modal-title {
+      @apply text-2xl font-semibold lowercase;
+    }
+
+    h1.cp__settings-category-title {
+      @apply text-xl lowercase;
+    }
+
+    h1.cp__settings-modal-title:first-letter, 
+    h1.cp__settings-category-title:first-letter {
+      @apply uppercase;
+    }
+
+    .settings-menu {
+      @apply p-0 m-0 mt-4 pr-3; 
+    }
+
+    .settings-menu-item {
+      @apply list-none p-0 my-1.5 rounded;
+      @apply hover:bg-black/10;
+    }
+
+    .settings-menu-link {
+      @apply px-2 py-1.5 select-none; 
+      color: var(--ls-primary-text-color);
+    }
   }
 
   &-inner {
     @apply flex flex-col md:flex-row;
 
     > aside {
-      border-right: 0 solid var(--ls-quaternary-background-color);
-      border-bottom: 1px solid var(--ls-quaternary-background-color);
-
-      @screen md {
-        border-right: 1px solid var(--ls-quaternary-background-color);
-        border-bottom: 0 solid var(--ls-quaternary-background-color);
-      }
 
       ul {
-        padding: 12px 12px 12px 5px;
-        margin: 0;
 
         > li {
-          list-style: none;
-          padding: 0;
-          margin: 5px 0;
-          border-radius: 4px;
 
           > a {
-            padding: 10px;
-            user-select: none;
-            color: var(--ls-primary-text-color);
 
             > i {
               overflow: hidden;
@@ -65,21 +107,6 @@
       }
     }
 
-    > article {
-      flex: 1;
-      padding: 0 12px 12px;
-      min-height: 380px;
-      width: auto;
-      overflow: auto;
-      margin-right: -17px;
-      margin-bottom: -17px;
-
-      @screen md {
-        max-height: 70vh;
-        width: 680px;
-      }
-    }
-
     &.no-aside {
       > article {
         padding-left: 0;
@@ -87,7 +114,7 @@
     }
 
     .panel-wrap {
-      padding: 12px;
+      @apply p-1;
 
       @screen sm {
         width: 600px;
