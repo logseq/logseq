@@ -494,7 +494,7 @@ test('New page should have the correct name', async ({ page }) => {
   await expect(page.locator('.ls-page-title')).toContainText('My page')
 })
 
-test('Renaming a page to an existing whiteboard name should be prohibited ', async ({ page }) => {
+test('Renaming a page to an existing whiteboard name should be prohibited', async ({ page }) => {
   await page.click('.ls-page-title .page-title')
   await page.waitForSelector('input[type="text"]')
   await page.fill('input[type="text"]', '')
