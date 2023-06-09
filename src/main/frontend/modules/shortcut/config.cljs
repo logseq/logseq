@@ -113,19 +113,19 @@
    :whiteboard/zoom-out          {:binding "shift+dash"
                                   :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/zoom-in           {:binding "shift+="
+   :whiteboard/zoom-in           {:binding "shift+equals"
                                   :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
 
-   :whiteboard/send-backward     {:binding "["
+   :whiteboard/send-backward     {:binding "open-square-bracket"
                                   :fn      #(.sendBackward ^js (state/active-tldraw-app))}
 
-   :whiteboard/send-to-back      {:binding "shift+["
+   :whiteboard/send-to-back      {:binding "shift+open-square-bracket"
                                   :fn      #(.sendToBack ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-forward     {:binding "]"
+   :whiteboard/bring-forward     {:binding "close-square-bracket"
                                   :fn      #(.bringForward ^js (state/active-tldraw-app))}
 
-   :whiteboard/bring-to-front    {:binding "shift+]"
+   :whiteboard/bring-to-front    {:binding "shift+close-square-bracket"
                                   :fn      #(.bringToFront ^js (state/active-tldraw-app))}
 
    :whiteboard/lock              {:binding "mod+l"
@@ -439,7 +439,7 @@
                                      :fn      route-handler/redirect-to-whiteboard-dashboard!}
 
    :go/keyboard-shortcuts          {:binding "g s"
-                                    :fn      #(route-handler/redirect! {:to :shortcut-setting})}
+                                    :fn      #(state/pub-event! [:modal/keymap-manager])}
 
    :go/tomorrow                    {:binding "g t"
                                     :fn      journal-handler/go-to-tomorrow!}
@@ -927,7 +927,10 @@
     :dev/show-block-ast
     :dev/show-page-data
     :dev/show-page-ast
-    :ui/clear-all-notifications]})
+    :ui/clear-all-notifications]
+
+   :shortcut.category/plugins
+   []})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category dicts/categories}]
@@ -942,10 +945,14 @@
    (fn [v]
      (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))))
 
+(def *shortcut-cmds (atom {}))
+
 (defn add-shortcut!
   [handler-id id shortcut-map]
-  (swap! config assoc-in [handler-id id] shortcut-map))
+  (swap! config assoc-in [handler-id id] shortcut-map)
+  (swap! *shortcut-cmds assoc id (:cmd shortcut-map)))
 
 (defn remove-shortcut!
   [handler-id id]
-  (swap! config medley/dissoc-in [handler-id id]))
+  (swap! config medley/dissoc-in [handler-id id])
+  (swap! *shortcut-cmds dissoc id))
