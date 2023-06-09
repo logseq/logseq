@@ -43,6 +43,7 @@ test('undo/redo of a renamed page should be preserved', async ({ page, block }) 
   await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
 
   await renamePage(page, randomString(10))
+  await page.click('.ui__confirm-modal button')
 
   await page.keyboard.press(modKey + '+z')
   await page.waitForTimeout(100)

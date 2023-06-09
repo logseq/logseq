@@ -15,6 +15,7 @@ async function page_rename_test(page: Page, original_page_name: string, new_page
 
   // Rename page in UI
   await renamePage(page, new_name)
+  await page.click('.ui__confirm-modal button')
 
   expect(await page.innerText('.page-title .title')).toBe(new_name)
 
@@ -45,6 +46,7 @@ async function homepage_rename_test(page: Page, original_page_name: string, new_
   expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(original_name);
 
   await renamePage(page, new_name)
+  await page.click('.ui__confirm-modal button')
 
   expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(new_name);
 
