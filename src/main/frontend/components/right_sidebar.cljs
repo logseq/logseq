@@ -123,11 +123,11 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/page-graph))
+    [(t :right-side-bar/page-graph)
      (page/page-graph)]
 
     :history
-    [(str (t :right-side-bar/history))
+    [(t :right-side-bar/history)
      (history)]
 
     :block-ref

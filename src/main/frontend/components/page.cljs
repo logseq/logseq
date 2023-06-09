@@ -820,7 +820,7 @@
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (if orphaned-pages?
-          (str (t :remove-orphaned-pages) "?")
+          (t :remove-orphaned-pages)
           (t :page/delete-confirmation))]]]
 
      [:table.table-auto.cp__all_pages_table.mt-4
@@ -856,7 +856,7 @@
                     (close-fn)
                     (doseq [page-name (map :block/name pages)]
                       (page-handler/delete! page-name #()))
-                    (notification/show! (str (t :tips/all-done) "!") :success)
+                    (notification/show! (t :tips/all-done) :success)
                     (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
