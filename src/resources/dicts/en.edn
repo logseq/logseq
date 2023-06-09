@@ -488,6 +488,7 @@
  :shortcut.category/toggle "Toggle"
  :shortcut.category/whiteboard "Whiteboard"
  :shortcut.category/others "Others"
+ :shortcut.category/plugins "Plugins"
  :window/minimize "Minimize"
  :window/maximize "Maximize"
  :window/restore "Restore"

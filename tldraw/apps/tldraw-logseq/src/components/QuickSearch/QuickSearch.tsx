@@ -104,7 +104,7 @@ export const LogseqQuickSearch = observer(
     const t = handlers.t
 
     const finishSearching = React.useCallback((id: string) => {
-      onChange(id)
+      setTimeout(() => onChange(id))
       rInput.current?.blur()
       if (id) {
         LogseqPortalShape.defaultSearchQuery = ''
