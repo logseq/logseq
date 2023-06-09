@@ -71,7 +71,7 @@
 
    ["/settings/shortcut"
     {:name :shortcut-setting
-     :view shortcut/shortcut}]
+     :view shortcut/shortcut-page}]
 
    ["/settings/zotero"
     {:name :zotero-setting
