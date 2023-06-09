@@ -1,29 +1,5 @@
-const plugin = require('tailwindcss/plugin')
 const colors = require('tailwindcss/colors')
 const radix = require('@radix-ui/colors')
-
-const gradientColors = {
-  tomato:  ["amber",     "orange",    "tomato",      "red",         "crimson"],
-  red:     ["orange",    "tomato",    "red",         "crimson",     "pink"], 
-  crimson: ["tomato",    "red",       "crimson",     "pink",        "plum"],
-  pink:    ["red",       "crimson",   "pink",        "plum",        "purple"],
-  plum:    ["crimson",   "pink",      "plum",        "purple",      "violet"], 
-  purple:  ["pink",      "plum",      "purple",      "violet",      "indigo"],
-  violet:  ["plum",      "purple",    "violet",      "indigo",      "blue"],  
-  indigo:  ["purple",    "violet",    "indigo",      "blue",        "cyan"],
-  blue:    ["violet",    "indigo",    "blue",        "cyan",        "teal"],
-  // sky:     ["indigo",    "blue",      "sky",         "cyan",        "teal"],
-  cyan:    ["indigo",    "blue",      "cyan",        "teal",        "green"],
-  teal:    ["blue",      "cyan",      "teal",        "green",       "grass"],
-  // mint:    ["cyan",      "teal",      "mint",        "green",       "grass"],
-  green:   ["cyan",      "teal",      "green",       "grass",       "amber"],
-  grass:   ["teal",      "green",     "grass",       "amber",       "orange"],
-  // lime:    ["green",     "grass",     "lime",        "yellow",      "amber"],
-  // yellow:  ["grass",     "lime",      "yellow",      "amber",       "orange"],
-  amber:   ["green",     "grass",     "amber",       "orange",      "tomato"],
-  orange:  ["grass",     "amber",     "orange",      "tomato",      "red"],
-  // brown:   ["green",     "grass",     "brown",       "tomato",       "red"],
-}
 
 function exposeColorsToCssVars ({ addBase, theme }) {
   function extractColorVars (colorObj, colorGroup = '') {
@@ -56,72 +32,6 @@ function buildColor(color, custom) {
 
   return base
 }
-
-// this will allow us to use gradient color functions in the ui:
-// grad-bg-tomato-3 OR grad-bg-tomato-3-alpha
-// it will also loop through all 5 color stops, unless the stops are specified 
-// grad-bg-stops-3
-// this will have a default repeating gradient at a step that can be configured with 
-// grad-bg-cycle-32 
-const addGradientColors = plugin(({ addBase, addComponents, addUtilities, config, ___theme }) => {
-  const dark = getDarkSelector(config)
-
-  addUtilities({
-    ['.grad-bg-stops-3']: {
-      '--grad-bg-stops': "var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)",
-    },
-    ['.grad-bg-stops-5']: {
-      '--grad-bg-stops': "var(--grad-bg-stop-a), var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d), var(--grad-bg-stop-e)",
-    },
-    ['.grad-bg-cycle-12']: {
-      'background-image': 'repeatint-linear-gradient(to right, var(--grad-bg-stops))',
-    },
-  })
-
-  Object.values(gradientColors).forEach((stops, ___index) => {
-    const baseColor = stops[2]
-    const color = (scale, stopIndex = 2, suffix = "") => `--color-${stops[stopIndex]}${suffix}-${scale}`
-
-    addComponents({
-      // tailwind componnent for .grad-bg-COLOR-9
-      [`.grad-bg-${baseColor}-9`]: {
-        "--grad-bg-stop-a": `var(${color(9, 0)})`,
-        "--grad-bg-stop-b": `var(${color(9, 1)})`,
-        "--grad-bg-stop-c": `var(${color(9, 2)})`,
-        "--grad-bg-stop-d": `var(${color(9, 3)})`,
-        "--grad-bg-stop-e": `var(${color(9, 4)})`,
-        "--grad-bg-stops-default": `var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)`,
-        "background-image": `linear-gradient(var(--grad-bg-direction, to right), var(--grad-bg-stops, var(--grad-bg-stops-default)))`,
-
-        [dark]: {
-          "--grad-bg-stop-a": `var(${color(9, 0, "dark")})`,
-          "--grad-bg-stop-b": `var(${color(9, 1, "dark")})`,
-          "--grad-bg-stop-c": `var(${color(9, 2, "dark")})`,
-          "--grad-bg-stop-d": `var(${color(9, 3, "dark")})`,
-          "--grad-bg-stop-e": `var(${color(9, 4, "dark")})`,
-        }
-      },
-      // tailwind component for .grad-bg-COLOR-9-alpha
-      [`.grad-bg-${baseColor}-9-alpha`]: {
-        "--grad-bg-stop-a": `var(${color(9, 0)})`,
-        "--grad-bg-stop-b": `var(${color(9, 1)})`,
-        "--grad-bg-stop-c": `var(${color(9, 2)})`,
-        "--grad-bg-stop-d": `var(${color(9, 3)})`,
-        "--grad-bg-stop-e": `var(${color(9, 4)})`,
-        "--grad-bg-stops-default": `var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)`,
-        "background-image": `linear-gradient(var(--grad-bg-direction, to right), var(--grad-bg-stops, var(--grad-bg-stops-default)))`,
-
-        [dark]: {
-          "--grad-bg-stop-a": `var(${color(9, 0, "dark")})`,
-          "--grad-bg-stop-b": `var(${color(9, 1, "dark")})`,
-          "--grad-bg-stop-c": `var(${color(9, 2, "dark")})`,
-          "--grad-bg-stop-d": `var(${color(9, 3, "dark")})`,
-          "--grad-bg-stop-e": `var(${color(9, 4, "dark")})`,
-        }
-      },
-    })
-  })
-})
 
 function getDarkSelector(config) {
   const darkMode = config("darkMode");
@@ -173,14 +83,6 @@ module.exports = {
     { pattern: /bg-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /text-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /columns-([1-9]|1[0-2])|(auto|3xs|2xs|xs|sm|md|lg|xl)|([2-7]xl)/ },
-    { pattern: /bg-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /shadow-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /text-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /ring-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /from-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /via-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /to-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /border-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(4|5|6|7|8)/ },
   ],
   plugins: [
     require('@tailwindcss/forms'),
@@ -188,7 +90,6 @@ module.exports = {
     require('@tailwindcss/aspect-ratio'),
     require('@tailwindcss/line-clamp'),
     require('tailwind-capitalize-first-letter'),
-    addGradientColors,
     exposeColorsToCssVars
   ],
   theme: {

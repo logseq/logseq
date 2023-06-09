@@ -1,4 +1,7 @@
-(ns logseq.shui.context)
+(ns logseq.shui.context
+  (:require 
+    [frontend.state :as state]
+    [frontend.colors :as colors]))
 
 (defn inline->inline-block [inline block-config]
   (fn [_context item]
@@ -33,4 +36,8 @@
    :whiteboard? (:whiteboard? block-config)
    ;; Some functions from logseq's application will be used in the shui components. To avoid circular dependencies,
    ;; they will be provided via the context object
-   :int->local-time-2 int->local-time-2})
+   :int->local-time-2 int->local-time-2
+   ;; We need some variable from the state to carry over 
+   :color-accent (state/get-color-accent) 
+   :color-gradient (state/get-color-gradient)
+   :linear-gradient colors/linear-gradient})

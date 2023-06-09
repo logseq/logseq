@@ -1495,6 +1495,37 @@
                        :grass :olive :lime :olive 
                        :yellow :sand :amber :sand :orange :sand :brown :sand})
 
+(defn color-gradient-even [color n-stops]
+  (let [color-index (.indexOf color-list color) 
+        middle (+ color-index (count color-list))
+        start (- middle (/ n-stops 2))
+        end (+ middle (/ n-stops 2))]
+    (subvec (into color-list color-list) start end)))
+
+(defn color-gradient-odd [color n-stops]
+  (let [color-index (.indexOf color-list color) 
+        middle (+ color-index (count color-list))
+        start (- middle (/ (dec n-stops) 2))
+        end (+ middle (/ (dec n-stops) 2))]
+    (subvec (into color-list color-list) start end)))
+
+
+(mod -1 10)
+(defn linear-gradient [color-name color-stop gradient-level]
+  (let [color-index (.indexOf color-list color-name) 
+        step (fn [dist] 
+               (str "var(--rx-"
+                 (name (nth color-list (mod (+ color-index dist) (count color-list))))
+                 "-" (name color-stop) ")"))]
+    (case gradient-level 
+      1 (str "linear-gradient(90deg, " (step 0) ", " (step 0) ")")
+      2 (str "linear-gradient(-45deg, " (step -1) " -50%, " (step 0) " 50%, " (step 1) " 150%)")
+      3 (str "linear-gradient(-45deg, " (step -1) " 0%, " (step 0) " 50%, " (step 1) " 100%)")
+      4 (str "linear-gradient(-45deg, " (step -2) " -16.66%, " (step -1) " 16.66%, " (step 0) " 50%, " (step 1) " 83.33%, " (step 2) " 116.66%)") 
+      5 (str "linear-gradient(-45deg, " (step -2) " 0%, " (step -1) " 25%, " (step 0) " 50%, " (step 1) " 75%, " (step 2) " 100%)")
+      6 (str "linear-gradient(-45deg, " (step -3) " -10%, " (step -2) " 10%, " (step -1) " 30%, " (step 0) " 50%, " (step 1) " 70%, " (step 2) " 90%, " (step 3) " 110%)")
+      7 (str "linear-gradient(-45deg, " (step -3) " 0%, " (step -2) " 16.66%, " (step -1) " 33.33%, " (step 0) " 50%, " (step 1) " 66.66%, " (step 2) " 83.33%, " (step 3) " 100%)"))))
+
 (defn get-color
   ; ([value])
   ([color value] 
@@ -1511,7 +1542,7 @@
                      (get-in radix [(keyword color-name) (keyword color-value)]))
      (get-in radix [(keyword color-name) (keyword color-value)]))))
 
-(defn set-radix [color]
+(defn set-radix [color gradient-level]
   (let [style-tag (or (js/document.querySelector "style#color-variables") 
                       (js/document.createElement "style"))
         steps ["01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "01-alpha" "02-alpha" "03-alpha" "04-alpha" "05-alpha" "06-alpha" "07-alpha" "08-alpha" "09-alpha" "10-alpha" "11-alpha" "12-alpha"]
