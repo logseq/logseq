@@ -795,7 +795,7 @@
                                       :min-width "0.5rem" 
                                       :max-width "100%"}}]])]))
   
-(rum/defc settings-account < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
   (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
         graph-usage (state/get-remote-graph-usage)
