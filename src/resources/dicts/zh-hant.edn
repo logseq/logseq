@@ -220,7 +220,7 @@
  :search "搜尋或建立新頁面"
  :whiteboard/link-whiteboard-or-block "連結白板/頁面/區塊"
  :page-search "在目前頁面搜尋"
- :graph-search "搜尋圖表"}{
+ :graph-search "搜尋圖表"
  :new-graph "新圖表"
  :graph "圖表"
  :graph/persist "Logseq 正在同步網路資料，請稍候。"
