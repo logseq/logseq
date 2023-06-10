@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { modKey } from './utils'
+import { modKey, renamePage } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
   if (await page.$('.nav-header .whiteboard') === null) {
@@ -492,4 +492,10 @@ test('New page should have the correct name', async ({ page }) => {
   page.locator('.tl-logseq-portal-header a').click()
 
   await expect(page.locator('.ls-page-title')).toContainText('My page')
+})
+
+test('Renaming a page to an existing whiteboard name should be prohibited', async ({ page }) => {
+  await renamePage(page, "My embedded whiteboard")
+
+  await expect(page.locator('.page-title input')).toHaveValue('My page')
 })
