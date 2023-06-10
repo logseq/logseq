@@ -1,8 +1,6 @@
 import { PlaywrightTestConfig } from '@playwright/test'
 
 const config: PlaywrightTestConfig = {
-  name: 'Logseq E2E Tests 🧪',
-
   // The directory where the tests are located
   // The order of the tests is determined by the file names alphabetically.
   testDir: './e2e-tests',
