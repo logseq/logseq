@@ -18,6 +18,8 @@
 
 (defn quick-capture [args]
   (let [{:keys [url title content page append]} (bean/->clj args)
+        title (or title "")
+        url (or url "")
         insert-today? (get-in (state/get-config)
                               [:quick-capture-options :insert-today?]
                               false)
