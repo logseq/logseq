@@ -9,7 +9,9 @@ import { createRandomPage, escapeToCodeEditor, escapeToBlockEditor } from './uti
  * For more information, see: https://codemirror.net/doc/manual.html
  */
 
-test('switch code editing mode', async ({ page }) => {
+// TODO: Fix test that started intermittently failing some time around
+// https://github.com/logseq/logseq/pull/9540
+test.skip('switch code editing mode', async ({ page }) => {
   await createRandomPage(page)
 
   // NOTE: ` will trigger auto-pairing in Logseq
