@@ -16,11 +16,7 @@ const config: PlaywrightTestConfig = {
   // default 'list' when running locally.
   reporter: process.env.CI ? 'github' : 'list',
 
-  // Retry on CI only.
-  // This will reduce the risk of false negatives when running on CI.
-  retries: process.env.CI ? 2 : 0,
-
-  // Fail the build on CI if you accidentally left test.only in the source code.
+  // Fail the build on CI if test.only is present.
   forbidOnly: !!process.env.CI,
 
   use: {
