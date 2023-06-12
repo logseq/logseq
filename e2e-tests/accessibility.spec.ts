@@ -4,7 +4,6 @@ import { expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
 test('should not have any automatically detectable accessibility issues', async ({ page }) => {
-    test.slow()
     await createRandomPage(page)
     await page.waitForTimeout(2000)
     const accessibilityScanResults = await new AxeBuilder({ page })
