@@ -231,7 +231,7 @@
             :where
             [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/page ?p]
+            [?h :block/ref-pages ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
