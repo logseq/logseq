@@ -118,7 +118,7 @@
  :file-rn/close-panel "Close the Panel"
  :file-rn/all-action "Apply all Actions! ({1})"
  :file-rn/select-format "(Developer Mode Option, Dangerous!) Select filename format"
- :file-rn/rename "rename file \"\" to \"{2}\""
+ :file-rn/rename "rename file \"{1}\" to \"{2}\""
  :file-rn/apply-rename "Apply the file rename operation"
  :file-rn/suggest-rename "Action required: "
  :file-rn/otherwise-breaking "Or title will become"
