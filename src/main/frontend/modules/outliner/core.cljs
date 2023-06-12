@@ -528,11 +528,10 @@
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
       `outliner-op`: what's the current outliner operation.
-      `cut-paste?`: whether it's pasted from cut blocks
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target? cut-paste?] :as opts}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (get-target-block target-block)
