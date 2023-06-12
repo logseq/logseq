@@ -293,7 +293,7 @@ test('create a block', async ({ page }) => {
 
 test('expand the block', async ({ page }) => {
   await page.keyboard.press('Escape')
-  await page.click('.logseq-tldraw .tl-context-bar .tie-object-expanded ')
+  await page.keyboard.press(modKey + '+ArrowDown')
   await page.waitForTimeout(100)
 
   await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(1)
