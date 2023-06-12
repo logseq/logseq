@@ -184,10 +184,8 @@
      (if (seq copied-blocks)
        ;; Handle internal paste
        (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
-             cut-paste? (boolean (seq revert-cut-txs))
              keep-uuid? (= (state/get-block-op-type) :cut)]
          (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
-                                                     :cut-paste? cut-paste?
                                                      :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
