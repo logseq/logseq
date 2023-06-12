@@ -105,7 +105,7 @@
   [text]
   (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
 
-(defn- get-revert-cut-tx
+(defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
   [blocks]
   (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
@@ -183,10 +183,10 @@
    (p/let [copied-blocks (get-copied-blocks)]
      (if (seq copied-blocks)
        ;; Handle internal paste
-       (let [revert-cut-tx (get-revert-cut-tx copied-blocks)
-             cut-paste? (boolean (seq revert-cut-tx))
+       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
+             cut-paste? (boolean (seq revert-cut-txs))
              keep-uuid? (= (state/get-block-op-type) :cut)]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-tx revert-cut-tx
+         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
                                                      :cut-paste? cut-paste?
                                                      :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
