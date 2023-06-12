@@ -297,9 +297,10 @@
   [pid key keybinding]
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
+        binding (some->> (if (string? binding) [binding] (seq binding))
+                         (map util/normalize-user-keyname))
         binding (if util/mac?
-                  (or (:mac keybinding) binding)
-                  binding)
+                  (or (:mac keybinding) binding) binding)
         mode    (or (:mode keybinding) :global)
         mode    (get keybinding-mode-handler-map (keyword mode))]
     [mode id {:binding binding}]))

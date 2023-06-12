@@ -100,11 +100,12 @@
   }
 
   &-overlay div {
-    background: var(--ls-tertiary-background-color);
+    background-image: linear-gradient(to bottom, var(--ls-primary-background-color), var(--ls-quaternary-background-color));
   }
 
   &-panel {
-    @apply relative rounded-md shadow-xl;
+    @apply relative rounded-md shadow-xl border;
+    border-color: var(--ls-border-color);
 
     overflow: hidden;
     background: var(--ls-secondary-background-color);
@@ -150,7 +151,7 @@
     hover:opacity-100;
 
     &-wrap {
-      @apply absolute top-0 right-0 pt-2 pr-2;
+      @apply z-10 absolute top-0 right-0 pt-2 pr-2;
     }
   }
 

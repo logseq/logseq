@@ -114,77 +114,87 @@
     (when (= (set (map :block/uuid blocks)) recent-cut-block-ids)
       (seq revert-tx))))
 
+(defn- paste-copied-text
+  [input *text html]
+  (let [replace-text-f (fn [text]
+                         (let [input-id (state/get-edit-input-id)]
+                           (commands/delete-selection! input-id)
+                           (commands/simple-insert! input-id text nil)))
+        text (string/replace *text "\r\n" "\n") ;; Fix for Windows platform
+        input-id (state/get-edit-input-id)
+        shape-refs-text (when (and (not (string/blank? html))
+                                   (get-whiteboard-tldr-from-text html))
+                          ;; text should always be prepared block-ref generated in tldr
+                          text)
+        {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+        text-url? (gp-util/url? text)
+        selection-url? (gp-util/url? selection)]
+    (cond
+      (not (string/blank? shape-refs-text))
+      (commands/simple-insert! input-id shape-refs-text nil)
+
+      ;; When a url is selected in a formatted link, replaces it with pasted text
+      (or (and (or text-url? selection-url?)
+               (selection-within-link? selection-and-format))
+          (and text-url? selection-url?))
+      (replace-text-f text)
+
+      ;; Pastes a formatted link over selected text
+      (and (or text-url?
+               (and value (gp-util/url? (string/trim value))))
+           (not (string/blank? (util/get-selected-text))))
+      (editor-handler/html-link-format! text)
+
+      ;; Pastes only block id when inside of '(())'
+      (and (block-ref/block-ref? text)
+           (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+      (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
+
+      :else
+      ;; from external
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+            html-text (let [result (when-not (string/blank? html)
+                                     (try
+                                       (html-parser/convert format html)
+                                       (catch :default e
+                                         (log/error :exception e)
+                                         nil)))]
+                        (if (string/blank? result) nil result))
+            text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
+            blocks? (text-blocks? text)
+            text' (or html-text
+                      (when (gp-util/url? text)
+                        (wrap-macro-url text))
+                      text)]
+        (cond
+          blocks?
+          (paste-text-parseable format text)
+
+          (util/safe-re-find #"(?:\r?\n){2,}" text')
+          (paste-segmented-text format text')
+
+          :else
+          (replace-text-f text'))))))
+
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
-  [text e html]
+  [input text e html]
   (util/stop e)
   (->
    (p/let [copied-blocks (get-copied-blocks)]
-     (let [input (state/get-input)
-           input-id (state/get-edit-input-id)
-           text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-           replace-text-f (fn [text]
-                            (let [input-id (state/get-edit-input-id)]
-                              (commands/delete-selection! input-id)
-                              (commands/simple-insert! input-id text nil)))
-           internal-paste? (seq copied-blocks)]
-       (if internal-paste?
-         (let [revert-cut-tx (get-revert-cut-tx copied-blocks)
-               cut-paste? (boolean (seq revert-cut-tx))
-               keep-uuid? cut-paste?]
-           (editor-handler/paste-blocks copied-blocks {:revert-cut-tx revert-cut-tx
-                                                       :cut-paste? cut-paste?
-                                                       :keep-uuid? keep-uuid?}))
-         (let [shape-refs-text (when (and (not (string/blank? html))
-                                          (get-whiteboard-tldr-from-text html))
-                                 ;; text should always be prepared block-ref generated in tldr
-                                 text)
-               {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-               text-url? (gp-util/url? text)
-               selection-url? (gp-util/url? selection)]
-           (cond
-             (not (string/blank? shape-refs-text))
-             (commands/simple-insert! input-id shape-refs-text nil)
-
-             (or (and (or text-url? selection-url?)
-                      (selection-within-link? selection-and-format))
-                 (and text-url? selection-url?))
-             (replace-text-f text)
-
-             (and (or text-url?
-                      (and value (gp-util/url? (string/trim value))))
-                  (not (string/blank? (util/get-selected-text))))
-             (editor-handler/html-link-format! text)
-
-             (and (block-ref/block-ref? text)
-                  (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
-             (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
-
-             :else
-             ;; from external
-             (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-                   html-text (let [result (when-not (string/blank? html)
-                                            (try
-                                              (html-parser/convert format html)
-                                              (catch :default e
-                                                (log/error :exception e)
-                                                nil)))]
-                               (if (string/blank? result) nil result))
-                   text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
-                   blocks? (text-blocks? text)
-                   text' (or html-text text)]
-               (cond
-                 blocks?
-                 (paste-text-parseable format text)
-
-                 (util/safe-re-find #"(?:\r?\n){2,}" text')
-                 (paste-segmented-text format text')
-
-                 :else
-                 (replace-text-f text'))))))))
+     (if (seq copied-blocks)
+       ;; Handle internal paste
+       (let [revert-cut-tx (get-revert-cut-tx copied-blocks)
+             cut-paste? (boolean (seq revert-cut-tx))
+             keep-uuid? cut-paste?]
+         (editor-handler/paste-blocks copied-blocks {:revert-cut-tx revert-cut-tx
+                                                     :cut-paste? cut-paste?
+                                                     :keep-uuid? keep-uuid?}))
+       (paste-copied-text input text html)))
    (p/catch (fn [error]
-              (prn "Paste failed: ")
-              (log/error :exception error)))))
+              (log/error :msg "Paste failed" :exception error)
+              (state/pub-event! [:capture-error {:error error
+                                                 :payload {:type ::paste-copied-blocks-or-text}}])))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -206,7 +216,7 @@
     (when-not (mobile-util/native-ios?)
       (util/stop e)
       (paste-text-in-one-block-at-point))
-    (paste-copied-blocks-or-text text e html)))
+    (paste-copied-blocks-or-text input text e html)))
 
 (defn- paste-file-if-exists [id e]
   (when id
@@ -248,10 +258,7 @@
         (paste-file-if-exists id e)
 
         :else
-        (let [text' (or (when (gp-util/url? text)
-                          (wrap-macro-url text))
-                        text)]
-          (paste-text-or-blocks-aux (state/get-input) e text' html))))))
+        (paste-text-or-blocks-aux (state/get-input) e text html)))))
 
 (defn editor-on-paste-raw!
   "Raw pastes without _any_ formatting. Can also replace selected text with a paste"

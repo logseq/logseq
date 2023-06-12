@@ -56,7 +56,7 @@
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
-   (shortcut/shortcut {:show-title? false})])
+   (shortcut/shortcut-page {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
