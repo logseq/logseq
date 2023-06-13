@@ -82,7 +82,7 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:did-mount  open-root-block!}
+  {:did-mount open-root-block!}
   [page-name _block hiccup sidebar? whiteboard? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
    (rum/with-key
@@ -159,7 +159,9 @@
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))
-              hiccup (component-block/->hiccup blocks hiccup-config {})]
+              non-collapsed-blocks-count (count (remove :block/collapsed? (:block/_page (db/entity (:db/id page-e)))))
+              lazy? (> non-collapsed-blocks-count 300)
+              hiccup (component-block/->hiccup blocks (assoc hiccup-config :lazy? lazy?) {})]
           [:div
            (page-blocks-inner page-name block hiccup sidebar? whiteboard? block-id)
            (when-not config/publishing?

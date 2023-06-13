@@ -2849,40 +2849,35 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     (ui/lazy-visible
-      (fn []
-        [:div.flex.flex-row.pr-2
-         {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-          :on-touch-move (fn [event]
-                           (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
-          :on-touch-end (fn [event]
-                          (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-          :on-touch-cancel (fn [_e]
-                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-          :on-mouse-over (fn [e]
-                           (block-mouse-over e *control-show? block-id doc-mode?))
-          :on-mouse-leave (fn [e]
-                            (block-mouse-leave e *control-show? block-id doc-mode?))}
-         (when (not slide?)
-           (block-control config block uuid block-id collapsed? *control-show? edit?))
+     [:div.flex.flex-row.pr-2
+      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+       :on-touch-move (fn [event]
+                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-cancel (fn [_e]
+                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
+       :on-mouse-over (fn [e]
+                        (block-mouse-over e *control-show? block-id doc-mode?))
+       :on-mouse-leave (fn [e]
+                         (block-mouse-leave e *control-show? block-id doc-mode?))}
+      (when (not slide?)
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-         (when @*show-left-menu?
-           (block-left-menu config block))
+      (when @*show-left-menu?
+        (block-left-menu config block))
 
-         (if whiteboard-block?
-           (block-reference {} (str uuid) nil)
-           ;; Not embed self
-           (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
-                 hide-block-refs-count? (and (:embed? config)
-                                             (= (:block/uuid block) (:embed-id config)))]
-             (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
+      (if whiteboard-block?
+        (block-reference {} (str uuid) nil)
+        ;; Not embed self
+        (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
+              hide-block-refs-count? (and (:embed? config)
+                                          (= (:block/uuid block) (:embed-id config)))]
+          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
 
-         (when @*show-right-menu?
-           (block-right-menu config block edit?))])
-      {:debug-id (str "block-container-ref " (:db/id block))
-       :fade-in? false
-       :initial-state edit?})
+      (when @*show-right-menu?
+        (block-right-menu config block edit?))]
 
      (block-children config block children collapsed?)
 
@@ -2958,8 +2953,16 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
         edit? (state/sub [:editor/editing? edit-input-id])
         opts {:edit? edit?
-              :edit-input-id edit-input-id}]
-    (block-container-inner state repo config block opts)))
+              :edit-input-id edit-input-id}
+        ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))]
+    (if (or ref? custom-query? (:lazy? config))
+      (ui/lazy-visible
+       (fn [] (block-container-inner state repo config block opts))
+       {:debug-id (str "block-container-ref " (:db/id block))
+        :fade-in? false
+        :initial-state edit?})
+      (block-container-inner state repo config block opts))))
 
 (defn divide-lists
   [[f & l]]
