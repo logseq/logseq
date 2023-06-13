@@ -2777,7 +2777,6 @@
         children (db/sort-by-left (:block/_parent block) block)
         {:block.temp/keys [top?]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
-        block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
         config (assoc config :block block)
         ;; Each block might have multiple queries, but we store only the first query's result
@@ -2850,34 +2849,40 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2
-      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-       :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
-       :on-touch-end (fn [event]
-                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel (fn [_e]
-                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-       :on-mouse-over (fn [e]
-                        (block-mouse-over e *control-show? block-id doc-mode?))
-       :on-mouse-leave (fn [e]
-                         (block-mouse-leave e *control-show? block-id doc-mode?))}
-      (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit?))
+     (ui/lazy-visible
+      (fn []
+        [:div.flex.flex-row.pr-2
+         {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+          :on-touch-move (fn [event]
+                           (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
+          :on-touch-end (fn [event]
+                          (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+          :on-touch-cancel (fn [_e]
+                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
+          :on-mouse-over (fn [e]
+                           (block-mouse-over e *control-show? block-id doc-mode?))
+          :on-mouse-leave (fn [e]
+                            (block-mouse-leave e *control-show? block-id doc-mode?))}
+         (when (not slide?)
+           (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-      (when @*show-left-menu?
-        (block-left-menu config block))
+         (when @*show-left-menu?
+           (block-left-menu config block))
 
-      (if whiteboard-block?
-        (block-reference {} (str uuid) nil)
-        ;; Not embed self
-        (let [hide-block-refs-count? (and (:embed? config)
-                                          (= (:block/uuid block) (:embed-id config)))]
-          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
+         (if whiteboard-block?
+           (block-reference {} (str uuid) nil)
+           ;; Not embed self
+           (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
+                 hide-block-refs-count? (and (:embed? config)
+                                             (= (:block/uuid block) (:embed-id config)))]
+             (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
 
-      (when @*show-right-menu?
-        (block-right-menu config block edit?))]
+         (when @*show-right-menu?
+           (block-right-menu config block edit?))])
+      {:debug-id (str "block-container-ref " (:db/id block))
+       :fade-in? false
+       :initial-state edit?})
 
      (block-children config block children collapsed?)
 
@@ -2954,11 +2959,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         opts {:edit? edit?
               :edit-input-id edit-input-id}]
-    (ui/lazy-visible
-     (fn [] (block-container-inner state repo config block opts))
-     {:debug-id (str "block-container-ref " (:db/id block))
-      :fade-in? false
-      :initial-state edit?})))
+    (block-container-inner state repo config block opts)))
 
 (defn divide-lists
   [[f & l]]
@@ -3371,35 +3372,6 @@
     :else
     ""))
 
-(rum/defcs lazy-blocks < rum/reactive rum/static
-  (rum/local nil ::loading?)
-  {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))
-   :did-mount (fn [state]
-                (let [[config blocks] (:rum/args state)]
-                  (loading-more-data! config (::loading? state) blocks true))
-                state)}
-  [state config blocks]
-  (let [db-id (:db/id config)
-        *loading? (::loading? state)
-        config' (dissoc config :infinite-list?)]
-    (if (:infinite-list? config)
-      (let [has-more? (and
-                       (>= (count blocks) model/initial-blocks-length)
-                       (some? (model/get-next-open-block (db/get-db) (last blocks) db-id)))
-            dom-id (str "lazy-blocks-" (::id state))]
-        [:div {:id dom-id}
-         (ui/infinite-list
-          "main-content-container"
-          (block-list config' blocks)
-          {:on-load #(loading-more-data! config' *loading? blocks false)
-           :bottom-reached (fn []
-                             (when-let [node (gdom/getElement dom-id)]
-                               (ui/bottom-reached? node 300)))
-           :has-more has-more?
-           :more (load-more config' *loading?)})])
-      (block-list config' blocks))))
-
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
   [state blocks config]
@@ -3416,7 +3388,7 @@
             config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
-         (lazy-blocks config blocks)]))))
+         (block-list config blocks)]))))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]
