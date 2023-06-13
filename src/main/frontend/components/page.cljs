@@ -82,8 +82,7 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:did-mount  open-root-block!
-   :did-update open-root-block!}
+  {:did-mount  open-root-block!}
   [page-name _block hiccup sidebar? whiteboard? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
    (rum/with-key
