@@ -166,12 +166,8 @@
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
-  {:before     #(notification/show!
-                 (ui/loading (t :graph/persist))
-                 :warning)
-   :on-error   #(notification/show!
-                 (t :graph/persist-error)
-                 :error)})
+  {:before     #(ui/notify-graph-persist!)
+   :on-error   #(ui/notify-graph-persist-error!)})
 
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs

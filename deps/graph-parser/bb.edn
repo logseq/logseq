@@ -3,10 +3,10 @@
  {logseq/bb-tasks
   #_{:local/root "../../../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "1815db538241082a01e95601e23e4290dd64d0c0"}}
+   :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}}
  
  :pods
- {clj-kondo/clj-kondo {:version "2022.10.05"}}
+ {clj-kondo/clj-kondo {:version "2023.05.26"}}
 
  :tasks
  {test:load-all-namespaces-with-nbb

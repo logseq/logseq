@@ -88,13 +88,16 @@
 
 (defn block-entity->map
   [e]
-  {:db/id (:db/id e)
-   :block/uuid (:block/uuid e)
-   :block/parent {:db/id (:db/id (:block/parent e))}
-   :block/left {:db/id (:db/id (:block/left e))}
-   :block/page (:block/page e)
-   :block/refs (:block/refs e)
-   :block/children (:block/children e)})
+  (cond-> {:db/id (:db/id e)
+           :block/uuid (:block/uuid e)
+           :block/parent {:db/id (:db/id (:block/parent e))}
+           :block/page (:block/page e)}
+    (:db/id (:block/left e))
+    (assoc :block/left {:db/id (:db/id (:block/left e))})
+    (:block/refs e)
+    (assoc :block/refs (:block/refs e))
+    (:block/children e)
+    (assoc :block/children (:block/children e))))
 
 (defn filter-top-level-blocks
   [blocks]
