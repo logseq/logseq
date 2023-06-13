@@ -244,7 +244,7 @@
                      frequencies)]
       (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
-        [:div.references.page-linked.flex-1.flex-row.border.rounded-xl.p-6
+        [:div.references.page-linked.flex-1.flex-row
          (sub-page-properties-changed page-name page-props-v filters-atom)
          [:div.content.pt-6
           (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
