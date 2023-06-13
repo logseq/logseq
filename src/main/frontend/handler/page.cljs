@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
@@ -792,10 +791,6 @@
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
-              prefix (str (t :new-page) ": ")
-              chosen (if (string/starts-with? chosen prefix) ;; FIXME: What if a page named "New page: XXX"?
-                       (string/replace-first chosen prefix "")
-                       chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (page-ref/->page-ref chosen)
                        chosen)
@@ -814,11 +809,7 @@
                                            :command :page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
-        (let [prefix (str (t :new-page) ": ")
-              chosen (if (string/starts-with? chosen prefix)
-                       (string/replace-first chosen prefix "")
-                       chosen)
-              page-ref-text (get-page-ref-text chosen)]
+        (let [page-ref-text (get-page-ref-text chosen)]
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format

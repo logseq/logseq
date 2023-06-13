@@ -4,5 +4,5 @@
                        org.clojure/clojurescript {:mvn/version "1.11.54"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
   :clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.12.08"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}

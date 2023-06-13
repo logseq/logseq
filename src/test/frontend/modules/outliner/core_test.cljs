@@ -245,7 +245,7 @@
                    :db/id 147,
                    :block/parent #:db{:id 144},
                    :block/page #:db{:id 144}}]]
-      (= blocks (outliner-core/fix-top-level-blocks blocks)))))
+      (is (= blocks (outliner-core/fix-top-level-blocks blocks))))))
 
 (deftest test-outdent-blocks
   (testing "
@@ -735,41 +735,42 @@ tags:: tag1, tag2
                  :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
                  :block/parent #:db{:id 2333},
                  :db/id 2334}]]
-    (= (tree/non-consecutive-blocks->vec-tree blocks)
-       '({:db/id 2315,
-          :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
-          :block/parent #:db{:id 2313},
-          :block/page #:db{:id 2313},
-          :block/level 1,
-          :block/children
-          [{:db/id 2316,
-            :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
-            :block/parent #:db{:id 2315},
-            :block/page #:db{:id 2313},
-            :block/level 2,
-            :block/children
-            [{:db/id 2317,
-              :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
-              :block/parent #:db{:id 2316},
-              :block/page #:db{:id 2313},
-              :block/level 3,
-              :block/children
-              [{:db/id 2318,
-                :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
-                :block/parent #:db{:id 2317},
-                :block/page #:db{:id 2313},
-                :block/level 4}]}]}
-           {:db/id 2333,
-            :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
-            :block/parent #:db{:id 2315},
-            :block/page #:db{:id 2313},
-            :block/level 2,
-            :block/children
-            [{:db/id 2334,
-              :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
-              :block/parent #:db{:id 2333},
-              :block/page #:db{:id 2313},
-              :block/level 3}]}]}))))
+    (is
+     (= (tree/non-consecutive-blocks->vec-tree blocks)
+        '({:db/id 2315,
+           :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
+           :block/parent #:db{:id 2313},
+           :block/page #:db{:id 2313},
+           :block/level 1,
+           :block/children
+           [{:db/id 2316,
+             :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
+             :block/parent #:db{:id 2315},
+             :block/page #:db{:id 2313},
+             :block/level 2,
+             :block/children
+             [{:db/id 2317,
+               :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
+               :block/parent #:db{:id 2316},
+               :block/page #:db{:id 2313},
+               :block/level 3,
+               :block/children
+               [{:db/id 2318,
+                 :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
+                 :block/parent #:db{:id 2317},
+                 :block/page #:db{:id 2313},
+                 :block/level 4}]}]}
+            {:db/id 2333,
+             :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
+             :block/parent #:db{:id 2315},
+             :block/page #:db{:id 2313},
+             :block/level 2,
+             :block/children
+             [{:db/id 2334,
+               :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
+               :block/parent #:db{:id 2333},
+               :block/page #:db{:id 2313},
+               :block/level 3}]}]})))))
 
 (comment
   (dotimes [i 5]

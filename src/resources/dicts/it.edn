@@ -138,7 +138,6 @@
  :search "Cerca o crea una pagina"
  :page-search "Cerca nella pagina corrente"
  :graph-search "Cerca nel grafo"
- :new-page "Nuova pagina"
  :new-graph "Aggiungi nuovo grafo"
  :graph "Grafo"
  :graph/persist "Logseq sta sincronizzando lo stato interno, per favore attendi alcuni secondi."
@@ -158,7 +157,6 @@
  :all-graphs "Tutti i grafi"
  :all-pages "Tutte le pagine"
  :all-files "Tutti i file"
- :remove-orphaned-pages "Rimuovi pagine orfane"
  :all-journals "Tutte le pagine di diario"
  :settings "Impostazioni"
  :settings-of-plugins "Impostazioni plugin"
@@ -168,7 +166,6 @@
  :import "Importa"
  :join-community "Unisciti alla comunità"
  :help-shortcut-title "Clicca per conoscere le scorciatoie e altri suggerimenti"
- :loading "Caricamento"
  :parsing-files "Analisi dei file"
  :loading-files "Caricamento dei file"
  :login "Accedi"
@@ -197,7 +194,6 @@
  :plugin/marketplace "Libreria"
  :plugin/downloads "Numero di scaricamenti"
  :plugin/stars "Stelle"
- :plugin/title "Titolo"
  :plugin/all "Tutti"
  :plugin/unpacked "Non pacchettizzati"
  :plugin/delete-alert "Sei sicuro di voler disinstallare [{1}]?"
@@ -207,7 +203,6 @@
  :plugin/restart "Riavvia app"
  :plugin/unpacked-tips "Seleziona la cartella del plugin"
  :plugin/contribute "✨ Sviluppa e sottoponici un nuovo plugin"
- :plugin/up-to-date "È aggiornato"
  :plugin/custom-js-alert "Trovato il file custom.js, è consentito eseguirlo? (Se non si comprende il contenuto di questo file, si consiglia di non consentire l'esecuzione, che presenta alcuni rischi per la sicurezza.)"
 
  :pdf/copy-ref "Copia riferimenti"
@@ -221,8 +216,6 @@
  :paginates/pages "Totale {1} pagine"
  :paginates/prev "Precedente"
  :paginates/next "Successivo"
-
- :tips/all-done "Completato"
 
  :command-palette/prompt "Digita un comando"
  :select/default-prompt "Selezionane uno"

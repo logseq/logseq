@@ -284,7 +284,7 @@
                                                              :block-uuid (:block/uuid block)}]))]
       (editor/delete-block! test-helper/test-db false))))
 
-(deftest ^:focus delete-block!
+(deftest delete-block!
   (testing "backspace deletes empty block"
     (load-test-files [{:file/path "pages/page1.md"
                        :file/content "\n

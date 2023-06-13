@@ -144,7 +144,6 @@
  :search "Wyszukaj lub stwórz stronę"
  :page-search "Wyszukaj na stronie"
  :graph-search "Przeszukaj graf"
- :new-page "Nowa strona"
  :new-graph "Dodaj nowy graf"
  :graph "Graf"
  :graph/persist "Logseq synchronizuje lokalny stan. Proszę poczekać kilka sekund."
@@ -166,7 +165,6 @@
  :all-graphs "Wszystkie grafy"
  :all-pages "Wszystkie strony"
  :all-files "Wszystkie pliki"
- :remove-orphaned-pages "Usuń strony bez powiązań"
  :all-journals "Wszystkie dzienniki"
  :settings "Ustawienia"
  :settings-of-plugins "Ustawienia pluginu"
@@ -176,7 +174,6 @@
  :join-community "Dołącz do społeczności"
  :discourse-title "Nasze forum!"
  :help-shortcut-title "Kliknij, aby sprawdzić skróty klawiszowe oraz inne porady"
- :loading "Ładuję"
  :parsing-files "Parsuję pliki"
  :loading-files "Ładuję pliki"
  :login "Zaloguj"
@@ -202,7 +199,6 @@
  :plugin/uninstall "Odinstaluj"
  :plugin/downloads "Ściągnięte"
  :plugin/stars "Gwiazdki"
- :plugin/title "Tytuł"
  :plugin/all "Wszystkie"
  :plugin/unpacked "Rozpakowany"
  :plugin/delete-alert "Czy na pewno chcesz usunąć plugin [{1}]?"
@@ -212,7 +208,6 @@
  :plugin/restart "Uruchom ponownie"
  :plugin/unpacked-tips "Wybierz katalog z pluginem"
  :plugin/contribute "✨ Napisz i prześlij nowy plugin"
- :plugin/up-to-date "Wszystko jest aktualne"
  :plugin/custom-js-alert "Wykryto plik custom.js, czy chcesz go wykonać? Ze względów bezpieczeństwa, nie rekomendujemy wykonywania tego pliku, jeżeli nie znasz jego zawartości."
 
  :pdf/copy-ref "Kopiuj ref"
@@ -226,8 +221,6 @@
  :paginates/pages "{1} wszystkich stron"
  :paginates/prev "← Poprzednia"
  :paginates/next "Następna →"
-
- :tips/all-done "Wszystko zrobione"
 
  :command-palette/prompt "Wprowadź komendę"
  :select/default-prompt "Wybierz jeden"
