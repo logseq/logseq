@@ -15,6 +15,8 @@
   :aliased-namespace-symbol {:level :warning}
   ;; Disable until it doesn't trigger false positives on rum/defcontext
   :earmuffed-var-not-dynamic {:level :off}
+  ;; Disable until we decide to use conj! as recommended in docs
+  :unused-value {:level :off}
   :unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints

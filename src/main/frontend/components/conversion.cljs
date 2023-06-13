@@ -149,7 +149,7 @@
              [:p (t :file-rn/need-action)])
            [:p
             (ui/button
-             (str (t :file-rn/all-action) " (" (count rename-items) ")")
+             (t :file-rn/all-action (count rename-items))
              :on-click <rename-all
              :class "text-md p-2 mr-1")
             (t :file-rn/or-select-actions)
