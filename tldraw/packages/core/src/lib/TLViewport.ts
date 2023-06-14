@@ -59,7 +59,7 @@ export class TLViewport {
     const deltaX = deltaMax[0] < 0 ? deltaMax[0] : deltaMin[0] > 0 ? deltaMin[0] : 0
     const deltaY = deltaMax[1] < 0 ? deltaMax[1] : deltaMin[1] > 0 ? deltaMin[1] : 0
 
-    this.panCamera(Vec.mul([deltaX, deltaY], -TLViewport.panMultiplier))
+    this.panCamera(Vec.mul([deltaX, deltaY], -TLViewport.panMultiplier * this.camera.zoom))
 }
 
 
