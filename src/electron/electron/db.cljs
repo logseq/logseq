@@ -6,8 +6,6 @@
             [clojure.string :as string]
             ["electron" :refer [app]]
             [electron.logger :as logger]
-            [medley.core :as medley]
-            [electron.utils :as utils]
             [cljs-bean.core :as bean]))
 
 ;; use built-in blocks to represent db schema, config, custom css, custom js, etc.

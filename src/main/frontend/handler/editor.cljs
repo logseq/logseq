@@ -42,6 +42,7 @@
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
+            [frontend.handler.editor.impl :as editor-impl]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -233,120 +234,6 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-;; id: block dom id, "ls-block-counter-uuid"
-(defn- another-block-with-same-id-exists?
-  [current-id block-id]
-  (when-let [id (and (string? block-id) (parse-uuid block-id))]
-    (and (not= current-id id)
-         (db/entity [:block/uuid id]))))
-
-(defn- remove-non-existed-refs!
-  [refs]
-  (remove (fn [x] (or
-                   (and (vector? x)
-                        (= :block/uuid (first x))
-                        (nil? (db/entity x)))
-                   (nil? x))) refs))
-
-(defn- with-marker-time
-  [content block format new-marker old-marker]
-  (if (and (state/enable-timetracking?) new-marker)
-    (try
-      (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
-            new-marker (string/trim (string/lower-case (name new-marker)))
-            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
-            new-content (cond
-                          (or (and (nil? old-marker) (or (= new-marker "doing")
-                                                         (= new-marker "now")))
-                              (and (= old-marker "todo") (= new-marker "doing"))
-                              (and (= old-marker "later") (= new-marker "now"))
-                              (and (= old-marker new-marker "now") (not logbook-exists?))
-                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
-                          (clock/clock-in format content)
-
-                          (or
-                           (and (= old-marker "doing") (= new-marker "todo"))
-                           (and (= old-marker "now") (= new-marker "later"))
-                           (and (contains? #{"now" "doing"} old-marker)
-                                (= new-marker "done")))
-                          (clock/clock-out format content)
-
-                          :else
-                          content)]
-        new-content)
-      (catch :default _e
-        content))
-    content))
-
-(defn- with-timetracking
-  [block value]
-  (if (and (state/enable-timetracking?)
-           (not= (:block/content block) value))
-    (let [format (:block/format block)
-          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
-          new-value (with-marker-time value block format
-                      new-marker
-                      (:block/marker block))]
-      new-value)
-    value))
-
-(defn wrap-parse-block
-  [{:block/keys [content format left page uuid level pre-block?] :as block}]
-  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
-        block (merge block
-                     (block/parse-title-and-body uuid format pre-block? (:block/content block)))
-        properties (:block/properties block)
-        properties (if (and (= format :markdown)
-                            (number? (:heading properties)))
-                     (dissoc properties :heading)
-                     properties)
-        real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property/with-built-in-properties properties content format)
-                  content)
-        content (drawer/with-logbook block content)
-        content (with-timetracking block content)
-        first-block? (= left page)
-        ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
-        first-elem-type (first (ffirst ast))
-        first-elem-meta (second (ffirst ast))
-        properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
-        markdown-heading? (and (= format :markdown)
-                               (= "Heading" first-elem-type)
-                               (nil? (:size first-elem-meta)))
-        block-with-title? (mldoc/block-with-title? first-elem-type)
-        content (string/triml content)
-        content (string/replace content (block-ref/->block-ref uuid) "")
-        [content content'] (cond
-                             (and first-block? properties?)
-                             [content content]
-
-                             markdown-heading?
-                             [content content]
-
-                             :else
-                             (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
-                               [content content']))
-        block (assoc block
-                     :block/content content'
-                     :block/format format)
-        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
-        block (block/parse-block block)
-        block (if (and first-block? (:block/pre-block? block))
-                block
-                (dissoc block :block/pre-block?))
-        block (update block :block/refs remove-non-existed-refs!)
-        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
-        new-properties (merge
-                        (select-keys properties (property/hidden-properties))
-                        (:block/properties block))]
-    (-> block
-        (dissoc :block.temp/top?
-                :block.temp/bottom?)
-        (assoc :block/content content
-               :block/properties new-properties)
-        (merge (if level {:block/level level} {})))))
-
 (defn- save-block-inner!
   [block value opts]
   (let [block (assoc block :block/content value)
@@ -355,7 +242,7 @@
      "Save block: "
      (let [original-uuid (:block/uuid (db/entity (:db/id block)))
            uuid-changed? (not= (:block/uuid block) original-uuid)
-           block' (-> (wrap-parse-block block)
+           block' (-> (editor-impl/wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
                       ;; a block that has been refed
                       (assoc :block/uuid (:block/uuid block)))
@@ -376,6 +263,13 @@
                         (not= (util/page-name-sanity-lc title) old-page-name))
                (state/pub-event! [:page/title-property-changed old-page-name title])))
            (js/console.error (str "Title is not a string: " title))))))))
+
+;; id: block dom id, "ls-block-counter-uuid"
+(defn- another-block-with-same-id-exists?
+  [current-id block-id]
+  (when-let [id (and (string? block-id) (parse-uuid block-id))]
+    (and (not= current-id id)
+         (db/entity [:block/uuid id]))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -453,7 +347,7 @@
                :block/content ""}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
-                       (wrap-parse-block))
+                       (editor-impl/wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
@@ -475,12 +369,12 @@
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
-        current-block (wrap-parse-block current-block)
+        current-block (editor-impl/wrap-parse-block current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
-                       (wrap-parse-block))
+                       (editor-impl/wrap-parse-block))
         sibling? (when block-self? false)]
     (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                              :keep-uuid? true})
@@ -580,7 +474,7 @@
                                  (:db/id block)
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
-                            (wrap-parse-block)
+                            (editor-impl/wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?

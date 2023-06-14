@@ -84,8 +84,9 @@
 
 (defn indent-outdent-block!
   [block direction]
-  (outliner-tx/transact! {:outliner-op :move-blocks}
-    (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
+  (let [opts {:outliner-op :move-blocks}]
+    (outliner-tx/transact! opts
+                           (outliner-core/indent-outdent-blocks! [block] (= direction :right)))))
 
 (defn select-block!
   [block-uuid]

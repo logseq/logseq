@@ -1,27 +1,14 @@
 (ns frontend.db
   "Main entry ns for db related fns"
-  (:require [clojure.core.async :as async]
-            [datascript.core :as d]
-            [logseq.db.schema :as db-schema]
+  (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [logseq.db.default :as default-db]
             [frontend.db.model]
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react :as react]
             [frontend.db.utils]
-            [frontend.db.persist :as db-persist]
-            [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [promesa.core :as p]
-            [electron.ipc :as ipc]
-            [clojure.string :as string]
-            [frontend.config :as config]
-            [clojure.edn :as edn]
-            [cljs-bean.core :as bean]
-            [goog.object :as gobj]))
+            [logseq.db.default :as default-db]))
 
 (import-vars
  [frontend.db.conn

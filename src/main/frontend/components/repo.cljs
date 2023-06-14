@@ -219,8 +219,8 @@
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
                                    short-repo-name (if repo-name
-                                                    (db/get-short-repo-name repo-name)
-                                                    "Select a Graph")]
+                                                     (db/get-short-repo-name repo-name)
+                                                     "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
                                 {:on-click (fn []

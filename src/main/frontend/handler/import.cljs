@@ -20,6 +20,7 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
             [frontend.util :as util]
+            [frontend.handler.editor.impl :as editor-impl]
             [clojure.core.async :as async]
             [medley.core :as medley]))
 
@@ -91,7 +92,7 @@
           page-name (:title headers)
           parsed-blocks (->>
                          (block/extract-blocks parsed-blocks "" :markdown {:page-name page-name})
-                         (mapv editor/wrap-parse-block))]
+                         (mapv editor-impl/wrap-parse-block))]
       (when (not (db/page-exists? page-name))
         (page-handler/create! page-name {:redirect? false}))
       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
