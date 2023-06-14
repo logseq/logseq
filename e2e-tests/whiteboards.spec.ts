@@ -444,8 +444,8 @@ test('Create an embedded whiteboard', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   await canvas.dblclick({
     position: {
-      x: 150,
-      y: 150,
+      x: 110,
+      y: 110,
     },
   })
 
