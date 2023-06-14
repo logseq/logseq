@@ -76,15 +76,17 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
           <TablerIcon name="grid-dots" />
         </ToggleInput>
 
-        <ToggleInput
-            tooltip={t('whiteboard/snap-to-grid')}
-            className="tl-button"
-            pressed={app.settings.snapToGrid}
-            id="tl-snap-to-grid"
-            onPressedChange={toggleSnapToGrid}
-          >
-          <TablerIcon name={app.settings.snapToGrid ? "magnet" : "magnet-off"} />
-        </ToggleInput>
+        {!app.readOnly && (
+          <ToggleInput
+              tooltip={t('whiteboard/snap-to-grid')}
+              className="tl-button"
+              pressed={app.settings.snapToGrid}
+              id="tl-snap-to-grid"
+              onPressedChange={toggleSnapToGrid}
+            >
+            <TablerIcon name={app.settings.snapToGrid ? "magnet" : "magnet-off"} />
+          </ToggleInput>
+        )}
       </div>
     </div>
   )
