@@ -59,19 +59,19 @@
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
-                "Check for updates"
+                (t :settings-page/check-for-updates)
                 :class "text-sm p-1 mr-1"
                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
-                "Check for updates"
+                (t :settings-page/check-for-updates)
                 :class "text-sm p-1 mr-1"
                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
-                (if update-pending? "Checking ..." "Check for updates")
+                (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
                 :class "text-sm p-1 mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates false))
@@ -80,7 +80,7 @@
                nil)]
 
        [:div.text-sm.cursor
-        {:title (str "Revision: " config/revision)
+        {:title (str (t :settings-page/revision) config/revision)
          :on-click (fn []
                      (notification/show! [:div "Current Revision: "
                                           [:a {:target "_blank"
@@ -93,14 +93,14 @@
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
          :href "https://docs.logseq.com/#/page/changelog"}
-        "What's new?"]]]
+        (t :settings-page/changelog)]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
           "update-not-available"
-          [:p "Your app is up-to-date 🎉"]
+          [:p (t :settings-page/app-updated)]
 
           "update-available"
           (let [{:keys [name url]} payload]
