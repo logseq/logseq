@@ -119,7 +119,7 @@
 
                   content-2 (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
               (recur (conj headings {:body  content
-                                     :raw-body content-2
+                                     :raw-body (string/trimr content-2)
                                      :level (:level (second block))
                                      :uuid  (:id properties)})
                      (rest blocks)
@@ -145,6 +145,7 @@
               content (gp-block/get-block-content utf8-encoded-content block format pos-meta block-pattern)
               uuid (:id properties)]
           (cons {:body content
+                 :raw-body (string/trimr content)
                  :level 1
                  :uuid uuid}
                 (reverse headings)))))))
@@ -152,6 +153,7 @@
 (defn- rebuild-content
   "translate [[[op block]]] to merged content"
   [_base-diffblocks diffs _format]
+  (prn ::rebuild diffs)
   ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
   (let  [ops-fn (fn [ops]
                   (map (fn [[op {:keys [raw-body]}]]
@@ -161,7 +163,7 @@
     (->> diffs
          (mapcat ops-fn)
          (filter seq)
-         (string/join ""))))
+         (string/join "\n"))))
 
 (defn three-way-merge
   [base income current format]
