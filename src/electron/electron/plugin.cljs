@@ -20,7 +20,7 @@
                   (send (name type) (bean/->js payload))))))
 
 (defonce github-api-0 "https://api.github.com")
-(defonce github-api-1 "https://logseq-plugin-services-proxy.logseq.workers.dev/github/api")
+(defonce github-api-1 "https://plugins.logseq.io/github/api")
 (defonce *github-api (atom github-api-0))
 (defonce *last-valid-github-api (atom nil))
 
@@ -55,7 +55,7 @@
               repo         (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
               api          #(str @*github-api "/repos/" repo "/" %)
               endpoint     (api url-suffix)
-              ^js res      (fetch endpoint)
+              ^js res      (fetch endpoint {:timeout (* 1000 5)})
               illegal-text (when-not (= 200 (.-status res)) (.text res))
               _            (when-not (string/blank? illegal-text) (throw (js/Error. (str "Github API Failed(" (.-status res) ") " illegal-text))))
               _            (debug "Release latest:" endpoint ":status" (.-status res))
