@@ -1151,7 +1151,8 @@
                      (doto cm
                        (.on "change" (fn []
                                        (some-> cm (.getDoc) (.getValue) (set-content1!))))))
-                  100)]
+                  ;; wait for the cm loaded
+                  1000)]
           #(js/clearTimeout t)))
       [])
 
