@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.shortcut :as shortcut]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -165,12 +166,8 @@
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
-  {:before     #(notification/show!
-                 (ui/loading (t :graph/persist))
-                 :warning)
-   :on-error   #(notification/show!
-                 (t :graph/persist-error)
-                 :error)})
+  {:before     #(ui/notify-graph-persist!)
+   :on-error   #(ui/notify-graph-persist-error!)})
 
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
@@ -939,6 +936,11 @@
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :modal/keymap-manager [[_]]
+  (state/set-modal!
+    #(shortcut/keymap-pane)
+    {:label "keymap-manager"}))
 
 (defmethod handle :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)

@@ -80,27 +80,17 @@ $ bb lang:missing es --copy
 
 Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
 
-## Fix Untranslated
+### Editing Tips
 
-There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left for your language use :
-
-```shell
-$ bb lang:duplicates LOCALE
-
-Keys with duplicate values found:
-
-|                  :translation-key | :duplicate-value |
-|-----------------------------------+------------------|
-|                          :general |          General |
-|                           :logseq |           Logseq |
-|                               :no |               No |
-```
-
+* Some translations may include punctuation like `:` or `!`. When translating them, please use the punctuation that makes the most sense for your language as you don't have to follow the English ones.
+* Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
 ## Fix Mistakes
 
-Sometimes, we typo a translation key or forget to use it. If this happens,
-the github CI step of `bb lang:validate-translations` will detect these errors
-and tell you what's wrong.
+Sometimes, we typo a translation key or forget to use it. If this happens, the
+github CI step of `bb lang:validate-translations` will detect these errors and
+tell you what's wrong. If you get an error about duplicate translations and this
+is a valid duplication for the language, then add it to `allowed-duplicates` in
+[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj).
 
 ## Add a Language
 

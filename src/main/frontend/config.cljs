@@ -29,6 +29,10 @@
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
+;; this is a feature flag to enable the account tab 
+;; when it launches (when pro plan launches) it should be removed
+(def ENABLE-SETTINGS-ACCOUNT-TAB false)
+
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)
       (def LOGIN-URL
@@ -472,7 +476,7 @@
 (defn get-current-repo-assets-root
   []
   (when-let [repo-dir (and (local-db? (state/get-current-repo))
-                            (get-repo-dir (state/get-current-repo)))]
+                           (get-repo-dir (state/get-current-repo)))]
     (path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path

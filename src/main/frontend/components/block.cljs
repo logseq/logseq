@@ -12,6 +12,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -37,13 +38,11 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -552,7 +551,7 @@
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-down (fn [_e] (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
@@ -1243,17 +1242,7 @@
 (defn- macro-function-cp
   [config arguments]
   (or
-   (when (:query-result config)
-     (when-let [query-result (rum/react (:query-result config))]
-       (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
-                           (common-handler/safe-read-string "failed to parse function")
-                           (query-handler/normalize-query-function query-result)
-                           (str))
-             f (sci/eval-string fn-string)]
-         (when (fn? f)
-           (try (f query-result)
-                (catch :default e
-                  (js/console.error e)))))))
+   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
@@ -1686,7 +1675,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal? (.-target e))
+    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
@@ -1957,11 +1946,12 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
-                                     (str "var(--ls-highlight-color-" bg-color ")")
-                                     bg-color)
-                 :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
-         :class "px-1 with-bg-color"}))
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}
+           :class "px-1 with-bg-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))

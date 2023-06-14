@@ -168,7 +168,6 @@
   ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-           cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
            selection-link? (and selection (gp-mldoc/mldoc-link? format selection))
            [content forward-pos] (cond
@@ -190,7 +189,7 @@
                       (subs value 0 selection-start)
                       content
                       (subs value selection-end))
-           cur-pos (or selection-start cur-pos)]
+           cur-pos (or selection-start (cursor/pos input))]
        (state/set-edit-content! edit-id new-value)
        (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
@@ -2005,7 +2004,7 @@
                   sibling?
                   keep-uuid?
                   cut-paste?
-                  revert-cut-txs]
+                  revert-cut-tx]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
@@ -2047,7 +2046,7 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks
-       :additional-tx revert-cut-txs}
+       :additional-tx revert-cut-tx}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]

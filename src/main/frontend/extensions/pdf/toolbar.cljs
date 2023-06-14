@@ -21,6 +21,7 @@
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 (def *area-mode? (atom false))
 (def *highlight-mode? (atom false))
+#_:clj-kondo/ignore
 (rum/defcontext *highlights-ctx*)
 
 (rum/defc pdf-settings
