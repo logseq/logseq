@@ -2725,19 +2725,21 @@
                                         #{"`"})
                         key)
              (= (get-current-input-char input) key))
-        (do (util/stop e)
-            (cursor/move-cursor-forward input))
+        (do
+          (util/stop e)
+          (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
-        (some? (:editor/action @state/state))
+        (some? @(:editor/action @state/state))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
-        (do (autopair input-id "[" format nil)
-            (util/stop e))
+        (do
+          (autopair input-id "[" format nil)
+          (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-paren-keys key))
