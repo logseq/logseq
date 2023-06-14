@@ -70,7 +70,7 @@ and handles unexpected failure."
   ([block]
    (parse-block block nil))
   ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
-                                                        :or {with-id? true}}]
+                                                   :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)

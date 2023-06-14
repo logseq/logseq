@@ -139,7 +139,7 @@
                  (not (contains? (:file/unlinked-dirs @state/state)
                                  (config/get-repo-dir repo)))))
 
-      ;; (prn "[DEBUG] Outliner transact:")
+      ;; (prn :debug "Outliner transact:")
       ;; (frontend.util/pprint {:txs txs :opts opts})
 
       (try

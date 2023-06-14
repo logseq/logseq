@@ -614,7 +614,7 @@
                                                (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page? 
+(defn block-exists-in-another-page?
   "For sanity check only.
    For renaming file externally, the file is actually deleted and transacted before-hand."
   [db block-uuid current-page-name]

@@ -2,7 +2,10 @@
   "DB-based graph implementation"
   (:require [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as block]
+            [frontend.config :as config]
+            [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -17,8 +20,12 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (string/blank? content)
                 block
-                (let [block (merge block
-                                   (block/parse-block (assoc block :block/content content)))]
+                (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config :markdown))
+                      first-elem-type (first (ffirst ast))
+                      block-with-title? (mldoc/block-with-title? first-elem-type)
+                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
+                      block (merge block
+                                   (block/parse-block (assoc block :block/content content')))]
                   (update block :block/refs remove-non-existed-refs!)))
         block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)]
     (-> block
