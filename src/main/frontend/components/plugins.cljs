@@ -461,14 +461,12 @@
   []
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
         text (t :plugin/auto-check-for-updates)]
-    (rum/use-effect!
-      #(plugin-handler/set-enabled-auto-check-for-updates (boolean enabled))
-      [enabled])
 
     [:div.flex.items-center.justify-between.px-4.py-2
      {:on-click (fn []
                   (let [t (not enabled)]
                     (set-enabled! t)
+                    (plugin-handler/set-enabled-auto-check-for-updates t)
                     (notification/show!
                       [:span text [:strong.pl-1 (if t "ON" "OFF")] " !"]
                       (if t :success :info))))}
