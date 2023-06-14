@@ -55,7 +55,7 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
-(def block-background-colors
+(def built-in-colors
   ["yellow"
    "red"
    "pink"
@@ -64,11 +64,15 @@
    "purple"
    "gray"])
 
+(defn built-in-color?
+  [color]
+  (some #{color} built-in-colors))
+
 (rum/defc menu-background-color
   [add-bgcolor-fn rm-bgcolor-fn]
   [:div.flex.flex-row.justify-between.py-1.px-2.items-center
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-    (for [color block-background-colors]
+    (for [color built-in-colors]
       [:a
        {:title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
@@ -719,12 +723,25 @@
             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
+  ([] (loading (t :loading)))
   ([content] (loading content nil))
   ([content opts]
    [:div.flex.flex-row.items-center.inline
     [:span.icon.flex.items-center (svg/loader-fn opts)
      (when-not (string/blank? content)
        [:span.text.pl-2 content])]]))
+
+(defn notify-graph-persist!
+  []
+  (notification/show!
+   (loading (t :graph/persist))
+   :warning))
+
+(defn notify-graph-persist-error!
+  []
+  (notification/show!
+   (t :graph/persist-error)
+   :error))
 
 (rum/defc rotating-arrow
   [collapsed?]

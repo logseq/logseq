@@ -218,6 +218,11 @@
                              (util/page-name-sanity-lc @*title-value))
                        (db/page-exists? page-name)
                        (db/page-exists? @*title-value))
+        rollback-fn #(do
+                       (reset! *title-value old-name)
+                       (gobj/set (rum/deref input-ref) "value" old-name)
+                       (reset! *edit? true)
+                       (.focus (rum/deref input-ref)))
         confirm-fn (fn []
                      (let [new-page-name (string/trim @*title-value)]
                        (ui/make-confirm-modal
@@ -228,16 +233,7 @@
                                           (close-fn)
                                           (page-handler/rename! (or title page-name) @*title-value)
                                           (reset! *edit? false))
-                         :on-cancel     (fn []
-                                          (reset! *title-value old-name)
-                                          (gobj/set (rum/deref input-ref) "value" old-name)
-                                          (reset! *edit? true)
-                                          (.focus (rum/deref input-ref)))})))
-        rollback-fn #(do
-                       (reset! *title-value old-name)
-                       (gobj/set (rum/deref input-ref) "value" old-name)
-                       (reset! *edit? false)
-                       (when-not untitled? (notification/show! "Illegal page name, can not rename!" :warning)))
+                         :on-cancel     rollback-fn})))
         blur-fn (fn [e]
                   (when (gp-util/wrapped-by-quotes? @*title-value)
                     (swap! *title-value gp-util/unquote-string)
@@ -247,13 +243,16 @@
                     (reset! *edit? false)
 
                     (string/blank? @*title-value)
-                    (rollback-fn)
+                    (do (when-not untitled? (notification/show! (t :page/illegal-page-name) :warning))
+                        (rollback-fn))
 
-                    (and (collide?) whiteboard-page?)
-                    (notification/show! (str "Page “" @*title-value "” already exists!") :error)
+                    (and (collide?) (or whiteboard-page? (model/whiteboard-page? @*title-value)))
+                    (do (notification/show! (t :page/page-already-exists @*title-value) :error)
+                        (rollback-fn))
 
                     (and (date/valid-journal-title? @*title-value) whiteboard-page?)
-                    (notification/show! (str "Whiteboard page cannot be renamed with journal titles!") :error)
+                    (do (notification/show! (t :page/whiteboard-to-journal-error) :error)
+                        (rollback-fn))
 
                     untitled?
                     (page-handler/rename! (or title page-name) @*title-value)
@@ -820,7 +819,7 @@
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (if orphaned-pages?
-          (str (t :remove-orphaned-pages) "?")
+          (t :remove-orphaned-pages)
           (t :page/delete-confirmation))]]]
 
      [:table.table-auto.cp__all_pages_table.mt-4
@@ -856,7 +855,7 @@
                     (close-fn)
                     (doseq [page-name (map :block/name pages)]
                       (page-handler/delete! page-name #()))
-                    (notification/show! (str (t :tips/all-done) "!") :success)
+                    (notification/show! (t :tips/all-done) :success)
                     (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
@@ -1041,7 +1040,7 @@
          [:div.r.flex.items-center.justify-between
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-whiteboards) " ?")]
+            {:html  [:small (t :page/show-whiteboards)]
              :arrow true}
             [:a.button.whiteboard
              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
@@ -1049,7 +1048,7 @@
              (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
           [:div
            (ui/tippy
-            {:html  [:small (str (t :page/show-journals) " ?")]
+            {:html  [:small (t :page/show-journals)]
              :arrow true}
             [:a.button.journal
              {:class    (util/classnames [{:active (boolean @*journal?)}])

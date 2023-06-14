@@ -1946,11 +1946,12 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
-                                     (str "var(--ls-highlight-color-" bg-color ")")
-                                     bg-color)
-                 :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
-         :class "px-1 with-bg-color"}))
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}
+           :class "px-1 with-bg-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))

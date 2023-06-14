@@ -270,7 +270,7 @@
         (if installing-or-updating?
           (t :plugin/updating)
           (if new-version
-            (str (t :plugin/update) " 👉 " new-version)
+            [:span (t :plugin/update) " 👉 " new-version]
             (t :plugin/check-update)))]])
 
     (ui/toggle (not disabled?)
@@ -572,7 +572,7 @@
               :options {:on-click #(reset! *sort-by :stars)}
               :icon    (ui/icon (aim-icon :stars))}
 
-             {:title   (str (t :plugin/title) " (A - Z)")
+             {:title   (t :plugin/title "A - Z")
               :options {:on-click #(reset! *sort-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}])
           {}))
@@ -604,7 +604,7 @@
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath (str root "/preferences.json")))}}
-                   {:title   [:span.flex.items-center (ui/icon "bug") (str (t :plugin/open-logseq-dir) "\u00A0") [:code "~/.logseq"]]
+                   {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath root))}}])
@@ -1218,7 +1218,7 @@
         (if check-pending?
           (notify!
             [:div
-             [:div (str (t :plugin/checking-for-updates))]
+             [:div (t :plugin/checking-for-updates)]
              (when sub-content [:p.opacity-60 sub-content])]
             (ui/loading ""))
           (when uid (notification/clear! uid))))

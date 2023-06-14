@@ -202,7 +202,7 @@
                                  #(do
                                     ;;(if theme (select-a-plugin-theme id))
                                     (notification/show!
-                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                      (t :plugin/update-plugin name (.-version (.-options pl))) :success)
                                     (state/consume-updates-from-coming-plugin! payload true))))
 
                              (do                            ;; register new
@@ -210,7 +210,7 @@
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                  (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (notification/show!
-                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
+                                 (t :plugin/installed-plugin name) :success)))))
 
                        :error
                        (let [error-code  (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
@@ -218,7 +218,7 @@
                              [msg type] (case error-code
 
                                           :no-new-version
-                                          [(str (t :plugin/up-to-date) " :)") :success]
+                                          [(t :plugin/up-to-date ":)") :success]
 
                                           [error-code :error])
                              pending?    (seq (:plugin/updates-pending @state/state))]
