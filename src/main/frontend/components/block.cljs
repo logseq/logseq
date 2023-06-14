@@ -440,7 +440,7 @@
     (ui/catch-error
      [:span.warning full_text]
      (if (and (gp-config/local-asset? href)
-              (config/local-db? (state/get-current-repo)))
+              (config/local-file-based-graph? (state/get-current-repo)))
        (asset-link config title href metadata full_text)
        (let [href (cond
                     (util/starts-with? href "http")
@@ -1020,7 +1020,7 @@
 (rum/defc audio-link
   [config url href _label metadata full_text]
   (if (and (gp-config/local-asset? href)
-           (config/local-db? (state/get-current-repo)))
+           (config/local-file-based-graph? (state/get-current-repo)))
     (asset-link config nil href metadata full_text)
     (let [href (cond
                  (util/starts-with? href "http")

@@ -144,7 +144,7 @@
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 (gp-util/remove-nils))
-          m (if (or (config/db-only? (state/get-current-repo))
+          m (if (or (config/db-based-graph? (state/get-current-repo))
                     (state/enable-block-timestamps?))
               (block-with-timestamps m)
               m)

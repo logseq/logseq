@@ -105,7 +105,7 @@
                 (cond
                   (and (not (seq (db/get-files config/local-repo)))
                        ;; Not native local directory
-                       (not (some config/local-db? (map :url repos)))
+                       (not (some config/local-file-based-graph? (map :url repos)))
                        (not (mobile-util/native-platform?)))
                   ;; will execute `(state/set-db-restoring! false)` inside
                   (repo-handler/setup-local-repo-if-not-exists!)

@@ -356,12 +356,12 @@
 (defonce local-handle "handle")
 (defonce db-version-prefix "logseq_db_")
 
-(defn local-db?
+(defn local-file-based-graph?
   [s]
   (and (string? s)
        (string/starts-with? s local-db-prefix)))
 
-(defn db-only?
+(defn db-based-graph?
   [s]
   (and (string? s)
        (string/starts-with? s db-version-prefix)))
@@ -387,13 +387,13 @@
       (js/console.error "BUG: nil repo")
       nil)
 
-    (db-only? repo-url)
+    (db-based-graph? repo-url)
     nil
 
-    (and (util/electron?) (local-db? repo-url))
+    (and (util/electron?) (local-file-based-graph? repo-url))
     (get-local-dir repo-url)
 
-    (and (mobile-util/native-platform?) (local-db? repo-url))
+    (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
     (let [dir (get-local-dir repo-url)]
       (if (string/starts-with? dir "file://")
         dir
@@ -405,7 +405,7 @@
 
     ;; nfs, browser-fs-access
     ;; Format: logseq_local_{dir-name}
-    (local-db? repo-url)
+    (local-file-based-graph? repo-url)
     (string/replace-first repo-url local-db-prefix "")
 
     ;; unit test
@@ -441,7 +441,7 @@
 (defn get-repo-fpath
   [repo-url path]
   (if (and (or (util/electron?) (mobile-util/native-platform?))
-           (local-db? repo-url))
+           (local-file-based-graph? repo-url))
     (path/path-join (get-repo-dir repo-url) path)
     (util/node-path.join (get-repo-dir repo-url) path)))
 
@@ -480,7 +480,7 @@
 
 (defn get-current-repo-assets-root
   []
-  (when-let [repo-dir (and (local-db? (state/get-current-repo))
+  (when-let [repo-dir (and (local-file-based-graph? (state/get-current-repo))
                             (get-repo-dir (state/get-current-repo)))]
     (path/path-join repo-dir "assets")))
 

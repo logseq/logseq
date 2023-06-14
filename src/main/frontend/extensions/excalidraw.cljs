@@ -162,7 +162,7 @@
   (let [repo (state/get-current-repo)
         granted? (state/sub [:nfs/user-granted? repo])]
     ;; Web granted
-    (when-not (and (config/local-db? repo)
+    (when-not (and (config/local-file-based-graph? repo)
                    (not granted?)
                    (not (util/electron?))
                    (not (mobile-util/native-platform?)))

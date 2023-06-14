@@ -139,7 +139,7 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (when (and (config/db-only? repo) (not (:skip-persist? tx-meta)))
+        (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta)))
           (let [t-writer (t/writer :json)
                 upsert-blocks (->> blocks
                                    (remove (fn [b] (contains? deleted-block-uuids (:block/uuid b))))

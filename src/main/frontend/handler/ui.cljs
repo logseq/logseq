@@ -136,7 +136,7 @@
 
 (defn exec-js-if-exists-&-allowed!
   [t]
-  (when-not (config/db-only? (state/get-current-repo))
+  (when-not (config/db-based-graph? (state/get-current-repo))
     (when-let [href (or
                      (state/get-custom-js-link)
                      (config/get-custom-js-path))]

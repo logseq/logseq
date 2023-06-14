@@ -266,7 +266,7 @@
 (defn get-local-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (when (config/local-db? repo)
+    (when (config/local-file-based-graph? repo)
       repo)))
 
 (defn ask-permission
@@ -379,7 +379,7 @@
 ;; FIXME: config may not be loaded when the graph is ready.
 (defmethod handle :graph/ready
   [[_ repo]]
-  (when (config/local-db? repo)
+  (when (config/local-file-based-graph? repo)
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
       (when (and (not dir-exists?)
@@ -388,7 +388,7 @@
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
   ;; Replace initial fs watcher
-  (when-not (config/db-only? repo)
+  (when-not (config/db-based-graph? repo)
     (fs-watcher/load-graph-files! repo))
   ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?

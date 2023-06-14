@@ -1504,7 +1504,7 @@
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
-    (when (config/local-db? repo)
+    (when (config/local-file-based-graph? repo)
       (-> (save-assets! block repo (js->clj files))
           ;; FIXME: only the first asset is handled
           (p/then

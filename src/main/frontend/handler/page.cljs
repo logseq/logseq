@@ -113,14 +113,14 @@
 
         (and create-title?
              (not whiteboard?)
-             (not (config/db-only? (state/get-current-repo))))
+             (not (config/db-based-graph? (state/get-current-repo))))
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page
            properties-block])
 
         (and (seq properties)
              (not whiteboard?)
-             (not (config/db-only? (state/get-current-repo))))
+             (not (config/db-based-graph? (state/get-current-repo))))
         [page (editor-handler/properties-block properties format page-entity)]
 
         :else
@@ -838,8 +838,8 @@
                (not (state/loading-files? repo))
                (not (state/whiteboard-route?)))
       (state/set-today! (date/today))
-      (when (or (config/db-only? repo)
-                (config/local-db? repo)
+      (when (or (config/db-based-graph? repo)
+                (config/local-file-based-graph? repo)
                 (and (= "local" repo) (not (mobile-util/native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
@@ -854,7 +854,7 @@
                          (ui-handler/re-render-root!)
                          (plugin-handler/hook-plugin-app :today-journal-created {:title today-page}))]
           (when (db/page-empty? repo today-page)
-            (if (config/db-only? repo)
+            (if (config/db-based-graph? repo)
               (create-f)
               (p/let [file-name (date/journal-title->default title)
                       file-rpath (str (config/get-journals-directory) "/" file-name "."

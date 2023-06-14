@@ -31,7 +31,7 @@
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
-    (let [local? (config/local-db? url)]
+    (let [local? (config/local-file-based-graph? url)]
       [:span.flex.items-center
        (if local?
          (let [local-dir (config/get-local-dir url)
@@ -145,8 +145,8 @@
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
                     (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
-                      (let [local? (config/local-db? url)
-                            db-only? (config/db-only? url)
+                      (let [local? (config/local-file-based-graph? url)
+                            db-only? (config/db-based-graph? url)
                             repo-path (cond
                                         local? (db/get-repo-name url)
                                         db-only? url
@@ -168,7 +168,7 @@
                                                           (state/pub-event! [:graph/switch url])
                                                           (state/pub-event! [:graph/pull-down-remote-graph graph]))))}})))
                     switch-repos)
-        refresh-link (let [nfs-repo? (config/local-db? current-repo)]
+        refresh-link (let [nfs-repo? (config/local-file-based-graph? current-repo)]
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
                                   (or (nfs-handler/supported?)
@@ -197,7 +197,7 @@
                :options {:on-click #(state/pub-event! [:graph/new-db-graph])}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
-              (when-not (config/db-only? current-repo)
+              (when-not (config/db-based-graph? current-repo)
                 reindex-link)
               new-window-link])
      (remove nil?))))

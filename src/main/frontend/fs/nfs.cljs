@@ -65,7 +65,7 @@
 
 (defn check-directory-permission!
   [repo]
-  (when (config/local-db? repo)
+  (when (config/local-file-based-graph? repo)
     (p/let [repo-dir (config/get-repo-dir repo)
             handle-path (str "handle/" repo-dir)
             handle (idb/get-item handle-path)]

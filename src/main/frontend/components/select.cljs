@@ -119,7 +119,7 @@
                         {:value (text-util/get-graph-name-from-path
                                  ;; TODO: Use helper when a common one is refactored
                                  ;; from components.repo
-                                 (if (config/local-db? url)
+                                 (if (config/local-file-based-graph? url)
                                    (config/get-local-dir url)
                                    (db/get-repo-path url)))
                          :id (config/get-repo-dir url)
@@ -142,7 +142,7 @@
                             {:value (text-util/get-graph-name-from-path
                                      ;; TODO: Use helper when a common one is refactored
                                      ;; from components.repo
-                                     (if (config/local-db? url)
+                                     (if (config/local-file-based-graph? url)
                                        (config/get-local-dir url)
                                        (db/get-repo-path url)))
                              :id (config/get-repo-dir url)
