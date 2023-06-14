@@ -28,7 +28,7 @@
             (when-let [misspelled-word (not-empty (.-misspelledWord params))]
               (. menu append
                  (MenuItem. (clj->js {:label
-                                      "Add to dictionary"
+                                      (t :electron/context-menu/add-to-dictionary)
                                       :click
                                       #(.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word))})))
               (. menu append (MenuItem. #js {:type "separator"})))
@@ -39,7 +39,7 @@
                                  :click #(. web-contents showDefinitionForSelection)})))
             (when has-text?
               (. menu append
-                 (MenuItem. #js {:label "Search with Google"
+                 (MenuItem. #js {:label (t :electron/context-menu/search-with-google)
                                  :click #(let [url (js/URL. "https://www.google.com/search")]
                                            (.. url -searchParams (set "q" selection-text))
                                            (.. shell (openExternal (.toString url))))}))
@@ -48,20 +48,20 @@
             (when editable?
               (when has-text?
                 (. menu append
-                   (MenuItem. #js {:label "Cut"
+                   (MenuItem. #js {:label (t :electron/context-menu/cut)
                                    :enabled (.-canCut edit-flags)
                                    :role "cut"}))
                 (. menu append
-                   (MenuItem. #js {:label "Copy"
+                   (MenuItem. #js {:label (t :electron/context-menu/copy)
                                    :enabled (.-canCopy edit-flags)
                                    :role "copy"})))
 
               (. menu append
-                 (MenuItem. #js {:label "Paste"
+                 (MenuItem. #js {:label (t :electron/context-menu/paste)
                                  :enabled (.-canPaste edit-flags)
                                  :role "paste"}))
               (. menu append
-                 (MenuItem. #js {:label "Select All"
+                 (MenuItem. #js {:label (t :electron/context-menu/select-all)
                                  :enabled (.-canSelectAll edit-flags)
                                  :role "selectAll"})))
 
