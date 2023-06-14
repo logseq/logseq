@@ -10,7 +10,6 @@ import type {
   TLCallback,
   TLEventMap,
   TLEvents,
-  TLShortcut,
   TLStateEvents,
   TLSubscription,
   TLSubscriptionEventInfo,
