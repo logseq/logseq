@@ -494,7 +494,7 @@
  :shortcut.category/plugins                            "Расширения"
  :window/minimize                                      "Свернуть"
  :window/maximize                                      "Развернуть"
- :window/restore                                       "Восстановить"
+ :window/restore                                       "Свернуть в окно"
  :window/close                                         "Закрыть"
  :window/exit-fullscreen                               "Выйти из полноэкранного режима"
 
