@@ -898,6 +898,42 @@
   }
 }
 
+.ui-fenced-code {
+  &-wrap {
+    &:not(.is-active) {
+      .ui-fenced-code-editor {
+        display: none !important;
+      }
+    }
+
+    &.is-active {
+      .ui-fenced-code-result {
+        @apply pt-2;
+      }
+    }
+  }
+
+  &-result {
+    @apply relative;
+
+    > .actions {
+      @apply absolute top-2 right-1 z-10 opacity-0 transition-opacity;
+
+      .ui__button {
+        font-size: 13px;
+        padding: 4px;
+        margin-left: 6px;
+      }
+    }
+
+    &:hover {
+      > .actions {
+        @apply opacity-100;
+      }
+    }
+  }
+}
+
 .lsp-frame-readme {
   margin: -2rem;
   min-height: 75vh;

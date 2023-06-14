@@ -5,13 +5,13 @@
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "4295d5df0458cc06a09c5d506510ee49b785407d"}
+   :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
   {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.10.05"}
+ {clj-kondo/clj-kondo {:version "2023.05.26"}
   org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
  {dev:desktop-watch

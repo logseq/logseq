@@ -1946,11 +1946,12 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
-                                     (str "var(--ls-highlight-color-" bg-color ")")
-                                     bg-color)
-                 :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
-         :class "px-1 with-bg-color"}))
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}
+           :class "px-1 with-bg-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))
@@ -3115,14 +3116,15 @@
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div {:ref (fn [el]
-                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+          [:div.ui-fenced-code-editor
+           {:ref (fn [el]
+                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
              (nil? inside-portal?) nil
 
              (or (:slide? config) inside-portal?)
              (highlight/highlight (str (random-uuid))
-                                  {:class (str "language-" language)
+                                  {:class     (str "language-" language)
                                    :data-lang language}
                                   code)
 
@@ -3291,10 +3293,14 @@
             [:sup.fn (str name "↩︎")]])]])
 
       ["Src" options]
-      [:div.cp__fenced-code-block
-       (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-         (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
-         (src-cp config options html-export?))]
+      (let [lang (util/safe-lower-case (:language options))]
+        [:div.cp__fenced-code-block
+         {:data-lang lang}
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type lang)]
+           [:div.ui-fenced-code-wrap
+            (src-cp config options html-export?)
+            (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
+           (src-cp config options html-export?))])
 
       :else
       "")
