@@ -182,7 +182,10 @@
     [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
      (cond-> options
              (true? no-padding?)
-             (assoc :class (str class " no-padding")))
+             (assoc :class (str class " no-padding"))
+
+             true
+             (dissoc :no-padding?))
 
      [:span.flex-1 child]
      (when shortcut
