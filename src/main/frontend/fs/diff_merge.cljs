@@ -91,44 +91,77 @@
                   (reverse headings))))))))
 
 
-(defn- prepend-block-lines
-  "prepend prefix to every lines of content except first"
-  [fisrt-prefix prefix content]
-  (let [lines (string/split-lines content)]
-    (if (<= (count lines) 1)
-      (str fisrt-prefix content)
-      (str (str fisrt-prefix (first lines))
-           "\n"
-           (->> (rest lines)
-                (map (fn [line] (str prefix line)))
-                (string/join "\n")))
-      )))
+(defn- get-sub-content-from-pos-meta
+  "Replace gp-block/get-block-content, return bare content, without any trim"
+  [raw-content pos-meta]
+  (let [{:keys [start_pos end_pos]} pos-meta]
+    (utf8/substring raw-content start_pos end_pos)))
+
+(defn- ast->diff-blocks-alt
+  "Prepare the blocks for diff-merge
+   blocks: ast of blocks
+   content: corresponding raw content"
+  [blocks content format {:keys [user-config block-pattern]}]
+  {:pre [(string? content) (contains? #{:markdown :org} format)]}
+  (let [utf8-encoded-content (utf8/encode content)]
+    (loop [headings []
+           blocks (reverse blocks)
+           properties {}
+           end-pos (.-length utf8-encoded-content)]
+      (cond
+        (seq blocks)
+        (let [[block pos-meta] (first blocks)
+              ;; fix start_pos for properties
+              fixed-pos-meta (assoc pos-meta :end_pos end-pos)]
+          (cond
+            (gp-block/heading-block? block)
+            (let [content (gp-block/get-block-content utf8-encoded-content (second block) format fixed-pos-meta block-pattern)
+
+                  content-2 (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
+              (recur (conj headings {:body  content
+                                     :raw-body content-2
+                                     :level (:level (second block))
+                                     :uuid  (:id properties)})
+                     (rest blocks)
+                     {}
+                     (:start_pos fixed-pos-meta))) ;; The current block's start pos is the next block's end pos
+
+            (gp-property/properties-ast? block)
+            (let [new-props (:properties (gp-block/extract-properties (second block) (assoc user-config :format format)))]
+              ;; sending the current end pos to next, as it's not finished yet
+              ;; supports multiple properties sub-block possible in future
+              (recur headings (rest blocks) (merge properties new-props) (:end_pos fixed-pos-meta)))
+
+            :else
+            (recur headings (rest blocks) properties (:end_pos fixed-pos-meta))))
+
+        (empty? properties)
+        (reverse headings)
+
+        ;; Add pre-blocks
+        :else ;; ??? unreachable
+        (let [[block _] (first blocks)
+              pos-meta {:start_pos 0 :end_pos end-pos}
+              content (gp-block/get-block-content utf8-encoded-content block format pos-meta block-pattern)
+              uuid (:id properties)]
+          (cons {:body content
+                 :level 1
+                 :uuid uuid}
+                (reverse headings)))))))
 
 (defn- rebuild-content
   "translate [[[op block]]] to merged content"
-  [_base-diffblocks diffs format]
+  [_base-diffblocks diffs _format]
   ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
-  (let  [level-prefix-fn (fn [level]
-                           (when (= format :markdown)
-                             (str (apply str (repeat (dec level) "\t"))
-                                  "  ")))
-         heading-prefix-fn (fn [level]
-                             (when (= format :markdown)
-                               (str (apply str (repeat (dec level) "\t"))
-                                    "- ")))
-         ops-fn (fn [ops]
-                  (map (fn [[op {:keys [body level]}]]
+  (let  [ops-fn (fn [ops]
+                  (map (fn [[op {:keys [raw-body]}]]
                          (when (or (= op 0) (= op 1)) ;; equal or insert
-                           (if (= format :org)
-                             (str (apply str (repeat level "*")) " " body)
-                             (prepend-block-lines (heading-prefix-fn level)
-                                                  (level-prefix-fn level)
-                                                  body))))
+                           raw-body))
                        ops))]
     (->> diffs
          (mapcat ops-fn)
          (filter seq)
-         (string/join "\n"))))
+         (string/join ""))))
 
 (defn three-way-merge
   [base income current format]
@@ -140,11 +173,11 @@
                   {:block-pattern "-"})
         merger (Merger.)
         base-ast (->ast base)
-        base-diffblocks (ast->diff-blocks base-ast base format options)
+        base-diffblocks (ast->diff-blocks-alt base-ast base format options)
         income-ast (->ast income)
-        income-diffblocks (ast->diff-blocks income-ast income format options)
+        income-diffblocks (ast->diff-blocks-alt income-ast income format options)
         current-ast (->ast current)
-        current-diffblocks (ast->diff-blocks current-ast current format options)
+        current-diffblocks (ast->diff-blocks-alt current-ast current format options)
         branch-diffblocks [income-diffblocks current-diffblocks]
         merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
         merged-diff (bean/->clj merged)
