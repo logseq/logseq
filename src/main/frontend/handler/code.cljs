@@ -18,9 +18,12 @@
     (when editor
       (.save editor)
       (let [textarea (.getTextArea editor)
+            ds (.-dataset textarea)
             value (gobj/get textarea "value")
-            default-value (gobj/get textarea "defaultValue")]
+            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))]
         (when (not= value default-value)
+          ;; update default value for the editor initial state
+          (set! ds -v value)
           (cond
             ;; save block content
             (:block/uuid config)
