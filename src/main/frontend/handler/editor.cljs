@@ -1874,8 +1874,8 @@
       (and (= content "1. ") (= last-input-char " ") input-id edit-block
            (not (own-order-number-list? edit-block)))
       (p/do!
-        (state/pub-event! [:editor/toggle-own-number-list edit-block])
-        (state/set-edit-content! input-id ""))
+       (state/pub-event! [:editor/toggle-own-number-list edit-block])
+       (state/set-edit-content! input-id ""))
 
       (and (= last-input-char commands/command-trigger)
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))

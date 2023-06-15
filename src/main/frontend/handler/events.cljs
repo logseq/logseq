@@ -967,16 +967,20 @@
   (let [chan (state/get-events-chan)]
     (async/go-loop []
       (let [[payload d] (async/<! chan)]
-        (-> (p/promise (handle payload))
-            (p/then (fn [v]
-                      (p/resolve! d v)))
-            (p/catch (fn [error]
-                       (let [type :handle-system-events/failed]
-                         (js/console.error (str type) (clj->js payload) "\n" error)
-                         (state/pub-event! [:capture-error {:error error
-                                                            :payload {:type type
-                                                                      :payload payload}}])
-                         (p/reject! d error))))))
+        (->
+         (try
+           (p/resolved (handle payload))
+           (catch :default error
+             (p/rejected error)))
+         (p/then (fn [result]
+                   (p/resolve! d result)))
+         (p/catch (fn [error]
+                    (let [type :handle-system-events/failed]
+                      (js/console.error (str type) (clj->js payload) "\n" error)
+                      (state/pub-event! [:capture-error {:error error
+                                                         :payload {:type type
+                                                                   :payload payload}}])
+                      (p/reject! d error))))))
       (recur))
     chan))
 
