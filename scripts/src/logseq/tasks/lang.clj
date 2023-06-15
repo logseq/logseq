@@ -162,7 +162,7 @@
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :es #{:settings-page/tab-general :settings-page/tab-editor}
+   :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color}
    :it #{:plugins}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
