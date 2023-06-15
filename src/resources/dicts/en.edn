@@ -200,7 +200,7 @@
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
  :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
  :settings-page/preferred-outdenting "Logical outdenting"
- :settings-page/preferred-outdenting-tip "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled. "
+ :settings-page/preferred-outdenting-tip "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled "
  :settings-page/preferred-outdenting-tip-more "→ Learn more"
  :settings-page/show-full-blocks "Show all lines of a block reference"
  :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in"
@@ -515,14 +515,8 @@
  :header/go-back                     "Go back"
  :header/go-forward                  "Go forward"
 
- :electron.context-menu/add-to-dictionary "Add to dictionary"
- :electron.context-menu/search-with-google "Search with Google"
- :electron.context-menu/cut "Cut"
- :electron.context-menu/copy "Copy"
- :electron.context-menu/paste "Paste"
- :electron.context-menu/select-all "Select All"
-   ;; Commands are nested for now to stay in sync with the shortcuts system.
-   ;; Other languages should not nest keys under :commands
+ ;; Commands are nested for now to stay in sync with the shortcuts system.
+ ;; Other languages should not nest keys under :commands
  :commands
  {:date-picker/complete         "Date picker: Choose selected day"
   :date-picker/prev-day         "Date picker: Select previous day"
