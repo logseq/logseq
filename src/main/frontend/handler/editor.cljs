@@ -2004,7 +2004,7 @@
                   sibling?
                   keep-uuid?
                   cut-paste?
-                  revert-cut-txs]
+                  revert-cut-tx]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
@@ -2046,7 +2046,7 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks
-       :additional-tx revert-cut-txs}
+       :additional-tx revert-cut-tx}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]

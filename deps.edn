@@ -54,5 +54,5 @@
                    :main-opts ["-m" "cljs-test-runner.main" "-d" "src/bench" "-n" "frontend.benchmark-test-runner"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.12.08"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

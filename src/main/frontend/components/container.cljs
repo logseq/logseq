@@ -543,7 +543,7 @@
          db-restoring?
          [:div.mt-20
           [:div.ls-center
-           (ui/loading (t :loading))]]
+           (ui/loading)]]
 
          :else
          [:div
