@@ -976,7 +976,6 @@
                    (p/resolve! d result)))
          (p/catch (fn [error]
                     (let [type :handle-system-events/failed]
-                      (js/console.error (str type) (clj->js payload) "\n" error)
                       (state/pub-event! [:capture-error {:error error
                                                          :payload {:type type
                                                                    :payload payload}}])
