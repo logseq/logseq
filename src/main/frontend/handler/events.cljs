@@ -952,7 +952,8 @@
       (when-let [block (cond-> blocks batch? (first))]
         (if (editor-handler/own-order-number-list? block)
           (editor-handler/remove-block-own-order-list-type! block)
-          (editor-handler/make-block-as-own-order-list! block))))))
+          (editor-handler/make-block-as-own-order-list! block))))
+    :test))
 
 (defmethod handle :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))
@@ -966,15 +967,17 @@
   []
   (let [chan (state/get-events-chan)]
     (async/go-loop []
-      (let [payload (async/<! chan)]
-        (try
-          (handle payload)
-          (catch :default error
-            (let [type :handle-system-events/failed]
-              (js/console.error (str type) (clj->js payload) "\n" error)
-              (state/pub-event! [:capture-error {:error error
-                                                 :payload {:type type
-                                                           :payload payload}}])))))
+      (let [[payload d] (async/<! chan)]
+        (-> (p/promise (handle payload))
+            (p/then (fn [v]
+                      (p/resolve! d v)))
+            (p/catch (fn [error]
+                       (let [type :handle-system-events/failed]
+                         (js/console.error (str type) (clj->js payload) "\n" error)
+                         (state/pub-event! [:capture-error {:error error
+                                                            :payload {:type type
+                                                                      :payload payload}}])
+                         (p/reject! d error))))))
       (recur))
     chan))
 
