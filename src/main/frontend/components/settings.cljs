@@ -127,10 +127,10 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled. "
+     (t :settings-page/preferred-outdenting-tip)
      [:a.text-sm
       {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
-      "→ Learn more"]]
+      (t :settings-page/preferred-outdenting-tip-more)]]
     [:img {:src    "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
            :width  500
            :height 500}]]])
@@ -141,7 +141,7 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     "This option controls whether to expand the block references automatically when zoom-in."]
+     (t :settings-page/auto-expand-block-refs-tip)]
     [:img {:src    "https://user-images.githubusercontent.com/28241963/225818326-118deda9-9d1e-477d-b0ce-771ca0bcd976.gif"
            :width  500
            :height 500}]]])
