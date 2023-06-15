@@ -200,16 +200,49 @@ SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
 
     (let [org-property ":PROPERTIES:\n:query-table: true\n:END:"]
       (are [x y] (= (property/with-built-in-properties {:query-table true} x :org) y)
-       content
-       (str org-property "\n" content)
+        content
+        (str org-property "\n" content)
 
-       "title"
-       (str "title\n" org-property)
+        "title"
+        (str "title\n" org-property)
 
-       "title\nbody"
-       (str "title\n" org-property "\nbody")
+        "title\nbody"
+        (str "title\n" org-property "\nbody")
 
-       "1. list"
-       (str org-property "\n1. list")))))
+        "1. list"
+        (str org-property "\n1. list")))))
 
-#_(cljs.test/run-tests)
+(deftest get-visible-ordered-properties
+  (testing "basic cases"
+    (are [x y expected] (= expected (property/get-visible-ordered-properties x y {}))
+      ;; returns in property order
+      {:prop "val" :prop2 "val2"} [:prop2 :prop]
+      [[:prop2 "val2"] [:prop "val"]]
+      ;; returns empty non-nil value if properties is non-nil
+      {} [:prop]
+      '()
+      ;; returns nil if properties is nil
+      nil []
+      nil))
+
+  (testing "hidden properties"
+    (are [x y z expected] (= expected (property/get-visible-ordered-properties x y z))
+      ;; page block
+      {:logseq.order-list-type "number" :foo "bar"}  [:logseq.order-list-type :foo] {:pre-block false}
+      [[:foo "bar"]]
+      ;; normal block
+      {:logseq.order-list-type "number" :foo "bar"}  [:logseq.order-list-type :foo] {:pre-block false}
+      [[:foo "bar"]]))
+
+  (testing "hidden editable properties"
+    (are [x y z expected] (= expected (property/get-visible-ordered-properties x y z))
+      ;; page block
+      {:title "foo"} [:title] {:pre-block? true}
+      '()
+      {:title "foo" :foo "bar"} [:title :foo] {:pre-block? true}
+      [[:foo "bar"]]
+      ;; normal block
+      {:logseq.table.version 2} [:logseq.table.version] {:pre-block? false}
+      '()
+      {:logseq.table.version 2 :foo "bar"} [:logseq.table.version :foo] {:pre-block? false}
+      [[:foo "bar"]])))
