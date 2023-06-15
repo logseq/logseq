@@ -76,6 +76,7 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
+  pdf: ['Links'],
 }
 
 export const withFillShapes = Object.entries(shapeMapping)

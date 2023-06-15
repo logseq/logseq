@@ -1183,3 +1183,15 @@ button.tl-shape-links-panel-item-remove-button {
     opacity: 1;
   }
 }
+
+.tl-pdf-container {
+  .extensions__pdf-container {
+    position: static !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .extensions__pdf-header {
+    display: none;
+  }
+}

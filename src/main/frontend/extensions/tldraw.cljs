@@ -7,6 +7,8 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.extensions.pdf.core :as pdf]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -45,6 +47,12 @@
 (rum/defc tweet
   [props]
   (ui/tweet-embed (gobj/get props "tweetId")))
+
+(rum/defc pdf
+  [props]
+  (let [pdf-current (state/sub :pdf/current)
+        pdf (pdf-assets/inflate-asset (gobj/get props "src"))]
+    (pdf/pdf-container (or pdf-current pdf))))
 
 (rum/defc block-reference
   [props]
@@ -86,6 +94,7 @@
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :Tweet tweet
+                       :Pdf pdf
                        :PageName page-name-link
                        :BacklinksCount references-count
                        :BlockReference block-reference
@@ -105,6 +114,7 @@
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))

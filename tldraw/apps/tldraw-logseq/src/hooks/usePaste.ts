@@ -17,6 +17,7 @@ import {
   HTMLShape,
   IFrameShape,
   ImageShape,
+  PdfShape,
   LogseqPortalShape,
   VideoShape,
   YouTubeShape,
@@ -36,27 +37,25 @@ const isValidURL = (url: string) => {
   }
 }
 
-interface VideoImageAsset extends TLAsset {
+interface Asset extends TLAsset {
   size?: number[]
 }
 
-const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
-const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
+const assetExtensions = {
+  'image': ['.png', '.svg', '.jpg', '.jpeg', '.gif'],
+  'video': ['.mp4', '.webm', '.ogg'],
+  'pdf': ['.pdf']
+}
 
 function getFileType(filename: string) {
   // Get extension, verify that it's an image
   const extensionMatch = filename.match(/\.[0-9a-z]+$/i)
-  if (!extensionMatch) {
-    return 'unknown'
-  }
+  if (!extensionMatch) return 'unknown'
   const extension = extensionMatch[0].toLowerCase()
-  if (IMAGE_EXTENSIONS.includes(extension)) {
-    return 'image'
-  }
-  if (VIDEO_EXTENSIONS.includes(extension)) {
-    return 'video'
-  }
-  return 'unknown'
+
+  const [type, _extensions] = Object.entries(assetExtensions).find(([_type, extensions]) => extensions.includes(extension)) ?? ['unknown', null]
+
+  return type
 }
 
 type MaybeShapes = TLShapeModel[] | null | undefined
@@ -96,23 +95,23 @@ const handleCreatingShapes = async (
   { point, shiftKey, dataTransfer, fromDrop }: TLPasteEventInfo,
   handlers: LogseqContextValue['handlers']
 ) => {
-  let imageAssetsToCreate: VideoImageAsset[] = []
+  let imageAssetsToCreate: Asset[] = []
   let assetsToClone: TLAsset[] = []
   const bindingsToCreate: TLBinding[] = []
 
-  async function createAssetsFromURL(url: string, isVideo: boolean): Promise<VideoImageAsset> {
+  async function createAssetsFromURL(url: string, type: string): Promise<Asset> {
     // Do we already have an asset for this image?
     const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
     if (existingAsset) {
-      return existingAsset as VideoImageAsset
+      return existingAsset as Asset
     }
 
     // Create a new asset for this image
-    const asset: VideoImageAsset = {
+    const asset: Asset = {
       id: uniqueId(),
-      type: isVideo ? 'video' : 'image',
+      type: type,
       src: url,
-      size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
+      size: await getSizeFromSrc(handlers.makeAssetUrl(url), type),
     }
     return asset
   }
@@ -123,7 +122,7 @@ const handleCreatingShapes = async (
       .map(async file => {
         try {
           const dataurl = await handlers.saveAsset(file)
-          return await createAssetsFromURL(dataurl, getFileType(file.name) === 'video')
+          return await createAssetsFromURL(dataurl, getFileType(file.name))
         } catch (err) {
           console.error(err)
         }
@@ -175,8 +174,22 @@ const handleCreatingShapes = async (
       imageAssetsToCreate = assets
 
       return assets.map((asset, i) => {
-        const defaultProps =
-          asset.type === 'video' ? VideoShape.defaultProps : ImageShape.defaultProps
+        let defaultProps = null
+
+        switch (asset.type) {
+          case 'video':
+            defaultProps = VideoShape.defaultProps
+            break
+          case 'image':
+            defaultProps = ImageShape.defaultProps
+            break
+          case 'pdf':
+            defaultProps = PdfShape.defaultProps
+            break
+          default:
+            return null
+        }
+
         const newShape = {
           ...defaultProps,
           id: uniqueId(),
