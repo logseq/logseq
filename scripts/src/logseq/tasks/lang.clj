@@ -166,7 +166,8 @@
    :it #{:plugins}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
-   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards}
+   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
+            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards 
