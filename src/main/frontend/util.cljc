@@ -607,7 +607,7 @@
          (str prefix new-value)))
      s)))
 
-(defonce escape-chars "[]{}().+*?|")
+(def escape-chars "[]{}().+*?|$")
 
 (defn escape-regex-chars
   "Escapes characters in string `old-value"
