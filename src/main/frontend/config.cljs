@@ -495,3 +495,5 @@
 (defn get-block-hidden-properties
   []
   (:block-hidden-properties (state/get-config)))
+
+(defonce page-ref-special-chars "`~`^")

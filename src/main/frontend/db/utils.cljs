@@ -5,7 +5,8 @@
             [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [clojure.string :as string]))
 
 ;; transit serialization
 
@@ -60,6 +61,27 @@
          (d/entity db id-or-lookup-ref))
        (d/entity db id-or-lookup-ref)))))
 
+(defn special-id->page
+  "Convert special id backs to page name."
+  [content refs]
+  (reduce
+   (fn [content ref]
+     (if (:block/name ref)
+       (string/replace content (str config/page-ref-special-chars (:block/uuid ref)) (:block/name ref))
+       content))
+   content
+   refs))
+
+(defn update-block-content
+  "Replace `[[internal-id]]` with `[[page name]]`"
+  [item eid]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (if-let [content (:block/content item)]
+      (let [refs (:block/refs (entity eid))]
+        (assoc item :block/content (special-id->page content refs)))
+      item)
+    item))
+
 (defn pull
   ([eid]
    (pull (state/get-current-repo) '[*] eid))
@@ -67,12 +89,8 @@
    (pull (state/get-current-repo) selector eid))
   ([repo selector eid]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull db
-               selector
-               eid)
-       (catch :default _e
-         nil)))))
+     (let [result (d/pull db selector eid)]
+       (update-block-content result eid)))))
 
 (defn pull-many
   ([eids]
@@ -81,10 +99,9 @@
    (pull-many (state/get-current-repo) selector eids))
   ([repo selector eids]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull-many db selector eids)
-       (catch :default e
-         (js/console.error e))))))
+     (let [selector (if (some #{:db/id} selector) selector (conj selector :db/id))]
+       (->> (d/pull-many db selector eids)
+            (map #(update-block-content % (:db/id %))))))))
 
 (defn transact!
   ([tx-data]

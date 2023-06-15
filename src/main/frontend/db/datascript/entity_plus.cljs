@@ -1,19 +1,29 @@
 (ns frontend.db.datascript.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity"
-  (:require [datascript.impl.entity :as entity :refer [Entity]]
-            [datascript.core :as d]
-            [cljs.core]))
+  (:require [cljs.core]
+            [datascript.impl.entity :as entity :refer [Entity]]
+            [frontend.state :as state]
+            [frontend.config :as config]
+            [frontend.db.utils :as db-utils]))
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
-   (or (get (.-kv e) k)
-       (lookup-entity e k default-value))))
+   (if (and (= k :block/content) (config/db-based-graph? (state/get-current-repo)))
+     (let [result (lookup-entity e k default-value)
+           refs (:block/refs e)]
+       (or
+        (if (seq refs)
+          (db-utils/special-id->page result refs)
+          result)
+        default-value))
+     (or (get (.-kv e) k)
+         (lookup-entity e k default-value)))))
 
 (extend-type Entity
   cljs.core/IEncodeJS
-  (-clj->js [this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
+  (-clj->js [_this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
 
   IAssociative
   (-assoc [this k v]

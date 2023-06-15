@@ -55,18 +55,12 @@
 
 ;;; internal utils
 (defn- get-blocks-contents
-  [repo root-block-uuid]
+  [repo root-block-uuid & {:keys [init-level]
+                           :or {init-level 1}}]
   (->
    (db/get-block-and-children repo root-block-uuid)
    (outliner-tree/blocks->vec-tree (str root-block-uuid))
-   (outliner-file/tree->file-content {:init-level 1})))
-
-(defn get-page-content
-  [page]
-  (-> page
-      db/get-page
-      :block/file
-      :file/content))
+   (outliner-file/tree->file-content {:init-level init-level})))
 
 (defn root-block-uuids->content
   [repo root-block-uuids]
@@ -94,11 +88,17 @@
                (mapv remove-block-ast-pos
                      (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
 
+(defn get-page-content
+  ([page-name]
+   (get-page-content (state/get-current-repo) page-name))
+  ([repo page-name]
+   (when-let [page-uuid (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
+     (get-blocks-contents repo page-uuid :init-level 0))))
+
 (defn- page-name->ast
   [page-name]
-  (let [content (get-page-content page-name)
-        format :markdown]
-    (when content
+  (when-let [content (get-page-content page-name)]
+    (let [format :markdown]
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
                      (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))

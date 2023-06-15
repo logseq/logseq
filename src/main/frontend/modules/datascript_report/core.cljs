@@ -4,22 +4,14 @@
 
 (def keys-of-deleted-entity 1)
 
-(defn safe-pull
-  [db selector eid]
-  (try
-    (d/pull db selector eid)
-    (catch :default e
-      (js/console.error e)
-      nil)))
-
 (defn get-entity-from-db-after-or-before
   "Get the entity from db after if possible; otherwise get entity from db before
    Useful for fetching deleted elements"
   [db-before db-after db-id]
-  (let [r (safe-pull db-after '[*] db-id)]
+  (let [r (d/pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
       ;; block has been deleted
-      (safe-pull db-before '[*] db-id)
+      (d/pull db-before '[*] db-id)
       r)))
 
 (defn get-blocks-and-pages

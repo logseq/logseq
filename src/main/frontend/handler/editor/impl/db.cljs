@@ -9,7 +9,6 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
-(def page-ref-special-chars "`~`^")
 (defn- remove-non-existed-refs!
   [refs]
   (remove (fn [x] (or
@@ -20,7 +19,7 @@
 
 (defn- replace-tag-ref
   [content page-name id]
-  (let [id' (str page-ref-special-chars id)
+  (let [id' (str config/page-ref-special-chars id)
         [page wrapped-id] (if (string/includes? page-name " ")
                             (map page-ref/->page-ref [page-name id'])
                             [page-name id'])
@@ -37,7 +36,7 @@
 
 (defn- replace-page-ref
   [content page-name id]
-  (let [id' (str page-ref-special-chars id)
+  (let [id' (str config/page-ref-special-chars id)
         [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
         (util/replace-ignore-case content page wrapped-id)))
 

@@ -876,6 +876,7 @@ independent of format as format specific heading characters are stripped"
     (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
     [blocks-tree]))
 
+;; TODO: performance enhance
 (defn get-block-and-children
   [repo block-uuid]
   (some-> (d/q
@@ -887,7 +888,8 @@ independent of format as format specific heading characters are stripped"
            block-uuid
            block-attrs)
           first
-          flatten-tree))
+          flatten-tree
+          (->> (map #(db-utils/update-block-content % (:db/id %))))))
 
 (defn get-file-page
   ([file-path]
@@ -1248,7 +1250,7 @@ independent of format as format specific heading characters are stripped"
                                          (->> (d/datoms db :aevt :block/content)
                                               (filter filter-fn)
                                               (map :e))
-                                         result (d/pull-many db block-attrs ids)]
+                                         result (db-utils/pull-many db block-attrs ids)]
                                      (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
                       nil)
              react

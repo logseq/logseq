@@ -16,7 +16,8 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.set :as set]
-            [frontend.modules.datascript-report.core :as db-report]))
+            [frontend.modules.datascript-report.core :as db-report]
+            [datascript.core :as d]))
 
 (defn get-engine
   [repo]
@@ -286,15 +287,15 @@
                    (let [tar-db  (:db-after tx-report)]
                      ;; Reverse query the corresponding page id of the modified `:file/content`)
                      (when-let [page-id (->> (:e datom)
-                                             (db-report/safe-pull tar-db '[:block/_file])
+                                             (d/pull tar-db '[:block/_file])
                                              (:block/_file)
                                              (first)
                                              (:db/id))]
                        ;; Fetch page entity according to what page->index requested
-                       (db-report/safe-pull tar-db '[:db/id :block/uuid
-                                                     :block/original-name
-                                                     {:block/file [:file/content]}]
-                                            page-id)))))
+                       (d/pull tar-db '[:db/id :block/uuid
+                                        :block/original-name
+                                        {:block/file [:file/content]}]
+                               page-id)))))
            (remove nil?)))))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
