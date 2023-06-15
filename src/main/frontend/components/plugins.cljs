@@ -1282,7 +1282,8 @@
 
     [:div.cp__plugins-settings.cp__settings-main
      [:header
-      [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
+      [:h1.title (ui/icon "puzzle" {:size 22})
+       [:strong (or title (t :settings-of-plugins))]]]
 
      [:div.cp__settings-inner.md:flex
       {:class (util/classnames [{:no-aside (not nav?)}])}
@@ -1377,4 +1378,5 @@
       [:div.settings-modal.of-plugins
        (focused-settings-content title)])
     {:center? false
+     :label   "plugin-settings-modal"
      :id      "ls-focused-settings-modal"}))
