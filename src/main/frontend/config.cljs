@@ -496,4 +496,4 @@
   []
   (:block-hidden-properties (state/get-config)))
 
-(defonce page-ref-special-chars "`~`^")
+(defonce page-ref-special-chars "~^")
