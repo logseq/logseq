@@ -12,7 +12,7 @@
                   [frontend.search :as search]
                   [clojure.string :as string]
                   [frontend.util :as util]
-                  [frontend.util.property :as property]
+                  [frontend.util.property-edit :as property-edit]
                   [logseq.graph-parser.util.block-ref :as block-ref]))
 
 (defn new-outliner-txs-state [] (atom []))
@@ -78,7 +78,7 @@
     txs))
 
 (defn replace-ref-with-content
-  [txs opts]
+  [repo txs opts]
   (if (and (= :delete-blocks (:outliner-op opts))
            (empty? (:uuid-changed opts)))
     (let [retracted-block-ids (->> (keep (fn [tx]
@@ -90,7 +90,8 @@
                               (let [refs (:block/_refs block)]
                                 (map (fn [ref]
                                        (let [id (:db/id ref)
-                                             block-content (property/remove-properties (:block/format block) (:block/content block))
+                                             block-content (property-edit/remove-properties-when-file-based
+                                                            repo (:block/format block) (:block/content block))
                                              new-content (-> (:block/content ref)
                                                              (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                              block-content)
@@ -128,7 +129,7 @@
 
               (and (= :delete-blocks (:outliner-op opts))
                    (empty? (:uuid-changed opts)))
-              (replace-ref-with-content opts)
+              (replace-ref-with-content repo opts)
 
               true
               (distinct))]

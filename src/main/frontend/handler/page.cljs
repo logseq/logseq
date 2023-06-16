@@ -33,7 +33,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [frontend.util.page :as page-util]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
@@ -98,7 +98,7 @@
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
-(defn- build-page-tx [format properties page journal? whiteboard?]
+(defn- build-page-tx [repo format properties page journal? whiteboard?]
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           title         (util/get-page-original-name page)
@@ -121,7 +121,7 @@
         (and (seq properties)
              (not whiteboard?)
              (not (config/db-based-graph? (state/get-current-repo))))
-        [page (editor-handler/properties-block properties format page-entity)]
+        [page (editor-handler/properties-block repo properties format page-entity)]
 
         :else
         [page]))))
@@ -162,11 +162,11 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx format nil % journal? false))
+                           (mapcat #(build-page-tx repo format nil % journal? false))
                            (remove nil?)
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
-             last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
+             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! txs)))
@@ -469,14 +469,15 @@
                                            properties-content
                                            (string/includes? (util/page-name-sanity-lc properties-content)
                                                              old-page-name))
-                                  (let [front-matter? (and (property/front-matter? properties-content)
+                                  (let [front-matter? (and (property-edit/front-matter?-when-file-based properties-content)
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
-                                     :block/content (property/insert-property (:block/format properties-block)
-                                                                              properties-content
-                                                                              :title
-                                                                              new-name
-                                                                              front-matter?)}))
+                                     :block/content (property-edit/insert-property-when-file-based
+                                                     (:block/format properties-block)
+                                                     properties-content
+                                                     :title
+                                                     new-name
+                                                     front-matter?)}))
             page-txs            [{:db/id               (:db/id page)
                                   :block/uuid          (:block/uuid page)
                                   :block/name          new-page-name
@@ -490,7 +491,6 @@
 
         (when (and file (not journal?))
           (rename-file! file new-file-name-body (fn [] nil)))
-
 
         (let [home (get (state/get-config) :default-home {})]
           (when (= old-page-name (util/page-name-sanity-lc (get home :page "")))

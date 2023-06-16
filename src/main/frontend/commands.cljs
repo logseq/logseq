@@ -15,7 +15,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
@@ -599,14 +599,15 @@
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
             edit-content (gobj/get current-input "value")
-            new-value (property/insert-property format edit-content "" "")]
+            repo (state/get-current-repo)
+            new-value (property-edit/insert-property-when-file-based repo format edit-content "" "")]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))]
-        (property/goto-properties-end format current-input)
+        (property-edit/goto-properties-end-when-file-based format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
 (defonce markdown-heading-pattern #"^#+\s+")

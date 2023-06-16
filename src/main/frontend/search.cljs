@@ -12,7 +12,7 @@
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.set :as set]
@@ -185,7 +185,7 @@
 (defn get-all-properties
   []
   (->> (db-model/get-all-properties)
-       (remove (property/hidden-properties))
+       (remove (property-edit/hidden-properties))
        ;; Complete full keyword except the ':'
        (map #(subs (str %) 1))))
 

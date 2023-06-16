@@ -11,7 +11,8 @@
 
 (defn move-blocks
   [^js event blocks target-block move-to]
-  (let [blocks' (map #(db/pull (:db/id %)) blocks)
+  (let [repo (state/get-current-repo)
+        blocks' (map #(db/pull (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)

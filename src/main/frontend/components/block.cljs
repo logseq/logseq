@@ -61,7 +61,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -1734,7 +1734,7 @@
   (and
    (or
     (empty? properties)
-    (property/properties-hidden? properties))
+    (property-edit/properties-hidden? properties))
 
    (empty? title)
 
@@ -2097,7 +2097,7 @@
   (let [dissoc-keys (fn [m keys] (apply dissoc m keys))
         properties (cond-> (update-keys (:block/properties block) keyword)
                            true
-                           (dissoc-keys (property/hidden-properties))
+                           (dissoc-keys (property-edit/hidden-properties))
                            pre-block?
                            (dissoc-keys hidden-editable-page-properties)
                            (not pre-block?)
@@ -2108,7 +2108,7 @@
       (seq properties)
       (let [properties-order (cond->> (:block/properties-order block)
                                       true
-                                      (remove (property/hidden-properties))
+                                      (remove (property-edit/hidden-properties))
                                       pre-block?
                                       (remove hidden-editable-page-properties))
             properties-order (distinct properties-order)
@@ -2231,7 +2231,8 @@
                                                     util/caret-range)
                                {:block/keys [content format]} block
                                content (->> content
-                                            (property/remove-built-in-properties format)
+                                            (property-edit/remove-built-in-properties-when-file-based
+                                             (state/get-current-repo) format)
                                             (drawer/remove-logbook))]
                            ;; save current editing block
                            (let [{:keys [value] :as state} (editor-handler/get-state)]
@@ -2320,7 +2321,7 @@
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [content (property/remove-built-in-properties format content)
+  (let [content (property-edit/remove-built-in-properties-when-file-based (state/get-current-repo) format content)
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
@@ -2389,7 +2390,7 @@
         (invalid-properties-cp invalid-properties))
 
       (when (and (seq properties)
-                 (let [hidden? (property/properties-hidden? properties)]
+                 (let [hidden? (property-edit/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config))

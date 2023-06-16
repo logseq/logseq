@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
@@ -94,7 +94,7 @@
   "Get keys for a query table result, which are the columns in a table"
   [result page?]
   (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
-                  (remove (property/built-in-properties))
+                  (remove (property-edit/built-in-properties))
                   (remove #{:template}))
         keys (if page? (cons :page keys) (concat '(:block :page) keys))
         keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
@@ -155,12 +155,12 @@
                    (get-in row [:block/properties column])))]))
 
 (defn build-column-text [row column]
-  (case column 
+  (case column
     :page  (or (get-in row [:block/page :block/original-name])
                (get-in row [:block/original-name])
                (get-in row [:block/content]))
-    :block (or (get-in row [:block/original-name]) 
-               (get-in row [:block/content])) 
+    :block (or (get-in row [:block/original-name])
+               (get-in row [:block/content]))
            (or (get-in row [:block/properties column])
                (get-in row [:block/properties-text-values column])
                (get-in row [(keyword :block column)]))))
@@ -184,27 +184,27 @@
           property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
           table-version (get-shui-component-version :table config)
           result-as-text (for [row sort-result]
-                           (for [column columns] 
+                           (for [column columns]
                              (build-column-text row column)))
           render-column-value (fn [row-format cell-format value]
-                                (cond 
+                                (cond
                                   ;; elements should be rendered as they are provided
-                                  (= :element cell-format) value 
+                                  (= :element cell-format) value
                                   ;; collections are treated as a comma separated list of page-cps
                                   (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
                                                      (interpose [:span ", "]))
                                   ;; boolean values need to first be stringified
-                                  (boolean? value) (str value) 
-                                  ;; string values will attempt to be rendered as pages, falling back to 
+                                  (boolean? value) (str value)
+                                  ;; string values will attempt to be rendered as pages, falling back to
                                   ;; inline-text when no page entity is found
                                   (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                                                    (page-cp {} page) 
+                                                    (page-cp {} page)
                                                     (inline-text row-format value))
                                   ;; anything else should just be rendered as provided
                                   :else value))]
-                      
+
       (case table-version
-        2 (shui/table-v2 {:data (conj [[columns]] result-as-text)} 
+        2 (shui/table-v2 {:data (conj [[columns]] result-as-text)}
                          (make-shui-context config inline))
         1 [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                                  :style {:width "100%"}

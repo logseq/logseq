@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [goog.object :as gobj]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db.listener :as db-listener]))
@@ -52,7 +52,8 @@
    (when-not (> retry-times 2)
      (when-not config/publishing?
        (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/pull [:block/uuid block-id]) block)
+         (let [repo (state/get-current-repo)
+               block (or (db/pull [:block/uuid block-id]) block)
                edit-input-id (if (uuid? id)
                                (get-edit-input-id-with-block-id id)
                                (-> (str (subs id 0 (- (count id) 36)) block-id)
@@ -71,8 +72,8 @@
 
                             :else
                             (subs content 0 pos))
-               content (-> (property/remove-built-in-properties (:block/format block)
-                                                                content)
+               content (-> (property-edit/remove-built-in-properties-when-file-based
+                            repo (:block/format block) content)
                            (drawer/remove-logbook))]
            (clear-selection!)
            (if edit-input-id
@@ -108,11 +109,11 @@
                                     (filter (set (keys properties)))
                                     distinct
                                     vec)
-                   content (property/remove-properties format content)
+                   content (property-edit/remove-properties-when-file-based repo format content)
                    kvs (for [key property-ks] [key (or (get properties-text-values key)
                                                        (get properties key))])
-                   content (property/insert-properties format content kvs)
-                   content (property/remove-empty-properties content)
+                   content (property-edit/insert-properties-when-file-based repo format content kvs)
+                   content (property-edit/remove-empty-properties-when-file-based repo content)
                    block {:block/uuid block-id
                           :block/properties properties
                           :block/properties-order property-ks

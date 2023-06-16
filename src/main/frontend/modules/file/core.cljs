@@ -9,7 +9,7 @@
             [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.fs :as fs-util]
-            [frontend.util.property :as property]
+            [frontend.util.property-edit :as property-edit]
             [logseq.common.path :as path]))
 
 (defn- indented-block-content
@@ -19,21 +19,22 @@
 
 (defn- content-with-collapsed-state
   "Only accept nake content (without any indentation)"
-  [format content collapsed?]
+  [repo format content collapsed?]
   (cond
     collapsed?
-    (property/insert-property format content :collapsed true)
+    (property-edit/insert-property-when-file-based repo format content :collapsed true)
 
     ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
     (false? collapsed?)
-    (property/remove-property format :collapsed content)
+    (property-edit/remove-property-when-file-based repo format :collapsed content)
 
     :else
     content))
 
 (defn transform-content
   [{:block/keys [collapsed? format pre-block? unordered content left page parent properties] :as b} level {:keys [heading-to-list?]}]
-  (let [block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
+  (let [repo (state/get-current-repo)
+        block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
                                   (not (string/includes? content (str (:block/uuid b)))))
         heading (:heading properties)
         markdown? (= :markdown format)
@@ -76,7 +77,7 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (content-with-collapsed-state format content collapsed?)
+                        content (content-with-collapsed-state repo format content collapsed?)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
@@ -84,7 +85,7 @@
                               " ")]
                     (str prefix sep new-content)))
         content (if block-ref-not-saved?
-                  (property/insert-property format content :id (str (:block/uuid b)))
+                  (property-edit/insert-property-when-file-based repo format content :id (str (:block/uuid b)))
                   content)]
     content))
 
