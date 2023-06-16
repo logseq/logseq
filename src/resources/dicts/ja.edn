@@ -49,7 +49,6 @@
  :left-side-bar/new-page "新規ページ"
  :left-side-bar/nav-favorites "お気に入り"
  :left-side-bar/nav-recent-pages "最新"
- :page/presentation-mode "プレゼンテーション"
  :page/delete-confirmation "このページとページのファイルを削除してもよいですか？"
  :page/open-in-finder "ディレクトリで開く"
  :page/open-with-default-app "デフォルトのアプリで開く"

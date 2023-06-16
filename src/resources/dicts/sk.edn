@@ -68,7 +68,6 @@
  :left-side-bar/new-whiteboard                     "Nová tabuľa"
  :left-side-bar/nav-favorites                      "Obľúbené"
  :left-side-bar/nav-recent-pages                   "Posledné"
- :page/presentation-mode                           "Prezentácia"
  :page/delete-confirmation                         "Naozaj chcete odstrániť túto stránku a jej súbor?"
  :page/open-in-finder                              "Otvoriť v adresári"
  :page/open-with-default-app                       "Otvoriť pomocou predvolenej aplikácie"

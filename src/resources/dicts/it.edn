@@ -51,7 +51,6 @@
  :left-side-bar/new-page "Nuova pagina"
  :left-side-bar/nav-favorites "Preferiti"
  :left-side-bar/nav-recent-pages "Recenti"
- :page/presentation-mode "Presentazione"
  :page/delete-confirmation "Sei sicuro di voler eliminare questa pagina e i suoi dati?"
  :page/open-in-finder "Apri nella cartella"
  :page/open-with-default-app "Apri con l'app predefinita"

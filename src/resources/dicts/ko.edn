@@ -51,7 +51,6 @@
  :left-side-bar/new-page "새 페이지"
  :left-side-bar/nav-favorites "즐겨찾기"
  :left-side-bar/nav-recent-pages "최근 페이지"
- :page/presentation-mode "프레젠테이션 모드"
  :page/delete-confirmation "이 페이지와 페이지의 파일들을 삭제하시겠습니까?"
  :page/open-in-finder "디렉토리에서 열기"
  :page/open-with-default-app "기본 앱으로 열기"
