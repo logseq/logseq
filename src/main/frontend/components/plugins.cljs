@@ -468,7 +468,7 @@
                     (set-enabled! t)
                     (plugin-handler/set-enabled-auto-check-for-updates t)
                     (notification/show!
-                      [:span text [:strong.pl-1 (if t "ON" "OFF")] " !"]
+                      [:span text [:strong.pl-1 (if t "ON" "OFF")] "!"]
                       (if t :success :info))))}
      [:span.pr-3.opacity-80 text]
      (ui/toggle enabled #() true)]))
