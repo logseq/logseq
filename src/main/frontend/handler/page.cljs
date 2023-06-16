@@ -473,6 +473,7 @@
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
                                      :block/content (property-edit/insert-property-when-file-based
+                                                     repo
                                                      (:block/format properties-block)
                                                      properties-content
                                                      :title

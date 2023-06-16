@@ -107,7 +107,8 @@
   [block props]
   (editor-handler/save-block-if-changed!
    block
-   (property-edit/insert-properties-when-file-based (:block/format block) (:block/content block) props)
+   (property-edit/insert-properties-when-file-based
+    (state/get-current-repo) (:block/format block) (:block/content block) props)
    {:force? true}))
 
 (defn- reset-block-card-properties!
@@ -773,7 +774,8 @@
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (when-let [content (:block/content block)]
-      (let [content (-> (property-edit/remove-built-in-properties-when-file-based (:block/format block) content)
+      (let [content (-> (property-edit/remove-built-in-properties-when-file-based
+                         (state/get-current-repo) (:block/format block) content)
                         (drawer/remove-logbook))]
         (editor-handler/save-block!
          (state/get-current-repo)
@@ -785,7 +787,7 @@
   ([block-ids]
    (let [block-content-fn (fn [block]
                             [block (-> (property-edit/remove-built-in-properties-when-file-based
-                                        (:block/format block) (:block/content block))
+                                        (state/get-current-repo) (:block/format block) (:block/content block))
                                        (drawer/remove-logbook)
                                        string/trim
                                        (str " #" card-hash-tag))])
