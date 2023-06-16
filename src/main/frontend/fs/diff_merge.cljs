@@ -116,10 +116,9 @@
           (cond
             (gp-block/heading-block? block)
             (let [content (gp-block/get-block-content utf8-encoded-content (second block) format fixed-pos-meta block-pattern)
-
-                  content-2 (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
+                  content-raw (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
               (recur (conj headings {:body  content
-                                     :raw-body (string/trimr content-2)
+                                     :raw-body (string/trimr content-raw)
                                      :level (:level (second block))
                                      :uuid  (:id properties)})
                      (rest blocks)
@@ -143,9 +142,10 @@
         (let [[block _] (first blocks)
               pos-meta {:start_pos 0 :end_pos end-pos}
               content (gp-block/get-block-content utf8-encoded-content block format pos-meta block-pattern)
+              content-raw (get-sub-content-from-pos-meta utf8-encoded-content pos-meta)
               uuid (:id properties)]
           (cons {:body content
-                 :raw-body (string/trimr content)
+                 :raw-body (string/trimr content-raw)
                  :level 1
                  :uuid uuid}
                 (reverse headings)))))))
@@ -153,7 +153,6 @@
 (defn- rebuild-content
   "translate [[[op block]]] to merged content"
   [_base-diffblocks diffs _format]
-  (prn ::rebuild diffs)
   ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
   (let  [ops-fn (fn [ops]
                   (map (fn [[op {:keys [raw-body]}]]
@@ -185,13 +184,3 @@
         merged-diff (bean/->clj merged)
         merged-content (rebuild-content base-diffblocks merged-diff format)]
     merged-content))
-
-;; (defn diff-merge
-;;   "N-ways diff & merge
-;;    Accept: blocks
-;;    https://github.com/logseq/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22
-;;    https://github.com/logseq/blob/85ca7e9bf7740d3880ed97d535a4f782a963395d/lib/merge.ts#L40"
-;;   [base & branches]
-;;   ()
-;;   (let [merger (Merger.)]
-;;     (.mergeBlocks merger (bean/->js base) (bean/->js branches))))
