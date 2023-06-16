@@ -635,7 +635,13 @@
                ;; higher priority in s1 when config.edn=default value or empty custom.css
                (and (contains? ignore-default-value-files path)
                     (#{config/config-default-content-md5 empty-custom-css-md5} (:etag %)))
-               false)
+               false
+               ;; special handling for css & edn files
+               (and
+                (or (string/ends-with? lower-case-path ".css")
+                    (string/ends-with? lower-case-path ".edn"))
+                (< last-modified (:last-modified %)))
+               true)
             s2)
          result
          (conj result item))))
@@ -1570,7 +1576,6 @@
   (go
     (p->c (p/all (->> relative-paths
                       (map (fn [rpath]
-                             (prn ::handle-remote-deletion rpath)
                              (p/let [base-file (path/path-join "logseq/version-files/base" rpath)
                                      current-change-file rpath
                                      format (gp-util/get-format current-change-file)
@@ -1611,8 +1616,7 @@
                                           format (gp-util/get-format current-change-file)
                                           repo (state/get-current-repo)
                                           repo-dir (config/get-repo-dir repo)
-                                          base-exists? (fs/file-exists? repo-dir base-file)
-                                          _ (prn ::base-ex base-exists?)]
+                                          base-exists? (fs/file-exists? repo-dir base-file)]
                                     (cond
                                       base-exists?
                                       (p/let [base-content (fs/read-file repo-dir base-file)
@@ -1621,7 +1625,7 @@
                                               incoming-content (fs/read-file repo-dir incoming-file)]
                                         (if (= base-content current-content)
                                           (do
-                                            (prn "base=current, write directly")
+                                            (prn "[diff-merge]base=current, write directly")
                                             (p/do!
                                              (fs/copy! repo
                                                        (path/path-join repo-dir incoming-file)
@@ -1633,13 +1637,10 @@
                                                                                                                  :from-disk? true
                                                                                                                  :fs/event :fs/remote-file-change})))
                                           (do
-                                            (prn "base!=current, should do a 3-way merge")
-                                            (prn ::cur
-                                                 current-content)
+                                            (prn "[diff-merge]base!=current, 3-way merge")
                                             (p/let [current-content (or current-content "")
                                                     incoming-content (fs/read-file repo-dir incoming-file)
                                                     merged-content (diff-merge/three-way-merge base-content incoming-content current-content format)]
-                                              (prn ::merged-content merged-content)
                                               (when (seq merged-content)
                                                 (p/do!
                                                  (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
@@ -1649,7 +1650,7 @@
 
                                       :else
                                       (do
-                                        (prn "no base, use empty content as base, avoid loosing data")
+                                        (prn "[diff-merge]no base found, use empty content as base, avoid loosing data")
                                         (p/let [current-content (-> (fs/read-file repo-dir current-change-file)
                                                                     (p/catch (fn [_] nil)))
                                                 current-content (or current-content "")
