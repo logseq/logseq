@@ -378,7 +378,7 @@
     (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                              :keep-uuid? true})
     (util/set-change-value input fst-block-text)
-    (ok-handler next-block)))
+    (ok-handler (assoc next-block :block/content snd-block-text))))
 
 (defn clear-when-saved!
   []
