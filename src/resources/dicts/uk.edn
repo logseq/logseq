@@ -77,7 +77,6 @@
  :page/logseq-is-having-a-problem "У Logseq виникла проблема. Щоб спробувати повернути його до робочого стану, виконайте такі безпечні кроки по порядку:"
  :page/step "Крок {1}"
  :page/try "Спробувати"
- :page/presentation-mode "Презентація"
  :page/delete-confirmation "Ви впевнені, що хочете видалити цю сторінку та її файл?"
  :page/open-in-finder "Відкрити у директорії"
  :page/open-with-default-app "Відкрити за допомогою програми за умовчанням"

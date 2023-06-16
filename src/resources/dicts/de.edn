@@ -193,7 +193,6 @@
  :page/open-backup-directory "Verzeichnis für Seiten-Backups öffnen"
  :page/open-in-finder "Im Verzeichnis öffnen"
  :page/open-with-default-app "Mit Standard-Anwendung öffnen"
- :page/presentation-mode "Präsentationsmodus"
  :page/show-journals "Journal anzeigen"
  :page/show-whiteboards "Whiteboards anzeigen"
  :page/unfavorite "Seite aus Favoriten entfernen"

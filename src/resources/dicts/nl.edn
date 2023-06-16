@@ -130,7 +130,6 @@
  :page/open-backup-directory "Open backups map pagina"
  :page/open-in-finder "Open in map"
  :page/open-with-default-app "Open met standaard app"
- :page/presentation-mode "Presentatiemodus"
  :page/show-journals "Toon Journaals"
  :page/unfavorite "Pagina uit favorieten verwijderen"
  :page/updated-at "Bijgewerkt op"
