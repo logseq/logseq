@@ -1,13 +1,13 @@
 (ns frontend.fs.diff-merge-test
-  (:require [cljs.test :refer [deftest are is]]
-            [logseq.db :as ldb]
-            [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.text :as text]
+  (:require [cljs-bean.core :as bean]
+            [cljs.test :refer [are deftest is]]
+            [frontend.db.conn :as conn]
             [frontend.fs.diff-merge :as fs-diff]
             [frontend.handler.common.file :as file-common-handler]
-            [frontend.db.conn :as conn]
+            [logseq.db :as ldb]
+            [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [cljs-bean.core :as bean]))
+            [logseq.graph-parser.text :as text]))
 
 (defn test-db->diff-blocks
   "A hijacked version of db->diff-blocks for testing.
@@ -29,18 +29,18 @@
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
 #+tItLe: Well parsed!"
-[{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!" 
-  :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b" 
+[{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!"
+  :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b"
   :level 1}]
-    
+
     "#+title: Howdy"
     [{:body "#+title: Howdy" :uuid nil :level 1}]
-    
+
     ":PROPERTIES:
 :fiction: [[aldsjfklsda]]
 :END:\n#+title: Howdy"
-    [{:body ":PROPERTIES:\n:fiction: [[aldsjfklsda]]\n:END:\n#+title: Howdy" 
-      :uuid nil 
+    [{:body ":PROPERTIES:\n:fiction: [[aldsjfklsda]]\n:END:\n#+title: Howdy"
+      :uuid nil
       :level 1}]))
 
 (deftest db<->ast-diff-blocks-test
@@ -85,7 +85,7 @@
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-  [{:body "## hello" :uuid nil :level 2}
+  [{:body "## hello" :uuid nil :level 1}
    {:body "world" :uuid nil :level 2}
    {:body "nice" :uuid nil :level 3}
    {:body "nice" :uuid nil :level 4}
@@ -103,20 +103,20 @@
 \t- i
 - j"
   [{:body "# a" :uuid nil :level 1}
-   {:body "## b" :uuid nil :level 2}
-   {:body "### c" :uuid nil :level 3}
-   {:body "#### d" :uuid nil :level 4}
-   {:body "### e" :uuid nil :level 3}
+   {:body "## b" :uuid nil :level 1}
+   {:body "### c" :uuid nil :level 1}
+   {:body "#### d" :uuid nil :level 1}
+   {:body "### e" :uuid nil :level 1}
    {:body "f" :uuid nil :level 1}
    {:body "g" :uuid nil :level 2}
    {:body "h" :uuid nil :level 3}
    {:body "i" :uuid nil :level 2}
    {:body "j" :uuid nil :level 1}]
-  
+
     "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58
 \t- b
 \t\t- c"
-[{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58" 
+[{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58"
   :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
  {:body "b" :uuid nil :level 2}
  {:body "c" :uuid nil :level 3}]))
@@ -142,10 +142,10 @@
     ;; See https://github.com/logseq/diff-merge#usage
     [[]
      [[-1 {:body "## hello"
-          :level 2
+          :level 1
           :uuid nil}]
       [1  {:body "## Halooooo"
-          :level 2
+          :level 1
           :uuid nil}]]
      [[0 {:body "world"
          :level 2
@@ -162,7 +162,7 @@
      [[0 {:body "world"
          :level 4
          :uuid nil}]]]
-    
+
     "## hello
 \t- world
 \t  id:: 63e25526-3612-4fb1-8cf9-abcd12354abc
@@ -180,10 +180,10 @@
 ;; See https://github.com/logseq/diff-merge#usage
 [[]
  [[-1 {:body "## hello"
-       :level 2
+       :level 1
        :uuid nil}]
   [1  {:body "## Halooooo"
-       :level 2
+       :level 1
        :uuid nil}]
   [1 {:body "world"
       :level 2
@@ -234,7 +234,7 @@
 
       "bar"
       [{:body "ghi\nid:: 11451411-1111-1111-1111-111111111111" :uuid  "11451411-1111-1111-1111-111111111111" :level 1}
-       {:body "jkl\nid:: 63241234-1234-1234-1234-123412341234" :uuid  "63241234-1234-1234-1234-123412341234" :level 2}]) 
+       {:body "jkl\nid:: 63241234-1234-1234-1234-123412341234" :uuid  "63241234-1234-1234-1234-123412341234" :level 2}])
 
     (are [page-name text new-uuids] (= (let [old-blks (test-db->diff-blocks conn page-name)
                                              new-blks (text->diffblocks text)
@@ -271,7 +271,7 @@
     [[["Properties" [["TiTlE" "Howdy" []]]] nil]]
     "#+title: Howdy"
     [{:body "#+title: Howdy", :level 1, :uuid nil}])
-  
+
   (are [ast text diff-blocks]
        (= (fs-diff/ast->diff-blocks ast text :org {:block-pattern "-" :user-config {:property-pages/enabled? true}})
           diff-blocks)
@@ -349,7 +349,7 @@
       foo-new-content
       "foo-persist"
       (fn [db-uuids] (conj db-uuids nil))
-      
+
       ;; Prepend a new line to bar
       (gp-mldoc/->edn new-bar-content (gp-mldoc/default-config :markdown))
       new-bar-content
@@ -379,7 +379,7 @@
 (deftest test-remove-indentation-spaces
   (is (= "" (gp-mldoc/remove-indentation-spaces "" 0 false)))
   (is (= "" (gp-mldoc/remove-indentation-spaces "" 3 true)))
-  
+
   (is (= "- nice\n  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 3 true)))
   (is (= "\t\t\t- nice\n  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 3 false)))
   (is (= "\t\t\t- nice\n\t\t\t  happy" (gp-mldoc/remove-indentation-spaces "\t\t\t- nice\n\t\t\t  happy" 0 true))))
@@ -389,3 +389,11 @@
   (is (= "nice\n\t\t\t  good" (text/remove-level-spaces "\t\t\t- nice\n\t\t\t  good" :markdown "-")))
   (is (= "- nice" (text/remove-level-spaces "\t\t\t- nice" :markdown "")))
   (is (= "nice" (text/remove-level-spaces "\t\t\t- nice" :markdown "-"))))
+
+(deftest test-three-way-merge
+  (is (= (fs-diff/three-way-merge
+          "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n- b"
+          "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n  aaa:: 111\n- b"
+          "- c"
+          :markdown)
+         "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n  aaa:: 111\n- c")))

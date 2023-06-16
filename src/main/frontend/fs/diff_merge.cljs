@@ -118,7 +118,7 @@
             (let [content (gp-block/get-block-content utf8-encoded-content (second block) format fixed-pos-meta block-pattern)
                   content-raw (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
               (recur (conj headings {:body  content
-                                     :raw-body (string/trimr content-raw)
+                                     :meta  {:raw-body (string/trimr content-raw)}
                                      :level (:level (second block))
                                      :uuid  (:id properties)})
                      (rest blocks)
@@ -155,9 +155,9 @@
   [_base-diffblocks diffs _format]
   ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
   (let  [ops-fn (fn [ops]
-                  (map (fn [[op {:keys [raw-body]}]]
+                  (map (fn [[op {:keys [meta]}]]
                          (when (or (= op 0) (= op 1)) ;; equal or insert
-                           raw-body))
+                           (:raw-body meta)))
                        ops))]
     (->> diffs
          (mapcat ops-fn)
@@ -181,6 +181,13 @@
         current-diffblocks (ast->diff-blocks-alt current-ast current format options)
         branch-diffblocks [income-diffblocks current-diffblocks]
         merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
+        ;; For extracting diff-merge test cases
+        ;; _ (prn "input:")
+        ;; _ (prn (js/JSON.stringify (bean/->js base-diffblocks)))
+        ;; _ (prn (js/JSON.stringify (bean/->js branch-diffblocks)))
+        ;; _ (prn "logseq diff merge version: " version)
+        ;; _ (prn "output:")
+        ;; _ (prn (js/JSON.stringify merged))
         merged-diff (bean/->clj merged)
         merged-content (rebuild-content base-diffblocks merged-diff format)]
     merged-content))
