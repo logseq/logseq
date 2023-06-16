@@ -760,7 +760,7 @@ Similar to re-frame subscriptions"
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
 
-(defn get-remote-graph-usage 
+(defn get-remote-graph-usage
   []
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (->> graphs
@@ -1721,8 +1721,10 @@ Similar to re-frame subscriptions"
 (defn pub-event!
   {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
-  (let [chan (get-events-chan)]
-    (async/put! chan payload)))
+  (let [d (p/deferred)
+        chan (get-events-chan)]
+    (async/put! chan [payload d])
+    d))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))

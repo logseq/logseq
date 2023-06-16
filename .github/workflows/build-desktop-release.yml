@@ -122,7 +122,7 @@ jobs:
         run: |
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
 
-      - name: Set Build Environment Variables (only when workflow_dispath)
+      - name: Set Build Environment Variables (only when workflow_dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         # if scheduled, use default settings
         run: |

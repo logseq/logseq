@@ -200,8 +200,11 @@
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
  :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
  :settings-page/preferred-outdenting "Logical outdenting"
+ :settings-page/preferred-outdenting-tip "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled "
+ :settings-page/preferred-outdenting-tip-more "→ Learn more"
  :settings-page/show-full-blocks "Show all lines of a block reference"
  :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in"
+ :settings-page/auto-expand-block-refs-tip "This option controls whether to expand the block references automatically when zoom-in."
  :settings-page/custom-date-format "Preferred date format"
  :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
  :settings-page/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
@@ -241,6 +244,11 @@
  :settings-page/enable-whiteboards "Whiteboards"
  :settings-page/native-titlebar "Native title bar"
  :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux."
+ :settings-page/check-for-updates "Check for updates"
+ :settings-page/checking "Checking ..."
+ :settings-page/revision "Revision: "
+ :settings-page/changelog "What's new?"
+ :settings-page/app-updated "Your app is up-to-date 🎉"
  :yes "Yes"
 
  :submit "Submit"
@@ -507,8 +515,9 @@
  :header/more                        "More"
  :header/go-back                     "Go back"
  :header/go-forward                  "Go forward"
-   ;; Commands are nested for now to stay in sync with the shortcuts system.
-   ;; Other languages should not nest keys under :commands
+
+ ;; Commands are nested for now to stay in sync with the shortcuts system.
+ ;; Other languages should not nest keys under :commands
  :commands
  {:date-picker/complete         "Date picker: Choose selected day"
   :date-picker/prev-day         "Date picker: Select previous day"
