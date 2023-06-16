@@ -6,7 +6,6 @@
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
-            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
@@ -67,7 +66,6 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -2047,66 +2045,25 @@
         :else
         (inline-text config (:block/format block) (str v)))]]))
 
-(def hidden-editable-page-properties
-  "Properties that are hidden in the pre-block (page property)"
-  #{:title :filters :icon})
-
-(assert (set/subset? hidden-editable-page-properties (gp-property/editable-built-in-properties))
-        "Hidden editable page properties must be valid editable properties")
-
-(def hidden-editable-block-properties
-  "Properties that are hidden in a block (block property)"
-  (into #{:logseq.query/nlp-date}
-        gp-property/editable-view-and-table-properties))
-
-(assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
-        "Hidden editable page properties must be valid editable properties")
-
-(defn- add-aliases-to-properties
-  [properties block]
-  (let [repo (state/get-current-repo)
-        aliases (db/get-page-alias-names repo
-                                         (:block/name (db/pull (:db/id (:block/page block)))))]
-    (if (seq aliases)
-      (if (:alias properties)
-        (update properties :alias (fn [c]
-                                    (util/distinct-by string/lower-case (concat c aliases))))
-        (assoc properties :alias aliases))
-      properties)))
-
 (rum/defc properties-cp
   [config {:block/keys [pre-block?] :as block}]
-  (let [dissoc-keys (fn [m keys] (apply dissoc m keys))
-        properties (cond-> (update-keys (:block/properties block) keyword)
-                           true
-                           (dissoc-keys (property/hidden-properties))
-                           pre-block?
-                           (dissoc-keys hidden-editable-page-properties)
-                           (not pre-block?)
-                           (dissoc-keys hidden-editable-block-properties)
-                           pre-block?
-                           (add-aliases-to-properties block))]
+  (let [ordered-properties
+        (property/get-visible-ordered-properties (:block/properties block)
+                                                 (:block/properties-order block)
+                                                 {:pre-block? pre-block?
+                                                  :page-id (:db/id (:block/page block))})]
     (cond
-      (seq properties)
-      (let [properties-order (cond->> (:block/properties-order block)
-                                      true
-                                      (remove (property/hidden-properties))
-                                      pre-block?
-                                      (remove hidden-editable-page-properties))
-            properties-order (distinct properties-order)
-            ordered-properties (if (seq properties-order)
-                                 (map (fn [k] [k (get properties k)]) properties-order)
-                                 properties)]
-        [:div.block-properties
-         {:class (when pre-block? "page-properties")
-          :title (if pre-block?
-                   "Click to edit this page's properties"
-                   "Click to edit this block's properties")}
-         (for [[k v] ordered-properties]
-           (rum/with-key (property-cp config block k v)
-             (str (:block/uuid block) "-" k)))])
+      (seq ordered-properties)
+      [:div.block-properties
+       {:class (when pre-block? "page-properties")
+        :title (if pre-block?
+                 "Click to edit this page's properties"
+                 "Click to edit this block's properties")}
+       (for [[k v] ordered-properties]
+         (rum/with-key (property-cp config block k v)
+           (str (:block/uuid block) "-" k)))]
 
-      (and pre-block? properties)
+      (and pre-block? ordered-properties)
       [:span.opacity-50 "Properties"]
 
       :else
@@ -3116,14 +3073,15 @@
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div {:ref (fn [el]
-                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+          [:div.ui-fenced-code-editor
+           {:ref (fn [el]
+                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
              (nil? inside-portal?) nil
 
              (or (:slide? config) inside-portal?)
              (highlight/highlight (str (random-uuid))
-                                  {:class (str "language-" language)
+                                  {:class     (str "language-" language)
                                    :data-lang language}
                                   code)
 
@@ -3292,10 +3250,14 @@
             [:sup.fn (str name "↩︎")]])]])
 
       ["Src" options]
-      [:div.cp__fenced-code-block
-       (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-         (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
-         (src-cp config options html-export?))]
+      (let [lang (util/safe-lower-case (:language options))]
+        [:div.cp__fenced-code-block
+         {:data-lang lang}
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type lang)]
+           [:div.ui-fenced-code-wrap
+            (src-cp config options html-export?)
+            (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
+           (src-cp config options html-export?))])
 
       :else
       "")

@@ -1,15 +1,5 @@
 .cp__settings {
   &-main {
-    > header {
-      padding: 0 10px 10px;
-      border-bottom: 1px solid var(--ls-quaternary-background-color);
-
-      h1 {
-        font-size: 22px;
-        margin: 0;
-      }
-    }
-
     aside {
       @apply bg-gray-400/5 p-4;
     }

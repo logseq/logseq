@@ -133,6 +133,7 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
    * Unrelated refactoring or heavy refactoring
    * Code or doc formatting changes including whitespace changes
    * Dependency updates e.g. in package.json
+   * Changes that contain multiple unverified resources. This is risky for our users and is a lot of work to verify. A change with one resource that can be verified is acceptable.
 
 ### PR Additional Links
 
