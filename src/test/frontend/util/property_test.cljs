@@ -73,17 +73,17 @@
 (deftest test-get-property-keys
   (testing "org mode"
     (are [x y] (= x y)
-        (property/get-property-keys :org "hello\n:PROPERTIES:\n:x1: y1\n:x2: y2\n:END:\n")
+        (#'property/get-property-keys :org "hello\n:PROPERTIES:\n:x1: y1\n:x2: y2\n:END:\n")
         ["X1" "X2"]
 
-        (property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
+        (#'property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
         nil))
   (testing "markdown mode"
     (are [x y] (= x y)
-        (property/get-property-keys :markdown "hello\nx1:: y1\nx2:: y2\n")
+        (#'property/get-property-keys :markdown "hello\nx1:: y1\nx2:: y2\n")
         ["X1" "X2"]
 
-        (property/get-property-keys :markdown "hello\n")
+        (#'property/get-property-keys :markdown "hello\n")
         nil)))
 
 (deftest test-insert-property
@@ -167,14 +167,14 @@ SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
     "abcd\nempty::\nanother-empty::\nid:: 123"))
 
 (deftest test-build-properties-str
-  (are [x y] (= (property/build-properties-str :mardown x) y)
+  (are [x y] (= (#'property/build-properties-str :mardown x) y)
     {:title "a"}
     "title:: a\n"
     {:title "a/b/c"}
     "title:: a/b/c\n"
     {:title "a/b/c" :tags "d,e"}
     "title:: a/b/c\ntags:: d,e\n")
-  (are [x y] (= (property/build-properties-str :org x) y)
+  (are [x y] (= (#'property/build-properties-str :org x) y)
     {:title "a"}
     ":PROPERTIES:\n:title: a\n:END:"
     {:title "a/b/c"}

@@ -41,19 +41,19 @@
                     "")
     content))
 
-(defn simplified-property?
+(defn- simplified-property?
   [line]
   (boolean
    (and (string? line)
         (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons)) line))))
 
-(defn front-matter-property?
+(defn- front-matter-property?
   [line]
   (boolean
    (and (string? line)
         (util/safe-re-find #"^\s*[^ ]+:" line))))
 
-(defn get-property-key
+(defn- get-property-key
   [line format]
   (and (string? line)
        (when-let [key (last
@@ -62,7 +62,7 @@
                          (util/safe-re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
 
-(defn org-property?
+(defn- org-property?
   [line]
   (boolean
    (and (string? line)
@@ -70,7 +70,7 @@
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
-(defn get-org-property-keys
+(defn- get-org-property-keys
   [content]
   (let [content-lines (string/split-lines content)
         [_ properties&body] (split-with #(-> (string/triml %)
@@ -91,7 +91,7 @@
                  string/upper-case)
            properties))))
 
-(defn get-markdown-property-keys
+(defn- get-markdown-property-keys
   [content]
   (let [content-lines (string/split-lines content)
         properties (filter #(re-matches (re-pattern (str "^.+" gp-property/colons "\\s*.+")) %)
@@ -103,7 +103,7 @@
                  string/upper-case)
            properties))))
 
-(defn get-property-keys
+(defn- get-property-keys
   [format content]
   (cond
     (gp-property/contains-properties? content)
@@ -163,7 +163,7 @@
     :else
     content))
 
-(defn build-properties-str
+(defn- build-properties-str
   [format properties]
   (when (seq properties)
     (let [org? (= format :org)

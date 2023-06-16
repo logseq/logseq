@@ -1,9 +1,9 @@
 (ns frontend.util.property-edit
   "Macros.")
 
-(defmacro defn-for-file-based-graph
+(defmacro defn-when-file-based
   [fname args]
-  (let [fn-name (symbol (str fname "-for-file-based"))
+  (let [fn-name (symbol (str fname "-when-file-based"))
         other-args (gensym "args")
         fn-args (vector 'repo '& other-args)
         call-fn-name (symbol (str "frontend.util.property/" fname))]
