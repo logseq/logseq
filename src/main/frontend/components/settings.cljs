@@ -295,12 +295,12 @@
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
   (let [pick-theme [:ul.theme-modes-options
-                    [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-                    [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-                    [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-light))
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong (t :settings-page/theme-light)]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-dark))
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong (t :settings-page/theme-dark)]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-system))
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong (t :settings-page/theme-system)]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
                              :action     pick-theme
@@ -690,7 +690,7 @@
    [:div.text-sm.my-4
     (ui/admonition
      :tip
-     [:p "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."])
+     [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4 
      "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
     [:br][:br]
