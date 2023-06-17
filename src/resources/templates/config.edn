@@ -204,41 +204,65 @@
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 
  ;; The following queries will be displayed at the bottom of today's journal page.
- ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
- ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
+ ;; The "NOW" query returns tasks with "NOW" or "DOING" status between 14 days before today and today.
+ ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status between today and 7 days after today.
+ ;; For both queries tasks are returned when the task either:
+ ;;  - is on a journal page within range, 
+ ;;  - is referencing a journal page within range, 
+ ;;  - is scheduled on a day within range or 
+ ;;  - has a deadline of a day within range.
  :default-queries
  {:journals
-  [{:title "🔨 NOW"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?today
+  [
+   {:title "🔨 NOW"
+    :query [:find (pull ?h [*]) ; get full block results
+            :in $ ?start ?today ; variables made from the values in :inputs to use in the query.
             :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "DOING"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal? true]
-            [?p :block/journal-day ?d]
-            [(>= ?d ?start)]
-            [(<= ?d ?today)]]
-    :inputs [:14d :today]
-    :result-transform (fn [result]
+            [?h :block/marker ?marker] ; tasks are identified by having a marker like TODO
+            [(contains? #{"NOW" "DOING"} ?marker)] ; specify which marker to include.
+            (or
+              [?h :block/page ?p] ; either the task is on a (journal) page
+              [?h :block/refs ?p] ; or references a (journal) page
+            )
+			; A task will always be on a page (like all blocks) as well as reference a page (namely the default marker page i.e. TODO etc.)
+            (or 
+              [?p :block/journal-day ?d] ; the page is a journal page with date ?d
+              [?h :block/scheduled ?d] ; or the task is scheduled for date ?d
+              [?h :block/deadline ?d] ; or the task has a deadline for date ?d
+            )
+            [(>= ?d ?start)] ; the date is bigger than or equal to ?start i.e. 14 days before today
+            [(<= ?d ?today)]] ; the date is smaller than or equal to ?next i.e. today.
+    :inputs [:-14d :today] ; dynamic input to define start and next. In this case -14 days from today and today.
+    :result-transform (fn [result] ; change the result of the query with using some clojure function, in this case a sort-by.
                         (sort-by (fn [h]
                                    (get h :block/priority "Z")) result))
-    :group-by-page? false
-    :collapsed? false}
+    :group-by-page? false ; don't group the blocks by page (change to true to group)
+    :breadcrumb-show? true ; do show the parent block hierarchy of the block (change to false to hide it)
+    :collapsed? false} ; don't collapse the query to title only. Change to true to collapse the query.
    {:title "📅 NEXT"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?next
+    :query [:find (pull ?h [*]) ; get full block results
+            :in $ ?start ?next ; variables made from the values in :inputs to use in the query.
             :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal? true]
-            [?p :block/journal-day ?d]
-            [(> ?d ?start)]
-            [(< ?d ?next)]]
-    :inputs [:today :7d-after]
-    :group-by-page? false
-    :collapsed? false}]}
+            [?h :block/marker ?marker] ; tasks are identified by having a marker like TODO
+            [(contains? #{"NOW" "LATER" "TODO"} ?marker)] ; specify which marker to include.
+            (or
+              [?h :block/page ?p] ; either the task is on a (journal) page
+              [?h :block/refs ?p] ; or references a (journal) page
+            )
+            ; A task will always be on a page (like all blocks) as well as reference a page (namely the default marker page i.e. TODO etc.)
+            (or 
+              [?p :block/journal-day ?d] ; the page is a journal page with date ?d
+              [?h :block/scheduled ?d] ; or the task is scheduled for date ?d
+              [?h :block/deadline ?d] ; or the task has a deadline for date ?d
+            )
+            [(> ?d ?start)] ; the date is bigger than ?start i.e. today
+            [(< ?d ?next)]] ; the date is smaller than ?next i.e. 7 days after today.
+    :inputs [:today :+7d] ; dynamic input to define start and next. In this case today and +7 days from today.
+    :group-by-page? false ; don't group the blocks by page (change to true to group)
+    :breadcrumb-show? true ; do show the parent block hierarchy of the block (change to false to hide it)
+    :collapsed? false} ; don't collapse the query to title only. Change to true to collapse the query.
+  ]
+ }
 
  ;; Add custom commands to the command palette
  ;; Example usage:
