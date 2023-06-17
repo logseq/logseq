@@ -1240,7 +1240,7 @@
 (defn- macro-function-cp
   [config arguments]
   (or
-   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
+   (some-> (:query-function-result config) rum/react (block-macros/function-macro arguments))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
@@ -2705,16 +2705,30 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config block]
-  (let [ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)
-        *navigating-block (get state ::navigating-block)
-        navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or (and custom-query?
-                           (empty? (:block/children block))
+(defn- build-config [config block {:keys [navigating-block navigated?]}]
+  (cond-> config
+    navigated?
+    (assoc :id (str navigating-block))
+
+    true
+    (update :block merge block)
+
+    ;; Each block might have multiple queries, but we store only the first
+    ;; query's result
+    (nil? (:query-result config))
+    (assoc :query-result (atom nil))
+
+    ;; Store block's first query result for use with {{function}}.
+    ;; Independent of :query-result to avoid reactive bugs
+    (nil? (:query-function-result config))
+    (assoc :query-function-result (atom nil))
+
+    (:ref? config)
+    (block-handler/attach-order-list-state block)))
+
+(defn- build-block [repo config block* {:keys [navigating-block navigated?]}]
+  (let [block (if (or (and (:custom-query? config)
+                           (empty? (:block/children block*))
                            (not (and (:dsl-query? config)
                                      (string/includes? (:query config) "not"))))
                       navigated?)
@@ -2723,21 +2737,26 @@
                                                       {:scoped-block-id (:db/id block)})
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
-                block)
-        block (if ref?
-                (merge block (db/sub-block (:db/id block)))
-                block)
-        {:block/keys [uuid children pre-block? refs level format content properties]} block
+                block*)
+        {:block/keys [pre-block? format content] :as block'}
+        (if (:ref? config)
+          (merge block (db/sub-block (:db/id block)))
+          block)]
+    (merge block' (block/parse-title-and-body uuid format pre-block? content))))
+
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  [state repo config* block*]
+  (let [ref? (:ref? config*)
+        custom-query? (boolean (:custom-query? config*))
+        ref-or-custom-query? (or ref? custom-query?)
+        *navigating-block (get state ::navigating-block)
+        navigating-block (rum/react *navigating-block)
+        navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
+        block (build-block repo config* block* {:navigating-block navigating-block :navigated? navigated?})
+        {:block/keys [uuid children pre-block? refs level content properties]} block
         {:block.temp/keys [top?]} block
-        config (if navigated? (assoc config :id (str navigating-block)) config)
-        block (merge block (block/parse-title-and-body uuid format pre-block? content))
+        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         blocks-container-id (:blocks-container-id config)
-        config (update config :block merge block)
-        ;; Each block might have multiple queries, but we store only the first query's result
-        config (if (nil? (:query-result config))
-                 (assoc config :query-result (atom nil))
-                 config)
-        config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)

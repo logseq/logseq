@@ -80,7 +80,7 @@
                          (dissoc result nil)
                          result))
                      transformed-query-result)]
-        (when-let [query-result (:query-result config)]
+        (when-let [query-result (:query-function-result config)]
           (reset! query-result result))
         (when query-atom
           (util/safe-with-meta result (meta @query-atom))))))

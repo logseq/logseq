@@ -78,8 +78,8 @@
 
 (deftest get-query-result-sets-result-in-config
   (let [result [{:db/id 1 :block/content "parent" :block/uuid 1}]
-        config {:query-result (atom nil)}]
+        config {:query-function-result (atom nil)}]
     (is (= result
            (mock-get-query-result result {} {:table? true :config config})))
-    (is (= result @(:query-result config))
-        "Result is set in config for downstream use e.g. query table fn")))
+    (is (= result @(:query-function-result config))
+        "Result is set in config for downstream use e.g. query fn")))
