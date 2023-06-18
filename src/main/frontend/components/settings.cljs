@@ -342,7 +342,7 @@
                       (when-not (string/blank? format)
                         (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
-                          [:div "You must re-index your graph for this change to take effect"]
+                          [:div (t :settings-page/custom-date-format-notification)]
                           :warning false)
                         (state/close-modal!)
                         (route-handler/redirect! {:to :repos}))))}
@@ -692,16 +692,14 @@
      :tip
      [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4 
-     "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
+     (t :settings-page/git-desc-1)]
     [:br][:br]
     [:span.text-sm.opacity-50.my-4
-     "For professional users, Logseq also supports using "]
+     (t :settings-page/git-desc-2)]
     [:a {:href "https://git-scm.com/" :target "_blank"}
      "Git"]
     [:span.text-sm.opacity-50.my-4
-     " for version control."]
-    [:span.text-sm.opacity-50.my-4
-     "Use Git at your own risk as general Git issues are not supported by the Logseq team"]]
+     " for version control. Use Git at your own risk as general Git issues are not supported by the Logseq team."]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
