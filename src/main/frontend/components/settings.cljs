@@ -995,11 +995,11 @@
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
          [:div.text-sm
-          "Click"
+          (:settings-page/sync-desc-1)
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
-           "here"]
-          "for instructions on how to set up and use Sync."]]])]))
+           (t :settings-page/sync-desc-2)]
+          (t :settings-page/sync-desc-3)]]])]))
 
      ;; (when-not web-platform?
      ;;   [:<>
