@@ -699,7 +699,7 @@
     [:a {:href "https://git-scm.com/" :target "_blank"}
      "Git"]
     [:span.text-sm.opacity-50.my-4
-     " for version control. Use Git at your own risk as general Git issues are not supported by the Logseq team."]]
+     (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
