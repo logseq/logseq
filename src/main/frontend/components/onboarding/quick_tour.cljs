@@ -164,7 +164,7 @@
                          (wait-target ".nav-header .whiteboard" 500)
                          (util/scroll-to-top))
     :canClickTarget    true
-    :buttons           [{:text "Next" :action (.-next jsTour)}]
+    :buttons           [{:text (t :on-boarding/tour-whiteboard-btn-next) :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
@@ -178,8 +178,8 @@
                          (route-handler/redirect-to-whiteboard-dashboard!)
                          (wait-target ".dashboard-create-card" 500))
     :attachTo          {:element ".dashboard-create-card" :on "bottom"}
-    :buttons           [{:text "Back" :classes "back" :action (.-back jsTour)}
-                        {:text "Finish" :action (.-complete jsTour)}]
+    :buttons           [{:text (t :on-boarding/tour-whiteboard-btn-back) :classes "back" :action (.-back jsTour)}
+                        {:text (t :on-boarding/tour-whiteboard-btn-finish) :action (.-complete jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
