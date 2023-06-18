@@ -18,7 +18,7 @@
   [^js jsTour]
   (let [^js el (js/document.createElement "button")]
     (.add (.-classList el) "cp__onboarding-skip-quick-tour")
-    (set! (.-innerHTML el) (h/render-html [:span [:i.ti.ti-player-skip-forward] (t :on-boarding/quick_tour-btn-skip)]))
+    (set! (.-innerHTML el) (h/render-html [:span [:i.ti.ti-player-skip-forward] (t :on-boarding/quick-tour-btn-skip)]))
     (.addEventListener el "click" #(.cancel jsTour))
     [#(.appendChild js/document.body el)
      #(.removeChild js/document.body el)]))
@@ -36,21 +36,21 @@
 
   (h/render-html
    [:div.steps
-    [:strong (str (t :on-boarding/quick_tour-steps) current)]
+    [:strong (str (t :on-boarding/quick-tour-steps) current)]
     [:ul (for [i (range total)] [:li {:class (when (= current (inc i)) "active")} i])]]))
 
 (defn- create-steps! [^js jsTour]
   [
    ;; step 1
    {:id                "nav-help"
-    :text              (h/render-html [:section [:h2 (t :on-boarding/quick_tour-help-title)]
-                                       [:p (t :on-boarding/quick_tour-help-desc)]])
+    :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-help-title)]
+                                       [:p (t :on-boarding/quick-tour-help-desc)]])
     :attachTo          {:element ".cp__sidebar-help-btn" :on "top"}
     :beforeShowPromise #(if (state/sub :ui/sidebar-open?)
                           (wait-target state/hide-right-sidebar! 700)
                           (p/resolved true))
     :canClickTarget    true
-    :buttons           [{:text (t :on-boarding/quick_tour-btn-next) :action (.-next jsTour)}]
+    :buttons           [{:text (t :on-boarding/quick-tour-btn-next) :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
@@ -58,11 +58,11 @@
 
    ;; step 2
    {:id                "nav-journal-page"
-    :text              (h/render-html [:section [:h2 (t :on-boarding/quick_tour-journal-page-title)]
+    :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-journal-page-title)]
                                        [:p
-                                        [:span (t :on-boarding/quick_tour-journal-page-desc-1)]
-                                        [:a (t :on-boarding/quick_tour-journal-page-desc-2)]
-                                        [:span (t :on-boarding/quick_tour-journal-page-desc-3)]]])
+                                        [:span (t :on-boarding/quick-tour-journal-page-desc-1)]
+                                        [:a (t :on-boarding/quick-tour-journal-page-desc-2)]
+                                        [:span (t :on-boarding/quick-tour-journal-page-desc-3)]]])
 
     :attachTo          {:element ".page.is-journals .page-title" :on "top-end"}
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
@@ -71,8 +71,8 @@
                                          (route-handler/redirect-to-page! (date/today))
                                          (util/scroll-to-top)) 200)
                           (p/resolved true))
-    :buttons           [{:text (t :on-boarding/quick_tour-btn-back) :classes "back" :action (.-back jsTour)}
-                        {:text (t :on-boarding/quick_tour-btn-next) :action (.-next jsTour)}]
+    :buttons           [{:text (t :on-boarding/quick-tour-btn-back) :classes "back" :action (.-back jsTour)}
+                        {:text (t :on-boarding/quick-tour-btn-next) :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 63}}
                                     {:name    "offset"
@@ -80,13 +80,13 @@
 
    ;; step 3
    {:id                "nav-left-sidebar"
-    :text              (h/render-html [:section [:h2 (t :on-boarding/quick_tour-left-sidebar-title)]
-                                       [:p [:span (t :on-boarding/quick_tour-left-sidebar-desc)]]])
+    :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-left-sidebar-title)]
+                                       [:p [:span (t :on-boarding/quick-tour-left-sidebar-desc)]]])
 
     :attachTo          {:element "#left-menu" :on "top"}
     :beforeShowPromise #(p/resolved true)
-    :buttons           [{:text (t :on-boarding/quick_tour-btn-back) :classes "back" :action (.-back jsTour)}
-                        {:text (t :on-boarding/quick_tour-btn-next) :action (.-next jsTour)}]
+    :buttons           [{:text (t :on-boarding/quick-tour-btn-back) :classes "back" :action (.-back jsTour)}
+                        {:text (t :on-boarding/quick-tour-btn-next) :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
@@ -94,15 +94,15 @@
 
    ;; step 4
    {:id                "nav-favorites"
-    :text              (h/render-html [:section [:h2 (t :on-boarding/quick_tour-favorites-title)]
-                                       [:p (t :on-boarding/quick_tour-favorites-desc-1)]
-                                       [:p (t :on-boarding/quick_tour-favorites-desc-2)]])
+    :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-favorites-title)]
+                                       [:p (t :on-boarding/quick-tour-favorites-desc-1)]
+                                       [:p (t :on-boarding/quick-tour-favorites-desc-2)]])
     :beforeShowPromise #(if-not (state/sub :ui/left-sidebar-open?)
                           (wait-target state/toggle-left-sidebar! 500)
                           (p/resolved true))
     :attachTo          {:element ".nav-content-item.favorites" :on "right"}
-    :buttons           [{:text (t :on-boarding/quick_tour-btn-back) :classes "back" :action (.-back jsTour)}
-                        {:text (t :on-boarding/quick_tour-btn-finish) :action (.-complete jsTour)}]}
+    :buttons           [{:text (t :on-boarding/quick-tour-btn-back) :classes "back" :action (.-back jsTour)}
+                        {:text (t :on-boarding/quick-tour-btn-finish) :action (.-complete jsTour)}]}
    ])
 
 (defn- create-steps-file-sync! [^js jsTour]
@@ -277,7 +277,7 @@
 
 (defn init []
   (command-palette/register {:id     :document/quick-tour
-                             :desc   (t :on-boarding/command-palette-quick_tour)
+                             :desc   (t :on-boarding/command-palette-quick-tour)
                              :action #(ready start)})
 
   ;; TODO: fix logic
