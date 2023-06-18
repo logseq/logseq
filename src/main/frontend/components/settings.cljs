@@ -104,7 +104,7 @@
 
           "update-available"
           (let [{:keys [name url]} payload]
-            [:p (str "Found new release ")
+            [:p (str (t :settings-page/update-available))
              [:a.link
               {:on-click
                (fn [e]
@@ -113,7 +113,7 @@
               svg/external-link name " 🎉"]])
 
           "error"
-          [:p "⚠️ Oops, Something Went Wrong!" [:br] " Please check out the "
+          [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
            [:a.link
             {:on-click
              (fn [e]
