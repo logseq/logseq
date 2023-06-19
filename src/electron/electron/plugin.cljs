@@ -19,6 +19,23 @@
               (.. win -webContents
                   (send (name type) (bean/->js payload))))))
 
+(defonce github-api-0 "https://api.github.com")
+(defonce github-api-1 "https://plugins.logseq.io/github/api")
+(defonce *github-api (atom github-api-0))
+(defonce *last-valid-github-api (atom nil))
+
+(defn valid-github-api!
+  []
+  (when (or (nil? @*last-valid-github-api)
+            (> (- (js/Date.now) @*last-valid-github-api) (* 1000 60)))
+    (let [target github-api-1]
+      (-> (fetch (str target "/rate_limit") {:timeout 2000})
+          (p/then #(when (not= (.-status %) 200) (throw (js/Error. (.-statusText %)))))
+          (p/then #(do (reset! *github-api target) (debug "INFO: use github api - " target)))
+          (p/catch #(do (reset! *github-api github-api-0) (debug "ERR: valid github api - " %)))
+          (p/finally #(reset! *last-valid-github-api (js/Date.now)))))))
+
+
 (defn dotdir-file?
   [file]
   (and file (string/starts-with? (node-path/normalize file) cfgs/dot-root)))
@@ -34,13 +51,14 @@
 (defn- fetch-release-asset
   [{:keys [repo theme]} url-suffix {:keys [response-transform]
                                     :or   {response-transform identity}}]
-  (-> (p/let [repo         (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
-              api          #(str "https://api.github.com/repos/" repo "/" %)
+  (-> (p/let [_            (valid-github-api!)
+              repo         (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+              api          #(str @*github-api "/repos/" repo "/" %)
               endpoint     (api url-suffix)
-              ^js res      (fetch endpoint)
+              ^js res      (fetch endpoint {:timeout (* 1000 5)})
               illegal-text (when-not (= 200 (.-status res)) (.text res))
               _            (when-not (string/blank? illegal-text) (throw (js/Error. (str "Github API Failed(" (.-status res) ") " illegal-text))))
-              _            (debug "[Release URL] " endpoint "[Status/Text]" (.-status res))
+              _            (debug "Release latest:" endpoint ":status" (.-status res))
               res          (response-transform res)
               res          (.json res)
               res          (bean/->clj res)
@@ -83,7 +101,7 @@
                             ;; cases. Previous logseq versions did not store the
                             ;; plugin's git tag required to correctly install it
                             (let [repo' (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
-                                  api   #(str "https://api.github.com/repos/" repo' "/" %)]
+                                  api   #(str @*github-api "/repos/" repo' "/" %)]
                               (fetch (api "releases/latest")))
                             res))}))
 
@@ -174,10 +192,10 @@
           updating?       (and version (. semver valid coerced-version)
                                (not= action :install))]
 
-      (debug (if updating? "Updating:" "Installing:") repo)
+      (debug "===" (if updating? "Updating:" "Installing:") repo "===")
 
       (-> (p/create
-            (fn [resolve _reject]
+            (fn [resolve reject]
               ;;(reset! *installing-or-updating item)
               ;; get releases
               (-> (p/let [[asset latest-version notes]
@@ -185,18 +203,19 @@
                             (fetch-specific-release-asset item)
                             (fetch-latest-release-asset item))
 
-                          _      (debug "[Release Asset] #" latest-version " =>" (:url asset))
+                          _      (debug "Release latest:" latest-version " from" (:url asset))
 
                           ;; compare latest version
                           _      (when-let [coerced-latest-version
                                             (and updating? latest-version
                                                  (. semver coerce latest-version))]
 
-                                   (debug "[Updating Latest?] " version " > " latest-version)
+                                   (debug "Release compare:" version "(current) > " latest-version "(latest)")
 
                                    (if (. semver lt coerced-version coerced-latest-version)
-                                     (debug "[Updating Latest] " latest-version)
-                                     (throw (js/Error. :no-new-version))))
+                                     (debug "Updating latest:" latest-version)
+                                     (do (debug "Update skip: no new version")
+                                         (throw (js/Error. :no-new-version)))))
 
                           dl-url (if-not (string? asset)
                                    (:browser_download_url asset) asset)
@@ -207,7 +226,7 @@
 
                           dest   (.join node-path cfgs/dot-root "plugins" (:id item))
                           _      (when-not only-check (download-asset-zip item dl-url latest-version dest))
-                          _      (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
+                          _      (debug (str "[" (if only-check "Checked" "Updated") " DONE]") latest-version)]
 
                     (emit :lsp-updates
                           {:status     :completed
@@ -224,8 +243,12 @@
                             {:status     :error
                              :only-check only-check
                              :payload    (assoc item :error-code (.-message e))})
-                      (debug e))
-                    (resolve nil)))))
+                      (reject e))))))
+
+          (p/catch
+            (fn [^js e]
+              (when-not (contains? #{":no-new-version"} (.-message e))
+                (debug e))))
 
           (p/finally
             (fn []))))
