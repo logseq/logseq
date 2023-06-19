@@ -28,7 +28,8 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [frontend.modules.shortcut.core :as shortcut]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.context.i18n :refer [t]]))
 
 ;;; ================================================================
 ;;; Commentary
