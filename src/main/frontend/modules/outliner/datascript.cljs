@@ -78,7 +78,7 @@
     txs))
 
 (defn replace-ref-with-content
-  [repo txs opts]
+  [txs repo opts]
   (if (and (= :delete-blocks (:outliner-op opts))
            (empty? (:uuid-changed opts)))
     (let [retracted-block-ids (->> (keep (fn [tx]
