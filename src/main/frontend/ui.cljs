@@ -559,7 +559,7 @@
        :aria-hidden "true"}]]]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
-  (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
+  (let [default-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
         binding         (or custom-binding default-binding)]
     (shortcut-helper/decorate-binding binding)))

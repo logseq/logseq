@@ -40,7 +40,7 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
-(def ^:large-vars/data-var all-default-keyboard-shortcuts
+(def ^:large-vars/data-var all-built-in-keyboard-shortcuts
   ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
   ;; So this setting item does not cover all cases.
   ;; See-also: frontend.components.datetime/time-repeater
@@ -73,10 +73,10 @@
 
    :whiteboard/select            {:binding ["1" "w s"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
-   
+
    :whiteboard/pan               {:binding ["2" "w p"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
-   
+
    :whiteboard/portal            {:binding ["3" "w b"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
 
@@ -85,13 +85,13 @@
 
    :whiteboard/highlighter       {:binding ["5" "w h"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
-   
+
    :whiteboard/eraser            {:binding ["6" "w e"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
-   
+
    :whiteboard/connector         {:binding ["7" "w c"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
-   
+
    :whiteboard/text              {:binding ["8" "w t"]
                                   :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
 
@@ -332,7 +332,7 @@
 
    :editor/toggle-undo-redo-mode   {:binding false
                                     :fn      undo-redo/toggle-undo-redo-mode!}
-   
+
    :editor/toggle-number-list      {:binding "t n"
                                     :fn #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
@@ -540,7 +540,7 @@
                                     :fn :frontend.handler.common.developer/show-page-ast}})
 
 (let [keyboard-commands
-      {::commands (set (keys all-default-keyboard-shortcuts))
+      {::commands (set (keys all-built-in-keyboard-shortcuts))
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
           (str "Keyboard commands must have an english label"
@@ -557,7 +557,7 @@
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
 
 (defn build-category-map [ks]
-  (->> (select-keys all-default-keyboard-shortcuts ks)
+  (->> (select-keys all-built-in-keyboard-shortcuts ks)
        (remove (comp :inactive val))
        ;; Convert keyword fns to real fns
        (map (fn [[k v]]
@@ -712,7 +712,7 @@
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy              (:misc/copy              all-default-keyboard-shortcuts)}
+    {:misc/copy              (:misc/copy              all-built-in-keyboard-shortcuts)}
 
     :shortcut.handler/global-non-editing-only
     (->
@@ -889,7 +889,7 @@
     :whiteboard/group
     :whiteboard/ungroup
     :whiteboard/toggle-grid]
-   
+
    :shortcut.category/others
    [:pdf/previous-page
     :pdf/next-page
@@ -941,9 +941,9 @@
 (def category
   "Active list of categories for docs purpose"
   (update-vals
-   category*
-   (fn [v]
-     (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))))
+    category*
+    (fn [v]
+     (vec (remove #(:inactive (get all-built-in-keyboard-shortcuts %)) v)))))
 
 (def *shortcut-cmds (atom {}))
 
