@@ -7,6 +7,10 @@ body:
         Thank you very much for opening a bug report with Logseq.
 
         If you have a feature idea or need help, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY).
+
+        Please make sure to provide a descriptive, deterministic, and reproducible report. It saves time for both the developers and users who are looking for solutions. Providing as much information as possible, including screenshots and logs, is highly appreciated. This will help us to better understand the issue and respond more effectively.
+
+        Please DO NOT use this template to ask questions. There are other appropriate channels to ask questions. This template is strictly for reporting bugs.
   - type: checkboxes
     id: confirm-search
     attributes:

@@ -29,7 +29,7 @@
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:button.button.icon.toggle-right-sidebar
-       {:title "Toggle right sidebar"
+       {:title (t :right-side-bar/toggle-right-sidebar)
         :on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:size 20})])))
 
@@ -56,7 +56,7 @@
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
-   (shortcut/shortcut {:show-title? false})])
+   (shortcut/shortcut-page {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
@@ -123,11 +123,11 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/page-graph))
+    [(t :right-side-bar/page-graph)
      (page/page-graph)]
 
     :history
-    [(str (t :right-side-bar/history))
+    [(t :right-side-bar/history)
      (history)]
 
     :block-ref

@@ -11,5 +11,4 @@ export async function renamePage(page: Page, new_name: string) {
   await page.fill('input[type="text"]', '')
   await page.type('.title input', new_name)
   await page.keyboard.press('Enter')
-  await page.click('.ui__confirm-modal button')
 }

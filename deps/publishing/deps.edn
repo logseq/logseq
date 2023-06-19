@@ -3,5 +3,5 @@
  {logseq/db {:local/root "../db"}}
 
  :aliases
- {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.03.17"}}
+ {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}}}
