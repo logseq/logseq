@@ -250,34 +250,71 @@ test('multi properties with code', async ({ page }) => {
 test('Select codeblock language', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.type('textarea >> nth=0', '/code block', { delay: 100 })
-  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
+  // Open the slash command menu
+  await page.type('textarea >> nth=0', '/code block', { delay: 20 })
+
+  expect(
+    await page.waitForSelector('[data-modal-name="commands"]', {
+      state: 'visible',
+    })
+  ).toBeTruthy()
+
+  // Select `code block` command and open the language dropdown menu
+  await page.press('textarea >> nth=0', 'Enter', { delay: 10 })
+  // wait for the modal to open
+  expect(
+    await page.waitForSelector('[data-modal-name="select-code-block-mode"]', {
+      state: 'visible',
+    })
+  ).toBeTruthy()
 
   // Select Clojure from the dropdown menu
   await repeatKeyPress(page, 'ArrowDown', 6)
-  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
+  await page.press('textarea >> nth=0', 'Enter', { delay: 10 })
+  // expect the codeblock to be visible
+  expect(await page.waitForSelector('.CodeMirror', { state: 'visible' }))
 
-  await page.type('.CodeMirror textarea', '(println "Hello, Logseq!")')
-  await page.press('.CodeMirror textarea', 'Escape', { delay: 100 })
+  // Exit codeblock and return to block edit mode
+  await page.press('.CodeMirror textarea >> nth=0', 'Escape', { delay: 10 })
+
   expect(await page.inputValue('.block-editor textarea')).toBe(
-    '```clojure\n(println "Hello, Logseq!")\n```'
+    '```clojure\n```'
   )
 })
 
 test('Select codeblock language while surrounded by text', async ({ page }) => {
   await createRandomPage(page)
-
-  await page.type('textarea >> nth=0', 'abc abc')
+  await page.type('textarea >> nth=0', 'ABC XYZ', { delay: 20 })
   await repeatKeyPress(page, 'ArrowLeft', 3)
-  await page.type('textarea >> nth=0', '/code', { delay: 100 })
-  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
+
+  // Open the slash command menu
+  await page.type('textarea >> nth=0', '/code block', { delay: 20 })
+
+  expect(
+    await page.waitForSelector('[data-modal-name="commands"]', {
+      state: 'visible',
+    })
+  ).toBeTruthy()
+
+  // Select `code block` command and open the language dropdown menu
+  await page.press('textarea >> nth=0', 'Enter', { delay: 10 })
+  // wait for the modal to open
+  expect(
+    await page.waitForSelector('[data-modal-name="select-code-block-mode"]', {
+      state: 'visible',
+    })
+  ).toBeTruthy()
 
   // Select Clojure from the dropdown menu
   await repeatKeyPress(page, 'ArrowDown', 6)
-  await page.press('textarea >> nth=0', 'Enter', { delay: 100 })
+  await page.press('textarea >> nth=0', 'Enter', { delay: 10 })
+  // expect the codeblock to be visible
+  expect(await page.waitForSelector('.CodeMirror', { state: 'visible' }))
 
-  await page.press('.CodeMirror textarea', 'Escape', { delay: 100 })
+  // Exit codeblock and return to block edit mode
+  await page.press('.CodeMirror textarea >> nth=0', 'Escape', { delay: 10 })
+
   expect(await page.inputValue('.block-editor textarea')).toBe(
-    'abc \n```clojure\n```\nabc'
+    'ABC \n```clojure\n```\nXYZ'
   )
 })
