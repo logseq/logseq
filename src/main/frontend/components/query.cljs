@@ -141,9 +141,7 @@
              (when-not (or built-in? dsl-query?)
                (when collapsed?
                  (editor-handler/collapse-block! current-block-uuid))))
-           state)}
-  (rum/local nil ::query-result)
-  {:init (fn [state] (assoc state :query-error (atom nil)))}
+           (assoc state :query-error (atom nil)))}
   [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]
   (let [*query-error (:query-error state)
         built-in? (built-in-custom-query? title)
@@ -208,13 +206,13 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (editor-property/set-block-property! current-block-uuid
-                                                                                                 "query-table"
-                                                                                                 false))}
+                                                                                                  "query-table"
+                                                                                                  false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (editor-property/set-block-property! current-block-uuid
-                                                                                                 "query-table"
-                                                                                                 true))}
+                                                                                                  "query-table"
+                                                                                                  true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 
                [:a.flex.ml-1.fade-link
