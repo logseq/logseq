@@ -632,7 +632,7 @@
                  (svg/caret-down)]]])
             (fn [{:keys [toggle-fn]}]
               (cards-select {:on-chosen (fn [query]
-                                          (let [query' (if (= query (t :flashcards/modal-select-all)") "" query)]
+                                          (let [query' (if (= query (t :flashcards/modal-select-all)) "" query)]
                                             (reset! query-atom query')
                                             (toggle-fn)))}))
             {:modal-class (util/hiccup->class
