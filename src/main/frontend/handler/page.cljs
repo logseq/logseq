@@ -94,7 +94,8 @@
 
 (defn- create-title-property?
   [journal? page-name]
-  (and (not journal?)
+  (and (not (config/db-based-graph? (state/get-current-repo)))
+       (not journal?)
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
@@ -112,8 +113,7 @@
         [page]
 
         (and create-title?
-             (not whiteboard?)
-             (not (config/db-based-graph? (state/get-current-repo))))
+             (not whiteboard?))
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page
            properties-block])
@@ -134,9 +134,10 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard? rename?]
            :or   {redirect?           true
                   create-first-block? true
+                  rename?             false
                   format              nil
                   properties          nil
                   split-namespace?    true
@@ -149,7 +150,7 @@
          page-name  (util/page-name-sanity-lc title)
          repo       (state/get-current-repo)
          with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
-     (when (db/page-empty? repo page-name)
+     (when (or (db/page-empty? repo page-name) rename?)
        (let [pages    (if split-namespace?
                         (gp-util/split-namespace-pages title)
                         [title])
@@ -163,12 +164,20 @@
                            ;; for namespace pages, only last page need properties
                            drop-last
                            (mapcat #(build-page-tx repo format nil % journal? false))
-                           (remove nil?)
-                           (remove (fn [m]
-                                     (some? (db/entity [:block/name (:block/name m)])))))
-             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard?)
+                           (remove nil?))
+             txs      (map-indexed (fn [i page]
+                                     (if (zero? i)
+                                       page
+                                       (assoc page :block/namespace
+                                              [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                   txs)
+             last-txs (first (build-page-tx repo format properties (last pages) journal? whiteboard?))
+             last-txs (if (seq txs)
+                        [(assoc last-txs :block/namespace [:block/uuid (:block/uuid (last txs))])]
+                        [last-txs])
              txs      (concat txs last-txs)]
          (when (seq txs)
+           (util/pprint txs)
            (db/transact! txs)))
 
        (when create-first-block?
@@ -620,9 +629,37 @@
                               :push        false
                               :path-params {:name to-page-name}})))
 
-(defn rename!
+(defn db-based-rename!
+  ([old-name new-name]
+   (db-based-rename! old-name new-name true))
+  ([old-name new-name redirect?]
+   (let [old-name      (string/trim old-name)
+         new-name      (string/trim new-name)
+         old-page-name (util/page-name-sanity-lc old-name)
+         page-e (db/entity [:block/name old-page-name])
+         new-page-name (util/page-name-sanity-lc new-name)
+         name-changed? (not= old-name new-name)]
+     (if (and old-name
+              new-name
+              (not (string/blank? new-name))
+              name-changed?)
+       (if (and (not= old-page-name new-page-name)
+                (db/entity [:block/name new-page-name]))
+         (when (string/blank? new-name)
+           (notification/show! "Merging pages is not supported yet." :info))
+         (create! new-page-name
+                  {:rename? true
+                   :uuid (:block/uuid page-e)
+                   :redirect? redirect?
+                   :create-first-block? false}))
+
+       (when (string/blank? new-name)
+         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+     (ui-handler/re-render-root!))))
+
+(defn file-based-rename!
   "Accepts unsanitized page names"
-  ([old-name new-name] (rename! old-name new-name true))
+  ([old-name new-name] (file-based-rename! old-name new-name true))
   ([old-name new-name redirect?]
     (let [repo          (state/get-current-repo)
           old-name      (string/trim old-name)
@@ -648,6 +685,15 @@
         (when (string/blank? new-name)
           (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
       (ui-handler/re-render-root!))))
+
+(defn rename!
+  ([old-name new-name] (rename! old-name new-name true))
+  ([old-name new-name redirect?]
+   (prn "db based? " (config/db-based-graph? (state/get-current-repo)))
+   (let [f (if (config/db-based-graph? (state/get-current-repo))
+             db-based-rename!
+             file-based-rename!)]
+     (f old-name new-name redirect?))))
 
 (defn- split-col-by-element
   [col element]
