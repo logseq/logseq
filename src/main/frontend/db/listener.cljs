@@ -7,15 +7,17 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.config :as config]))
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
-  (let [key (conn/datascript-db repo)
-        db (conn/get-db repo)]
-    (when db
-      (let [db-str (if db (db-utils/db->string db) "")]
-        (p/let [_ (db-persist/save-graph! key db-str)])))))
+  (when-not (config/db-based-graph? repo)
+    (let [key (conn/datascript-db repo)
+          db (conn/get-db repo)]
+      (when db
+        (let [db-str (if db (db-utils/db->string db) "")]
+          (p/let [_ (db-persist/save-graph! key db-str)]))))))
 
 (defonce persistent-jobs (atom {}))
 
@@ -27,19 +29,20 @@
 (defn persist-if-idle!
   [repo]
   (clear-repo-persistent-job! repo)
-  (let [job (js/setTimeout
-             (fn []
-               (if (and (state/input-idle? repo)
-                        (state/db-idle? repo)
+  (when-not (config/db-based-graph? repo)
+    (let [job (js/setTimeout
+              (fn []
+                (if (and (state/input-idle? repo)
+                         (state/db-idle? repo)
                         ;; It's ok to not persist here since new changes
                         ;; will be notified when restarting the app.
-                        (not (state/whiteboard-route?)))
-                 (persist! repo)
+                         (not (state/whiteboard-route?)))
+                  (persist! repo)
                  ;; (state/set-db-persisted! repo true)
 
-                 (persist-if-idle! repo)))
-             3000)]
-    (swap! persistent-jobs assoc repo job)))
+                  (persist-if-idle! repo)))
+              3000)]
+     (swap! persistent-jobs assoc repo job))))
 
 ;; only save when user's idle
 

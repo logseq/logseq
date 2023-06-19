@@ -545,7 +545,7 @@
   (p/let [full-graph-name (str config/db-version-prefix graph)
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
-          _ (ipc/ipc :db-new graph)
+          _ (ipc/ipc :db-new full-graph-name)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
               {:skip-persist? true})
           initial-data [{:file/path (str "logseq/" "config.edn")
