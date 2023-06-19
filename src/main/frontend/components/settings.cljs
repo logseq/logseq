@@ -59,19 +59,19 @@
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
-                "Check for updates"
+                (t :settings-page/check-for-updates)
                 :class "text-sm p-1 mr-1"
                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
-                "Check for updates"
+                (t :settings-page/check-for-updates)
                 :class "text-sm p-1 mr-1"
                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
-                (if update-pending? "Checking ..." "Check for updates")
+                (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
                 :class "text-sm p-1 mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates false))
@@ -80,7 +80,7 @@
                nil)]
 
        [:div.text-sm.cursor
-        {:title (str "Revision: " config/revision)
+        {:title (str (t :settings-page/revision) config/revision)
          :on-click (fn []
                      (notification/show! [:div "Current Revision: "
                                           [:a {:target "_blank"
@@ -93,14 +93,14 @@
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
          :href "https://docs.logseq.com/#/page/changelog"}
-        "What's new?"]]]
+        (t :settings-page/changelog)]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
           "update-not-available"
-          [:p "Your app is up-to-date 🎉"]
+          [:p (t :settings-page/app-updated)]
 
           "update-available"
           (let [{:keys [name url]} payload]
@@ -127,10 +127,10 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled. "
+     (t :settings-page/preferred-outdenting-tip)
      [:a.text-sm
       {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
-      "→ Learn more"]]
+      (t :settings-page/preferred-outdenting-tip-more)]]
     [:img {:src    "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
            :width  500
            :height 500}]]])
@@ -141,7 +141,7 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     "This option controls whether to expand the block references automatically when zoom-in."]
+     (t :settings-page/auto-expand-block-refs-tip)]
     [:img {:src    "https://user-images.githubusercontent.com/28241963/225818326-118deda9-9d1e-477d-b0ce-771ca0bcd976.gif"
            :width  500
            :height 500}]]])

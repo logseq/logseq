@@ -162,11 +162,12 @@
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :es #{:settings-page/tab-general :settings-page/tab-editor}
+   :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color}
    :it #{:plugins}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
-   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards}
+   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
+            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards 

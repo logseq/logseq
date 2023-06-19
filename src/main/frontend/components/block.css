@@ -1,7 +1,7 @@
 .block-content-wrapper {
   /* 38px is the width of block-control */
   width: calc(100% - 22px);
-
+  user-select: text;
   @screen sm {
     width: calc(100% - 33px);
     overflow-x: visible;
