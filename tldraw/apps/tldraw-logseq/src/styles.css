@@ -32,6 +32,10 @@
   user-select: none;
 }
 
+.logseq-tldraw .block-content-wrapper * {
+  user-select: text;
+}
+
 .dark-theme,
 html[data-theme='dark'] {
   --ls-wb-background-color-gray: var(--color-gray-800, gray);
