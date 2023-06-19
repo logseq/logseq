@@ -102,6 +102,12 @@
    ;; :file/handle {}
    })
 
+(def schema-for-db-based-graph
+  (merge
+   schema
+   {:property/schema {}
+    :property/name {}}))
+
 (def retract-attributes
   #{
     :block/refs

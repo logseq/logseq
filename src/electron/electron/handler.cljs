@@ -344,12 +344,14 @@
   |     3 | init data, (config.edn, custom.js, custom.css) |
   |     4 | db schema                                      |
   |     5 | unknown type                                   |
+  |     6 | property block                                 |
   "
   [block]
   (cond
     (:block/page block) 1
     (:block/name block) 2
     (:file/content block) 3
+    (= :property (:block/type block)) 6
     :else 5))
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
