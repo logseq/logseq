@@ -2734,9 +2734,7 @@
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
         ;; Each block might have multiple queries, but we store only the first query's result
-        config (if (nil? (:query-result config))
-                 (assoc config :query-result (atom nil))
-                 config)
+        config (assoc config :query-result (atom nil))
         config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
@@ -2771,18 +2769,18 @@
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect")
-                    (when order-list? " is-order-list")
-                    (when (string/blank? content) " is-blank"))
-        :blockid (str uuid)
-        :haschild (str (boolean has-child?))}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-md")
+                   (when selected? " selected noselect")
+                   (when order-list? " is-order-list")
+                   (when (string/blank? content) " is-blank"))
+       :blockid (str uuid)
+       :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
