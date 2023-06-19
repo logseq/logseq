@@ -31,12 +31,12 @@
       [:h1.text-xl
        (if picker?
          [:span [:strong (ui/icon "heart")] "Welcome to " [:strong "Logseq!"]]
-         [:span [:strong (ui/icon "file-import")] "Import existing notes"])]
+         [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-setup-title)])]
 
       [:h2
        (if picker?
          "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."
-         "You can also do this later in the app.")]
+         (t :on-boarding/importing-setup-desc))]
 
       content])])
 
@@ -221,14 +221,14 @@
      :importer
      [:article.flex.flex-col.items-center.importer.py-16.px-8
       [:section.c.text-center
-       [:h1 "Do you already have notes that you want to import?"]
-       [:h2 "If they are in a JSON, EDN or Markdown format Logseq can work with them."]]
+       [:h1 (t :on-boarding/importing-title)]
+       [:h2 (t :on-boarding/importing-desc)]]
       [:section.d.md:flex
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/roam-research 28)]]
         [:div.flex.flex-col
-         [[:strong "RoamResearch"]
-          [:small "Import a JSON Export of your Roam graph"]]]
+         [[:strong (t :on-boarding/importing-roam-title)]
+          [:small (t :on-boarding/importing-roam-desc)]]]
         [:input.absolute.hidden
          {:id        "import-roam"
           :type      "file"
@@ -237,8 +237,8 @@
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/logo 28)]]
         [:span.flex.flex-col
-         [[:strong "EDN / JSON"]
-          [:small "Import an EDN or a JSON Export of your Logseq graph"]]]
+         [[:strong (t :on-boarding/importing-lsq-title)]
+          [:small (t :on-boarding/importing-lsq-desc)]]]
         [:input.absolute.hidden
          {:id        "import-lsq"
           :type      "file"
@@ -247,8 +247,8 @@
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
         [:span.flex.flex-col
-         [[:strong "OPML"]
-          [:small " Import OPML files"]]]
+         [[:strong (t :on-boarding/importing-opml-title)]
+          [:small (t :on-boarding/importing-opml-desc)]]]
 
         [:input.absolute.hidden
          {:id        "import-opml"
