@@ -60,6 +60,8 @@
               (not (and (string? query) (string/includes? query "(by-page false)")))))))
 
 (defn get-query-result
+  "Fetches a query's result, transforms it as needed and saves the result into
+  an atom that is passed in as an argument"
   [state config *query-error *query-triggered? current-block-uuid q options]
   (let [query-atom (trigger-custom-query! state *query-error *query-triggered?)
         query-result (and query-atom (rum/react query-atom))

@@ -2733,8 +2733,13 @@
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
-        ;; Each block might have multiple queries, but we store only the first query's result
-        config (assoc config :query-result (atom nil))
+        ;; Each block might have multiple queries, but we store only the first query's result.
+        ;; This :query-result atom is used by the query function feature to share results between
+        ;; the parent's query block and the children blocks. This works because config is shared
+        ;; between parent and children blocks
+        config (if (nil? (:query-result config))
+                 (assoc config :query-result (atom nil))
+                 config)
         config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
