@@ -454,8 +454,8 @@
   (commands/exec-plugin-simple-command! pid cmd action))
 
 (defmethod handle :shortcut-handler-refreshed [[_]]
-  (when-not @st/*inited?
-    (reset! st/*inited? true)
+  (when-not @st/*pending-inited?
+    (reset! st/*pending-inited? true)
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]

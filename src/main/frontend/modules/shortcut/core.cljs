@@ -13,9 +13,9 @@
   (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
-(def *installed (atom {}))
-(def *inited? (atom false))
-(def *pending (atom []))
+(def *installed-handlers (atom {}))
+(def *pending-inited? (atom false))
+(def *pending-shortcuts (atom []))
 
 (def global-keys #js
                   [KeyCodes/TAB
@@ -29,14 +29,14 @@
 
 (defn consume-pending-shortcuts!
   []
-  (when (and @*inited? (seq @*pending))
-    (doseq [[handler-id id shortcut] @*pending]
+  (when (and @*pending-inited? (seq @*pending-shortcuts))
+    (doseq [[handler-id id shortcut] @*pending-shortcuts]
       (register-shortcut! handler-id id shortcut))
-    (reset! *pending [])))
+    (reset! *pending-shortcuts [])))
 
 (defn- get-handler-by-id
   [handler-id]
-  (-> (filter #(= (:group %) handler-id) (vals @*installed))
+  (-> (filter #(= (:group %) handler-id) (vals @*installed-handlers))
       first
       :handler))
 
@@ -50,8 +50,8 @@
   ([handler-id id]
    (register-shortcut! handler-id id nil))
   ([handler-id id shortcut-map]
-   (if (and (keyword? handler-id) (not @*inited?))
-     (swap! *pending conj [handler-id id shortcut-map])
+   (if (and (keyword? handler-id) (not @*pending-inited?))
+     (swap! *pending-shortcuts conj [handler-id id shortcut-map])
      (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
                           (let [handler-id (keyword handler-id)]
                             (get-handler-by-id handler-id))
@@ -86,10 +86,10 @@
 
 (defn uninstall-shortcut-handler!
   [install-id]
-  (when-let [handler (-> (get @*installed install-id)
+  (when-let [handler (-> (get @*installed-handlers install-id)
                          :handler)]
     (.dispose ^js handler)
-    (swap! *installed dissoc install-id)))
+    (swap! *installed-handlers dissoc install-id)))
 
 (defn install-shortcut-handler!
   [handler-id {:keys [set-global-keys?
@@ -126,7 +126,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (swap! *installed merge data)
+      (swap! *installed-handlers merge data)
 
       install-id)))
 
@@ -156,12 +156,12 @@
      state)})
 
 (defn unlisten-all []
-  (doseq [{:keys [handler group]} (vals @*installed)
+  (doseq [{:keys [handler group]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
     (.removeAllListeners handler)))
 
 (defn listen-all []
-  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed)
+  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
     (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
@@ -182,7 +182,7 @@
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
     (state/set-state! :ui/shortcut-handler-refreshing? true)
 
-    (doseq [id (keys @*installed)]
+    (doseq [id (keys @*installed-handlers)]
       (uninstall-shortcut-handler! id))
     (install-shortcuts!)
     (state/pub-event! [:shortcut-handler-refreshed])
@@ -215,7 +215,7 @@
      (let [handler (KeyHandler. js/document)
            keystroke (:rum/local state)]
 
-       (doseq [id (keys @*installed)]
+       (doseq [id (keys @*installed-handlers)]
          (uninstall-shortcut-handler! id))
 
        (events/listen handler "key"
