@@ -86,11 +86,17 @@ Almost all translations are small. The only exceptions to this are the keys `:tu
 * Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
 ## Fix Mistakes
 
-Sometimes, we typo a translation key or forget to use it. If this happens, the
-github CI step of `bb lang:validate-translations` will detect these errors and
-tell you what's wrong. If you get an error about duplicate translations and this
-is a valid duplication for the language, then add it to `allowed-duplicates` in
-[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj).
+There is a lint command to catch common translation mistakes - `bb
+lang:validate-translations`. This runs for all contribution pull requests so
+you'll need to ensure it doesn't fail. Mistakes that it catches:
+
+* Adding translation entries for nonexistent entries in English.
+    * Most common mistake is mistyping an entry name
+* Adding English entries for translations that don't exist in the UI.
+* Adding translation entries that are just duplicates of the English entry.
+    * This catches contributors copying entries from English and then forgetting to translate. Sometimes you do want to have the translation be the same. For this case, add an entry to `allowed-duplicates` in
+[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
+with a list of duplicated entries e.g. `:nb-NO #{:port ...}`.
 
 ## Add a Language
 
