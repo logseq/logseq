@@ -1,7 +1,7 @@
 import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as pathlib from 'path'
-import { modKey } from './util/basic'
+import { modKey, KEYPRESS_DELAY } from './util/basic'
 import { Block } from './types'
 
 // TODO: The file should be a facade of utils in the /util folder
@@ -302,4 +302,31 @@ export async function getCursorPos(page: Page): Promise<number | null> {
   });
 
   return cursorPosition;
+}
+
+/**
+ * Verifies if a modal or dialog is open on the page and then closes it if it is open.
+ *
+ * @param {Page} page - The page object representing the current context in Playwright.
+ *                         This page object provides methods and properties to interact with a web page as a user would.
+ *
+ * @param {string} modal - The CSS selector of the modal dialog to close.
+ *                         This should be unique to the modal that is expected to be present on the page.
+ *
+ * @return {Promise<void>} - A Promise which resolves when the modal is closed.
+ *f
+ * @throws - Will throw an error if the modal is not initially visible on the page
+ *           or if the modal remains visible after attempting to close it.
+ */
+export async function verifyAndCloseModal(page: Page, modal: string): Promise<void> {
+  // Confirm that the modal is open
+  expect(await page.waitForSelector(modal, { state: 'visible' })).toBeTruthy();
+
+  // Exit edit mode
+  await page.keyboard.press('Escape', { delay: KEYPRESS_DELAY })
+  // close the modal
+  await page.keyboard.press('Escape', { delay: KEYPRESS_DELAY })
+
+  // Confirm that the modal is no longer visible on the page
+  await expect ( page.locator(modal)).not.toBeVisible();
 }
