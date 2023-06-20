@@ -172,6 +172,12 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  toggleSnapToGrid = (): this => {
+    const { settings } = this.app
+    settings.update({ snapToGrid: !settings.snapToGrid })
+    return this
+  }
+
   setColor = (color: string): this => {
     const { settings } = this.app
 
