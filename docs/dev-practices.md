@@ -72,10 +72,13 @@ queries and rules. Our queries are linted through clj-kondo and
 [datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will
 error if it detects an invalid query.
 
-### Invalid translations
+### Translations
 
 Our translations can be configured incorrectly. We can catch some of these
 mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
+
+Punctuation and delimiting characters (e.g. `:`, `:`, `?`) should be part of the translatable string.
+Those characters and their position may vary depending on the language.
 
 ### Spell Checker
 
@@ -282,7 +285,7 @@ point out:
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
 
   ```sh
-  bb dev:validate-repo-config-edn templates/config.edn
+  bb dev:validate-repo-config-edn src/resources/templates/config.edn
   ```
 
 * `dev:publishing` - Build a publishing app for a given graph dir. If the

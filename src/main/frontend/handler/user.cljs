@@ -199,6 +199,16 @@
   (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
 
+(defn upgrade [] 
+  (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
+        user-uuid (user-uuid)
+        url (cond-> base-upgrade-url
+              user-uuid (str "?checkout[custom][user_uuid]=" (name user-uuid)))]
+    (println " ~~~ LEMON: " url " ~~~ ")
+    (js/window.open url)))
+  ; (js/window.open 
+  ;   "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"))
+
 (defn <ensure-id&access-token
   []
   (go

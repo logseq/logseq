@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
@@ -35,9 +34,7 @@
   []
   ;; only persist current db!
   ;; TODO rename the function and event to persist-db
-  (repo-handler/persist-db! {:before     #(notification/show!
-                                           (ui/loading (t :graph/persist))
-                                           :warning)
+  (repo-handler/persist-db! {:before     #(ui/notify-graph-persist!)
                              :on-success #(ipc/ipc "persistent-dbs-saved")
                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
@@ -139,15 +136,11 @@
                  ;; fire back "broadcastPersistGraphDone" on done
                  (fn [data]
                    (let [repo (bean/->clj data)
-                         before-f #(notification/show!
-                                    (ui/loading (t :graph/persist))
-                                    :warning)
+                         before-f #(ui/notify-graph-persist!)
                          after-f #(ipc/ipc "broadcastPersistGraphDone")
                          error-f (fn []
                                    (after-f)
-                                   (notification/show!
-                                    (t :graph/persist-error)
-                                    :error))
+                                   (ui/notify-graph-persist-error!))
                          handlers {:before     before-f
                                    :on-success after-f
                                    :on-error   error-f}]

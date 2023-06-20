@@ -75,13 +75,26 @@
           js/JSON.stringify))))
 
 (defn remove-indentation-spaces
+  "Remove the indentation spaces from the content. Only for markdown.
+   level - ast level + 1 (2 for the first level, 3 for the second level, etc., as the non-first line of multi-line block has 2 more space
+           Ex.
+              - level 1 multiline block first line
+                level 1 multiline block second line
+              \t- level 2 multiline block first line
+              \t  level 2 multiline block second line
+   remove-first-line? - apply the indentation removal to the first line or not"
   [s level remove-first-line?]
   (let [lines (string/split-lines s)
         [f & r] lines
         body (map (fn [line]
+                    ;; Check if the indentation area only contains white spaces
+                    ;; Level = ast level + 1, 1-based indentation level
+                    ;; For markdown in Logseq, the indentation area for the non-first line of multi-line block is (ast level - 1) * "\t" + 2 * "(space)"
                     (if (string/blank? (gp-util/safe-subs line 0 level))
+                      ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
                       (gp-util/safe-subs line level)
-                      line))
+                      ;; Otherwise, trim these invalid spaces
+                      (string/triml line)))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))

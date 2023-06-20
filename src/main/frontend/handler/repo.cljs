@@ -48,8 +48,8 @@
       (let [format (state/get-preferred-format)
             file-rpath (str "pages/" "contents." (config/get-file-extension format))
             default-content (case (name format)
-                              "org" (rc/inline "contents.org")
-                              "markdown" (rc/inline "contents.md")
+                              "org" (rc/inline "templates/contents.org")
+                              "markdown" (rc/inline "templates/contents.md")
                               "")]
         (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]

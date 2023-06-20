@@ -598,7 +598,7 @@
 
     [:div.version-list
      (if loading?
-       [:div.p-4 (ui/loading "Loading...")]
+       [:div.p-4 (ui/loading)]
        (for [version version-files]
          (let [version-uuid (get-version-key version)
                local?       (some? (:relative-path version))]
@@ -704,7 +704,7 @@
 
      ;; ready loading
      [:div.flex.items-center.h-full.justify-center.w-full.absolute.ready-loading
-      (ui/loading "Loading...")]]))
+      (ui/loading)]]))
 
 (defn pick-page-histories-panel [graph-uuid page-name]
   (fn []
@@ -789,7 +789,7 @@
    [:div.cloud-tip.rounded-md.mt-6.py-4
     [:div.items-center.opacity-90.flex.justify-center
      [:span.pr-2.flex (ui/icon "bell-ringing" {:class "font-semibold"})]
-     [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
+     [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]]
 
     ;; [:ul.flex.py-6.px-4
     ;;  [:li.it
@@ -802,7 +802,7 @@
     ;;  [:li.it
     ;;   [:h1.dark:text-white "50G"]
     ;;   [:h2 "Total Storage"]]]
-    ]
+    
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Done" :on-click close-fn)]])

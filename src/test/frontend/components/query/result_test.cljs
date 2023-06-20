@@ -8,11 +8,11 @@
 (defn- mock-get-query-result
   "Mocks get-query-result assuming custom queries are being tested. Db calls are
   mocked to minimize setup"
-  [result query {:keys [table? current-block-uuid]}]
+  [result query-m {:keys [table? current-block-uuid config] :or {config {}}}]
   (with-redefs [db/custom-query (constantly (atom result))
                 model/with-pages identity]
     (binding [rum/*reactions* (volatile! #{})]
-      (#'query-result/get-query-result {} {} (atom nil) (atom nil) current-block-uuid query {:table? table?}))))
+      (#'query-result/get-query-result config query-m (atom nil) current-block-uuid {:table? table?}))))
 
 (deftest get-query-result-with-transforms-and-grouping
   (let [result (mapv
@@ -22,8 +22,8 @@
                  {:block/uuid (random-uuid) :block/scheduled 20230417}])
         sorted-result (sort-by :block/scheduled result)]
     (testing "For list view"
-      (are [query expected]
-           (= expected (mock-get-query-result result query {:table? false}))
+      (are [query-m expected]
+           (= expected (mock-get-query-result result query-m {:table? false}))
 
            ;; Default list behavior is to group result
            {}
@@ -75,3 +75,11 @@
     (is (= result
            (mock-get-query-result result {:remove-block-children? false} {:table? true}))
         "Doesn't remove children when :remove-block-children? is false")))
+
+(deftest get-query-result-sets-result-in-config
+  (let [result [{:db/id 1 :block/content "parent" :block/uuid 1}]
+        config {:query-result (atom nil)}]
+    (is (= result
+           (mock-get-query-result result {} {:table? true :config config})))
+    (is (= result @(:query-result config))
+        "Result is set in config for downstream use e.g. query table fn")))

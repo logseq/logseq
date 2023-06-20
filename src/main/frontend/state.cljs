@@ -73,9 +73,9 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
-     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
+     :ui/sidebar-width                      "40%"
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
@@ -165,6 +165,8 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
      :electron/server                       nil
+     :electron/window-maximized?            false
+     :electron/window-fullscreen?           false
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
@@ -423,15 +425,6 @@ should be done through this fn in order to get global config and config defaults
          (string/lower-case (name fmt)))
 
        (get-in @state [:me :preferred_format] "markdown")))))
-
-;; TODO: consider adding a pane in Settings to set this through the GUI (rather
-;; than having to go through the config.edn file)
-(defn get-editor-command-trigger
-  ([] (get-editor-command-trigger (get-current-repo)))
-  ([repo-url]
-   (or
-     (:editor/command-trigger (get-config repo-url))        ;; Get from user config
-     "/")))                                                 ;; Set the default
 
 (defn markdown?
   []
@@ -766,6 +759,18 @@ Similar to re-frame subscriptions"
   [uuid]
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
+
+(defn get-remote-graph-usage
+  []
+  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+    (->> graphs
+         (map #(hash-map :uuid (:GraphUUID %)
+                         :name (:GraphName %)
+                         :used-gbs (/ (:GraphStorageUsage %) 1024 1024 1024)
+                         :limit-gbs (/ (:GraphStorageLimit %) 1024 1024 1024)
+                         :used-percent (/ (:GraphStorageUsage %) (:GraphStorageLimit %) 0.01)))
+         (map #(assoc % :free-gbs (- (:limit-gbs %) (:used-gbs %))))
+         (vec))))
 
 (defn delete-remote-graph!
   [repo]
@@ -1716,8 +1721,10 @@ Similar to re-frame subscriptions"
 (defn pub-event!
   {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
-  (let [chan (get-events-chan)]
-    (async/put! chan payload)))
+  (let [d (p/deferred)
+        chan (get-events-chan)]
+    (async/put! chan [payload d])
+    d))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -2020,9 +2027,10 @@ Similar to re-frame subscriptions"
                    (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
-    (when (every? not-empty (vals agent-opts))
-      (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
+  (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
+    (when (and  (not (contains? #{"system"} type))
+                (every? not-empty (vals agent-opts)))
+      (str protocol "://" host ":" port))))
 
 (defn set-mobile-app-state-change
   [is-active?]
@@ -2104,6 +2112,9 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn get-user-info []
+  (sub :user/info))
 
 (defn clear-user-info!
   []

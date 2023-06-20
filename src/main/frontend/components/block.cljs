@@ -6,12 +6,12 @@
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
-            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -37,13 +37,11 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -68,7 +66,6 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -552,7 +549,7 @@
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-down (fn [_e] (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
@@ -1243,17 +1240,7 @@
 (defn- macro-function-cp
   [config arguments]
   (or
-   (when (:query-result config)
-     (when-let [query-result (rum/react (:query-result config))]
-       (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
-                           (common-handler/safe-read-string "failed to parse function")
-                           (query-handler/normalize-query-function query-result)
-                           (str))
-             f (sci/eval-string fn-string)]
-         (when (fn? f)
-           (try (f query-result)
-                (catch :default e
-                  (js/console.error e)))))))
+   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
@@ -1686,7 +1673,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal? (.-target e))
+    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
@@ -1957,11 +1944,12 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
-                                     (str "var(--ls-highlight-color-" bg-color ")")
-                                     bg-color)
-                 :color (when-not (some #{bg-color} ui/block-background-colors) "white")}
-         :class "px-1 with-bg-color"}))
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}
+           :class "px-1 with-bg-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))
@@ -2057,66 +2045,25 @@
         :else
         (inline-text config (:block/format block) (str v)))]]))
 
-(def hidden-editable-page-properties
-  "Properties that are hidden in the pre-block (page property)"
-  #{:title :filters :icon})
-
-(assert (set/subset? hidden-editable-page-properties (gp-property/editable-built-in-properties))
-        "Hidden editable page properties must be valid editable properties")
-
-(def hidden-editable-block-properties
-  "Properties that are hidden in a block (block property)"
-  (into #{:logseq.query/nlp-date}
-        gp-property/editable-view-and-table-properties))
-
-(assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
-        "Hidden editable page properties must be valid editable properties")
-
-(defn- add-aliases-to-properties
-  [properties block]
-  (let [repo (state/get-current-repo)
-        aliases (db/get-page-alias-names repo
-                                         (:block/name (db/pull (:db/id (:block/page block)))))]
-    (if (seq aliases)
-      (if (:alias properties)
-        (update properties :alias (fn [c]
-                                    (util/distinct-by string/lower-case (concat c aliases))))
-        (assoc properties :alias aliases))
-      properties)))
-
 (rum/defc properties-cp
   [config {:block/keys [pre-block?] :as block}]
-  (let [dissoc-keys (fn [m keys] (apply dissoc m keys))
-        properties (cond-> (update-keys (:block/properties block) keyword)
-                           true
-                           (dissoc-keys (property/hidden-properties))
-                           pre-block?
-                           (dissoc-keys hidden-editable-page-properties)
-                           (not pre-block?)
-                           (dissoc-keys hidden-editable-block-properties)
-                           pre-block?
-                           (add-aliases-to-properties block))]
+  (let [ordered-properties
+        (property/get-visible-ordered-properties (:block/properties block)
+                                                 (:block/properties-order block)
+                                                 {:pre-block? pre-block?
+                                                  :page-id (:db/id (:block/page block))})]
     (cond
-      (seq properties)
-      (let [properties-order (cond->> (:block/properties-order block)
-                                      true
-                                      (remove (property/hidden-properties))
-                                      pre-block?
-                                      (remove hidden-editable-page-properties))
-            properties-order (distinct properties-order)
-            ordered-properties (if (seq properties-order)
-                                 (map (fn [k] [k (get properties k)]) properties-order)
-                                 properties)]
-        [:div.block-properties
-         {:class (when pre-block? "page-properties")
-          :title (if pre-block?
-                   "Click to edit this page's properties"
-                   "Click to edit this block's properties")}
-         (for [[k v] ordered-properties]
-           (rum/with-key (property-cp config block k v)
-             (str (:block/uuid block) "-" k)))])
+      (seq ordered-properties)
+      [:div.block-properties
+       {:class (when pre-block? "page-properties")
+        :title (if pre-block?
+                 "Click to edit this page's properties"
+                 "Click to edit this block's properties")}
+       (for [[k v] ordered-properties]
+         (rum/with-key (property-cp config block k v)
+           (str (:block/uuid block) "-" k)))]
 
-      (and pre-block? properties)
+      (and pre-block? ordered-properties)
       [:span.opacity-50 "Properties"]
 
       :else
@@ -2758,16 +2705,27 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config block]
-  (let [ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)
-        *navigating-block (get state ::navigating-block)
-        navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or (and custom-query?
-                           (empty? (:block/children block))
+(defn- build-config [config block {:keys [navigating-block navigated?]}]
+  (cond-> config
+    navigated?
+    (assoc :id (str navigating-block))
+
+    true
+    (update :block merge block)
+
+    ;; Each block might have multiple queries, but we store only the first query's result.
+    ;; This :query-result atom is used by the query function feature to share results between
+    ;; the parent's query block and the children blocks. This works because config is shared
+    ;; between parent and children blocks
+    (nil? (:query-result config))
+    (assoc :query-result (atom nil))
+
+    (:ref? config)
+    (block-handler/attach-order-list-state block)))
+
+(defn- build-block [repo config block* {:keys [navigating-block navigated?]}]
+  (let [block (if (or (and (:custom-query? config)
+                           (empty? (:block/children block*))
                            (not (and (:dsl-query? config)
                                      (string/includes? (:query config) "not"))))
                       navigated?)
@@ -2776,21 +2734,26 @@
                                                       {:scoped-block-id (:db/id block)})
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
-                block)
-        block (if ref?
-                (merge block (db/sub-block (:db/id block)))
-                block)
-        {:block/keys [uuid children pre-block? refs level format content properties]} block
+                block*)
+        {:block/keys [pre-block? format content] :as block'}
+        (if (:ref? config)
+          (merge block (db/sub-block (:db/id block)))
+          block)]
+    (merge block' (block/parse-title-and-body uuid format pre-block? content))))
+
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  [state repo config* block*]
+  (let [ref? (:ref? config*)
+        custom-query? (boolean (:custom-query? config*))
+        ref-or-custom-query? (or ref? custom-query?)
+        *navigating-block (get state ::navigating-block)
+        navigating-block (rum/react *navigating-block)
+        navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
+        block (build-block repo config* block* {:navigating-block navigating-block :navigated? navigated?})
+        {:block/keys [uuid children pre-block? refs level content properties]} block
         {:block.temp/keys [top?]} block
-        config (if navigated? (assoc config :id (str navigating-block)) config)
-        block (merge block (block/parse-title-and-body uuid format pre-block? content))
+        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         blocks-container-id (:blocks-container-id config)
-        config (update config :block merge block)
-        ;; Each block might have multiple queries, but we store only the first query's result
-        config (if (nil? (:query-result config))
-                 (assoc config :query-result (atom nil))
-                 config)
-        config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
@@ -2818,21 +2781,24 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
+        own-number-list? (:own-order-number-list? config)
+        order-list? (boolean own-number-list?)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect")
-                    (when (string/blank? content) " is-blank"))
-        :blockid (str uuid)
-        :haschild (str (boolean has-child?))}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-md")
+                   (when selected? " selected noselect")
+                   (when order-list? " is-order-list")
+                   (when (string/blank? content) " is-blank"))
+       :blockid (str uuid)
+       :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
@@ -2858,7 +2824,7 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2
+     [:div.block-main-container.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
@@ -3123,14 +3089,15 @@
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div {:ref (fn [el]
-                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+          [:div.ui-fenced-code-editor
+           {:ref (fn [el]
+                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
              (nil? inside-portal?) nil
 
              (or (:slide? config) inside-portal?)
              (highlight/highlight (str (random-uuid))
-                                  {:class (str "language-" language)
+                                  {:class     (str "language-" language)
                                    :data-lang language}
                                   code)
 
@@ -3299,10 +3266,14 @@
             [:sup.fn (str name "↩︎")]])]])
 
       ["Src" options]
-      [:div.cp__fenced-code-block
-       (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-         (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
-         (src-cp config options html-export?))]
+      (let [lang (util/safe-lower-case (:language options))]
+        [:div.cp__fenced-code-block
+         {:data-lang lang}
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type lang)]
+           [:div.ui-fenced-code-wrap
+            (src-cp config options html-export?)
+            (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
+           (src-cp config options html-export?))])
 
       :else
       "")

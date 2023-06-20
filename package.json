@@ -117,7 +117,7 @@
         "highlight.js": "10.4.1",
         "ignore": "5.1.8",
         "jszip": "3.8.0",
-        "mldoc": "^1.5.1",
+        "mldoc": "^1.5.5",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
         "pixi-graph-fork": "0.2.0",

@@ -52,10 +52,10 @@
 (defonce query-state (atom {}))
 
 ;; Current dynamic component
-(def ^:dynamic *query-component*)
+(def ^:dynamic *query-component* nil)
 
 ;; Which reactive queries are triggered by the current component
-(def ^:dynamic *reactive-queries*)
+(def ^:dynamic *reactive-queries* nil)
 
 ;; component -> query-key
 (defonce query-components (atom {}))
