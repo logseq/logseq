@@ -107,7 +107,7 @@
     [:div.opacity-60 (t :bug-report/main-desc)]]
    [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
     [:h1.text-2xl (t :bug-report/section-clipboard-title)]
-    [:div.opacity-60 :bug-report/section-clipboard-desc]
+    [:div.opacity-60 (t :bug-report/section-clipboard-desc)]
     (report-item-button (t :bug-report/section-clipboard-btn-title)
                  (t :bug-report/section-clipboard-btn-desc)
                  "clipboard"
