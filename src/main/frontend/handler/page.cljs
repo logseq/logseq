@@ -171,11 +171,19 @@
                                        (assoc page :block/namespace
                                               [:block/uuid (:block/uuid (nth txs (dec i)))])))
                                    txs)
-             last-txs (first (build-page-tx repo format properties (last pages) journal? whiteboard?))
+             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard?)
              last-txs (if (seq txs)
-                        [(assoc last-txs :block/namespace [:block/uuid (:block/uuid (last txs))])]
-                        [last-txs])
-             txs      (concat txs last-txs)]
+                        (update last-txs 0
+                                (fn [p]
+                                  (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
+                        last-txs)
+             txs      (concat
+                       (when (and rename? uuid)
+                         (when-let [e (db/entity [:block/uuid uuid])]
+                           [[:db/retract (:db/id e) :block/namespace]
+                            [:db/retract (:db/id e) :block/refs]]))
+                       txs
+                       last-txs)]
          (when (seq txs)
            (util/pprint txs)
            (db/transact! txs)))
