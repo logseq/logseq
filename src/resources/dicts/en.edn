@@ -354,6 +354,8 @@
  :whiteboard/search-only-pages "Search only pages"
  :whiteboard/cache-outdated "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."
  :whiteboard/shape-quick-links "Shape Quick Links"
+ :whiteboard/toggle-grid "Toggle grid"
+ :whiteboard/snap-to-grid "Snap to grid"
  :page-search "Search in the current page"
  :graph-search "Search graph"
  :home "Home"
