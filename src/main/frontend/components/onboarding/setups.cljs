@@ -30,13 +30,13 @@
 
       [:h1.text-xl
        (if picker?
-         [:span [:strong (ui/icon "heart")] "Welcome to " [:strong "Logseq!"]]
-         [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-setup-title)])]
+         [:span [:strong (ui/icon "heart")] (t :on-boarding/main-title) [:strong "Logseq!"]]
+         [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-main-title)])]
 
       [:h2
        (if picker?
-         "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."
-         (t :on-boarding/importing-setup-desc))]
+         (t :on-boarding/main-desc)
+         (t :on-boarding/importing-main-desc))]
 
       content])])
 
@@ -93,8 +93,8 @@
 
               (if parsing?
                 (ui/loading "")
-                [[:strong "Choose a folder"]
-                 [:small "Open existing directory or Create a new one"]])]]]
+                [[:strong (t :on-boarding/section-btn-title)]
+                 [:small (t :on-boarding/section-btn-desc)]])]]]
            [:div.px-5
             (ui/admonition :warning
                            (widgets/native-fs-api-alert))]))]
@@ -102,22 +102,22 @@
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
         [:span.flex-1.flex.flex-col
-         [:strong "How Logseq saves your work"]
-         [:small.opacity-60 "Inside the directory you choose, Logseq will create 4 folders."]]]
+         [:strong (t :on-boarding/section-title)]
+         [:small.opacity-60 (t :on-boarding/section-desc)]]]
 
        [:p.text-sm.pt-5.tracking-wide
-        [:span (str "Each page is a file stored only on your " DEVICE ".")]
+        [:span (str (t :on-boarding/section-tip-1) DEVICE ".")]
         [:br]
-        [:span "You may choose to sync it later."]]
+        [:span (t :on-boarding/section-tip-2)]]
 
        [:ul
         (for [[title label icon]
-              [["Graphics & Documents" "/assets" "whiteboard"]
-               ["Daily notes" "/journals" "calendar-plus"]
-               ["PAGES" "/pages" "page"]
+              [[(t :on-boarding/section-assets) "/assets" "whiteboard"]
+               [(t :on-boarding/section-journals) "/journals" "calendar-plus"]
+               [(t :on-boarding/section-pages) "/pages" "page"]
                []
-               ["APP Internal" "/logseq" "tool"]
-               ["Config File" "/logseq/config.edn"]]]
+               [(t :on-boarding/section-app) "/logseq" "tool"]
+               [(t :on-boarding/section-config) "/logseq/config.edn"]]]
           (if-not title
             [:li.hr]
             [:li
