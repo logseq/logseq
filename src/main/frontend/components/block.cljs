@@ -789,26 +789,27 @@
     (.stopPropagation e)
     (editor-handler/edit-block! config :max (:block/uuid config))))
 
-(rum/defc block-embed < rum/reactive db-mixins/query
+(declare block-container)
+
+(rum/defc block-embed < rum/reactive
   [config uuid]
   (when-let [block (db/entity [:block/uuid uuid])]
     (let [repo (state/get-current-repo)]
       (if (state/sub-block-unloaded? repo (str uuid))
         [:span "Loading..."]
-        (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
-                                              {:scoped-block-id (:db/id block)})]
-          [:div.color-level.embed-block.bg-base-2
-           {:style {:z-index 2}
-            :on-double-click #(edit-parent-block % config)
-            :on-mouse-down (fn [e] (.stopPropagation e))}
-           [:div.px-3.pt-1.pb-2
-            (blocks-container blocks (assoc config
-                                            :db/id (:db/id block)
-                                            :id (str uuid)
-                                            :embed-id uuid
-                                            :embed? true
-                                            :embed-parent (:block config)
-                                            :ref? false))]])))))
+        [:div.color-level.embed-block.bg-base-2
+         {:style {:z-index 2}
+          :on-double-click #(edit-parent-block % config)
+          :on-mouse-down (fn [e] (.stopPropagation e))}
+         [:div.px-3.pt-1.pb-2
+          (let [config' (assoc config
+                               :db/id (:db/id block)
+                               :id (str uuid)
+                               :embed-id uuid
+                               :embed? true
+                               :embed-parent (:block config)
+                               :ref? false)]
+            (blocks-container [block] config'))]]))))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -829,10 +830,11 @@
                   page-name))
        (if whiteboard-page?
          ((state/get-component :whiteboard/tldraw-preview) page-name)
-         (let [page (model/get-page page-name)
-               blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
+         (let [block (model/get-page page-name)
+               block (db/sub-block (:db/id block))
+               blocks (db/sort-by-left (:block/_parent block) block)]
            (blocks-container blocks (assoc config
-                                           :db/id (:db/id page)
+                                           :db/id (:db/id block)
                                            :id page-name
                                            :embed? true
                                            :page-embed? true
@@ -857,7 +859,6 @@
     (util/format "{{%s}}" name)))
 
 (declare block-content)
-(declare block-container)
 (declare breadcrumb)
 
 (rum/defc block-reference < rum/reactive
@@ -2511,9 +2512,7 @@
            (let [refs-cp (state/get-component :block/linked-references)]
              (refs-cp uuid)))]))))
 
-;; FIXME: not updating when block content is updated outbound
 (rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
-  ;; todo: mixin for init-blocks-container-id?
   {:init (fn [state]
            (assoc state
                   ::init-blocks-container-id (atom nil)))}
@@ -2522,7 +2521,7 @@
         *init-blocks-container-id (::init-blocks-container-id state)
         block-entity (db/entity [:block/uuid uuid])
         block-id (:db/id block-entity)
-        block (first (model/get-paginated-blocks (state/get-current-repo) block-id))
+        block (db/sub-block block-id)
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
                               (let [id' (swap! *blocks-container-id inc)]
@@ -3343,39 +3342,6 @@
   (for [[idx item] (medley/indexed blocks)]
     (block-item config blocks idx item)))
 
-(defn- custom-query-or-ref?
-  [config]
-  (let [ref? (:ref? config)
-        custom-query? (:custom-query? config)]
-    (or custom-query? ref?)))
-
-(defn- load-more-blocks!
-  [config blocks]
-  (when-let [db-id (:db/id config)]
-    (let [last-block-id (:db/id (last blocks))]
-      (block-handler/load-more! db-id last-block-id))))
-
-(defn- loading-more-data!
-  [config *loading? blocks initial?]
-  ;; To prevent scrolling after inserting new blocks
-  (when (or initial?
-            (and (not initial?) (> (- (util/time-ms) (:start-time config)) 100)))
-    (reset! *loading? true)
-    (load-more-blocks! config blocks)
-    (reset! *loading? false)))
-
-(rum/defc load-more < rum/reactive
-  [config *loading?]
-  (cond
-    (or (:preview? config) (:sidebar? config))
-    "More"
-
-    (rum/react *loading?)
-    (ui/lazy-loading-placeholder 88)
-
-    :else
-    ""))
-
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
   [state blocks config]
@@ -3388,8 +3354,7 @@
         config (assoc config :blocks-container-id blocks-container-id)
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
-      (let [id (if (:navigated? config) @(:navigating-block config) (:id config))
-            config (assoc config :start-time (util/time-ms))]
+      (let [config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (block-list config blocks)]))))

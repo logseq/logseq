@@ -91,8 +91,7 @@
         page (db/entity [:block/name page-name])
         journal? (:journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-paginated-blocks repo (:db/id page)
-                                            {:limit 1000})
+        blocks (-> (db/get-page-blocks-no-cache repo page-name)
                    (outliner-tree/blocks->vec-tree page-name))
         blocks (if journal?
                  (rest blocks)

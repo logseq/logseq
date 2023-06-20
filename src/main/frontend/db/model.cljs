@@ -563,63 +563,6 @@ independent of format as format specific heading characters are stripped"
           '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
-(defn get-next-open-block
-  ([db block]
-   (get-next-open-block db block nil))
-  ([db block scoped-block-id]
-   (let [block-id (:db/id block)
-         block-parent-id (:db/id (:block/parent block))
-         next-block (or
-                     (if (and (collapsed-and-has-children? db block)
-                              (not= block-id scoped-block-id)) ; skips children
-                       ;; Sibling
-                       (get-by-parent-&-left db block-parent-id block-id)
-                       (or
-                        ;; Child
-                        (get-by-parent-&-left db block-id block-id)
-                        ;; Sibling
-                        (get-by-parent-&-left db block-parent-id block-id)))
-
-                     ;; Next outdented block
-                     (get-next-outdented-block db block-id))]
-     (if (and scoped-block-id next-block)
-       (let [parents (->> (get-block-parents (state/get-current-repo) (:block/uuid next-block))
-                          (map :db/id)
-                          (set))]
-         (when (contains? parents scoped-block-id)
-           next-block))
-       next-block))))
-
-(defn get-paginated-blocks-no-cache
-  "Result should be sorted."
-  [db start-id {:keys [limit include-start? scoped-block-id end-id]}]
-  (when-let [start (db-utils/entity db start-id)]
-    (let [scoped-block-parents (when scoped-block-id
-                                 (let [block (db-utils/entity db scoped-block-id)]
-                                   (->> (get-block-parents (state/get-current-repo) (:block/uuid block))
-                                        (map :db/id)
-                                        (set))))
-          result (loop [block start
-                        result []]
-                   (if (and limit (>= (count result) limit))
-                     result
-                     (let [next-block (get-next-open-block db block scoped-block-id)]
-                       (if next-block
-                         (cond
-                           (and (seq scoped-block-parents)
-                                (contains? scoped-block-parents (:db/id (:block/parent next-block))))
-                           result
-
-                           (and end-id (= end-id (:db/id next-block)))
-                           (conj result next-block)
-
-                           :else
-                           (recur next-block (conj result next-block)))
-                         result))))]
-      (if include-start?
-        (cons start result)
-        result))))
-
 (defn get-block-last-direct-child
   "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
   ([db db-id]
@@ -642,30 +585,6 @@ independent of format as format specific heading characters are stripped"
       (if last-child
         (recur last-child (get-block-last-direct-child db last-child))
         prev))))
-
-(defn get-prev-open-block
-  [db id]
-  (let [block (db-utils/entity db id)
-        left (:block/left block)
-        left-id (:db/id left)]
-    (if (= (:db/id left) (:db/id (:block/parent block)))
-      left-id
-      (if (util/collapsed? left)
-        left-id
-        (or (get-block-last-child db (:db/id left)) left-id)))))
-
-(defn recursive-child?
-  [repo child-id parent-id]
-  (let [*last-node (atom nil)]
-    (loop [node (db-utils/entity repo child-id)]
-      (when-not (= @*last-node node)
-        (reset! *last-node node)
-        (if node
-          (let [parent (:block/parent node)]
-            (if (= (:db/id parent) parent-id)
-              true
-              (recur parent)))
-          false)))))
 
 (defn get-prev-sibling
   [db id]
@@ -717,38 +636,6 @@ independent of format as format specific heading characters are stripped"
                                       (nth blocks (inc i)))
           (nth blocks i))))
     blocks)))
-
-;; TODO: deprecate
-(defn get-paginated-blocks
-  "Get paginated blocks for a page or a specific block.
-   `scoped-block-id`: if specified, returns its children only."
-  ([repo-url block-id]
-   (get-paginated-blocks repo-url block-id {}))
-  ([repo-url block-id {:keys [pull-keys start-block limit use-cache? scoped-block-id]
-                       :or {pull-keys '[* :block/_refs]
-                            limit initial-blocks-length
-                            use-cache? true
-                            scoped-block-id nil}}]
-   (when block-id
-     (assert (integer? block-id) (str "wrong block-id: " block-id))
-     (let [entity (db-utils/entity repo-url block-id)
-           page? (some? (:block/name entity))
-           query-key (if page?
-                       :frontend.db.react/page-blocks
-                       :frontend.db.react/block-and-children)]
-       (some->
-        (react/q repo-url [query-key block-id]
-                 {:use-cache? use-cache?
-                  :query-fn (fn [db tx-report result]
-                              (let [limit (if (and result @result)
-                                            (max (+ (count (first @result)) 10) limit)
-                                            limit)
-                                    e (db-utils/entity repo-url block-id)
-                                    entities (:block/_page e)]
-                                [entities (:tx-data tx-report)]))}
-                 nil)
-        react
-        first)))))
 
 (defn get-page-blocks-no-cache
   "Return blocks of the designated page, without using cache.

@@ -64,9 +64,9 @@
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
 (defn- get-block
-  [repo page-name block-id]
-  (when page-name
-    (when-let [block (model/get-page page-name)]
+  [page-name-or-uuid]
+  (when page-name-or-uuid
+    (when-let [block (model/get-page page-name-or-uuid)]
       (model/sub-block (:db/id block)))))
 
 (defn- open-root-block!
@@ -137,7 +137,7 @@
                         (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          block (get-block repo page-name block-id)
+          block (get-block page-name)
           block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block))]
       (cond
         block-unloaded?
@@ -150,8 +150,7 @@
         :else
         (let [document-mode? (state/sub :document/mode?)
               hiccup-config (merge
-                             {:infinite-list? true
-                              :id (if block? (str block-id) page-name)
+                             {:id (if block? (str block-id) page-name)
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box

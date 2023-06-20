@@ -224,8 +224,7 @@
   ICardShow
   (show-cycle [_this phase]
     (let [block-id (:db/id block)
-          blocks (-> (db/get-paginated-blocks (state/get-current-repo) block-id
-                                              {:scoped-block-id block-id})
+          blocks (-> [(db/entity block-id)]
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
       (case phase
@@ -523,8 +522,7 @@
 
 (rum/defc preview-cp < rum/reactive db-mixins/query
   [block-id]
-  (let [blocks (db/get-paginated-blocks (state/get-current-repo) block-id
-                                        {:scoped-block-id block-id})]
+  (let [blocks [(db/entity block-id)]]
     (view-modal blocks {:preview? true} (atom 0))))
 
 (defn preview

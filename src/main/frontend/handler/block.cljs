@@ -48,31 +48,6 @@
   [block]
   (get-timestamp block "Deadline"))
 
-(defn load-more!
-  [db-id start-id]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)
-        block (db/entity repo db-id)
-        block? (not (:block/name block))
-        k (if block?
-            :frontend.db.react/block-and-children
-            :frontend.db.react/page-blocks)
-        query-k [repo k db-id]
-        option (cond-> {:limit db-model/step-loading-blocks}
-                 block?
-                 (assoc :scoped-block-id db-id))
-        query-result (react/get-query-cached-result query-k)
-        start-id' (or
-                   (when query-result (:db/id (last @query-result)))
-                   start-id)
-        more-data (db-model/get-paginated-blocks-no-cache db start-id' option)]
-    (react/swap-new-result! query-k
-                            (fn [[entities _tx-data]]
-                              (let [entities' (->> (concat entities more-data)
-                                                   (util/distinct-by :block/uuid))
-                                    tx-data' (mapv (juxt :block/parent :block/left :block/collapsed?) more-data)]
-                                [entities' tx-data'])))))
-
 (defn indentable?
   [{:block/keys [parent left]}]
   (when parent
