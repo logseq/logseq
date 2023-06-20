@@ -511,24 +511,6 @@ independent of format as format specific heading characters are stripped"
                                   (not= parent-id (:db/id node)))
                          node)) lefts))))
 
-(defn- get-next-outdented-block
-  "Get the next outdented block of the block that has the `id`.
-  e.g.
-  - a
-    - b
-      - c
-  - d
-
-  The next outdented block of `c` is `d`."
-  [db id]
-  (when-let [block (db-utils/entity db id)]
-    (let [parent (:block/parent block)]
-      (if-let [parent-sibling (get-by-parent-&-left db
-                                                    (:db/id (:block/parent parent))
-                                                    (:db/id parent))]
-        parent-sibling
-        (get-next-outdented-block db (:db/id parent))))))
-
 (defn top-block?
   [block]
   (= (:db/id (:block/parent block))

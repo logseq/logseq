@@ -1,19 +1,20 @@
 (ns frontend.modules.outliner.datascript
   (:require [datascript.core :as d]
-                  [frontend.db.conn :as conn]
-                  [frontend.db :as db]
-                  [frontend.db.react :as react]
-                  [frontend.modules.outliner.pipeline :as pipelines]
-                  [frontend.modules.editor.undo-redo :as undo-redo]
-                  [frontend.state :as state]
-                  [frontend.config :as config]
-                  [logseq.graph-parser.util :as gp-util]
-                  [lambdaisland.glogi :as log]
-                  [frontend.search :as search]
-                  [clojure.string :as string]
-                  [frontend.util :as util]
-                  [frontend.util.property-edit :as property-edit]
-                  [logseq.graph-parser.util.block-ref :as block-ref]))
+            [frontend.db.conn :as conn]
+            [frontend.db :as db]
+            [frontend.db.react :as react]
+            [frontend.modules.outliner.pipeline :as pipelines]
+            [frontend.modules.editor.undo-redo :as undo-redo]
+            [frontend.state :as state]
+            [frontend.config :as config]
+            [logseq.graph-parser.util :as gp-util]
+            [lambdaisland.glogi :as log]
+            [frontend.search :as search]
+            [clojure.string :as string]
+            [frontend.util :as util]
+            [frontend.util.property-edit :as property-edit]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [frontend.db.validate :as db-validate]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -113,6 +114,29 @@
       (concat txs retracted-tx'))
     txs))
 
+(defn validate-db!
+  [{:keys [db-before db-after tx-data]}]
+  (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
+                           (map :e)
+                           distinct
+                           (map (fn [id]
+                                  (-> (or (d/entity db-after id)
+                                          (d/entity db-before id))
+                                      :block/page
+                                      :db/id)))
+                           (remove nil?)
+                           (distinct))]
+    (reduce
+     (fn [_ page-id]
+       (if-let [result (db-validate/broken-page? db-after page-id)]
+         (do
+           ;; revert db changes
+           (assert (false? result) (str "Broken page: " result))
+           (reduced false))
+         true))
+     true
+     changed-pages)))
+
 (defn transact!
   [txs opts before-editor-cursor]
   (let [repo (state/get-current-repo)
@@ -148,6 +172,8 @@
               conn (conn/get-db repo false)
               rs (d/transact! conn txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
+          ;; TODO: disable this when db is stable
+          (validate-db! rs)
           (state/update-state! :history/tx->editor-cursor
                                (fn [m] (assoc m tx-id before-editor-cursor)))
 
