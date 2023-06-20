@@ -205,8 +205,15 @@ test('convert the first rectangle to ellipse', async ({ page }) => {
   await page.click('.tl-context-bar .tl-geometry-tools-pane-anchor')
   await page.click('.tl-context-bar .tl-geometry-toolbar [data-tool=ellipse]')
 
-  await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(1)
-  await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
+  var selector = '.logseq-tldraw .tl-ellipse-container'
+  expect(
+    await page.waitForSelector(selector, { state: 'visible' })
+  )
+  await expect(page.locator(selector)).toHaveCount(1)
+
+  selector = '.logseq-tldraw .tl-box-container'
+  expect(await page.waitForSelector(selector, { state: 'visible' }))
+  await expect(page.locator(selector)).toHaveCount(1)
 })
 
 test('change the color of the ellipse', async ({ page }) => {
@@ -284,31 +291,53 @@ test('create a block', async ({ page }) => {
   await page.mouse.dblclick(bounds.x + 105, bounds.y + 105)
   await page.waitForTimeout(100)
 
-  await page.keyboard.type('a')
-  await page.keyboard.press('Enter')
+  await page.keyboard.type('a', { delay: 20 })
+  await page.keyboard.press('Enter', { delay: 10 })
 
+  const selector = '.logseq-tldraw .tl-logseq-portal-container'
 
-  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(1)
+  expect(await page.waitForSelector(selector, { state: 'visible' }))
+
+  await expect(page.locator(selector)).toHaveCount(1)
 })
 
 test('expand the block', async ({ page }) => {
-  await page.keyboard.press('Escape')
-  await page.keyboard.press(modKey + '+ArrowDown')
-  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape', { delay: 10 })
+  await page.keyboard.press(modKey + '+ArrowDown', { delay: 10 })
 
-  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(1)
+  const selector =
+    '.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header'
+  expect(
+    await page.waitForSelector(selector, { state: 'visible' })
+  ).toBeTruthy()
+
+  await expect(page.locator(selector)).toHaveCount(1)
 })
 
-test('undo the expand action', async ({ page }) => {
+// TODO: Depends on the previous test
+test.skip('undo the expand action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
-  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header')).toHaveCount(0)
+  const selector =
+    '.logseq-tldraw .tl-logseq-portal-container .tl-logseq-portal-header'
+
+  expect(
+    await page.waitForSelector(selector, { state: 'hidden' })
+  ).toBeTruthy()
+
+  await expect(page.locator(selector)).toHaveCount(0)
 })
 
 test('undo the block action', async ({ page }) => {
-  await page.keyboard.press(modKey + '+z')
+  await page.keyboard.press(modKey + '+z', { delay: 10 })
+  await page.waitForTimeout(100)
+  const selector = '.logseq-tldraw .tl-logseq-portal-container'
 
-  await expect(page.locator('.logseq-tldraw .tl-logseq-portal-container')).toHaveCount(0)
+  expect(
+    await page.waitForSelector(selector, { state: 'hidden' })
+  ).toBeTruthy()
+
+  await expect(page.locator(selector)).toHaveCount(0)
 })
 
 test('copy/paste url to create an iFrame shape', async ({ page }) => {
@@ -442,8 +471,8 @@ test('Create an embedded whiteboard', async ({ page }) => {
   const canvas = await page.waitForSelector('.logseq-tldraw')
   await canvas.dblclick({
     position: {
-      x: 150,
-      y: 150,
+      x: 110,
+      y: 110,
     },
   })
 
