@@ -227,7 +227,7 @@
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/roam-research 28)]]
         [:div.flex.flex-col
-         [[:strong (t :on-boarding/importing-roam-title)]
+         [[:strong "RoamResearch"]
           [:small (t :on-boarding/importing-roam-desc)]]]
         [:input.absolute.hidden
          {:id        "import-roam"
@@ -237,7 +237,7 @@
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/logo 28)]]
         [:span.flex.flex-col
-         [[:strong (t :on-boarding/importing-lsq-title)]
+         [[:strong "EDN / JSON"]
           [:small (t :on-boarding/importing-lsq-desc)]]]
         [:input.absolute.hidden
          {:id        "import-lsq"
@@ -247,7 +247,7 @@
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
         [:span.flex.flex-col
-         [[:strong (t :on-boarding/importing-opml-title)]
+         [[:strong "OPML"]
           [:small (t :on-boarding/importing-opml-desc)]]]
 
         [:input.absolute.hidden
