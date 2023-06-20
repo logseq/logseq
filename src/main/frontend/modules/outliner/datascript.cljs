@@ -130,8 +130,8 @@
      (fn [_ page-id]
        (if-let [result (db-validate/broken-page? db-after page-id)]
          (do
-           ;; revert db changes
-           (assert (false? result) (str "Broken page: " result))
+           ;; TODO: revert db changes
+           (when config/dev? (assert (false? result) (str "Broken page: " result)))
            (reduced false))
          true))
      true
