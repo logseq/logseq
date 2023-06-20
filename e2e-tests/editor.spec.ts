@@ -48,7 +48,7 @@ test('hashtag page search auto-complete', async ({ page }) => {
   await createRandomPage(page)
 
   // Open the tag page search dialog and verify that it is open
-  await page.type(TXT_AREA_SELECTOR, '#', { delay: TXT_INPUT_DELAY })
+  await page.type(TXT_AREA_SELECTOR, 'lorem #', { delay: TXT_INPUT_DELAY })
   await verifyAndCloseModal(page, PAGE_SEARCH_MODAL)
 })
 
@@ -229,14 +229,17 @@ test('copy & paste block ref and replace its content', async ({
   // Trigger replace-block-reference-with-content-at-point
   await page.keyboard.press(modKey + '+Shift+r', { delay: KEYPRESS_DELAY })
 
-  await expect(page.locator(TXT_AREA_SELECTOR)).toHaveValue('Some random text')
+  // add a space to trigger replacing the block ref with its content; needed for the CI
+  await page.type(TXT_AREA_SELECTOR, ' ', { delay: TXT_INPUT_DELAY })
+
+  await expect(page.locator(TXT_AREA_SELECTOR)).toHaveValue('Some random text ')
 
   await block.escapeEditing()
 
   await expect(
-    page.locator('.block-ref >> text="Some random text"')
+    page.locator('.block-ref >> text="Some random text "')
   ).toHaveCount(0)
-  await expect(page.locator('text="Some random text"')).toHaveCount(2)
+  await expect(page.locator('text="Some random text "')).toHaveCount(2)
 })
 
 test('copy and paste block after editing new block #5962', async ({

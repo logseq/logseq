@@ -322,9 +322,7 @@ export async function verifyAndCloseModal(page: Page, modal: string): Promise<vo
   // Confirm that the modal is open
   expect(await page.waitForSelector(modal, { state: 'visible' })).toBeTruthy();
 
-  // Exit edit mode
-  await page.keyboard.press('Escape', { delay: KEYPRESS_DELAY })
-  // close the modal
+  // Close the modal
   await page.keyboard.press('Escape', { delay: KEYPRESS_DELAY })
 
   // Confirm that the modal is no longer visible on the page
