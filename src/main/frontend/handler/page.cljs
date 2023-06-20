@@ -185,7 +185,6 @@
                        txs
                        last-txs)]
          (when (seq txs)
-           (util/pprint txs)
            (db/transact! txs)))
 
        (when create-first-block?
