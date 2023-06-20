@@ -140,7 +140,7 @@
                                  :uuid)
           latest-journal-blocks (when recent-journal
                                   (query repo db (str "select * from blocks where type = 1 and page_uuid = '" recent-journal "'")))
-          init-data (query repo db "select * from blocks where type in (3, 4, 5)")]
+          init-data (query repo db "select * from blocks where type in (3, 4, 5, 6)")]
       {:all-pages all-pages
        :all-blocks all-block-ids
        :journal-blocks latest-journal-blocks

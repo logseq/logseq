@@ -52,6 +52,8 @@
   (state/set-current-repo! "local")
   (when-let [data js/window.logseq_db]
     (let [data (unescape-html data)
+          ;; FIXME: how to decide which schema to use here?
+          ;; db-schema/schema or db-schema/schema-for-db-based-graph?
           db-conn (d/create-conn db-schema/schema)
           _ (swap! db/conns assoc "logseq-db/local" db-conn)
           db (db/string->db data)]

@@ -107,7 +107,7 @@
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
-    [@(d/conn-from-datoms datoms db-schema/schema) assets]))
+    [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
 (defn filter-only-public-pages-and-blocks
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
@@ -129,4 +129,4 @@
                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
           datoms (d/datoms filtered-db :eavt)
           assets (get-assets db datoms)]
-      [@(d/conn-from-datoms datoms db-schema/schema) assets])))
+      [@(d/conn-from-datoms datoms (:schema db)) assets])))

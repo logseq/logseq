@@ -34,7 +34,7 @@
                   "")))
          (string/join))))
 
-(defn- get-page-reference
+(defn get-page-reference
   [block format]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
@@ -83,7 +83,7 @@
                nil)]
     (when page (or (block-ref/get-block-ref-id page) page))))
 
-(defn- get-block-reference
+(defn get-block-reference
   [block]
   (when-let [block-id (cond
                         (and (vector? block)

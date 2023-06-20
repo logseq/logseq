@@ -1,5 +1,6 @@
 (ns logseq.db.schema
-  "Main db schema for the Logseq app")
+  "Main db schema for the Logseq app"
+  (:require [frontend.config :as config]))
 
 (defonce version 2)
 (defonce ast-version 1)
@@ -15,7 +16,8 @@
    ;; :block/type is a string type of the current block
    ;; "whiteboard" for whiteboards
    ;; "macros" for macro
-   :block/type {}
+   ;; "property" for property blocks
+   :block/type {:db/index true}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}
@@ -106,7 +108,13 @@
   (merge
    schema
    {:property/schema {}
-    :property/name {}}))
+    :property/name {:db/unique :db.unique/identity}}))
+
+(defn get-schema
+  [repo]
+  (if (config/db-based-graph? repo)
+    schema-for-db-based-graph
+    schema))
 
 (def retract-attributes
   #{

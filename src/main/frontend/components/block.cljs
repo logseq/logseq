@@ -20,6 +20,7 @@
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
+            [frontend.components.property :as property-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -2813,17 +2814,17 @@
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect")
-                    (when (string/blank? content) " is-blank"))
-        :blockid (str uuid)
-        :haschild (str (boolean has-child?))}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-md")
+                   (when selected? " selected noselect")
+                   (when (string/blank? content) " is-blank"))
+       :blockid (str uuid)
+       :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
@@ -2878,6 +2879,8 @@
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
+     (when (config/db-based-graph? repo)
+        (property-component/properties-area block (:block/properties block)))
 
      (block-children config block children collapsed?)
 

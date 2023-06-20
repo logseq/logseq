@@ -101,7 +101,7 @@
     (let [all-datoms (persistent! datoms)
           new-db (util/profile
                   (str "DB init! " (count all-datoms) " datoms")
-                  (d/init-db all-datoms db-schema/schema))]
+                  (d/init-db all-datoms db-schema/schema-for-db-based-graph))]
 
       (reset! conn new-db)
 
@@ -174,7 +174,7 @@
                    all-eav-coll)
           db-name (db-conn/datascript-db repo)
           db-conn (util/profile :restore-graph-from-sqlite!-init-db
-                                (d/conn-from-datoms datoms db-schema/schema))
+                                (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph))
           _ (swap! db-conn/conns assoc db-name db-conn)
           end-time (t/now)]
     (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
