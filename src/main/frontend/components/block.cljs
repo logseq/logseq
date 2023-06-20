@@ -2879,8 +2879,9 @@
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
+
      (when (config/db-based-graph? repo)
-        (property-component/properties-area block (:block/properties block)))
+       (property-component/properties-area block (:block/properties block)))
 
      (block-children config block children collapsed?)
 

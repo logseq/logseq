@@ -222,25 +222,35 @@
 ;;     (properties-area entity properties refs-properties' block-components-m)))
 
 (rum/defcs properties-area <
+  rum/static
   (rum/local nil ::new-property)
-  rum/reactive
-  [state block properties]
+  (rum/local nil ::properties)
+  {:will-mount (fn [state]
+                 (reset! (::properties state) (second (:rum/args state)))
+                 state)}
+  [state block _properties]
   (let [*new-property (::new-property state)
+        *properties (::properties state)
         repo (state/get-current-repo)]
     [:div.ls-properties-area.pl-6
-     (when (seq properties)
-       (prn :properties properties)
+     (when (seq @*properties)
        [:div
-        (for [[prop-uuid-or-built-in-prop v] properties]
-          (if (uuid? prop-uuid-or-built-in-prop)
-            (when-let [property-class (db/pull [:block/uuid prop-uuid-or-built-in-prop])]
+        (for [[prop-uuid-or-built-in-prop v] @*properties]
+          (if (and (string? prop-uuid-or-built-in-prop)
+                   (util/uuid-string? prop-uuid-or-built-in-prop))
+            (when-let [property-class (db/pull [:block/uuid (uuid prop-uuid-or-built-in-prop)])]
               [:div
                [:a.mr-2 (:property/name property-class)]
-               [:input {:value v}]])
+               [:span v]
+               [:a.ml-8 {:on-click
+                         (fn []
+                           (property-handler/remove-property! repo block prop-uuid-or-built-in-prop)
+                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)]))))}
+                "DEL"]])
             ;; builtin
             [:div
              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-             [:input {:value v}]]))])
+             [:span v]]))])
      (if (nil? @*new-property)
        [:a {:title "Add another value"
             :on-click (fn [] (reset! *new-property {}))}
@@ -251,7 +261,7 @@
         [:input.block-properties {:on-change #(swap! *new-property assoc :v (util/evalue %))}]
         [:a {:on-click (fn []
                          (when (and (:k @*new-property) (:k @*new-property))
-                           (prn :*new-property @*new-property)
                            (property-handler/add-property! repo block (:k @*new-property) (:v @*new-property))
+                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)])))
                            (reset! *new-property nil)))}
          "Save"]])]))
