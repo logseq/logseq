@@ -2258,7 +2258,7 @@
                  (str uuid "-" idx)))))]))))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
   (let [content (property/remove-built-in-properties format content)
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
@@ -2278,14 +2278,15 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-               (not (string/blank? (:hl-color properties)))
-               (assoc :data-hl-color (:hl-color properties))
+                (not (string/blank? (:hl-color properties)))
+                (assoc :data-hl-color (:hl-color properties))
 
-               (not block-ref?)
-               (assoc mouse-down-key (fn [e]
-                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
+                (not block-ref?)
+                (assoc mouse-down-key (fn [e]
+                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
+              :class (when selected? "select-none")
               :on-mouse-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
@@ -2385,7 +2386,7 @@
                                   (= (:block/uuid block) (:block/uuid (:block config))))
                  default-hide? (if (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)) false true)]
              (assoc state ::hide-block-refs? (atom default-hide?))))}
-  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count? selected?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
@@ -2423,7 +2424,7 @@
                                            (editor-handler/clear-selection!)
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
-            (block-content config block edit-input-id block-id slide?))]
+            (block-content config block edit-input-id block-id slide? selected?))]
 
           (when-not hide-block-refs-count?
             [:div.flex.flex-row.items-center
@@ -2479,7 +2480,7 @@
       [:div.single-block.ls-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
-       (block-content-or-editor config block edit-input-id block-el-id edit? true)])))
+       (block-content-or-editor config block edit-input-id block-el-id edit? true false)])))
 
 (rum/defc single-block-cp
   [block-uuid]
@@ -2794,7 +2795,7 @@
        :class (str uuid
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-md")
-                   (when selected? " selected noselect")
+                   (when selected? " selected")
                    (when order-list? " is-order-list")
                    (when (string/blank? content) " is-blank"))
        :blockid (str uuid)
@@ -2848,7 +2849,7 @@
         ;; Not embed self
         (let [hide-block-refs-count? (and (:embed? config)
                                           (= (:block/uuid block) (:embed-id config)))]
-          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
+          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?)))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]

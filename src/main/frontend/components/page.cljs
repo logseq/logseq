@@ -872,7 +872,7 @@
         has-next? (< current total-pages)
         prev-page (if (= 1 current) 1 (dec current))
         next-page (if (= total-pages current) total-pages (inc current))]
-    [:div.flex.items-center.noselect
+    [:div.flex.items-center.select-none
      (when has-prev?
        [[:a.fade-link.flex
          {:on-click #(on-change 1)}
