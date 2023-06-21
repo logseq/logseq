@@ -134,7 +134,7 @@
 (defn- finished-cb
   []
   (route-handler/redirect-to-home!)
-  (notification/show! "Import finished!" :success)
+  (notification/show! (t :on-boarding/importing-notif-finish) :success)
   (ui-handler/re-render-root!))
 
 (defn- roam-import-handler
@@ -154,7 +154,7 @@
                         (state/set-state! :graph/importing nil)
                         (finished-cb))))))
           (.readAsText reader file)))
-      (notification/show! "Please choose a JSON file."
+      (notification/show! (t :on-boarding/importing-roam-notif)
                           :error))))
 
 (defn- lsq-import-handler
@@ -180,7 +180,7 @@
                         (state/set-state! :graph/importing nil)
                         (finished-cb))))))
           (.readAsText reader file)))
-      (notification/show! "Please choose an EDN or a JSON file."
+      (notification/show! (t :on-boarding/importing-lsq-notif)
                           :error))))
 
 (defn- opml-import-handler
@@ -200,7 +200,7 @@
                                                           (state/set-state! :graph/importing nil)
                                                           (finished-cb))))))
           (.readAsText reader file)))
-      (notification/show! "Please choose a OPML file."
+      (notification/show! (t :on-boarding/importing-opml-notif)
                           :error))))
 
 (rum/defc importer < rum/reactive
@@ -257,4 +257,4 @@
 
       (when (= "picker" (:from query-params))
         [:section.e
-         [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])])))
+         [:a.button {:on-click #(route-handler/redirect-to-home!)} (t :on-boarding/importing-btn-skip)]])])))
