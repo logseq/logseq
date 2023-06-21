@@ -557,7 +557,16 @@
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
 
 (defn build-category-map [ks]
-  (->> (select-keys all-built-in-keyboard-shortcuts ks)
+  (->> (if (sequential? ks)
+         ks (let [{:keys [ns includes excludes]} ks]
+              (->> (keys all-built-in-keyboard-shortcuts)
+                   (filter (fn [k]
+                             (and (or (and ns (keyword? k)
+                                           (contains? (->> (if (seqable? ns) (seq ns) [ns]) (map #(name %)) (set))
+                                                      (namespace k)))
+                                      (and includes (contains? (set includes) k)))
+                                  (if (not (seq excludes)) true (not (contains? (set excludes) k)))))))))
+       (select-keys all-built-in-keyboard-shortcuts)
        (remove (comp :inactive val))
        ;; Convert keyword fns to real fns
        (map (fn [[k v]]
@@ -570,59 +579,21 @@
 (defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker
-    (build-category-map [:date-picker/complete
-                         :date-picker/prev-day
-                         :date-picker/next-day
-                         :date-picker/prev-week
-                         :date-picker/next-week])
+    (build-category-map {:ns :date-picker})
 
     :shortcut.handler/pdf
-    (-> (build-category-map [:pdf/previous-page
-                             :pdf/next-page
-                             :pdf/close
-                             :pdf/find])
+    (-> (build-category-map {:ns :pdf})
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/whiteboard
-    (-> (build-category-map [:whiteboard/select
-                             :whiteboard/pan
-                             :whiteboard/portal
-                             :whiteboard/pencil
-                             :whiteboard/highlighter
-                             :whiteboard/eraser
-                             :whiteboard/connector
-                             :whiteboard/text
-                             :whiteboard/rectangle
-                             :whiteboard/ellipse
-                             :whiteboard/reset-zoom
-                             :whiteboard/zoom-to-fit
-                             :whiteboard/zoom-to-selection
-                             :whiteboard/zoom-out
-                             :whiteboard/zoom-in
-                             :whiteboard/send-backward
-                             :whiteboard/send-to-back
-                             :whiteboard/bring-forward
-                             :whiteboard/bring-to-front
-                             :whiteboard/lock
-                             :whiteboard/unlock
-                             :whiteboard/group
-                             :whiteboard/ungroup
-                             :whiteboard/toggle-grid])
+    (-> (build-category-map {:ns :whiteboard})
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
-    (build-category-map [:auto-complete/complete
-                         :auto-complete/prev
-                         :auto-complete/next
-                         :auto-complete/shift-complete
-                         :auto-complete/open-link])
+    (build-category-map {:ns :auto-complete})
 
     :shortcut.handler/cards
-    (-> (build-category-map [:cards/toggle-answers
-                             :cards/next-card
-                             :cards/forgotten
-                             :cards/remembered
-                             :cards/recall])
+    (-> (build-category-map {:ns :cards})
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/block-editing-only
@@ -655,104 +626,104 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:graph/export-as-html
-                          :graph/open
-                          :graph/remove
-                          :graph/add
-                          :graph/save
-                          :graph/re-index
-                          :editor/cycle-todo
-                          :editor/up
-                          :editor/down
-                          :editor/left
-                          :editor/right
-                          :editor/select-up
-                          :editor/select-down
-                          :editor/move-block-up
-                          :editor/move-block-down
-                          :editor/open-edit
-                          :editor/select-block-up
-                          :editor/select-block-down
-                          :editor/select-parent
-                          :editor/delete-selection
-                          :editor/expand-block-children
-                          :editor/collapse-block-children
-                          :editor/indent
-                          :editor/outdent
-                          :editor/copy
-                          :editor/copy-text
-                          :editor/cut
-                          :command/toggle-favorite])
-     (with-meta {:before m/enable-when-not-component-editing!}))
+      (build-category-map [:graph/export-as-html
+                           :graph/open
+                           :graph/remove
+                           :graph/add
+                           :graph/save
+                           :graph/re-index
+                           :editor/cycle-todo
+                           :editor/up
+                           :editor/down
+                           :editor/left
+                           :editor/right
+                           :editor/select-up
+                           :editor/select-down
+                           :editor/move-block-up
+                           :editor/move-block-down
+                           :editor/open-edit
+                           :editor/select-block-up
+                           :editor/select-block-down
+                           :editor/select-parent
+                           :editor/delete-selection
+                           :editor/expand-block-children
+                           :editor/collapse-block-children
+                           :editor/indent
+                           :editor/outdent
+                           :editor/copy
+                           :editor/copy-text
+                           :editor/cut
+                           :command/toggle-favorite])
+      (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
     (->
-     (build-category-map [:editor/insert-link
-                          :editor/select-all-blocks
-                          :editor/zoom-in
-                          :editor/zoom-out
-                          :editor/toggle-undo-redo-mode
-                          :editor/toggle-number-list
-                          :editor/undo
-                          :editor/redo
-                          :ui/toggle-brackets
-                          :go/search-in-page
-                          :go/search
-                          :go/electron-find-in-page
-                          :go/electron-jump-to-the-next
-                          :go/electron-jump-to-the-previous
-                          :go/backward
-                          :go/forward
-                          :search/re-index
-                          :sidebar/open-today-page
-                          :sidebar/clear
-                          :command/run
-                          :command-palette/toggle])
-     (with-meta {:before m/prevent-default-behavior}))
+      (build-category-map [:editor/insert-link
+                           :editor/select-all-blocks
+                           :editor/zoom-in
+                           :editor/zoom-out
+                           :editor/toggle-undo-redo-mode
+                           :editor/toggle-number-list
+                           :editor/undo
+                           :editor/redo
+                           :ui/toggle-brackets
+                           :go/search-in-page
+                           :go/search
+                           :go/electron-find-in-page
+                           :go/electron-jump-to-the-next
+                           :go/electron-jump-to-the-previous
+                           :go/backward
+                           :go/forward
+                           :search/re-index
+                           :sidebar/open-today-page
+                           :sidebar/clear
+                           :command/run
+                           :command-palette/toggle])
+      (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy              (:misc/copy              all-built-in-keyboard-shortcuts)}
+    {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}
 
     :shortcut.handler/global-non-editing-only
     (->
-     (build-category-map [:go/home
-                          :go/journals
-                          :go/all-pages
-                          :go/flashcards
-                          :go/graph-view
-                          :go/all-graphs
-                          :go/whiteboards
-                          :go/keyboard-shortcuts
-                          :go/tomorrow
-                          :go/next-journal
-                          :go/prev-journal
-                          :ui/toggle-document-mode
-                          :ui/toggle-settings
-                          :ui/toggle-right-sidebar
-                          :ui/toggle-left-sidebar
-                          :ui/toggle-help
-                          :ui/toggle-theme
-                          :ui/toggle-contents
-                          :editor/open-file-in-default-app
-                          :editor/open-file-in-directory
-                          :editor/copy-current-file
-                          :editor/copy-page-url
-                          :editor/new-whiteboard
-                          :ui/toggle-wide-mode
-                          :ui/select-theme-color
-                          :ui/goto-plugins
-                          :ui/install-plugins-from-file
-                          :editor/toggle-open-blocks
-                          :ui/toggle-cards
-                          :ui/clear-all-notifications
-                          :git/commit
-                          :sidebar/close-top
-                          :dev/show-block-data
-                          :dev/show-block-ast
-                          :dev/show-page-data
-                          :dev/show-page-ast])
-     (with-meta {:before m/enable-when-not-editing-mode!}))}))
+      (build-category-map [:go/home
+                           :go/journals
+                           :go/all-pages
+                           :go/flashcards
+                           :go/graph-view
+                           :go/all-graphs
+                           :go/whiteboards
+                           :go/keyboard-shortcuts
+                           :go/tomorrow
+                           :go/next-journal
+                           :go/prev-journal
+                           :ui/toggle-document-mode
+                           :ui/toggle-settings
+                           :ui/toggle-right-sidebar
+                           :ui/toggle-left-sidebar
+                           :ui/toggle-help
+                           :ui/toggle-theme
+                           :ui/toggle-contents
+                           :editor/open-file-in-default-app
+                           :editor/open-file-in-directory
+                           :editor/copy-current-file
+                           :editor/copy-page-url
+                           :editor/new-whiteboard
+                           :ui/toggle-wide-mode
+                           :ui/select-theme-color
+                           :ui/goto-plugins
+                           :ui/install-plugins-from-file
+                           :editor/toggle-open-blocks
+                           :ui/toggle-cards
+                           :ui/clear-all-notifications
+                           :git/commit
+                           :sidebar/close-top
+                           :dev/show-block-data
+                           :dev/show-block-ast
+                           :dev/show-page-data
+                           :dev/show-page-ast])
+      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.dicts.en/dicts
