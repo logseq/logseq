@@ -77,7 +77,7 @@
                     :block.temp/top?
                     :block.temp/bottom?
                     :block/pre-block?
-                    :block/unordered?)
+                    :block/unordered)
                    (assoc :block/content content)
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]

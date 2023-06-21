@@ -40,6 +40,7 @@
             [frontend.util.list :as list]
             [frontend.util.marker :as marker]
             [frontend.util.property-edit :as property-edit]
+            [frontend.util.property :as property]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
             [frontend.handler.editor.impl :as editor-impl]
@@ -1958,7 +1959,8 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property-edit/insert-properties-when-file-based repo format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* format {:page-name page-name})
+                    blocks (->> (block/extract-blocks ast content* format {:page-name page-name})
+                                (map editor-impl/wrap-parse-block))
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -1974,6 +1976,13 @@
         page-id (:db/id (:block/page target-block))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
+        blocks (if (config/db-based-graph? (state/get-current-repo))
+                 ;; Remove properties from content
+                 (map (fn [b]
+                        (cond-> b
+                          (:content b)
+                          (update :content #(property/remove-properties format %)))) blocks)
+                 blocks)
         blocks (gp-block/with-parent-and-left page-id blocks)
         block-refs (->> (mapcat :block/refs blocks)
                         (set)

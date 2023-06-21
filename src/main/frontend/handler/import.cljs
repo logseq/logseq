@@ -71,6 +71,7 @@
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))
 
+;; TODO: replace files with page blocks transaction
 (defn import-from-roam-json!
   [data finished-ok-handler]
   (when-let [repo (state/get-current-repo)]
@@ -147,9 +148,9 @@
                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
                  (db/transact! blocks))
                (editor/insert-block-tree children page-format
-                                        {:target-block page-block
-                                         :sibling?     false
-                                         :keep-uuid?   true}))
+                                         {:target-block page-block
+                                          :sibling?     false
+                                          :keep-uuid?   true}))
              (catch :default e
                (js/console.error e)
                (prn {:tree tree})

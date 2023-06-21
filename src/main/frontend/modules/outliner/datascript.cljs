@@ -140,13 +140,17 @@
 (defn transact!
   [txs opts before-editor-cursor]
   (let [repo (state/get-current-repo)
-        txs (remove-nil-from-transaction txs)
+        db-based? (config/db-based-graph? repo)
         txs (map (fn [m] (if (map? m)
-                           (dissoc m
-                                   :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                   :block/title :block/body :block/level :block/container :db/other-tx
-                                   :block/additional-properties)
+                           (cond-> m
+                             true
+                             (dissoc :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                     :block/title :block/body :block/level :block/container :db/other-tx
+                                     :block/additional-properties :block/unordered)
+                             db-based?
+                             (update :block/properties dissoc :id))
                            m)) txs)
+        txs (remove-nil-from-transaction txs)
         txs (cond-> txs
               (:uuid-changed opts)
               (update-block-refs opts)
@@ -159,10 +163,9 @@
               (distinct))]
     (when (and (seq txs)
                (not (:skip-transact? opts))
-               (if (react/db-graph? repo)
-                 true
-                 (not (contains? (:file/unlinked-dirs @state/state)
-                                 (config/get-repo-dir repo)))))
+               (or db-based?
+                   (not (contains? (:file/unlinked-dirs @state/state)
+                                   (config/get-repo-dir repo)))))
 
       ;; (prn :debug "Outliner transact:")
       ;; (frontend.util/pprint {:txs txs :opts opts})
