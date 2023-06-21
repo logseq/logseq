@@ -102,6 +102,7 @@
                                                false
                                                true)
       :ui/scrolling?                         (atom false)
+      :ui/new-property                       (atom {})
       :document/mode?                        document-mode?
 
       :config                                {}

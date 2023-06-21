@@ -222,15 +222,18 @@
 ;;     (properties-area entity properties refs-properties' block-components-m)))
 
 (rum/defcs properties-area <
-  rum/static
-  (rum/local nil ::new-property)
+  rum/reactive
   (rum/local nil ::properties)
+  (rum/local nil ::property-key)
+  (rum/local nil ::property-value)
   {:will-mount (fn [state]
                  (reset! (::properties state) (second (:rum/args state)))
                  state)}
-  [state block _properties]
-  (let [*new-property (::new-property state)
+  [state block _properties edit-input-id]
+  (let [new-property? (state/sub edit-input-id :path-in-sub-atom :ui/new-property)
         *properties (::properties state)
+        *property-key (::property-key state)
+        *property-value (::property-value state)
         repo (state/get-current-repo)]
     [:div.ls-properties-area.pl-6
      (when (seq @*properties)
@@ -251,17 +254,23 @@
             [:div
              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
              [:span v]]))])
-     (if (nil? @*new-property)
-       [:a {:title "Add another value"
-            :on-click (fn [] (reset! *new-property {}))}
-        (ui/icon "circle-plus")]
-
+     (cond
+       new-property?
        [:div
-        [:input.block-properties {:on-change #(swap! *new-property assoc :k (util/evalue %))}]
-        [:input.block-properties {:on-change #(swap! *new-property assoc :v (util/evalue %))}]
+        [:input.block-properties {:on-change #(reset! *property-key (util/evalue %))}]
+        [:input.block-properties {:on-change #(reset! *property-value (util/evalue %))}]
         [:a {:on-click (fn []
-                         (when (and (:k @*new-property) (:k @*new-property))
-                           (property-handler/add-property! repo block (:k @*new-property) (:v @*new-property))
-                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)])))
-                           (reset! *new-property nil)))}
-         "Save"]])]))
+                         (when (and @*property-key @*property-value)
+                           (property-handler/add-property! repo block @*property-key @*property-value)
+                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)]))))
+                         (reset! *property-key nil)
+                         (reset! *property-value nil))}
+         "Save"]]
+
+       (seq @*properties)
+       [:a {:title "Add another value"
+            :on-click (fn []
+                        (state/set-state! edit-input-id true :path-in-sub-atom :ui/new-property)
+                        (reset! *property-key nil)
+                        (reset! *property-value nil))}
+        (ui/icon "circle-plus")])]))

@@ -2854,7 +2854,7 @@
         (block-right-menu config block edit?))]
 
      (when (config/db-based-graph? repo)
-       (property-component/properties-area block (:block/properties block)))
+       (property-component/properties-area block (:block/properties block) edit-input-id))
 
      (block-children config block children collapsed?)
 

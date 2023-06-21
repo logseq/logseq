@@ -134,3 +134,9 @@
                  :block/refs refs}))))
           (state/clear-editor-action!)
           (state/clear-edit!))))))
+
+(defn editing-new-property!
+  []
+  (when-let [edit-input-id (state/get-edit-input-id)]
+    (state/set-state! edit-input-id true :path-in-sub-atom :ui/new-property)
+    (state/clear-edit!)))
