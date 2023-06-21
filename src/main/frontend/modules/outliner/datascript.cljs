@@ -131,7 +131,7 @@
        (if-let [result (db-validate/broken-page? db-after page-id)]
          (do
            ;; TODO: revert db changes
-           (when config/dev? (assert (false? result) (str "Broken page: " result)))
+           (assert (false? result) (str "Broken page: " result))
            (reduced false))
          true))
      true
@@ -173,7 +173,7 @@
               rs (d/transact! conn txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
           ;; TODO: disable this when db is stable
-          (validate-db! rs)
+          (when config/dev? (validate-db! rs))
           (state/update-state! :history/tx->editor-cursor
                                (fn [m] (assoc m tx-id before-editor-cursor)))
 
