@@ -1,5 +1,6 @@
 import type { TLBoxTool } from '../TLBoxTool'
 import Vec from '@tldraw/vec'
+import { GRID_SIZE } from '@tldraw/core'
 import type { TLBounds } from '@tldraw/intersect'
 import { type TLEventMap, TLCursor, type TLStateEvents, TLResizeCorner } from '../../../../types'
 import { uniqueId, BoundsUtils } from '../../../../utils'
@@ -68,7 +69,7 @@ export class CreatingState<
     if (!this.creatingShape) throw Error('Expected a creating shape.')
     const { initialBounds } = this
     const { currentPoint, originPoint, shiftKey } = this.app.inputs
-    const bounds = BoundsUtils.getTransformedBoundingBox(
+    let bounds = BoundsUtils.getTransformedBoundingBox(
       initialBounds,
       TLResizeCorner.BottomRight,
       Vec.sub(currentPoint, originPoint),
@@ -77,6 +78,10 @@ export class CreatingState<
         this.creatingShape.props.isAspectRatioLocked ||
         !this.creatingShape.canChangeAspectRatio
     )
+
+    if (this.app.settings.snapToGrid) {
+      bounds = BoundsUtils.snapBoundsToGrid(bounds, GRID_SIZE)
+    }
 
     this.creatingShape.update({
       point: [bounds.minX, bounds.minY],

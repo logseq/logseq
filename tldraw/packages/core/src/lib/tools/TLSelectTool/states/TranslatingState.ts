@@ -1,11 +1,12 @@
 import { Vec } from '@tldraw/vec'
 import { transaction } from 'mobx'
 import { type TLEventMap, TLCursor, type TLEvents } from '../../../../types'
-import { dedupe, uniqueId } from '../../../../utils'
+import { uniqueId } from '../../../../utils'
 import type { TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
 import type { TLSelectTool } from '../TLSelectTool'
+import { GRID_SIZE } from '../../../../constants'
 
 export class TranslatingState<
   S extends TLShape,
@@ -46,9 +47,15 @@ export class TranslatingState<
     }
 
     transaction(() => {
-      this.app.allSelectedShapesArray.forEach(shape => {
-        if (!shape.props.isLocked) shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
-      })
+      this.app.allSelectedShapesArray
+        .filter(s => !s.props.isLocked)
+        .forEach(shape => {
+          let position = Vec.add(initialPoints[shape.id], delta)
+          if (this.app.settings.snapToGrid) {
+            position = Vec.snap(position, GRID_SIZE)
+          }
+          shape.update({ point: position })
+        })
     })
   }
 

@@ -51,7 +51,7 @@ export class TLViewport {
   }
 
   panToPointWhenNearBounds = (point: number[]) => {
-    const threshold = [TLViewport.panThreshold, TLViewport.panThreshold]
+    const threshold =  Vec.div([TLViewport.panThreshold, TLViewport.panThreshold], this.camera.zoom)
 
     const deltaMax = Vec.sub([this.currentView.maxX, this.currentView.maxY], Vec.add(point, threshold))
     const deltaMin = Vec.sub([this.currentView.minX, this.currentView.minY], Vec.sub(point, threshold))
@@ -59,7 +59,7 @@ export class TLViewport {
     const deltaX = deltaMax[0] < 0 ? deltaMax[0] : deltaMin[0] > 0 ? deltaMin[0] : 0
     const deltaY = deltaMax[1] < 0 ? deltaMax[1] : deltaMin[1] > 0 ? deltaMin[1] : 0
 
-    this.panCamera(Vec.mul([deltaX, deltaY], -TLViewport.panMultiplier))
+    this.panCamera(Vec.mul([deltaX, deltaY], -TLViewport.panMultiplier * this.camera.zoom))
 }
 
 

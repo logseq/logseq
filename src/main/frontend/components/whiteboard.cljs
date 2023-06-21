@@ -146,7 +146,7 @@
   [page-name]
   (let [page-entity (model/get-page page-name)
         {:block/keys [updated-at created-at]} page-entity]
-    (str (if (= created-at updated-at) "Created " "Edited ")
+    (str (if (= created-at updated-at) (t :whiteboard/dashboard-card-created) (t :whiteboard/dashboard-card-edited))
          (util/time-ago (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
@@ -190,7 +190,7 @@
       (whiteboard-handler/create-new-whiteboard-and-redirect!))}
    (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
-    "New whiteboard"]])
+    (t :whiteboard/dashboard-card-new-whiteboard)]])
 
 (rum/defc whiteboard-dashboard
   []

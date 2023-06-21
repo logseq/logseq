@@ -5,6 +5,8 @@ import type { TLShape, TLLineShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLBaseLineBindingState } from '../../../TLBaseLineBindingState'
 import type { TLLineTool } from '../TLLineTool'
+import Vec from '@tldraw/vec'
+import { GRID_SIZE } from '@tldraw/core'
 
 export class CreatingState<
   S extends TLShape,
@@ -31,7 +33,7 @@ export class CreatingState<
       id: uniqueId(),
       type: Shape.id,
       parentId: this.app.currentPage.id,
-      point: originPoint,
+      point: this.app.settings.snapToGrid ? Vec.snap(originPoint, GRID_SIZE) : originPoint,
       fill: this.app.settings.color,
       stroke: this.app.settings.color,
       scaleLevel: this.app.settings.scaleLevel,
