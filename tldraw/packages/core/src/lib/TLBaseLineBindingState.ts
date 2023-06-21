@@ -7,7 +7,7 @@ import type { TLLineShape, TLLineShapeProps, TLShape } from './shapes'
 import type { TLApp } from './TLApp'
 import type { TLTool } from './TLTool'
 import { TLToolState } from './TLToolState'
-
+import { GRID_SIZE } from '@tldraw/core'
 export class TLBaseLineBindingState<
   S extends TLShape,
   T extends S & TLLineShape,
@@ -30,8 +30,7 @@ export class TLBaseLineBindingState<
   onPointerMove: TLStateEvents<S, K>['onPointerMove'] = () => {
     const {
       inputs: { shiftKey, previousPoint, originPoint, currentPoint, modKey, altKey },
-      settings: { showGrid },
-      currentGrid,
+      settings: { snapToGrid },
     } = this.app
     // @ts-expect-error just ignore
     const shape = this.app.getShapeById<TLLineShape>(this.initialShape.id)!
@@ -56,9 +55,7 @@ export class TLBaseLineBindingState<
     const handleChanges = {
       [handleId]: {
         ...handles[handleId],
-        // FIXME Snap not working properly
-        // point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint)
-        point: Vec.toFixed(nextPoint),
+        point: snapToGrid ? Vec.snap(nextPoint, GRID_SIZE) : Vec.toFixed(nextPoint),
         bindingId: undefined,
       },
     }

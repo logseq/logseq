@@ -3616,7 +3616,7 @@
         edit-block (state/get-edit-block)
         target-element (.-nodeName (.-target e))]
     (cond
-      (whiteboard?)
+      (and (whiteboard?) (not edit-input))
       (do
         (util/stop e)
         (.selectAll (.-api ^js (state/active-tldraw-app))))

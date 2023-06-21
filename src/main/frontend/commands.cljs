@@ -278,7 +278,7 @@
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
                [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
-     ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
+     ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
                                                      :backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
