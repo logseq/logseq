@@ -982,8 +982,8 @@
 
 (rum/defcs default-embed-playground
   < rum/static rum/reactive
-    (shortcut/mixin :shortcut.handler/pdf)
-  []
+    (shortcut/mixin :shortcut.handler/pdf false)
+  [_state]
   (let [pdf-current (state/sub :pdf/current)
         system-win? (state/sub :pdf/system-win?)]
     [:div.extensions__pdf-playground

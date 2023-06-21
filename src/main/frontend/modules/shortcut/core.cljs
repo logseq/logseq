@@ -139,21 +139,28 @@
        (map #(install-shortcut-handler! % {}))
        doall))
 
-(defn mixin [handler-id]
-  {:did-mount
-   (fn [state]
-     (let [install-id (install-shortcut-handler! handler-id {:state state})]
-       (assoc state ::install-id install-id)))
+(defn mixin
+  ([handler-id] (mixin handler-id true))
+  ([handler-id remount-reinstall?]
+   (cond->
+     {:did-mount
+      (fn [state]
+        (let [install-id (install-shortcut-handler! handler-id {:state state})]
+          (assoc state ::install-id install-id)))
 
-   :will-remount (fn [old-state new-state]
-                  (uninstall-shortcut-handler! (::install-id old-state))
-                  (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-                    (assoc new-state ::install-id install-id)))
-   :will-unmount
-   (fn [state]
-     (when-let [install-id (::install-id state)]
-       (uninstall-shortcut-handler! install-id))
-     state)})
+      :will-unmount
+      (fn [state]
+        (when-let [install-id (::install-id state)]
+          (uninstall-shortcut-handler! install-id))
+        state)}
+
+     remount-reinstall?
+     (assoc
+       :will-remount
+       (fn [old-state new-state]
+         (uninstall-shortcut-handler! (::install-id old-state))
+         (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+           (assoc new-state ::install-id install-id)))))))
 
 (defn unlisten-all []
   (doseq [{:keys [handler group]} (vals @*installed-handlers)

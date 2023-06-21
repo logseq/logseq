@@ -681,10 +681,6 @@
                            :command-palette/toggle])
       (with-meta {:before m/prevent-default-behavior}))
 
-    :shortcut.handler/misc
-    ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}
-
     :shortcut.handler/global-non-editing-only
     (->
       (build-category-map [:go/home
@@ -723,7 +719,11 @@
                            :dev/show-block-ast
                            :dev/show-page-data
                            :dev/show-page-ast])
-      (with-meta {:before m/enable-when-not-editing-mode!}))}))
+      (with-meta {:before m/enable-when-not-editing-mode!}))
+
+    :shortcut.handler/misc
+    ;; always overrides the copy due to "mod+c mod+s"
+    {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}}))
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.dicts.en/dicts
