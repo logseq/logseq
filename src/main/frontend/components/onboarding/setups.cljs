@@ -46,12 +46,12 @@
    (cond
      (mobile-util/native-android?)
      [:div.px-4
-      "You can save them in your local storage, and use Logseq Sync or any third-party sync service to keep your notes sync with other devices. "
-      "If you prefer to use Dropbox to sync your notes, you can use "
+      (t :on-boarding/android-intro-sync-title)
+      (t :on-boarding/android-intro-sync-desc-1)
       [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
            :target "_blank"}
        "Dropsync"]
-      ". Or you can use "
+      (t :on-boarding/android-intro-sync-desc-2)
       [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
            :target "_blank"}
        "FolderSync"]
