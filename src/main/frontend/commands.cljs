@@ -298,7 +298,8 @@
 
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]
-     ["Add new property" property-handler/editing-new-property!]]
+     ["Add new property" [[:editor/clear-current-slash]
+                          [:editor/new-property]]]]
 
     @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
@@ -700,6 +701,9 @@
 
 (defmethod handle-step :editor/exit [[_]]
   (state/clear-edit!))
+
+(defmethod handle-step :editor/new-property [[_]]
+  (property-handler/editing-new-property!))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))

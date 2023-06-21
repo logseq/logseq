@@ -425,7 +425,8 @@ independent of format as format specific heading characters are stripped"
        {:query-fn (fn [_]
                     (let [e (db-utils/entity id)
                           children (map :db/id (sort-by-left (:block/_parent e) e))]
-                      [e {:children children
+                      [e {:properties (:block/properties e)
+                          :children children
                           :collapsed? (:block/collapsed? e)}]))}
        nil)
      react

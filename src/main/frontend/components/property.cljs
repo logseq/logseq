@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [goog.dom :as gdom]
             [frontend.search :as search]
+            [frontend.mixins :as mixins]
             ;; [frontend.components.search.highlight :as highlight]
             [frontend.components.svg :as svg]
             [frontend.modules.shortcut.core :as shortcut]
@@ -46,24 +47,48 @@
                      :property-schema (edn/read-string @*property-schema)}))}
       "Save"]]))
 
-(rum/defcs properties-area <
-  rum/reactive
-  (rum/local nil ::properties)
+(rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
-  {:will-mount (fn [state]
-                 (reset! (::properties state) (second (:rum/args state)))
-                 state)}
-  [state block _properties edit-input-id]
-  (let [new-property? (state/sub edit-input-id :path-in-sub-atom :ui/new-property)
-        *properties (::properties state)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn []
+                 (property-handler/set-editing-new-property! nil))
+      :node (js/document.getElementById "edit-new-property"))))
+  [state repo block edit-input-id properties]
+  (let [new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         *property-key (::property-key state)
-        *property-value (::property-value state)
-        repo (state/get-current-repo)]
+        *property-value (::property-value state)]
+    (cond
+      new-property?
+      [:div#edit-new-property
+       [:input.block-properties {:on-change #(reset! *property-key (util/evalue %))}]
+       [:input.block-properties {:on-change #(reset! *property-value (util/evalue %))}]
+       [:a {:on-click (fn []
+                        (when (and @*property-key @*property-value)
+                          (property-handler/add-property! repo block @*property-key @*property-value))
+                        (reset! *property-key nil)
+                        (reset! *property-value nil)
+                        (property-handler/set-editing-new-property! nil))}
+        "Save"]]
+
+      (seq properties)
+      [:a {:title "Add another value"
+           :on-click (fn []
+                       (property-handler/set-editing-new-property! edit-input-id)
+                       (reset! *property-key nil)
+                       (reset! *property-value nil))}
+       (ui/icon "circle-plus")])))
+
+(rum/defc properties-area < rum/static
+  [block properties edit-input-id]
+  (let [repo (state/get-current-repo)]
     [:div.ls-properties-area.pl-6
-     (when (seq @*properties)
+     (when (seq properties)
        [:div
-        (for [[prop-uuid-or-built-in-prop v] @*properties]
+        (for [[prop-uuid-or-built-in-prop v] properties]
           (if (and (string? prop-uuid-or-built-in-prop)
                    (util/uuid-string? prop-uuid-or-built-in-prop))
             (when-let [property-class (db/pull [:block/uuid (uuid prop-uuid-or-built-in-prop)])]
@@ -74,30 +99,10 @@
                [:span v]
                [:a.ml-8 {:on-click
                          (fn []
-                           (property-handler/remove-property! repo block prop-uuid-or-built-in-prop)
-                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)]))))}
+                           (property-handler/remove-property! repo block prop-uuid-or-built-in-prop))}
                 "DEL"]])
             ;; builtin
             [:div
              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
              [:span v]]))])
-     (cond
-       new-property?
-       [:div
-        [:input.block-properties {:on-change #(reset! *property-key (util/evalue %))}]
-        [:input.block-properties {:on-change #(reset! *property-value (util/evalue %))}]
-        [:a {:on-click (fn []
-                         (when (and @*property-key @*property-value)
-                           (property-handler/add-property! repo block @*property-key @*property-value)
-                           (reset! *properties (:block/properties (db/pull [:block/uuid (:block/uuid block)]))))
-                         (reset! *property-key nil)
-                         (reset! *property-value nil))}
-         "Save"]]
-
-       (seq @*properties)
-       [:a {:title "Add another value"
-            :on-click (fn []
-                        (state/set-state! edit-input-id true :path-in-sub-atom :ui/new-property)
-                        (reset! *property-key nil)
-                        (reset! *property-value nil))}
-        (ui/icon "circle-plus")])]))
+     (new-property repo block edit-input-id properties)]))
