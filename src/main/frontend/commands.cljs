@@ -297,7 +297,12 @@
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
-                                                          :backward-pos 2}]]]]
+                                                          :backward-pos 2}]]]
+
+     ["Code block" [[:editor/input "```\n```\n" {:type            "block"
+                                                 :backward-pos    5
+                                                 :only-breakline? true}]
+                    [:editor/select-code-block-mode]] "Insert code block"]]
 
     @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
@@ -331,7 +336,7 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command only-breakline?]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
@@ -365,7 +370,8 @@
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
                                              (string/starts-with? last-pattern gp-property/colons)))))))]
-                   (if (and space? (string/starts-with? last-pattern "#[["))
+                   (if (and space? (or (string/starts-with? last-pattern "#[[")
+                                       (string/starts-with? last-pattern "```")))
                      false
                      space?))
           prefix (cond
@@ -381,6 +387,10 @@
 
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
+          postfix (cond-> postfix
+                          (and only-breakline? postfix
+                               (= (get postfix 0) "\n"))
+                          (string/replace-first "\n" ""))
           new-value (cond
                       (string/blank? postfix)
                       prefix
@@ -691,6 +701,15 @@
     (do
       (state/set-timestamp-block! nil)
       (state/set-editor-action! :datepicker))))
+
+(defmethod handle-step :editor/select-code-block-mode [[_]]
+  (-> (p/delay 50)
+      (p/then
+        (fn []
+          (when-let [input (state/get-input)]
+            ;; update action cursor position
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+            (state/set-editor-action! :select-code-block-mode))))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
