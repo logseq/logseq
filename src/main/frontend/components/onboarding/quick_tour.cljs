@@ -109,12 +109,12 @@
   [
    ;; initiate graph
    {:id             "sync-initiate"
-    :text           (h/render-html [:section [:h2 "🚀 Initiate synchronization of your current graph"]
-                                    [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph."]])
+    :text           (h/render-html [:section [:h2 (t :on-boarding/quick-tour-sync-initiate)]
+                                    [:p (t :on-boarding/quick-tour-sync-initiate-p)]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
-    :buttons        [{:text "Cancel" :classes "bg-gray" :action (fn [] (.hide jsTour))}
-                     {:text "Continue" :action (fn []
+    :buttons        [{:text (t :on-boarding/quick-tour-sync-initiate-btn-cancel) :classes "bg-gray" :action (fn [] (.hide jsTour))}
+                     {:text (t :on-boarding/quick-tour-sync-initiate-btn-continue) :action (fn []
                                                  (some->> (js/document.querySelector ".cp__file-sync-indicator a.button")
                                                           (.click))
                                                  (.hide jsTour))}]
@@ -125,11 +125,11 @@
 
    ;; learn
    {:id             "sync-learn"
-    :text           (h/render-html [:section [:h2 "💡 Learn about your sync status"]
-                                    [:p "Click here to see the progress of your local graph being synced with the cloud."]])
+    :text           (h/render-html [:section [:h2 (t :on-boarding/quick-tour-sync-learn)]
+                                    [:p (t :on-boarding/quick-tour-sync-learn-p)]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
-    :buttons        [{:text "Got it!" :action (fn []
+    :buttons        [{:text (t :on-boarding/quick-tour-sync-learn-btn-got-it) :action (fn []
                                                 (.hide jsTour)
                                                 (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :congrats]) 3000))}]
     :popperOptions  {:modifiers [{:name    "preventOverflow"
@@ -139,14 +139,14 @@
 
    ;; history
    {:id                "sync-history"
-    :text              (h/render-html [:section [:h2 "⏱ Go back in time!"]
-                                       [:p "With file sync you can now go through older versions of this page and revert back to them if you like!"]])
+    :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-sync-history)]
+                                       [:p (t :on-boarding/quick-tour-sync-history-p)]])
     :attachTo          {:element ".cp__btn_history_version" :on (if (util/mobile?) "bottom" "left")}
     :beforeShowPromise #(when-let [^js target (js/document.querySelector ".toolbar-dots-btn")]
                           (.click target)
                           (p/delay 300))
     :canClickTarget    true
-    :buttons           [{:text "Got it!" :action (.-hide jsTour)}]
+    :buttons           [{:text (t :on-boarding/quick-tour-sync-history-btn-got-it) :action (.-hide jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
