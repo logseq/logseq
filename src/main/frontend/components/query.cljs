@@ -141,10 +141,8 @@
              (when-not (or built-in? dsl-query?)
                (when collapsed?
                  (editor-handler/collapse-block! current-block-uuid))))
-           state)}
-  (rum/local nil ::query-result)
-  {:init (fn [state] (assoc state :query-error (atom nil)))}
-  [state config {:keys [title builder query view collapsed? table-view?] :as q} *query-triggered?]
+           (assoc state :query-error (atom nil)))}
+  [state config {:keys [title builder query view collapsed? table-view?] :as q}]
   (let [*query-error (:query-error state)
         built-in? (built-in-custom-query? title)
         dsl-query? (:dsl-query? config)
@@ -165,11 +163,12 @@
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
+        ;; FIXME: This isn't getting set for full-text searches
         full-text-search? (and dsl-query?
                                (util/electron?)
                                (symbol? (gp-util/safe-read-string query)))
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (query-result/get-query-result state config *query-error *query-triggered? current-block-uuid q {:table? table?}))
+                 (query-result/get-query-result config q *query-error current-block-uuid {:table? table?}))
         query-time (:query-time (meta result))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
@@ -208,13 +207,13 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (editor-property/set-block-property! current-block-uuid
-                                                                                                 "query-table"
-                                                                                                 false))}
+                                                                                                  "query-table"
+                                                                                                  false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (editor-property/set-block-property! current-block-uuid
-                                                                                                 "query-table"
-                                                                                                 true))}
+                                                                                                  "query-table"
+                                                                                                  true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 
                [:a.flex.ml-1.fade-link
@@ -230,7 +229,7 @@
                   (query-refresh-button query-time {:full-text-search? full-text-search?
                                                     :on-mouse-down (fn [e]
                                                                      (util/stop e)
-                                                                     (query-result/trigger-custom-query! state *query-error *query-triggered?))}))]])])
+                                                                     (query-result/trigger-custom-query! config q *query-error))}))]])])
 
          (when dsl-query? builder)
 
@@ -247,11 +246,10 @@
               (custom-query-inner config q opts))])]))))
 
 (rum/defcs custom-query < rum/static
-  (rum/local false ::query-triggered?)
   [state config q]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn []
-      (custom-query* config q (::query-triggered? state)))
+      (custom-query* config q))
     {:debug-id q})))

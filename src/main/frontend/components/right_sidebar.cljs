@@ -114,7 +114,7 @@
 
 (defn build-sidebar-item
   [repo idx db-id block-type]
-  (case block-type
+  (case (keyword block-type)
     :contents
     [(t :right-side-bar/contents)
      (contents)]
