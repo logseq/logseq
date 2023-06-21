@@ -1072,7 +1072,7 @@
 
       [:article
        [:header.cp__settings-header
-        [:h1.cp__settings-category-title (name (first @*active))]]
+        [:h1.cp__settings-category-title (t (keyword (str "settings-page/tab-" (name (first @*active)))))]]
 
        (case (first @*active)
 
