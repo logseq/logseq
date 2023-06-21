@@ -867,7 +867,8 @@
         (let [title [:span.block-ref
                      (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                     block nil (:block/uuid block)
-                                    (:slide? config))]
+                                    (:slide? config)
+                                    false)]
               inner (if label
                       (->elem
                        :span.block-ref
