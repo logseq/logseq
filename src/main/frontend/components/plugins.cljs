@@ -122,9 +122,9 @@
                        (fn [^js e]
                          (case (keyword (aget e "name"))
                            :IllegalPluginPackageError
-                           (notification/show! "Illegal Logseq plugin package." :error)
+                           (notification/show! (t :plugin/illegal-package-error) :error)
                            :ExistedImportedPluginPackageError
-                           (notification/show! "Existed Imported plugin package." :error)
+                           (notification/show! (t :plugin/existed-imported-package-error) :error)
                            :default)
                          (plugin-handler/reset-unpacked-state))
             reg-handle #(plugin-handler/reset-unpacked-state)]
@@ -139,7 +139,7 @@
     [unpacked-pkg-path])
 
   (when unpacked-pkg-path
-    [:strong.inline-flex.px-3 "Loading ..."]))
+    [:strong.inline-flex.px-3 (t :plugin/modal-loading)]))
 
 (rum/defc category-tabs
   [t total-nums category on-action]
@@ -437,7 +437,7 @@
          [:option "https://s3.amazonaws.com"]
          [:option "https://clients3.google.com/generate_204"]]]
 
-       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+       (ui/button (if testing? (ui/loading (t :network-proxy/test-load)) (t :network-proxy/test))
                   :intent "logseq" :large? false
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
@@ -445,7 +445,7 @@
                                  (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
-                                               (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
+                                               (notification/show! (str (t :network-proxy/test-notif-1) code (t :network-proxy/test-notif-2) response-ms "ms.") :success)))
                                      (p/catch (fn [e]
                                                 (notification/show! (str e) :error)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
