@@ -10,45 +10,29 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.util.property-edit :as property-edit]))
+            [frontend.modules.outliner.transaction :as outliner-tx]))
 
 (defn add-property!
-  [repo block k v]
-  (let [tx-data (property-edit/insert-property-when-db-based repo block k v)]
+  [repo block k-name v]
+  (let [property-class      (db/pull repo '[*] [:property/name k-name])
+        property-class-uuid (or (:block/uuid property-class) (random-uuid))
+        tx-data (cond-> []
+                  (nil? property-class) (conj {:property/schema {}
+                                               :property/name k-name
+                                               :block/uuid property-class-uuid
+                                               :block/type "property"})
+                  true (conj {:block/uuid (:block/uuid block)
+                              :block/properties (assoc (:block/properties block) (str property-class-uuid) v)}))]
     (db/transact! repo tx-data)))
 
 (defn remove-property!
-  [repo block k]
-  (let [tx-data (property-edit/remove-property-when-db-based block k)]
-    (db/transact! repo tx-data)))
-
-
-;; (defn add-property!
-;;   [block-db-id key]
-;;   (let [block (db/pull block-db-id)
-;;         key (string/trim key)
-;;         key-name (util/page-name-sanity-lc key)
-;;         property (db/entity [:block/name key-name])]
-;;     (when-not (or
-;;                (= (:block/name block) key-name)
-;;                (and property
-;;                     (or
-;;                      (= (:block/type property) "tag")
-;;                      (= (:db/id property) (:db/id block)))))
-;;       (let [property-uuid (db/new-block-id)]
-;;         (db/transact! (state/get-current-repo)
-;;           [
-;;            ;; property
-;;            {:block/uuid property-uuid
-;;             :block/type "property"
-;;             :block/property-schema {:type "any"}
-;;             :block/original-name key
-;;             :block/name key-name}
-
-;;            {:block/uuid (:block/uuid block)
-;;             :block/properties (assoc (:block/properties block)
-;;                                      property-uuid "")}])))))
+  [repo block k-uuid-or-builtin-k-name]
+  {:pre (string? k-uuid-or-builtin-k-name)}
+  (let [origin-properties (:block/properties block)]
+    (assert (contains? (set (keys origin-properties)) k-uuid-or-builtin-k-name))
+    (db/transact! repo
+                  [{:block/uuid (:block/uuid block)
+                    :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)}])))
 
 (defn- extract-refs
   [entity properties]
