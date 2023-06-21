@@ -60,7 +60,7 @@
 
 (deftest detect-deprecations
   (is (re-find
-       #":editor/command-trigger.*Will"
+       #":editor/command-trigger.*is"
        (deprecation-warnings-for "{:preferred-workflow :todo :editor/command-trigger \",\"}"))
       "Warning when there is a deprecation")
 

@@ -23,6 +23,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
+            [frontend.components.shortcut :as shortcut]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -167,12 +168,8 @@
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
-  {:before     #(notification/show!
-                 (ui/loading (t :graph/persist))
-                 :warning)
-   :on-error   #(notification/show!
-                 (t :graph/persist-error)
-                 :error)})
+  {:before     #(ui/notify-graph-persist!)
+   :on-error   #(ui/notify-graph-persist-error!)})
 
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
@@ -949,6 +946,11 @@
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
+(defmethod handle :modal/keymap-manager [[_]]
+  (state/set-modal!
+    #(shortcut/keymap-pane)
+    {:label "keymap-manager"}))
+
 (defmethod handle :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)
         blocks (cond->> blocks
@@ -973,15 +975,20 @@
   []
   (let [chan (state/get-events-chan)]
     (async/go-loop []
-      (let [payload (async/<! chan)]
-        (try
-          (handle payload)
-          (catch :default error
-            (let [type :handle-system-events/failed]
-              (js/console.error (str type) (clj->js payload) "\n" error)
-              (state/pub-event! [:capture-error {:error error
-                                                 :payload {:type type
-                                                           :payload payload}}])))))
+      (let [[payload d] (async/<! chan)]
+        (->
+         (try
+           (p/resolved (handle payload))
+           (catch :default error
+             (p/rejected error)))
+         (p/then (fn [result]
+                   (p/resolve! d result)))
+         (p/catch (fn [error]
+                    (let [type :handle-system-events/failed]
+                      (state/pub-event! [:capture-error {:error error
+                                                         :payload {:type type
+                                                                   :payload payload}}])
+                      (p/reject! d error))))))
       (recur))
     chan))
 

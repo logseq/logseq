@@ -27,7 +27,7 @@
       (js/setTimeout #(util/scroll-editor-cursor element) 50)))
   state)
 
-(defn did-remount!
+(defn will-remount!
   [_old-state state]
   (keyboards-handler/esc-save! state)
   state)
@@ -45,5 +45,5 @@
 
 (def lifecycle
   {:did-mount did-mount!
-   :did-remount did-remount!
+   :will-remount will-remount!
    :will-unmount will-unmount})

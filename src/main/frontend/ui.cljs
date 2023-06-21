@@ -55,7 +55,7 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
-(def block-background-colors
+(def built-in-colors
   ["yellow"
    "red"
    "pink"
@@ -64,11 +64,15 @@
    "purple"
    "gray"])
 
+(defn built-in-color?
+  [color]
+  (some #{color} built-in-colors))
+
 (rum/defc menu-background-color
   [add-bgcolor-fn rm-bgcolor-fn]
   [:div.flex.flex-row.justify-between.py-1.px-2.items-center
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-    (for [color block-background-colors]
+    (for [color built-in-colors]
       [:a
        {:title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
@@ -171,12 +175,18 @@
                   sequence)]))
 
 (rum/defc menu-link
-  [options child shortcut]
-  (if (:only-child? options)
+  [{:keys [only-child? no-padding? class] :as options} child shortcut]
+  (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-     options
+     (cond-> options
+             (true? no-padding?)
+             (assoc :class (str class " no-padding"))
+
+             true
+             (dissoc :no-padding?))
+
      [:span.flex-1 child]
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
@@ -210,7 +220,7 @@
                                   [:div.title-wrap {:style {:margin-right "8px"
                                                             :margin-left  "4px"}} title]]))]
                  (if hr
-                   [:hr.menu-separator {:key "dropdown-hr"}]
+                   [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
                     (menu-link new-options child nil)
                     title)))))
@@ -367,11 +377,15 @@
       (doseq [[event function]
               [["persist-zoom-level" #(storage/set :zoom-level %)]
                ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
-               ["full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")]]]
+               ["full-screen" #(do (js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")
+                                   (state/set-state! :electron/window-fullscreen? (= % "enter")))]
+               ["maximize" #(state/set-state! :electron/window-maximized? %)]]]
         (.on js/window.apis event function))
 
-      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
-                                           (and isFullScreen (.add cl "is-fullscreen")))))))
+      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen isMaximized]} (js->clj % :keywordize-keys true)]
+                                           (when isFullScreen ((.add cl "is-fullscreen")
+                                                               (state/set-state! :electron/window-fullscreen? true)))
+                                           (when isMaximized (state/set-state! :electron/window-maximized? true)))))))
 
 (defn inject-dynamic-style-node!
   []
@@ -712,12 +726,25 @@
             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
+  ([] (loading (t :loading)))
   ([content] (loading content nil))
   ([content opts]
    [:div.flex.flex-row.items-center.inline
     [:span.icon.flex.items-center (svg/loader-fn opts)
      (when-not (string/blank? content)
        [:span.text.pl-2 content])]]))
+
+(defn notify-graph-persist!
+  []
+  (notification/show!
+   (loading (t :graph/persist))
+   :warning))
+
+(defn notify-graph-persist-error!
+  []
+  (notification/show!
+   (t :graph/persist-error)
+   :error))
 
 (rum/defc rotating-arrow
   [collapsed?]

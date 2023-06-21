@@ -2,6 +2,8 @@ import { SelectInput, type SelectOption } from '../inputs/SelectInput'
 import type { Side } from '@radix-ui/react-popper'
 import type { SizeLevel } from '../../lib'
 import { useApp } from '@tldraw/react'
+import React from 'react'
+import { LogseqContext } from '../../lib/logseq-context'
 
 interface ScaleInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   scaleLevel?: SizeLevel
@@ -11,37 +13,40 @@ interface ScaleInputProps extends React.HTMLAttributes<HTMLButtonElement> {
 
 export function ScaleInput({ scaleLevel, compact, popoverSide, ...rest }: ScaleInputProps) {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
 
   const sizeOptions: SelectOption[] = [
     {
-      label: compact ? 'XS' : 'Extra Small',
+      label: compact ? 'XS' : t('whiteboard/extra-small'),
       value: 'xs',
     },
     {
-      label: compact ? 'SM' : 'Small',
+      label: compact ? 'SM' : t('whiteboard/small'),
       value: 'sm',
     },
     {
-      label: compact ? 'MD' : 'Medium',
+      label: compact ? 'MD' : t('whiteboard/medium'),
       value: 'md',
     },
     {
-      label: compact ? 'LG' : 'Large',
+      label: compact ? 'LG' : t('whiteboard/large'),
       value: 'lg',
     },
     {
-      label: compact ? 'XL' : 'Extra Large',
+      label: compact ? 'XL' : t('whiteboard/extra-large'),
       value: 'xl',
     },
     {
-      label: compact ? 'XXL' : 'Huge',
+      label: compact ? 'XXL' : t('whiteboard/huge'),
       value: 'xxl',
     },
   ]
 
   return (
     <SelectInput
-      tooltip="Scale level"
+      tooltip={t('whiteboard/scale-level')}
       options={sizeOptions}
       value={scaleLevel}
       popoverSide={popoverSide}

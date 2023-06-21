@@ -107,7 +107,7 @@
        [:div.pl-1.content.mt-3
 
         [:div
-         [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
+         [:h2.text-lg.font-medium.my-4 (t :graph/local-graphs)]
          (when (seq local-graphs)
            (repos-inner local-graphs))
 
@@ -123,7 +123,7 @@
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
-            [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+            [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
             [:div
              (ui/button
               [:span.flex.items-center "Refresh"

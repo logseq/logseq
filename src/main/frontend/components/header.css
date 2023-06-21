@@ -1,7 +1,9 @@
 .cp__header {
-  @apply z-10;
-
-  padding-top: var(--ls-headbar-inner-top-padding);
+  @apply shadow z-10;
+  -webkit-app-region: drag;
+  
+  padding-top: calc(var(--ls-headbar-inner-top-padding));
+  margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
   align-items: center;

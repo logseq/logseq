@@ -41,7 +41,7 @@
     (state/set-global-config! config)
     config))
 
-(def default-content (rc/inline "global-config.edn"))
+(def default-content (rc/inline "templates/global-config.edn"))
 
 (defn- create-global-config-file-if-not-exists
   [repo-url]

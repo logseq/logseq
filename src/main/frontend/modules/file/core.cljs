@@ -157,7 +157,7 @@
         (if (and (string/blank? new-content)
                  (not blocks-just-deleted?))
           (state/pub-event! [:capture-error {:error (js/Error. "Empty content")
-                                             :payload {:file-path file-path}}])
+                                             :payload {}}])
           (let [files [[file-path new-content]]
                 repo (state/get-current-repo)]
             (file-handler/alter-files-handler! repo files {} {}))))

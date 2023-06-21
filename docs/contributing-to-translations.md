@@ -80,27 +80,23 @@ $ bb lang:missing es --copy
 
 Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
 
-## Fix Untranslated
+### Editing Tips
 
-There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left for your language use :
-
-```shell
-$ bb lang:duplicates LOCALE
-
-Keys with duplicate values found:
-
-|                  :translation-key | :duplicate-value |
-|-----------------------------------+------------------|
-|                          :general |          General |
-|                           :logseq |           Logseq |
-|                               :no |               No |
-```
-
+* Some translations may include punctuation like `:` or `!`. When translating them, please use the punctuation that makes the most sense for your language as you don't have to follow the English ones.
+* Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
 ## Fix Mistakes
 
-Sometimes, we typo a translation key or forget to use it. If this happens,
-the github CI step of `bb lang:validate-translations` will detect these errors
-and tell you what's wrong.
+There is a lint command to catch common translation mistakes - `bb
+lang:validate-translations`. This runs for all contribution pull requests so
+you'll need to ensure it doesn't fail. Mistakes that it catches:
+
+* Adding translation entries for nonexistent entries in English.
+    * Most common mistake is mistyping an entry name
+* Adding English entries for translations that don't exist in the UI.
+* Adding translation entries that are just duplicates of the English entry.
+    * This catches contributors copying entries from English and then forgetting to translate. Sometimes you do want to have the translation be the same. For this case, add an entry to `allowed-duplicates` in
+[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
+with a list of duplicated entries e.g. `:nb-NO #{:port ...}`.
 
 ## Add a Language
 

@@ -5,7 +5,8 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [frontend.context.i18n :refer [t]]))
 
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
@@ -42,7 +43,7 @@
 
         copy-result-to-clipboard! (fn [result]
                                     (util/copy-to-clipboard! result)
-                                    (notification/show! "Copied to clipboard!"))
+                                    (notification/show! (t :bug-report/inspector-page-copy-notif)))
 
         reset-step! (fn []
                       (set-step! 0)
@@ -56,26 +57,26 @@
 
     [:div.flex.flex-col
      (when (= step 0)
-       (list [:div.mx-auto "Press Ctrl+V / ⌘+V to inspect your clipboard data"]
-             [:div.mx-auto "or click here to paste if you are using the mobile version"]
+       (list [:div.mx-auto (t :bug-report/inspector-page-desc-1)]
+             [:div.mx-auto (t :bug-report/inspector-page-desc-2)]
              ;; for mobile
-             [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder "Long press here to paste if you are on mobile"}]
+             [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder (t :bug-report/inspector-page-placeholder)}]
              [:div.flex.justify-between.items-center.mt-2
-              [:div "Something wrong? No problem, click to go back to the previous step."]
-              (ui/button "Go back" :on-click #(util/open-url (rfe/href :bug-report)))]))
+              [:div (t :bug-report/inspector-page-tip)]
+              (ui/button (t :bug-report/inspector-page-btn-back) :on-click #(util/open-url (rfe/href :bug-report)))]))
 
      (when (= step 1)
        (list
-        [:div "Here is the data read from clipboard."]
+        [:div (t :bug-report/inspector-page-desc-clipboard)]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "If this is okay to share, click the copy button."]
-         (ui/button "Copy the result" :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
+         [:div (t :bug-report/inspector-page-desc-copy)]
+         (ui/button (t :bug-report/inspector-page-btn-copy) :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Now you can report the result pasted to your clipboard. Please paste the result in the 'Additional Context' section and state where you copied the original content from. Thanks!"]
-         (ui/button "Create an issue" :href header/bug-report-url)]
+         [:div (t :bug-report/inspector-page-desc-create-issue)]
+         (ui/button (t :bug-report/inspector-page-btn-create-issue) :href header/bug-report-url)]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Something wrong? No problem, click to go back to the previous step."]
-         (ui/button "Go back" :on-click reset-step!)]
+         [:div (t :bug-report/inspector-page-tip)]
+         (ui/button (t :bug-report/inspector-page-btn-back) :on-click reset-step!)]
 
         [:pre.whitespace-pre-wrap [:code (js/JSON.stringify (clj->js result) nil 2)]]))]))
 
@@ -102,17 +103,17 @@
    [:div.flex.flex-col.items-center
     [:div.flex.items-center.mb-2
      (ui/icon "bug")
-     [:h1.text-3xl.ml-2 "Bug report"]]
-    [:div.opacity-60 "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can."]]
+     [:h1.text-3xl.ml-2 (t :bug-report/main-title)]]
+    [:div.opacity-60 (t :bug-report/main-desc)]]
    [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
-    [:h1.text-2xl "Is the bug you encountered related to these features?"]
-    [:div.opacity-60 "You can use these handy tools to give us additional information."]
-    (report-item-button "Clipboard helper"
-                 "Inspect and collect clipboard data"
+    [:h1.text-2xl (t :bug-report/section-clipboard-title)]
+    [:div.opacity-60 (t :bug-report/section-clipboard-desc)]
+    (report-item-button (t :bug-report/section-clipboard-btn-title)
+                 (t :bug-report/section-clipboard-btn-desc)
                  "clipboard"
                  {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
     [:div.py-2] ;; divider
     [:div.flex.flex-col
-     [:h1.text-2xl "Or..."]
-     [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly."]
-     (report-item-button "Submit a bug report" "Help Make Logseq Better!" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
+     [:h1.text-2xl (t :bug-report/section-issues-title)]
+     [:div.opacity-60 (t :bug-report/section-issues-desc)]
+     (report-item-button (t :bug-report/section-issues-btn-title) (t :bug-report/section-issues-btn-desc) "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])

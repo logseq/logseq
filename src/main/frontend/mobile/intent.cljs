@@ -65,6 +65,7 @@
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
           time (date/get-current-time)
+          date-ref-name (date/today)
           path (editor-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
@@ -75,21 +76,25 @@
           template (get-in (state/get-config)
                            [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
-    (-> (string/replace template "{time}" time)
+    (-> template
+        (string/replace "{time}" time)
+        (string/replace "{date}" date-ref-name)
+        (string/replace "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- embed-text-file
   "Store external content with url into Logseq repo"
   [url title]
   (p/let [time (date/get-current-time)
+          date-ref-name (date/today)
           title (some-> (or title (node-path/basename url))
                         gp-util/safe-decode-uri-component
                         util/node-path.name
                         ;; make the title more user friendly
                         gp-util/page-name-sanity)
           path (node-path/join (config/get-repo-dir (state/get-current-repo))
-                          (config/get-pages-directory)
-                          (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
+                               (config/get-pages-directory)
+                               (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
           _ (p/catch
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]
@@ -98,7 +103,10 @@
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]
-    (-> (string/replace template "{time}" time)
+    (-> template
+        (string/replace "{time}" time)
+        (string/replace "{date}" date-ref-name)
+        (string/replace "{text}" "")
         (string/replace "{url}" (or url "")))))
 
 (defn- handle-received-media [result]

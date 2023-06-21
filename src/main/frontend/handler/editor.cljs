@@ -169,7 +169,6 @@
   ([text]
    (when-let [m (get-selection-and-format)]
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-           cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
            selection-link? (and selection (gp-mldoc/mldoc-link? format selection))
            [content forward-pos] (cond
@@ -191,7 +190,7 @@
                       (subs value 0 selection-start)
                       content
                       (subs value selection-end))
-           cur-pos (or selection-start cur-pos)]
+           cur-pos (or selection-start (cursor/pos input))]
        (state/set-edit-content! edit-id new-value)
        (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
@@ -301,10 +300,10 @@
            (save-block-inner! block value opts)))))))
 
 (defn- compute-fst-snd-block-text
-  [value pos]
+  [value selection-start selection-end]
   (when (string? value)
-    (let [fst-block-text (subs value 0 pos)
-          snd-block-text (string/triml (subs value pos))]
+    (let [fst-block-text (subs value 0 selection-start)
+          snd-block-text (string/triml (subs value selection-end))]
       [fst-block-text snd-block-text])))
 
 (declare save-current-block!)
@@ -342,13 +341,21 @@
     (= uuid block-id)))
 
 (defn insert-new-block-before-block-aux!
-  [config block _value {:keys [ok-handler]}]
-  (let [new-m {:block/uuid (db/new-block-id)
+  [config block value {:keys [ok-handler]}]
+  (let [edit-input-id (state/get-edit-input-id)
+        input (gdom/getElement edit-input-id)
+        input-text-selected? (util/input-text-selected? input)
+        new-m {:block/uuid (db/new-block-id)
                :block/content ""}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (editor-impl/wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
+    (when input-text-selected?
+      (let [selection-start (util/get-selection-start input)
+            selection-end (util/get-selection-end input)
+            [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
+        (state/set-edit-content! edit-input-id new-content)))
     (profile
      "outliner insert block"
      (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
@@ -365,8 +372,9 @@
     :as _opts}]
   (let [block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
-        pos (cursor/pos input)
-        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+        selection-start (util/get-selection-start input)
+        selection-end (util/get-selection-end input)
+        [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
         new-m {:block/uuid (db/new-block-id)
@@ -419,8 +427,9 @@
                        block)
              block-self? (block-self-alone-when-insert? config block-id)
              input (gdom/getElement (state/get-edit-input-id))
-             pos (cursor/pos input)
-             [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+             selection-start (util/get-selection-start input)
+             selection-end (util/get-selection-end input)
+             [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
              insert-fn (cond
                          block-self?
                          insert-new-block-aux!
@@ -691,7 +700,7 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
-   (let [{:keys [id block-id block-parent-id value format]} (get-state)]
+   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
              page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
@@ -707,24 +716,28 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)
+                       sibling-block (if (:embed? config)
+                                       (util/get-prev-block-non-collapsed
+                                        block-parent
+                                        {:container (util/rec-get-blocks-container block-parent)})
+                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
                        {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
-                                       {:outliner-op :delete-blocks}
+                                      {:outliner-op :delete-blocks}
                                        concat-prev-block?
                                        (assoc :concat-data
                                               {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
-                     (if concat-prev-block?
-                       (let [prev-block' (if (seq (:block/_refs block-e))
-                                           (assoc prev-block
-                                                  :block/uuid (:block/uuid block)
-                                                  :block.temp/additional-properties (:block/properties block))
-                                           prev-block)]
-                         (delete-block-aux! block delete-children?)
-                         (save-block! repo prev-block' new-content {:editor/op :delete}))
-                       (delete-block-aux! block delete-children?)))
+                                          (if concat-prev-block?
+                                            (let [prev-block' (if (seq (:block/_refs block-e))
+                                                                (assoc prev-block
+                                                                       :block/uuid (:block/uuid block)
+                                                                       :block.temp/additional-properties (:block/properties block))
+                                                                prev-block)]
+                                              (delete-block-aux! block delete-children?)
+                                              (save-block! repo prev-block' new-content {:editor/op :delete}))
+                                            (delete-block-aux! block delete-children?)))
                    (move-fn)))))))))
    (state/set-editor-op! nil)))
 
@@ -1416,7 +1429,7 @@
                                        (if file-obj (.-name file-obj) (if image? "image" "asset"))
                                        image?)
                   format
-                  {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
+                  {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                    :restore?     true
                    :command      :insert-asset})))))
           (p/finally
@@ -1555,7 +1568,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= (state/get-editor-command-trigger) (util/nth-safe edit-content (dec pos)))
+         (and (= commands/command-trigger (util/nth-safe edit-content (dec pos)))
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -1673,7 +1686,7 @@
                id
                (get-link format link label)
                format
-               {:last-pattern (str (state/get-editor-command-trigger) "link")
+               {:last-pattern (str commands/command-trigger "link")
                 :command :link})))
 
     :image-link (let [{:keys [link label]} m]
@@ -1682,7 +1695,7 @@
                      id
                      (get-image-link format link label)
                      format
-                     {:last-pattern (str (state/get-editor-command-trigger) "link")
+                     {:last-pattern (str commands/command-trigger "link")
                       :command :image-link})))
 
     nil)
@@ -1748,12 +1761,11 @@
     (cond
       (and (= content "1. ") (= last-input-char " ") input-id edit-block
            (not (own-order-number-list? edit-block)))
-      (do
-        (state/set-edit-content! input-id "")
-        (-> (p/delay 10)
-            (p/then #(state/pub-event! [:editor/toggle-own-number-list edit-block]))))
+      (p/do!
+       (state/pub-event! [:editor/toggle-own-number-list edit-block])
+       (state/set-edit-content! input-id ""))
 
-      (and (= last-input-char (state/get-editor-command-trigger))
+      (and (= last-input-char commands/command-trigger)
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
@@ -1934,6 +1946,7 @@
                                                                          :replace-empty-target? replace-empty-target?
                                                                          :keep-uuid? keep-uuid?})]
          (edit-last-block-after-inserted! result))))))
+
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2605,7 +2618,7 @@
             (delete-block! repo false))))
 
       (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
+           (= (util/nth-safe value (dec current-pos)) commands/command-trigger))
       (do
         (util/stop e)
         (commands/restore-state)
@@ -2891,8 +2904,8 @@
                (util/event-is-composing? e true)])]
         (cond
           ;; When you type something after /
-          (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
-          (if (= (state/get-editor-command-trigger) (second (re-find #"(\S+)\s+$" value)))
+          (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
+          (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
             (state/clear-editor-action!)
             (let [matched-commands (get-matched-commands input)]
               (if (seq matched-commands)
@@ -3495,7 +3508,7 @@
         edit-block (state/get-edit-block)
         target-element (.-nodeName (.-target e))]
     (cond
-      (whiteboard?)
+      (and (whiteboard?) (not edit-input))
       (do
         (util/stop e)
         (.selectAll (.-api ^js (state/active-tldraw-app))))

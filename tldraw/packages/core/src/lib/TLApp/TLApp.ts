@@ -10,7 +10,6 @@ import type {
   TLCallback,
   TLEventMap,
   TLEvents,
-  TLShortcut,
   TLStateEvents,
   TLSubscription,
   TLSubscriptionEventInfo,
@@ -399,7 +398,6 @@ export class TLApp<
 
   @action addAssets<T extends TLAsset>(assets: T[]): this {
     assets.forEach(asset => (this.assets[asset.id] = asset))
-    this.persist()
     return this
   }
 
