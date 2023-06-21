@@ -143,6 +143,7 @@ const handleCreatingShapes = async (
 
   async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
     return tryCreateShapeHelper(
+      tryCreateShapeFromFilePath,
       tryCreateShapeFromFiles,
       tryCreateShapeFromPageName,
       tryCreateShapeFromBlockUUID,
@@ -164,6 +165,16 @@ const handleCreatingShapes = async (
       .filter(isNonNullable)
 
     return allShapes
+  }
+
+  async function tryCreateShapeFromFilePath(item: DataTransfer) {
+    const file = item.getData('file')
+    if (!file) return null
+
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(new File([new Blob([''])], file))
+
+    return await tryCreateShapeFromFiles(dataTransfer)
   }
 
   async function tryCreateShapeFromFiles(item: DataTransfer) {

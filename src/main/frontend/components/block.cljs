@@ -1047,7 +1047,7 @@
                         (state/set-current-pdf! current)
                         (util/stop event)))
           :draggable true
-          :on-drag-start #(.setData (gobj/get % "dataTransfer") "text" s)}
+          :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
          (or label-text
              (->elem :span (map-inline config label)))]
 
