@@ -1048,7 +1048,7 @@
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
                (when (util/electron?)
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
@@ -1091,7 +1091,7 @@
          :editor
          (settings-editor current-repo)
 
-         :git
+         :version-control
          (settings-git)
 
          :assets
