@@ -10,7 +10,9 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]))
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.util.property-edit :as property-edit]
+            [malli.core :as m]))
 
 (defn add-property!
   [repo block k-name v]
@@ -33,6 +35,23 @@
     (db/transact! repo
                   [{:block/uuid (:block/uuid block)
                     :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)}])))
+
+
+(defn update-property-class!
+  [repo property-uuid {:keys [property-name property-schema]}]
+  {:pre [(uuid? property-uuid)]}
+  (let [tx-data (cond-> {:block/uuid property-uuid}
+                  property-name (assoc :property/name property-name)
+                  property-schema (assoc :property/schema property-schema))]
+    (db/transact! repo [tx-data])))
+
+(defn explain-property-value
+  [repo property-uuid property-value]
+  {:pre [(uuid? property-uuid)]}
+  (let [prop-entity (db/entity repo [:block/uuid property-uuid])]
+    (assert (= "property" (:block/type prop-entity)) prop-entity)
+    (when-let [schema (:property/schema prop-entity)]
+      (m/explain schema property-value))))
 
 (defn- extract-refs
   [entity properties]
