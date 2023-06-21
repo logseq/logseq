@@ -181,12 +181,18 @@
                   sequence)]))
 
 (rum/defc menu-link
-  [options child shortcut]
-  (if (:only-child? options)
+  [{:keys [only-child? no-padding? class] :as options} child shortcut]
+  (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-     options
+     (cond-> options
+             (true? no-padding?)
+             (assoc :class (str class " no-padding"))
+
+             true
+             (dissoc :no-padding?))
+
      [:span.flex-1 child]
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
@@ -220,7 +226,7 @@
                                   [:div.title-wrap {:style {:margin-right "8px"
                                                             :margin-left  "4px"}} title]]))]
                  (if hr
-                   [:hr.menu-separator {:key "dropdown-hr"}]
+                   [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
                     (menu-link new-options child nil)
                     title)))))

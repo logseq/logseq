@@ -1,4 +1,5 @@
 import type { TLBounds } from '@tldraw/intersect'
+import { GRID_SIZE } from '@tldraw/core'
 import { Vec } from '@tldraw/vec'
 import {
   type TLEventMap,
@@ -216,6 +217,11 @@ export class ResizingState<
       //   // Position the bounds at the center
       //   relativeBounds = BoundsUtils.centerBounds(relativeBounds, center)
       // }
+
+      if (this.app.settings.snapToGrid) {
+        relativeBounds = BoundsUtils.snapBoundsToGrid(relativeBounds, GRID_SIZE)
+      }
+
       shape.onResize(initialShapeProps, {
         center,
         rotation,

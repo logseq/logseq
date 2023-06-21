@@ -33,8 +33,6 @@ export type StyleOptions = {
 export type UIContainerAttrs = {
   draggable: boolean
   resizable: boolean
-
-  [key: string]: any
 }
 
 export type UIBaseOptions = {
@@ -75,20 +73,34 @@ export interface LSPluginPkgConfig {
   mode: 'shadow' | 'iframe'
   themes: Theme[]
   icon: string
-
-  [key: string]: any
+  /**
+   * Alternative entrypoint for development.
+   */
+  devEntry: unknown
+  /**
+   * For legacy themes, do not use.
+   */
+  theme: unknown
 }
 
 export interface LSPluginBaseInfo {
-  id: string // should be unique
+  /**
+   * Must be unique.
+   */
+  id: string
   mode: 'shadow' | 'iframe'
-
   settings: {
     disabled: boolean
-    [key: string]: any
-  }
-
-  [key: string]: any
+  } & Record<string, unknown>
+  effect: boolean
+  /**
+   * For internal use only. Indicates if plugin is installed in dot root.
+   */
+  iir: boolean
+  /**
+   * For internal use only.
+   */
+  lsr: string
 }
 
 export type IHookEvent = {
@@ -146,8 +158,6 @@ export interface AppUserConfigs {
   showBracket: boolean
   enabledFlashcards: boolean
   enabledJournals: boolean
-
-  [key: string]: any
 }
 
 /**
@@ -157,8 +167,6 @@ export interface AppGraphInfo {
   name: string
   url: string
   path: string
-
-  [key: string]: any
 }
 
 /**
@@ -184,8 +192,6 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
-
-  [key: string]: any
 }
 
 /**
@@ -205,8 +211,6 @@ export interface PageEntity {
   format?: 'markdown' | 'org'
   journalDay?: number
   updatedAt?: number
-
-  [key: string]: any
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -1078,8 +1082,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   resolveResourceFullUrl(filePath: string): string
 
-  App: IAppProxy & Record<string, any>
-  Editor: IEditorProxy & Record<string, any>
+  App: IAppProxy
+  Editor: IEditorProxy
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy

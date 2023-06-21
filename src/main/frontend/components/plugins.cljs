@@ -457,6 +457,22 @@
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
                                 (state/close-sub-modal! :https-proxy-panel))))]]]))
 
+(rum/defc auto-check-for-updates-control
+  []
+  (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
+        text (t :plugin/auto-check-for-updates)]
+
+    [:div.flex.items-center.justify-between.px-4.py-2
+     {:on-click (fn []
+                  (let [t (not enabled)]
+                    (set-enabled! t)
+                    (plugin-handler/set-enabled-auto-check-for-updates t)
+                    (notification/show!
+                      [:span text [:strong.pl-1 (if t "ON" "OFF")] "!"]
+                      (if t :success :info))))}
+     [:span.pr-3.opacity-80 text]
+     (ui/toggle enabled #() true)]))
+
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
@@ -590,7 +606,11 @@
                    {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath root))}}]))
+                                 (js/apis.openPath root))}}])
+
+                [{:hr true :key "dropdown-more"}
+                 {:title   (auto-check-for-updates-control)
+                  :options {:no-padding? true}}])
         {})
 
       ;; developer
@@ -1045,7 +1065,11 @@
                       [:span (t :plugin/found-updates)] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
                       :class    "extra-item"}
-            :icon    (ui/icon "download")})])
+            :icon    (ui/icon "download")})]
+
+        [{:hr true :key "dropdown-more"}
+         {:title (auto-check-for-updates-control)
+          :options {:no-padding? true}}])
       {:trigger-class "toolbar-plugins-manager-trigger"})))
 
 (rum/defc header-ui-items-list-wrap
@@ -1251,9 +1275,11 @@
       (fn []
         (when online?
           (let [last-updates (storage/get :lsp-last-auto-updates)]
-            (when (or (not (number? last-updates))
-                      ;; interval 12 hours
-                      (> (- (js/Date.now) last-updates) (* 60 60 12 1000)))
+            (when (and (not (false? last-updates))
+                       (or (true? last-updates)
+                           (not (number? last-updates))
+                           ;; interval 12 hours
+                           (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
               (js/setTimeout
                 (fn []
                   (plugin-handler/auto-check-enabled-for-updates!)
@@ -1293,7 +1319,7 @@
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
               [:li
-               {:class (util/classnames [{:active (= id focused)}])}
+               {:key id :class (util/classnames [{:active (= id focused)}])}
                [:a.flex.items-center.settings-plugin-item
                 {:data-id  id
                  :on-click #(do (state/set-state! :plugin/focused-settings id))}
