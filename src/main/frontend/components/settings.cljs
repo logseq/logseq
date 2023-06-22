@@ -82,7 +82,7 @@
        [:div.text-sm.cursor
         {:title (str (t :settings-page/revision) config/revision)
          :on-click (fn []
-                     (notification/show! [:div "Current Revision: "
+                     (notification/show! [:div (t :settings-page/revision-notif)
                                           [:a {:target "_blank"
                                                :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
                                            config/revision]]
@@ -265,7 +265,7 @@
                                 (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 600."]
+                                 [:div (t :settings-page/git-commit-warn)]
                                  :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
@@ -436,13 +436,13 @@
       (let [home (get (state/get-config) :default-home {})
             new-home (dissoc home :page)]
         (config-handler/set-config! :default-home new-home)
-        (notification/show! "Home default page updated successfully!" :success))
+        (notification/show! (t :settings-page/update-home-page-success-notif) :success))
 
       (db/page-exists? value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)
-        (notification/show! "Home default page updated successfully!" :success))
+        (notification/show! (t :settings-page/update-home-page-success-notif) :success))
 
       :else
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
