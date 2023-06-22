@@ -28,7 +28,8 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [frontend.modules.shortcut.core :as shortcut]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.context.i18n :refer [t]]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -409,7 +410,7 @@
     (reset! *phase 1)))
 
 (def review-finished
-  [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
+  [:p.p-2 (t :flashcards/modal-finished)])
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
@@ -457,9 +458,9 @@
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
               (btn-with-shortcut {:btn-text (case next-phase
-                                              1 "Hide answers"
-                                              2 "Show answers"
-                                              3 "Show clozes")
+                                              1 (t :flashcards/modal-btn-hide-answers)
+                                              2 (t :flashcards/modal-btn-show-answers)
+                                              3 (t :flashcards/modal-btn-show-clozes))
                                   :shortcut  "s"
                                   :id "card-answers"
                                   :class "mr-2"
@@ -467,7 +468,7 @@
             (when (and (not= @card-index (count blocks))
                        cards?
                        preview?)
-              (btn-with-shortcut {:btn-text "Next"
+              (btn-with-shortcut {:btn-text (t :flashcards/modal-btn-next-card)
                                   :shortcut "n"
                                   :id       "card-next"
                                   :class    "mr-2"
@@ -477,7 +478,7 @@
 
             (when (and (not preview?) (= 1 next-phase))
               [:<>
-               (btn-with-shortcut {:btn-text   "Forgotten"
+               (btn-with-shortcut {:btn-text   (t :flashcards/modal-btn-forgotten)
                                    :shortcut   "f"
                                    :id         "card-forgotten"
                                    :background "red"
@@ -486,12 +487,12 @@
                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                                    (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" (t :flashcards/modal-btn-recall))
                                    :shortcut "t"
                                    :id       "card-recall"
                                    :on-click #(score-and-next-card 3 card card-index finished? phase review-records cb)})
 
-               (btn-with-shortcut {:btn-text   "Remembered"
+               (btn-with-shortcut {:btn-text   (t :flashcards/modal-btn-remembered)
                                    :shortcut   "r"
                                    :id         "card-remembered"
                                    :background "green"
@@ -499,10 +500,10 @@
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
-                                "Reset this card so that you can review it immediately."]
+                                (t :flashcards/modal-btn-reset-tip)]
                          :class "tippy-hover"
                          :interactive true}
-                        (ui/button [:span "Reset"]
+                        (ui/button [:span (t :flashcards/modal-btn-reset)]
                                    :id "card-reset"
                                    :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
                                    :on-click (fn [e]
@@ -590,11 +591,11 @@
   (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
         items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
                    (map (fn [col] (string/join " " col))))
-        items (concat items ["All"])]
+        items (concat items [(t :flashcards/modal-select-all)])]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false
-                              :input-default-placeholder "Switch to"
+                              :input-default-placeholder (t :flashcards/modal-select-switch)
                               :extract-fn nil})))
 
 ;;; register cards macro
@@ -627,12 +628,12 @@
                {:on-mouse-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
-               [:span.flex (if (string/blank? query-string) "All" query-string)
+               [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
                 [:span {:style {:margin-top 2}}
                  (svg/caret-down)]]])
             (fn [{:keys [toggle-fn]}]
               (cards-select {:on-chosen (fn [query]
-                                          (let [query' (if (= query "All") "" query)]
+                                          (let [query' (if (= query (t :flashcards/modal-select-all)) "" query)]
                                             (reset! query-atom query')
                                             (toggle-fn)))}))
             {:modal-class (util/hiccup->class
@@ -642,13 +643,13 @@
 
            ;; FIXME: CSS issue
            (if @*preview-mode?
-             (ui/tippy {:html [:div.text-sm "current/total"]
+             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-current-total)]
                         :interactive true}
                        [:div.opacity-60.text-sm.mr-3
                         @*card-index
                         [:span "/"]
                         total])
-             (ui/tippy {:html [:div.text-sm "overdue/total"]
+             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-overdue-total)]
                         ;; :class "tippy-hover"
                         :interactive true}
                        [:div.opacity-60.text-sm.mr-3
@@ -657,7 +658,7 @@
                         total]))
 
            (ui/tippy
-            {:html [:div.text-sm "Toggle preview mode"]
+            {:html [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true
@@ -672,7 +673,7 @@
              "A"])
 
            (ui/tippy
-            {:html [:div.text-sm "Toggle random mode"]
+            {:html [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
@@ -702,15 +703,15 @@
                      *card-index))]])
       (if (:global? config)
         [:div.ls-card.content
-         [:h1.title "Time to create a card!"]
+         [:h1.title (t :flashcards/modal-welcome-title)]
 
          [:div
-          [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
+          [:p (t :flashcards/modal-welcome-desc-1)]
           [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
-          [:p "You can "
-           [:a {:href "https://docs.logseq.com/#/page/cards" :target "_blank"}
-            "click this link"]
-           " to check the documentation."]]]
+          [:p (t :flashcards/modal-welcome-desc-2)
+           [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"}
+            (t :flashcards/modal-welcome-desc-3)]
+           (t :flashcards/modal-welcome-desc-4)]]]
         [:div.opacity-60.custom-query-title.ls-card.content
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]

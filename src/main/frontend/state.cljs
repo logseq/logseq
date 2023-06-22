@@ -755,6 +755,18 @@ Similar to re-frame subscriptions"
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
 
+(defn get-remote-graph-usage
+  []
+  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+    (->> graphs
+         (map #(hash-map :uuid (:GraphUUID %)
+                         :name (:GraphName %)
+                         :used-gbs (/ (:GraphStorageUsage %) 1024 1024 1024)
+                         :limit-gbs (/ (:GraphStorageLimit %) 1024 1024 1024)
+                         :used-percent (/ (:GraphStorageUsage %) (:GraphStorageLimit %) 0.01)))
+         (map #(assoc % :free-gbs (- (:limit-gbs %) (:used-gbs %))))
+         (vec))))
+
 (defn delete-remote-graph!
   [repo]
   (swap! state update-in [:file-sync/remote-graphs :graphs]
@@ -1704,8 +1716,10 @@ Similar to re-frame subscriptions"
 (defn pub-event!
   {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
-  (let [chan (get-events-chan)]
-    (async/put! chan payload)))
+  (let [d (p/deferred)
+        chan (get-events-chan)]
+    (async/put! chan [payload d])
+    d))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -2008,9 +2022,10 @@ Similar to re-frame subscriptions"
                    (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
-    (when (every? not-empty (vals agent-opts))
-      (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
+  (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
+    (when (and  (not (contains? #{"system"} type))
+                (every? not-empty (vals agent-opts)))
+      (str protocol "://" host ":" port))))
 
 (defn set-mobile-app-state-change
   [is-active?]
@@ -2092,6 +2107,9 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
+
+(defn get-user-info []
+  (sub :user/info))
 
 (defn clear-user-info!
   []

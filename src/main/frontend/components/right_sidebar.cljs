@@ -56,7 +56,7 @@
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
-   (shortcut/shortcut {:show-title? false})])
+   (shortcut/shortcut-page {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
@@ -114,7 +114,7 @@
 
 (defn build-sidebar-item
   [repo idx db-id block-type]
-  (case block-type
+  (case (keyword block-type)
     :contents
     [(t :right-side-bar/contents)
      (contents)]
@@ -123,11 +123,11 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/page-graph))
+    [(t :right-side-bar/page-graph)
      (page/page-graph)]
 
     :history
-    [(str (t :right-side-bar/history))
+    [(t :right-side-bar/history)
      (history)]
 
     :block-ref

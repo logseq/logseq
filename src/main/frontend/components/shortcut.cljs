@@ -13,12 +13,15 @@
 
 (rum/defcs customize-shortcut-dialog-inner <
   (rum/local "")
+  (rum/local nil :rum/action)
   (shortcut/record!)
   [state k action-name current-binding]
-  (let [keypress (:rum/local state)
-        keyboard-shortcut (if (= "" @keypress) current-binding @keypress)]
-    [:div
-     [:div
+  (let [*keypress         (:rum/local state)
+        *action           (:rum/action state)
+        keypressed?       (not= "" @*keypress)
+        keyboard-shortcut (if-not keypressed? current-binding @*keypress)]
+    [:<>
+     [:div.sm:w-lsm
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
       [:p.mb-4.mt-4
        (ui/render-keyboard-shortcut (-> keyboard-shortcut
@@ -26,26 +29,30 @@
                                         (str/lower-case)
                                         (str/split  #" |\+")))
        " "
-       [:a.text-sm
-        {:style {:margin-left "12px"}
-         :on-click (fn []
-                     (dh/remove-shortcut k)
-                     (shortcut/refresh!)
-                     (swap! keypress (fn [] "")) ;; Clear local state
-                     )}
-        "Reset"]]]
+       (when keypressed?
+         [:a.text-sm
+          {:style    {:margin-left "12px"}
+           :on-click (fn []
+                       (dh/remove-shortcut k)
+                       (shortcut/refresh!)
+                       (swap! *keypress (constantly ""))          ;; Clear local state
+                       )}
+          "Reset"])]]
      [:div.cancel-save-buttons.text-right.mt-4
-      (ui/button "Save" :on-click state/close-modal!)
+      (ui/button "Save" :on-click (fn []
+                                    (reset! *action :save)
+                                    (state/close-modal!)))
       [:a.ml-4
        {:on-click (fn []
-                    (reset! keypress (dh/binding-for-storage current-binding))
+                    (reset! *keypress (dh/binding-for-storage current-binding))
+                    (reset! *action :cancel)
                     (state/close-modal!))} "Cancel"]]]))
 
 (defn customize-shortcut-dialog [k action-name displayed-binding]
   (fn [_]
     (customize-shortcut-dialog-inner k action-name displayed-binding)))
 
-(rum/defc shortcut-col [k binding configurable? action-name]
+(rum/defc shortcut-col [_category k binding configurable? action-name]
   (let [conflict?         (dh/potential-conflict? k)
         displayed-binding (dh/binding-for-display k binding)
         disabled?         (str/includes? displayed-binding "system default")]
@@ -61,28 +68,48 @@
                  (if disabled? "Cannot override system default" "Click to modify"))
         :background (if conflict? "pink" (when disabled? "gray"))
         :on-click (when-not disabled?
-                    #(state/set-modal! (customize-shortcut-dialog k action-name displayed-binding))))])))
+                    #(state/set-sub-modal!
+                       (customize-shortcut-dialog k action-name displayed-binding)
+                       {:center? true})))])))
 
-(rum/defc shortcut-table < rum/reactive
-  ([name]
-   (shortcut-table name false))
-  ([name configurable?]
-   (let [shortcut-config (rum/cursor-in
-                          state/state
-                          [:config (state/get-current-repo) :shortcuts])
-         _ (rum/react shortcut-config)]
-     [:div
-      [:table
-       [:thead
-        [:tr
-         [:th.text-left [:b (t name)]]
-         [:th.text-right]]]
-       [:tbody
-        (map (fn [[k {:keys [binding]}]]
-               [:tr {:key (str k)}
-                [:td.text-left (t (dh/decorate-namespace k))]
-                (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
-          (dh/binding-by-category name))]]])))
+(rum/defcs shortcut-table
+  < rum/reactive
+    (rum/local true ::folded?)
+    {:will-mount (fn [state]
+                   (let [name (first (:rum/args state))]
+                     (cond-> state
+                             (contains? #{:shortcut.category/basics}
+                                        name)
+                             (-> ::folded? (reset! false) (do state)))))}
+  [state category configurable?]
+  (let [*folded? (::folded? state)
+        plugin?  (= category :shortcut.category/plugins)
+        _        (state/sub [:config (state/get-current-repo) :shortcuts])]
+    [:div.cp__shortcut-table-wrap
+     [:a.fold
+      {:on-click #(reset! *folded? (not @*folded?))}
+      (ui/icon (if @*folded? "chevron-left" "chevron-down"))]
+     [:table
+      [:thead
+       [:tr
+        [:th.text-left [:b (t category)]]
+        [:th.text-right]]]
+      (when-not @*folded?
+        [:tbody
+         (map (fn [[k {:keys [binding]}]]
+                (let [cmd   (dh/shortcut-cmd k)
+                      label (cond
+                              (string? (:desc cmd))
+                              [:<>
+                               [:code.text-xs (namespace k)]
+                               [:small.pl-1 (:desc cmd)]]
+
+                              (not plugin?) (-> k (dh/decorate-namespace) (t))
+                              :else (str k))]
+                  [:tr {:key (str k)}
+                   [:td.text-left.flex.items-center label]
+                   (shortcut-col category k binding configurable? label)]))
+              (dh/binding-by-category category))])]]))
 
 (rum/defc trigger-table []
   [:table
@@ -167,13 +194,9 @@
               [:td.text-right (get rendered name)]])
         list)]]))
 
-(rum/defc shortcut
-  [{:keys [show-title?]
-    :or {show-title? true}}]
-  [:div
-   (when show-title? [:h1.title (t :help/shortcut-page-title)])
-   (trigger-table)
-   (markdown-and-orgmode-syntax)
+(rum/defc keymap-tables
+  []
+  [:div.cp__keymap-tables
    (shortcut-table :shortcut.category/basics true)
    (shortcut-table :shortcut.category/navigating true)
    (shortcut-table :shortcut.category/block-editing true)
@@ -182,4 +205,27 @@
    (shortcut-table :shortcut.category/formatting true)
    (shortcut-table :shortcut.category/toggle true)
    (when (state/enable-whiteboards?) (shortcut-table :shortcut.category/whiteboard true))
+   (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/others true)])
+
+(rum/defc keymap-pane
+  []
+  (let [[ready?, set-ready!] (rum/use-state false)]
+    (rum/use-effect!
+      (fn [] (js/setTimeout #(set-ready! true) 32))
+      [])
+
+    [:div.cp__keymap-pane
+     [:h1.pb-2.text-3xl.pt-2 "Keymap"]
+     (if ready?
+       (keymap-tables)
+       [:p.flex.justify-center.py-20 (ui/loading "")])]))
+
+(rum/defc shortcut-page
+  [{:keys [show-title?]
+    :or {show-title? true}}]
+  [:div.cp__shortcut-page
+   (when show-title? [:h1.title (t :help/shortcut-page-title)])
+   (trigger-table)
+   (markdown-and-orgmode-syntax)
+   (keymap-tables)])

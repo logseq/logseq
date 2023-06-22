@@ -6,6 +6,7 @@ import * as React from 'react'
 import type { Shape } from '../../lib'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
+import { ToggleInput } from '../inputs/ToggleInput'
 import { ZoomMenu } from '../ZoomMenu'
 import * as Separator from '@radix-ui/react-separator'
 import { LogseqContext } from '../../lib/logseq-context'
@@ -32,6 +33,14 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
     app.api.zoomOut()
   }, [app])
 
+  const toggleGrid = React.useCallback(() => {
+    app.api.toggleGrid()
+  }, [app])
+
+  const toggleSnapToGrid = React.useCallback(() => {
+    app.api.toggleSnapToGrid()
+  }, [app])
+
   return (
     <div className="tl-action-bar" data-html2canvas-ignore="true">
       {!app.readOnly && (
@@ -54,6 +63,30 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </Button>
         <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
         <ZoomMenu />
+      </div>
+
+      <div className={'tl-toolbar tl-grid-bar ml-4'}>
+        <ToggleInput
+            tooltip={t('whiteboard/toggle-grid')}
+            className="tl-button"
+            pressed={app.settings.showGrid}
+            id="tl-show-grid"
+            onPressedChange={toggleGrid}
+          >
+          <TablerIcon name="grid-dots" />
+        </ToggleInput>
+
+        {!app.readOnly && (
+          <ToggleInput
+              tooltip={t('whiteboard/snap-to-grid')}
+              className="tl-button"
+              pressed={app.settings.snapToGrid}
+              id="tl-snap-to-grid"
+              onPressedChange={toggleSnapToGrid}
+            >
+            <TablerIcon name={app.settings.snapToGrid ? "magnet" : "magnet-off"} />
+          </ToggleInput>
+        )}
       </div>
     </div>
   )

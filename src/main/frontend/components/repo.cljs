@@ -107,7 +107,7 @@
        [:div.pl-1.content.mt-3
 
         [:div
-         [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
+         [:h2.text-lg.font-medium.my-4 (t :graph/local-graphs)]
          (when (seq local-graphs)
            (repos-inner local-graphs))
 
@@ -123,7 +123,7 @@
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
-            [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+            [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
             [:div
              (ui/button
               [:span.flex.items-center "Refresh"
@@ -232,7 +232,7 @@
                                            "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
-                                                 [:div "Switch to:"]
+                                                 [:div (t :left-side-bar/switch)]
                                                  (when (and (file-sync/enable-sync?) login?)
                                                    (if remotes-loading?
                                                      (ui/loading "")

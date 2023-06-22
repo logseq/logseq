@@ -257,8 +257,8 @@
    {:name icon
     :class "highlight"
     :extension? true}
-   [:div.text.font-bold (str label ": ")
-    [:span.ml-1 name]]))
+   [:div.text.font-bold label
+    [:span.ml-2 name]]))
 
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
@@ -312,7 +312,7 @@
 
                                 :else
                                 (do (log/error "search result with non-existing uuid: " data)
-                                    (str (t :search/cache-outdated)))))])
+                                    (t :search/cache-outdated))))])
 
        :page-content
        (let [{:block/keys [snippet uuid]} data  ;; content here is normalized
@@ -327,7 +327,7 @@
                                 (if page
                                   (page-content-search-result-item repo uuid format snippet search-q search-mode)
                                   (do (log/error "search result with non-existing uuid: " data)
-                                      (str (t :search/cache-outdated)))))]))
+                                      (t :search/cache-outdated))))]))
 
        nil)]))
 
@@ -408,7 +408,7 @@
                     true)]
         (ui/tippy {:html [:div
                           ;; TODO: fetch from config
-                          "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
+                          (t :search/command-palette-tip-1) [:code (util/->platform-shortcut "Ctrl + Shift + p")] (t :search/command-palette-tip-2)]
                    :interactive     true
                    :arrow           true
                    :theme       "monospace"}

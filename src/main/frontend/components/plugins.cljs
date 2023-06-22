@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.search :as search]
@@ -270,7 +271,7 @@
         (if installing-or-updating?
           (t :plugin/updating)
           (if new-version
-            (str (t :plugin/update) " 👉 " new-version)
+            [:span (t :plugin/update) " 👉 " new-version]
             (t :plugin/check-update)))]])
 
     (ui/toggle (not disabled?)
@@ -456,6 +457,22 @@
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
                                 (state/close-sub-modal! :https-proxy-panel))))]]]))
 
+(rum/defc auto-check-for-updates-control
+  []
+  (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
+        text (t :plugin/auto-check-for-updates)]
+
+    [:div.flex.items-center.justify-between.px-4.py-2
+     {:on-click (fn []
+                  (let [t (not enabled)]
+                    (set-enabled! t)
+                    (plugin-handler/set-enabled-auto-check-for-updates t)
+                    (notification/show!
+                      [:span text [:strong.pl-1 (if t "ON" "OFF")] "!"]
+                      (if t :success :info))))}
+     [:span.pr-3.opacity-80 text]
+     (ui/toggle enabled #() true)]))
+
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
@@ -554,7 +571,7 @@
               :options {:on-click #(reset! *sort-by :stars)}
               :icon    (ui/icon (aim-icon :stars))}
 
-             {:title   (str (t :plugin/title) " (A - Z)")
+             {:title   (t :plugin/title "A - Z")
               :options {:on-click #(reset! *sort-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}])
           {}))
@@ -586,10 +603,14 @@
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                  (js/apis.openPath (str root "/preferences.json")))}}
-                   {:title   [:span.flex.items-center (ui/icon "bug") (str (t :plugin/open-logseq-dir) "\u00A0") [:code "~/.logseq"]]
+                   {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath root))}}]))
+                                 (js/apis.openPath root))}}])
+
+                [{:hr true :key "dropdown-more"}
+                 {:title   (auto-check-for-updates-control)
+                  :options {:no-padding? true}}])
         {})
 
       ;; developer
@@ -1044,7 +1065,11 @@
                       [:span (t :plugin/found-updates)] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
                       :class    "extra-item"}
-            :icon    (ui/icon "download")})])
+            :icon    (ui/icon "download")})]
+
+        [{:hr true :key "dropdown-more"}
+         {:title (auto-check-for-updates-control)
+          :options {:no-padding? true}}])
       {:trigger-class "toolbar-plugins-manager-trigger"})))
 
 (rum/defc header-ui-items-list-wrap
@@ -1113,14 +1138,61 @@
             (let [updates-coming (state/sub :plugin/updates-coming)]
               (toolbar-plugins-manager-list updates-coming items)))]]))))
 
-(rum/defcs hook-ui-fenced-code < rum/reactive
-  [_state content {:keys [render edit] :as _opts}]
+(rum/defc hook-ui-fenced-code
+  [block content {:keys [render edit] :as _opts}]
 
-  [:div
-   {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
-    :class         (util/classnames [{:not-edit (false? edit)}])}
-   (when (fn? render)
-     (js/React.createElement render #js {:content content}))])
+  (let [[content1 set-content1!] (rum/use-state content)
+        [editor-active? set-editor-active!] (rum/use-state (string/blank? content))
+        *cm (rum/use-ref nil)
+        *el (rum/use-ref nil)]
+
+    (rum/use-effect!
+      #(set-content1! content)
+      [content])
+
+    (rum/use-effect!
+      (fn []
+        (some-> (rum/deref *el)
+                (.closest ".ui-fenced-code-wrap")
+                (.-classList)
+                (#(if editor-active?
+                    (.add % "is-active")
+                    (.remove % "is-active"))))
+        (when-let [cm (rum/deref *cm)]
+          (.refresh cm)
+          (.focus cm)
+          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
+      [editor-active?])
+
+    (rum/use-effect!
+      (fn []
+        (let [t (js/setTimeout
+                  #(when-let [^js cm (some-> (rum/deref *el)
+                                             (.closest ".ui-fenced-code-wrap")
+                                             (.querySelector ".CodeMirror")
+                                             (.-CodeMirror))]
+                     (rum/set-ref! *cm cm)
+                     (doto cm
+                       (.on "change" (fn []
+                                       (some-> cm (.getDoc) (.getValue) (set-content1!))))))
+                  ;; wait for the cm loaded
+                  1000)]
+          #(js/clearTimeout t)))
+      [])
+
+    [:div.ui-fenced-code-result
+     {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+      :class         (util/classnames [{:not-edit (false? edit)}])
+      :ref           *el}
+     [:<>
+      [:span.actions
+       {:on-mouse-down #(util/stop %)}
+       (ui/button (ui/icon "square-toggle-horizontal" {:size 14})
+                  :on-click #(set-editor-active! (not editor-active?)))
+       (ui/button (ui/icon "source-code" {:size 14})
+                  :on-click #(editor-handler/edit-block! block (count content1) (:block/uuid block)))]
+      (when (fn? render)
+        (js/React.createElement render #js {:content content1}))]]))
 
 (rum/defc plugins-page
   []
@@ -1192,7 +1264,7 @@
         (if check-pending?
           (notify!
             [:div
-             [:div (str (t :plugin/checking-for-updates))]
+             [:div (t :plugin/checking-for-updates)]
              (when sub-content [:p.opacity-60 sub-content])]
             (ui/loading ""))
           (when uid (notification/clear! uid))))
@@ -1203,9 +1275,11 @@
       (fn []
         (when online?
           (let [last-updates (storage/get :lsp-last-auto-updates)]
-            (when (or (not (number? last-updates))
-                      ;; interval 12 hours
-                      (> (- (js/Date.now) last-updates) (* 60 60 12 1000)))
+            (when (and (not (false? last-updates))
+                       (or (true? last-updates)
+                           (not (number? last-updates))
+                           ;; interval 12 hours
+                           (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
               (js/setTimeout
                 (fn []
                   (plugin-handler/auto-check-enabled-for-updates!)
@@ -1234,7 +1308,8 @@
 
     [:div.cp__plugins-settings.cp__settings-main
      [:header
-      [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
+      [:h1.title (ui/icon "puzzle" {:size 22})
+       [:strong (or title (t :settings-of-plugins))]]]
 
      [:div.cp__settings-inner.md:flex
       {:class (util/classnames [{:no-aside (not nav?)}])}
@@ -1244,7 +1319,7 @@
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
               [:li
-               {:class (util/classnames [{:active (= id focused)}])}
+               {:key id :class (util/classnames [{:active (= id focused)}])}
                [:a.flex.items-center.settings-plugin-item
                 {:data-id  id
                  :on-click #(do (state/set-state! :plugin/focused-settings id))}
@@ -1329,4 +1404,5 @@
       [:div.settings-modal.of-plugins
        (focused-settings-content title)])
     {:center? false
+     :label   "plugin-settings-modal"
      :id      "ls-focused-settings-modal"}))
