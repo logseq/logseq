@@ -218,7 +218,7 @@ export class ResizingState<
       //   relativeBounds = BoundsUtils.centerBounds(relativeBounds, center)
       // }
 
-      if (this.app.settings.snapToGrid) {
+      if (this.app.settings.snapToGrid && !isAspectRatioLocked) {
         relativeBounds = BoundsUtils.snapBoundsToGrid(relativeBounds, GRID_SIZE)
       }
 
