@@ -331,7 +331,7 @@
                               (reset! *search-key (str "@" author))
                               (.select el))} author]
         [:small {:on-click #(do
-                              (notification/show! "Copied!" :success)
+                              (notification/show! (t :plugin/copy-notif) :success)
                               (util/copy-to-clipboard! id))}
          (str "ID: " id)]]]
 
@@ -1334,7 +1334,7 @@
         (when-let [^js pl (and focused (= @*cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
-            [:p.warning.text-lg.mt-5 "Settings schema Error!"]
+            [:p.warning.text-lg.mt-5 (t :plugin/schema-error)]
             (plugins-settings/settings-container
               (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
@@ -1352,16 +1352,15 @@
   [pid name url]
   [:div
    [:span.block.whitespace-normal
-    "This plugin "
+    (t :plugin/perf-tip-1)
     [:strong.text-error "#" name]
-    " takes too long to load, affecting the application startup time and
-     potentially causing other plugins to fail to load."]
+    (t :plugin/perf-tip-2)]
 
    [:path.opacity-50
     [:small [:span.pr-1 (ui/icon "folder")] url]]
 
    [:p
-    (ui/button "Disable now"
+    (ui/button (t :plugin/perf-tip-btn-disable)
                :small? true
                :on-click
                (fn []
@@ -1369,9 +1368,9 @@
                      (p/then #(do
                                 (notification/clear! pid)
                                 (notification/show!
-                                  [:span "The plugin "
+                                  [:span (t :plugin/perf-tip-notif-1)
                                    [:strong.text-error "#" name]
-                                   " is disabled."] :success
+                                   (t :plugin/perf-tip-notif-2)] :success
                                   true nil 3000 nil)))
                      (p/catch #(js/console.error %)))))]])
 

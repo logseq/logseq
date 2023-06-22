@@ -565,6 +565,15 @@
  :plugin/modal-loading "Loading ..."
  :plugin/illegal-package-error "Illegal Logseq plugin package."
  :plugin/existed-imported-package-error "Existed Imported plugin package."
+
+ :plugin/copy-notif "Copied!"
+ :plugin/schema-error "Settings schema Error!"
+ :plugin/perf-tip-1 "This plugin "
+ :plugin/perf-tip-2 " takes too long to load, affecting the application startup time and potentially causing other plugins to fail to load."
+ :plugin/perf-tip-btn-disable "Disable now"
+ :plugin/perf-tip-notif-1 "The plugin "
+ :plugin/perf-tip-notif-2 " is disabled."
+
  :plugin/downloads "Downloads"
  :plugin/stars "Stars"
  :plugin/title "Title ({1})"
