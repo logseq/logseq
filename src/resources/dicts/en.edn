@@ -147,6 +147,7 @@
  :right-side-bar/show-journals "Show Journals"
  :right-side-bar/separator "Right sidebar resize handler"
  :right-side-bar/toggle-right-sidebar "Toggle right sidebar"
+ :left-side-bar/switch "Switch to:"
  :left-side-bar/journals "Journals"
  :left-side-bar/create "Create"
  :left-side-bar/new-page "New page"

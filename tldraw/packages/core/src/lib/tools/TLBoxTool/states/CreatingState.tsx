@@ -69,17 +69,18 @@ export class CreatingState<
     if (!this.creatingShape) throw Error('Expected a creating shape.')
     const { initialBounds } = this
     const { currentPoint, originPoint, shiftKey } = this.app.inputs
+    const isAspectRatioLocked = shiftKey ||
+      this.creatingShape.props.isAspectRatioLocked ||
+      !this.creatingShape.canChangeAspectRatio
     let bounds = BoundsUtils.getTransformedBoundingBox(
       initialBounds,
       TLResizeCorner.BottomRight,
       Vec.sub(currentPoint, originPoint),
       0,
-      shiftKey ||
-        this.creatingShape.props.isAspectRatioLocked ||
-        !this.creatingShape.canChangeAspectRatio
+      isAspectRatioLocked
     )
 
-    if (this.app.settings.snapToGrid) {
+    if (this.app.settings.snapToGrid && !isAspectRatioLocked) {
       bounds = BoundsUtils.snapBoundsToGrid(bounds, GRID_SIZE)
     }
 
