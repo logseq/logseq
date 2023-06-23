@@ -392,7 +392,7 @@
                         :page_uuid (str (:page_uuid b))
                         :page_journal_day (:block/journal-day b)
                         :name (:block/name b)
-                        :content (:block/content b)
+                        :content (or (:file/content b) (:block/content b))
                         :datoms (:datoms b)
                         :created_at (or (:block/created-at b) (utils/time-ms))
                         :updated_at (or (:block/updated-at b) (utils/time-ms))})
