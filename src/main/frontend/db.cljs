@@ -1,6 +1,7 @@
 (ns frontend.db
   "Main entry ns for db related fns"
   (:require [datascript.core :as d]
+            [frontend.config :as config]
             [frontend.db.conn :as conn]
             [frontend.db.model]
             [frontend.db.query-custom]
@@ -8,7 +9,8 @@
             [frontend.db.react :as react]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
-            [logseq.db.default :as default-db]))
+            [logseq.db.default :as default-db]
+            [logseq.db.schema :as db-schema]))
 
 (import-vars
  [frontend.db.conn
@@ -69,3 +71,9 @@
 (defn new-block-id
   []
   (d/squuid))
+
+(defn get-schema
+  [repo]
+  (if (config/db-based-graph? repo)
+    db-schema/schema-for-db-based-graph
+    db-schema/schema))

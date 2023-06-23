@@ -4,6 +4,7 @@
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.listener :as db-listener]
             [logseq.db.schema :as db-schema]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -99,7 +100,7 @@
   (shortcut/refresh!)
   (events/run!)
   ;; actually, there's no persist for publishing
-  (db/listen-and-persist! (state/get-current-repo))
+  (db-listener/listen-and-persist! (state/get-current-repo))
   (start))
 
 (defn stop []

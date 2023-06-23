@@ -1,7 +1,6 @@
 (ns logseq.publishing.db
   "Provides db fns and associated util fns for publishing"
   (:require [datascript.core :as d]
-            [logseq.db.schema :as db-schema]
             [logseq.db.rules :as rules]
             [clojure.set :as set]
             [clojure.string :as string]))

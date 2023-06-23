@@ -1,6 +1,5 @@
 (ns logseq.db.schema
-  "Main db schema for the Logseq app"
-  (:require [frontend.config :as config]))
+  "Main db schema for the Logseq app")
 
 (defonce version 2)
 (defonce ast-version 1)
@@ -109,12 +108,6 @@
    schema
    {:property/schema {}
     :property/name {:db/unique :db.unique/identity}}))
-
-(defn get-schema
-  [repo]
-  (if (config/db-based-graph? repo)
-    schema-for-db-based-graph
-    schema))
 
 (def retract-attributes
   #{
