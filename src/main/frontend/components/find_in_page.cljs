@@ -27,7 +27,7 @@
     [:div.flex.w-48.relative
      [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
       {:auto-focus true
-       :placeholder "Find in page"
+       :placeholder (t :search-in-page/placeholder)
        :aria-label "Find in page"
        :value q
        :on-composition-start on-change-fn
@@ -61,7 +61,7 @@
                 (debounced-search))
     :intent "link"
     :small? true
-    :title "Match case"
+    :title (t :search-in-page/btn-match-case)
     :class (str (when match-case? "active ") "text-lg"))
 
    (ui/button
@@ -72,7 +72,7 @@
     :intent "link"
     :small? true
     :class "text-lg"
-    :title "Previous result")
+    :title (t :search-in-page/btn-prev))
 
    (ui/button
     (ui/icon "caret-down")
@@ -82,7 +82,7 @@
     :intent "link"
     :small? true
     :class "text-lg"
-    :title "Next result")
+    :title (t :search-in-page/btn-next))
 
    (ui/button
     (ui/icon "x")
@@ -91,7 +91,7 @@
     :intent "link"
     :small? true
     :class "text-lg"
-    :title "Close")])
+    :title (t :search-in-page/btn-close))])
 
 (rum/defc search < rum/reactive
   []
