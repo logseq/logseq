@@ -56,7 +56,6 @@
  :on-boarding/importing-lsq-desc "Import an EDN or a JSON Export of your Logseq graph"
  :on-boarding/importing-lsq-notif "Please choose an EDN or a JSON file."
  :on-boarding/importing-opml-desc " Import OPML files"
-
  :on-boarding/importing-opml-notif "Please choose a OPML file."
  :on-boarding/importing-notif-finish "Import finished!"
  :on-boarding/importing-btn-skip "Skip"
