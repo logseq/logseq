@@ -82,6 +82,8 @@
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
+     :ui/radix-color                        (storage/get :ui/radix-color)
+     :ui/radix-gradient                     (storage/get :ui/radix-gradient)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -288,10 +290,7 @@
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
      ;; db tx-id -> editor cursor
-     :history/tx->editor-cursor             {}
-
-     ;; new theming 
-     :color/accent                           nil})))
+     :history/tx->editor-cursor             {}})))
 
 ;; Block ast state
 ;; ===============
@@ -2130,24 +2129,27 @@ Similar to re-frame subscriptions"
   (storage/remove :user-groups))
 
 (defn get-color-accent []
-  (get @state :color/accent))
+  (get @state :ui/radix-color))
 
 (defn get-color-gradient []
-  (get @state :color/gradient 1))
+  (get @state :ui/radix-gradient 1))
 
 (defn set-color-accent! [color]
-  (swap! state assoc :color/accent color)
+  (swap! state assoc :ui/radix-color color)
+  (storage/set :ui/radix-color color)
   (colors/set-radix color (get-color-gradient)))
 
 (defn set-color-gradient! [steps]
-  (swap! state assoc :color/gradient steps)
+  (swap! state assoc :ui/radix-gradient steps)
+  (storage/set :ui/radix-gradient steps)
   (colors/set-radix (get-color-accent) steps))
 
 (defn unset-color-accent! []
-  (swap! state assoc :color/accent nil)
+  (swap! state assoc :ui/radix-color nil)
+  (storage/remove :ui/radix-color)
   (colors/unset-radix))
 
 (defn unset-color-gradient! []
-  (swap! state assoc :color/gradient nil)
-  (colors/unset-radix))
+  (swap! state assoc :ui/radix-gradient nil)
+  (storage/remove :ui/radix-gradient))
 

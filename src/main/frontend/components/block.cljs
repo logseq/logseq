@@ -3084,7 +3084,12 @@
           attr (when language
                  {:data-lang language})
           code (apply str lines)
+          theme-key (str (state/sub :ui/theme) "/" 
+                         (state/sub :ui/system-theme?) "/" 
+                         (state/sub :ui/radix-color) "/" 
+                         (state/sub :ui/custom-theme))
           [inside-portal? set-inside-portal?] (rum/use-state nil)]
+      (js/console.log "actual theme-key" theme-key)
       (cond
         html-export?
         (highlight/html-export attr code)
@@ -3105,7 +3110,7 @@
 
              :else
              [:<>
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (lazy-editor/editor config (str (d/squuid)) attr code (assoc options :theme-key theme-key))
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
                   (sci/eval-result code block)))])])))))

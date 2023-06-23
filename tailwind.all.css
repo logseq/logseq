@@ -14,6 +14,7 @@
 @import "katex/dist/katex.min.css";
 @import "resources/css/codemirror.min.css";
 @import "resources/css/codemirror.solarized.css";
+@import "resources/css/codemirror.lsradix.css";
 @import "resources/css/show-hint.css";
 
 @import "resources/css/radix.css";

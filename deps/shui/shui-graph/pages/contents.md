@@ -20,10 +20,12 @@
 	- We want to make it easy to customize with themes
 	- We want to support as much old themes as possible
 	- var(--shui-button-color,
+	  collapsed:: true
 		- var(--logseq-button-primary-color,
+		  collapsed:: true
 			- var(--lx-color-6)))
 	- light and dark variants
-	- ```
+	- ```css
 	  :root {
 	    --lx-blue-1: #123456;
 	  }

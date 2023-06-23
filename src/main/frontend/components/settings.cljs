@@ -308,7 +308,7 @@
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
 (defn theme-row [t dark?]
-  (let [color-accent (state/sub :color/accent)
+  (let [color-accent (state/sub :ui/radix-color)
         pick-theme [:div.grid {:style {:grid-template-columns "repeat(17, 1fr)" 
                                        :gap "0.75rem"
                                        :overflow-x :scroll 
@@ -347,7 +347,7 @@
                               :action     pick-theme})])) 
 
 (defn theme-gradient-row [t dark? color-accent]
-  (let [color-gradient (state/sub :color/gradient)
+  (let [color-gradient (state/sub :ui/radix-gradient)
         pick-gradient [:div {:class "grid grid-cols-7 gap-2 overflow-x-auto"}
                        [:div {:class (cond-> "theme-gradient-row--gradient-swatch" 
                                        (= 1 color-gradient) (str " selected"))
@@ -698,16 +698,17 @@
   (let [preferred-language (state/sub [:preferred-language])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
+        show-radix-themes? true
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")
-        color-accent (state/sub :color/accent)]
+        color-accent (state/sub :ui/radix-color)]
     [:div.panel-wrap.is-general
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
-     ; (theme-row t dark?)
-     ; (when color-accent (theme-gradient-row t dark? color-accent))
+     (when show-radix-themes? (theme-row t dark?))
+     (when (and show-radix-themes? color-accent) (theme-gradient-row t dark? color-accent))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
