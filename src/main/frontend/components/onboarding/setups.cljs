@@ -19,7 +19,7 @@
             [clojure.string :as string]
             [goog.object :as gobj]))
 
-(defonce DEVICE (if (util/mobile?) "phone" "computer"))
+(def DEVICE (if (util/mobile?) (t :on-boarding/section-phone) (t :on-boarding/section-computer)))
 
 (rum/defc setups-container
   [flag content]
@@ -30,13 +30,13 @@
 
       [:h1.text-xl
        (if picker?
-         [:span [:strong (ui/icon "heart")] "Welcome to " [:strong "Logseq!"]]
-         [:span [:strong (ui/icon "file-import")] "Import existing notes"])]
+         [:span [:strong (ui/icon "heart")] (t :on-boarding/main-title)]
+         [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-main-title)])]
 
       [:h2
        (if picker?
-         "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."
-         "You can also do this later in the app.")]
+         (t :on-boarding/main-desc)
+         (t :on-boarding/importing-main-desc))]
 
       content])])
 
@@ -93,8 +93,8 @@
 
               (if parsing?
                 (ui/loading "")
-                [[:strong "Choose a folder"]
-                 [:small "Open existing directory or Create a new one"]])]]]
+                [[:strong (t :on-boarding/section-btn-title)]
+                 [:small (t :on-boarding/section-btn-desc)]])]]]
            [:div.px-5
             (ui/admonition :warning
                            (widgets/native-fs-api-alert))]))]
@@ -102,22 +102,22 @@
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
         [:span.flex-1.flex.flex-col
-         [:strong "How Logseq saves your work"]
-         [:small.opacity-60 "Inside the directory you choose, Logseq will create 4 folders."]]]
+         [:strong (t :on-boarding/section-title)]
+         [:small.opacity-60 (t :on-boarding/section-desc)]]]
 
        [:p.text-sm.pt-5.tracking-wide
-        [:span (str "Each page is a file stored only on your " DEVICE ".")]
+        [:span (str (t :on-boarding/section-tip-1 DEVICE))]
         [:br]
-        [:span "You may choose to sync it later."]]
+        [:span (t :on-boarding/section-tip-2)]]
 
        [:ul
         (for [[title label icon]
-              [["Graphics & Documents" "/assets" "whiteboard"]
-               ["Daily notes" "/journals" "calendar-plus"]
-               ["PAGES" "/pages" "page"]
+              [[(t :on-boarding/section-assets) "/assets" "whiteboard"]
+               [(t :on-boarding/section-journals) "/journals" "calendar-plus"]
+               [(t :on-boarding/section-pages) "/pages" "page"]
                []
-               ["APP Internal" "/logseq" "tool"]
-               ["Config File" "/logseq/config.edn"]]]
+               [(t :on-boarding/section-app) "/logseq" "tool"]
+               [(t :on-boarding/section-config) "/logseq/config.edn"]]]
           (if-not title
             [:li.hr]
             [:li
@@ -221,14 +221,14 @@
      :importer
      [:article.flex.flex-col.items-center.importer.py-16.px-8
       [:section.c.text-center
-       [:h1 "Do you already have notes that you want to import?"]
-       [:h2 "If they are in a JSON, EDN or Markdown format Logseq can work with them."]]
+       [:h1 (t :on-boarding/importing-title)]
+       [:h2 (t :on-boarding/importing-desc)]]
       [:section.d.md:flex
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/roam-research 28)]]
         [:div.flex.flex-col
          [[:strong "RoamResearch"]
-          [:small "Import a JSON Export of your Roam graph"]]]
+          [:small (t :on-boarding/importing-roam-desc)]]]
         [:input.absolute.hidden
          {:id        "import-roam"
           :type      "file"
@@ -238,7 +238,7 @@
         [:span.as-flex-center [:i (svg/logo 28)]]
         [:span.flex.flex-col
          [[:strong "EDN / JSON"]
-          [:small "Import an EDN or a JSON Export of your Logseq graph"]]]
+          [:small (t :on-boarding/importing-lsq-desc)]]]
         [:input.absolute.hidden
          {:id        "import-lsq"
           :type      "file"
@@ -248,7 +248,7 @@
         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
         [:span.flex.flex-col
          [[:strong "OPML"]
-          [:small " Import OPML files"]]]
+          [:small (t :on-boarding/importing-opml-desc)]]]
 
         [:input.absolute.hidden
          {:id        "import-opml"

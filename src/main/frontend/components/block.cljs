@@ -867,7 +867,8 @@
         (let [title [:span.block-ref
                      (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                     block nil (:block/uuid block)
-                                    (:slide? config))]
+                                    (:slide? config)
+                                    false)]
               inner (if label
                       (->elem
                        :span.block-ref
@@ -2258,7 +2259,7 @@
                  (str uuid "-" idx)))))]))))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
   (let [content (property/remove-built-in-properties format content)
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
@@ -2278,14 +2279,15 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-               (not (string/blank? (:hl-color properties)))
-               (assoc :data-hl-color (:hl-color properties))
+                (not (string/blank? (:hl-color properties)))
+                (assoc :data-hl-color (:hl-color properties))
 
-               (not block-ref?)
-               (assoc mouse-down-key (fn [e]
-                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
+                (not block-ref?)
+                (assoc mouse-down-key (fn [e]
+                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
+              :class (when selected? "select-none")
               :on-mouse-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
@@ -2385,7 +2387,7 @@
                                   (= (:block/uuid block) (:block/uuid (:block config))))
                  default-hide? (if (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)) false true)]
              (assoc state ::hide-block-refs? (atom default-hide?))))}
-  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count? selected?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
@@ -2423,7 +2425,7 @@
                                            (editor-handler/clear-selection!)
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
-            (block-content config block edit-input-id block-id slide?))]
+            (block-content config block edit-input-id block-id slide? selected?))]
 
           (when-not hide-block-refs-count?
             [:div.flex.flex-row.items-center
@@ -2479,7 +2481,7 @@
       [:div.single-block.ls-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
-       (block-content-or-editor config block edit-input-id block-el-id edit? true)])))
+       (block-content-or-editor config block edit-input-id block-el-id edit? true false)])))
 
 (rum/defc single-block-cp
   [block-uuid]
@@ -2705,16 +2707,27 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config block]
-  (let [ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)
-        *navigating-block (get state ::navigating-block)
-        navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or (and custom-query?
-                           (empty? (:block/children block))
+(defn- build-config [config block {:keys [navigating-block navigated?]}]
+  (cond-> config
+    navigated?
+    (assoc :id (str navigating-block))
+
+    true
+    (update :block merge block)
+
+    ;; Each block might have multiple queries, but we store only the first query's result.
+    ;; This :query-result atom is used by the query function feature to share results between
+    ;; the parent's query block and the children blocks. This works because config is shared
+    ;; between parent and children blocks
+    (nil? (:query-result config))
+    (assoc :query-result (atom nil))
+
+    (:ref? config)
+    (block-handler/attach-order-list-state block)))
+
+(defn- build-block [repo config block* {:keys [navigating-block navigated?]}]
+  (let [block (if (or (and (:custom-query? config)
+                           (empty? (:block/children block*))
                            (not (and (:dsl-query? config)
                                      (string/includes? (:query config) "not"))))
                       navigated?)
@@ -2723,21 +2736,26 @@
                                                       {:scoped-block-id (:db/id block)})
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
-                block)
-        block (if ref?
-                (merge block (db/sub-block (:db/id block)))
-                block)
-        {:block/keys [uuid children pre-block? refs level format content properties]} block
+                block*)
+        {:block/keys [pre-block? format content] :as block'}
+        (if (:ref? config)
+          (merge block (db/sub-block (:db/id block)))
+          block)]
+    (merge block' (block/parse-title-and-body uuid format pre-block? content))))
+
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  [state repo config* block*]
+  (let [ref? (:ref? config*)
+        custom-query? (boolean (:custom-query? config*))
+        ref-or-custom-query? (or ref? custom-query?)
+        *navigating-block (get state ::navigating-block)
+        navigating-block (rum/react *navigating-block)
+        navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
+        block (build-block repo config* block* {:navigating-block navigating-block :navigated? navigated?})
+        {:block/keys [uuid children pre-block? refs level content properties]} block
         {:block.temp/keys [top?]} block
-        config (if navigated? (assoc config :id (str navigating-block)) config)
-        block (merge block (block/parse-title-and-body uuid format pre-block? content))
+        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         blocks-container-id (:blocks-container-id config)
-        config (update config :block merge block)
-        ;; Each block might have multiple queries, but we store only the first query's result
-        config (if (nil? (:query-result config))
-                 (assoc config :query-result (atom nil))
-                 config)
-        config (if ref? (block-handler/attach-order-list-state config block) config)
         heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
@@ -2771,18 +2789,18 @@
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-md")
-                    (when selected? " selected noselect")
-                    (when order-list? " is-order-list")
-                    (when (string/blank? content) " is-blank"))
-        :blockid (str uuid)
-        :haschild (str (boolean has-child?))}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-md")
+                   (when selected? " selected")
+                   (when order-list? " is-order-list")
+                   (when (string/blank? content) " is-blank"))
+       :blockid (str uuid)
+       :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
@@ -2832,7 +2850,7 @@
         ;; Not embed self
         (let [hide-block-refs-count? (and (:embed? config)
                                           (= (:block/uuid block) (:embed-id config)))]
-          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
+          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?)))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]

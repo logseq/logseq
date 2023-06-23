@@ -408,7 +408,7 @@
                     true)]
         (ui/tippy {:html [:div
                           ;; TODO: fetch from config
-                          "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
+                          (t :search/command-palette-tip-1) [:code (util/->platform-shortcut "Ctrl + Shift + p")] (t :search/command-palette-tip-2)]
                    :interactive     true
                    :arrow           true
                    :theme       "monospace"}

@@ -104,7 +104,7 @@
 
           "update-available"
           (let [{:keys [name url]} payload]
-            [:p (str "Found new release ")
+            [:p (str (t :settings-page/update-available))
              [:a.link
               {:on-click
                (fn [e]
@@ -113,7 +113,7 @@
               svg/external-link name " 🎉"]])
 
           "error"
-          [:p "⚠️ Oops, Something Went Wrong!" [:br] " Please check out the "
+          [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
            [:a.link
             {:on-click
              (fn [e]
@@ -295,12 +295,12 @@
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
   (let [pick-theme [:ul.theme-modes-options
-                    [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-                    [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-                    [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-light))
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong (t :settings-page/theme-light)]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-dark))
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong (t :settings-page/theme-dark)]]
+                    [:li {:on-click (partial state/use-theme-mode! (t :settings-page/theme-system))
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong (t :settings-page/theme-system)]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
                              :action     pick-theme
@@ -342,7 +342,7 @@
                       (when-not (string/blank? format)
                         (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
-                          [:div "You must re-index your graph for this change to take effect"]
+                          [:div (t :settings-page/custom-date-format-notification)]
                           :warning false)
                         (state/close-modal!)
                         (route-handler/redirect! {:to :repos}))))}
@@ -690,18 +690,16 @@
    [:div.text-sm.my-4
     (ui/admonition
      :tip
-     [:p "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."])
+     [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4 
-     "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."]
+     (t :settings-page/git-desc-1)]
     [:br][:br]
     [:span.text-sm.opacity-50.my-4
-     "For professional users, Logseq also supports using "]
+     (t :settings-page/git-desc-2)]
     [:a {:href "https://git-scm.com/" :target "_blank"}
      "Git"]
     [:span.text-sm.opacity-50.my-4
-     " for version control."]
-    [:span.text-sm.opacity-50.my-4
-     "Use Git at your own risk as general Git issues are not supported by the Logseq team"]]
+     (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
@@ -997,11 +995,11 @@
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
          [:div.text-sm
-          "Click"
+          (t :settings-page/sync-desc-1)
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
-           "here"]
-          "for instructions on how to set up and use Sync."]]])]))
+           (t :settings-page/sync-desc-2)]
+          (t :settings-page/sync-desc-3)]]])]))
 
      ;; (when-not web-platform?
      ;;   [:<>
@@ -1050,7 +1048,7 @@
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
 
                (when (util/electron?)
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
@@ -1074,7 +1072,7 @@
 
       [:article
        [:header.cp__settings-header
-        [:h1.cp__settings-category-title (name (first @*active))]]
+        [:h1.cp__settings-category-title (t (keyword (str "settings-page/tab-" (name (first @*active)))))]]
 
        (case (first @*active)
 
@@ -1093,7 +1091,7 @@
          :editor
          (settings-editor current-repo)
 
-         :git
+         :version-control
          (settings-git)
 
          :assets
