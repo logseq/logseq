@@ -7,7 +7,8 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.mixins :as mixins]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc search-input
   [q matches]
