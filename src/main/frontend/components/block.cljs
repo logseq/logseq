@@ -352,7 +352,7 @@
                 :on-click      (fn [e]
                                  (util/stop e)
                                  (-> (util/copy-image-to-clipboard image-src)
-                                     (p/then #(notification/show! "Copied!" :success))))}
+                                     (p/then #(notification/show! (t :asset/copy-notif) :success))))}
                (ui/icon "copy")]
 
               [:button.asset-action-btn
