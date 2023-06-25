@@ -4,7 +4,7 @@
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
-            ["electron" :refer [BrowserWindow app session shell] :as electron]
+            ["electron" :refer [BrowserWindow Menu app session shell] :as electron]
             ["path" :as node-path]
             ["url" :as URL]
             [electron.state :as state]
@@ -53,8 +53,10 @@
 
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
-         win       (BrowserWindow. (clj->js win-opts))]
+         win       (BrowserWindow. (clj->js win-opts))
+         menu      (Menu.)] ; Empty menu which inhibits Ctrl-W from closing the main window
      (.manage win-state win)
+     (.setMenu win menu)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
