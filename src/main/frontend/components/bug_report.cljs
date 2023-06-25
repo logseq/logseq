@@ -84,7 +84,7 @@
   [route-match]
   (let [name (get-in route-match [:parameters :path :tool])]
     [:div.flex.flex-col ;; container
-     [:h1.text-2xl.mx-auto.mb-4 (ui/icon "clipboard") " " (-> name (string/replace #"-" " ") (string/capitalize))]
+     [:h1.text-2xl.mx-auto.mb-4 (ui/icon "clipboard") " " (-> (t :bug-report/clipboard-inspector-title) (string/capitalize))]
      (cond ;; TODO any fallback?
        (= name "clipboard-data-inspector")
        (clipboard-data-inspector))]))
