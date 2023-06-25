@@ -59,6 +59,7 @@
  :on-boarding/section-phone "phone"
  :on-boarding/section-app "APP Internal"
  :on-boarding/section-config "Config File"
+ :query/config-property-settings "Properties settings for this query:"
  :bug-report/main-title "Bug report"
  :bug-report/main-desc "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can."
  :bug-report/section-clipboard-title "Is the bug you encountered related to these features?"
