@@ -155,6 +155,8 @@
  :page/step "Step {1}"
  :page/try "Try"
  :page/slide-view "View as slides"
+ :page/slide-view-tips "Tip: press "
+ :page/slide-view-go-fullscreen " to go fullscreen"
  :page/delete-confirmation "Are you sure you want to delete this page and its file?"
  :page/open-in-finder "Open in directory"
  :page/open-with-default-app "Open with default app"

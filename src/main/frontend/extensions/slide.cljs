@@ -3,6 +3,7 @@
             [cljs-bean.core :as bean]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.config :as config]
             [frontend.components.block :as block]
             [clojure.string :as string]
@@ -63,9 +64,9 @@
   [loading? style config blocks]
   [:div
    [:p.text-sm
-    [:span.opacity-70 "Tip: press "]
+    [:span.opacity-70 (t :page/slide-view-tips)]
     [:code "f"]
-    [:span.opacity-70 " to go fullscreen"]]
+    [:span.opacity-70 (t :page/slide-view-go-fullscreen)]]
    [:div.reveal {:style style}
     (when loading?
       [:div.ls-center (ui/loading "")])
