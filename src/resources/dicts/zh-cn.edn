@@ -44,6 +44,7 @@
  :search-item/file "文件"
  :search-item/page "页面"
  :search-item/whiteboard "白板"
+ :search-item/no-result "未找到匹配项"
  :help/context-menu "右键菜单"
  :help/markdown-syntax "Markdown 语法"
  :help/org-mode-syntax "Org Mode 语法"

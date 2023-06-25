@@ -119,6 +119,7 @@
  :search-item/page "Page"
  :search-item/file "File"
  :search-item/block "Block"
+ :search-item/no-result "No matched result"
  :help/context-menu "Block context menu"
  :help/markdown-syntax "Markdown syntax"
  :help/org-mode-syntax "Org mode syntax"

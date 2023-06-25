@@ -1,6 +1,7 @@
 (ns frontend.components.query
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.db :as db]
@@ -115,7 +116,7 @@
          nil
 
          :else
-         [:div.text-sm.mt-2.opacity-90 "No matched result"])])))
+         [:div.text-sm.mt-2.opacity-90 (t :search-item/no-result)])])))
 
 (rum/defc query-title
   [config title {:keys [result-count]}]
