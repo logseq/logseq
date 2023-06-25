@@ -293,7 +293,7 @@
   [block shown-properties all-properties _close-fn]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
-     [:div.font-bold "Properties settings for this query:"]
+     [:div.font-bold (t :query/config-property-settings)]
      (for [property all-properties]
        (let [property-value (get query-properties property)
              shown? (if (nil? property-value)
