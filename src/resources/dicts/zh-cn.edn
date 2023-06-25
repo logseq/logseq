@@ -321,6 +321,7 @@
  :color/yellow "黄色"
 
  :whiteboard/link-whiteboard-or-block "链接白板/页面/块"
+ :whiteboard/create-or-search-graph "创建或搜索你的图谱..."
 
  :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
  :updater/quit-and-install "现在安装"

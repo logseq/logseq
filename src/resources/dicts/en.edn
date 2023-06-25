@@ -429,6 +429,7 @@
  :whiteboard/references "References"
  :whiteboard/link-to-any-page-or-block "Link to any page or block"
  :whiteboard/start-typing-to-search "Start typing to search..."
+ :whiteboard/create-or-search-graph "Create or search your graph..."
  :whiteboard/new-block-no-colon "New block"
  :whiteboard/new-block "New block:"
  :whiteboard/new-page "New page:"
