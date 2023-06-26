@@ -445,7 +445,7 @@
                                  (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
-                                               (notification/show! (str (t :network-proxy/test-notif-1) code (t :network-proxy/test-notif-2) response-ms "ms.") :success)))
+                                               (notification/show! (str (t :network-proxy/test-notification code response-ms)) :success)))
                                      (p/catch (fn [e]
                                                 (notification/show! (str e) :error)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
