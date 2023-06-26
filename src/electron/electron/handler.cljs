@@ -227,12 +227,10 @@
          (map graph-name->path))))
 
 (defn- get-db-based-graphs
-  "Returns all graph names in the cache directory (starting with `logseq_db_`)"
+  "Returns all graph names in the cache directory"
   []
   (let [dir (get-db-based-graphs-dir)]
-    (->> (common-graph/readdir dir)
-         (remove #{dir})
-         (map node-path/basename)
+    (->> (common-graph/read-directories dir)
          (map graph-name->path))))
 
 (defn- get-graphs

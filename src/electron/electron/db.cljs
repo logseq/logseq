@@ -22,6 +22,7 @@
 (defn sanitize-db-name
   [db-name]
   (-> db-name
+      (string/replace "logseq_db_" "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
       (string/replace ":" "_"))) ;; windows
@@ -71,9 +72,11 @@
 
 (defn get-db-full-path
   [db-name]
-  (let [db-name (sanitize-db-name db-name)
-        dir (get-graphs-dir)]
-    [db-name (node-path/join dir db-name)]))
+  (let [db-name' (sanitize-db-name db-name)
+        dir (get-graphs-dir)
+        graph-dir (node-path/join dir db-name')]
+    (fs/ensureDirSync graph-dir)
+    [db-name' (node-path/join graph-dir "db.sqlite")]))
 
 (defn open-db!
   [db-name]
