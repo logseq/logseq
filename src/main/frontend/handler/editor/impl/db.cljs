@@ -7,7 +7,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.util :as util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [frontend.handler.ui :as ui-handler]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -82,3 +83,11 @@
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
     result))
+
+(defn save-file!
+  [path content]
+  (when path
+    (db/transact! [{:file/path path
+                    :file/content content}])
+    (when (= path "logseq/custom.css")
+      (ui-handler/add-style-if-exists!))))

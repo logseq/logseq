@@ -548,11 +548,14 @@
           _ (ipc/ipc :db-new full-graph-name)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
               {:skip-persist? true})
-          initial-data [{:file/path (str "logseq/" "config.edn")
+          initial-data [{:block/uuid (db/new-block-id)
+                         :file/path (str "logseq/" "config.edn")
                          :file/content config/config-default-content}
-                        {:file/path (str "logseq/" "custom.css")
+                        {:block/uuid (db/new-block-id)
+                         :file/path (str "logseq/" "custom.css")
                          :file/content ""}
-                        {:file/path (str "logseq/" "custom.js")
+                        {:block/uuid (db/new-block-id)
+                         :file/path (str "logseq/" "custom.js")
                          :file/content ""}]
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)

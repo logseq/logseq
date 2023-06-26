@@ -78,7 +78,8 @@
   {:will-mount (fn [state]
                  (let [*content (atom nil)
                        [path format] (:rum/args state)
-                       repo-dir (config/get-repo-dir (state/get-current-repo))
+                       repo (state/get-current-repo)
+                       repo-dir (config/get-repo-dir repo)
                        [dir path] (cond
                                     ;; assume local file, relative path
                                     (not (string/starts-with? path "/"))
@@ -87,7 +88,11 @@
                                     :else ;; global file on native platform
                                     [nil path])]
                    (when (and format (contains? (gp-config/text-formats) format))
-                     (p/let [content (fs/read-file dir path)]
+                     (p/let [content (if (and (config/db-based-graph? repo)
+                                              ;; not global
+                                              (not (string/starts-with? path "/")))
+                                       (db/get-file path)
+                                       (fs/read-file dir path))]
                        (reset! *content (or content ""))))
                    (assoc state ::file-content *content)))
    :did-mount (fn [state]

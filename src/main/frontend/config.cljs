@@ -493,8 +493,10 @@
   ([]
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
-   (when-let [repo-dir (get-repo-dir repo)]
-     (path/path-join repo-dir app-name custom-js-file))))
+   (if (db-based-graph? repo)
+     (str app-name "/" custom-js-file)
+     (when-let [repo-dir (get-repo-dir repo)]
+       (path/path-join repo-dir app-name custom-js-file)))))
 
 (defn get-block-hidden-properties
   []

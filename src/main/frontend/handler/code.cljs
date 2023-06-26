@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.handler.editor.impl.db :as db-impl]))
 
 (defn save-code-editor!
   []
@@ -20,7 +21,8 @@
       (let [textarea (.getTextArea editor)
             ds (.-dataset textarea)
             value (gobj/get textarea "value")
-            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))]
+            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))
+            repo (state/get-current-repo)]
         (when (not= value default-value)
           ;; update default value for the editor initial state
           (set! ds -v value)
@@ -40,9 +42,12 @@
               (state/set-edit-content! (state/get-edit-input-id) new-content)
               (editor-handler/save-block-if-changed! block new-content))
 
+            (and (not-empty (:file-path config))
+                 (config/db-based-graph? repo))
+            (db-impl/save-file! (:file-path config) value)
+
             (not-empty (:file-path config))
             (let [path (:file-path config)
-                  repo (state/get-current-repo)
                   repo-dir (config/get-repo-dir repo)
                   rpath (when (string/starts-with? path repo-dir)
                           (path/trim-dir-prefix repo-dir path))]

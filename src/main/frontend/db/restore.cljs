@@ -149,7 +149,7 @@
           init-data' (doall
                       (keep (fn [b]
                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                (if (uuid-string? (:uuid b)) ; deleted blocks still refed
+                                (if (and (uuid-string? (:uuid b)) (not= (:type b) 3)) ; deleted blocks still refed
                                   [[eid :block/uuid (:uuid b)]]
                                   (->> b
                                        :datoms
