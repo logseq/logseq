@@ -28,7 +28,7 @@
                     (remove nil?))
           zdx  (bean/->js zdx)
           zdx  (and zdx (js/Math.max.apply nil zdx))
-          zdx' (util/safe-parse-int (.. container -style -zIndex))]
+          zdx' (some-> (.. container -style -zIndex) (parse-long))]
 
       (when (or (nil? zdx') (not= zdx zdx'))
         (set! (.. container -style -zIndex) (inc zdx))))))
