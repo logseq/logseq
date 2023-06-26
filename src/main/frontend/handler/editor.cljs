@@ -25,6 +25,8 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -43,7 +45,6 @@
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
-            [frontend.handler.editor.impl :as editor-impl]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -234,6 +235,12 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
+(defn wrap-parse-block
+  [block]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-editor-handler/wrap-parse-block block)
+    (file-editor-handler/wrap-parse-block block)))
+
 (defn- save-block-inner!
   [block value opts]
   (let [block {:db/id (:db/id block)
@@ -243,7 +250,7 @@
      "Save block: "
      (let [original-uuid (:block/uuid (db/entity (:db/id block)))
            uuid-changed? (not= (:block/uuid block) original-uuid)
-           block' (-> (editor-impl/wrap-parse-block block)
+           block' (-> (wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
                       ;; a block that has been refed
                       (assoc :block/uuid (:block/uuid block)))
@@ -352,7 +359,7 @@
                :block/content ""}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
-                       (editor-impl/wrap-parse-block))
+                       (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
     (when input-text-selected?
       (let [selection-start (util/get-selection-start input)
@@ -384,7 +391,7 @@
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
-                       (editor-impl/wrap-parse-block))
+                       (wrap-parse-block))
         sibling? (when block-self? false)]
     (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                              :keep-uuid? true})
@@ -486,7 +493,7 @@
                                  (:db/id block)
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
-                            (editor-impl/wrap-parse-block)
+                            (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?
@@ -1959,7 +1966,7 @@
                                   (property-edit/insert-properties-when-file-based repo format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (->> (block/extract-blocks ast content* format {:page-name page-name})
-                                (map editor-impl/wrap-parse-block))
+                                (map wrap-parse-block))
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))

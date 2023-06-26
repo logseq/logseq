@@ -18,4 +18,7 @@
 (defn get-recent-pages
   []
   (->> (db/get-key-value :recent/pages)
-       (map #(:block/original-name (db/entity [:block/uuid %])))))
+       (map (fn [id]
+              (let [e (db/entity [:block/uuid id])]
+                (or (:block/original-name e)
+                    (:block/uuid e)))))))

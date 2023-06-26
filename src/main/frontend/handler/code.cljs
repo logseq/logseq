@@ -9,7 +9,7 @@
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.common.path :as path]
-            [frontend.handler.editor.impl.db :as db-impl]))
+            [frontend.handler.db-based.editor :as db-editor-handler]))
 
 (defn save-code-editor!
   []
@@ -44,7 +44,7 @@
 
             (and (not-empty (:file-path config))
                  (config/db-based-graph? repo))
-            (db-impl/save-file! (:file-path config) value)
+            (db-editor-handler/save-file! (:file-path config) value)
 
             (not-empty (:file-path config))
             (let [path (:file-path config)

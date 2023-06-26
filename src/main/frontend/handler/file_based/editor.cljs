@@ -1,4 +1,4 @@
-(ns frontend.handler.editor.impl.file
+(ns frontend.handler.file-based.editor
   "File-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.config :as config]
