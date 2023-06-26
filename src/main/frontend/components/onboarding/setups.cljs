@@ -19,7 +19,7 @@
             [clojure.string :as string]
             [goog.object :as gobj]))
 
-(defonce DEVICE (if (util/mobile?) "phone" "computer"))
+(def DEVICE (if (util/mobile?) (t :on-boarding/section-phone) (t :on-boarding/section-computer)))
 
 (rum/defc setups-container
   [flag content]
@@ -30,7 +30,7 @@
 
       [:h1.text-xl
        (if picker?
-         [:span [:strong (ui/icon "heart")] (t :on-boarding/main-title) [:strong "Logseq!"]]
+         [:span [:strong (ui/icon "heart")] (t :on-boarding/main-title)]
          [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-main-title)])]
 
       [:h2
@@ -106,7 +106,7 @@
          [:small.opacity-60 (t :on-boarding/section-desc)]]]
 
        [:p.text-sm.pt-5.tracking-wide
-        [:span (str (t :on-boarding/section-tip-1) DEVICE ".")]
+        [:span (str (t :on-boarding/section-tip-1 DEVICE))]
         [:br]
         [:span (t :on-boarding/section-tip-2)]]
 

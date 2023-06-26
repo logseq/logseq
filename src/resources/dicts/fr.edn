@@ -33,7 +33,6 @@
  :right-side-bar/flashcards "Cartes-mémoire"
  :right-side-bar/new-page "Nouvelle page"
  :left-side-bar/journals "Journaux"
- :page/presentation-mode "Mode présentation"
  :page/delete-confirmation "Etes-vous sûr de vouloir supprimer la page ?"
  :page/make-public "Rendre la page publique"
  :page/make-private "Rendre la page privée"
