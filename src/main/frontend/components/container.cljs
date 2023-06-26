@@ -38,6 +38,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
+            [medley.core :as medley]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
@@ -721,14 +722,15 @@
 
   [:div.cp__sidebar-help-menu-popup
    [:div.list-wrap
-    (for [{:keys [title icon href on-click] :as item} help-menu-items]
+    (for [[idx {:keys [title icon href on-click] :as item}] (medley/indexed help-menu-items)]
       (case item
         :hr
-        [:hr.my-2]
+        [:hr.my-2 {:key idx}]
 
         ;; default
         [:a.it.flex.items-center.px-4.py-1.select-none
-         {:on-click (fn []
+         {:key      title
+          :on-click (fn []
                       (cond
                         (fn? on-click) (on-click)
                         (string? href) (util/open-url href))
