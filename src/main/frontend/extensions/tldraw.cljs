@@ -114,6 +114,7 @@
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))

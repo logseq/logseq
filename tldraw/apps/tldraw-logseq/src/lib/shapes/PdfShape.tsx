@@ -20,7 +20,7 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
     type: 'pdf',
     parentId: 'page',
     point: [0, 0],
-    size: [853, 480],
+    size: [595, 842],
     assetId: '',
   }
 
@@ -28,7 +28,7 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
   canFlip = true
   canEdit = true
 
-  ReactComponent = observer(({ events, asset, isErasing, isEditing, isSelected }: TLComponentProps) => {
+  ReactComponent = observer(({ events, asset, isErasing, isEditing }: TLComponentProps) => {
     const ref = React.useRef<HTMLElement>(null)
     const {
       renderers: { Pdf },
@@ -37,12 +37,6 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
     const app = useApp<Shape>()
 
     const isMoving = useCameraMovingRef()
-
-    React.useEffect(() => {
-      if (asset && isEditing) {
-        // handlers.setCurrentPdf(handlers.makeAssetUrl(asset.src))
-      }
-    }, [isEditing])
 
     return (
       <HTMLContainer
@@ -53,21 +47,20 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
         }}
         {...events}
       >
-        <div
-        className="relative tl-pdf-container"
-          onWheelCapture={stop}
-          onPointerDown={stop}
-          onPointerUp={stop}
-          style={{
-            width: '100%',
-            height: '100%',
-            pointerEvents: !isMoving && (isEditing || isSelected) ? 'all' : 'none',
-          }}
-        >
-          {asset ? (
-            <Pdf src={handlers ? handlers.makeAssetUrl(asset.src) : asset.src} />
-          ) : null}
-        </div>
+        {asset ? (
+          <embed
+            src={handlers ? handlers.inflateAsset(asset.src).url : asset.src + '#toolbar=0&navpanes=0&scrollbar=0'}
+            className="relative tl-pdf-container hide-scrollbar"
+            onWheelCapture={stop}
+            onPointerDown={stop}
+            onPointerUp={stop}
+            style={{
+              width: '100%',
+              height: '100%',
+              pointerEvents: !isMoving && isEditing ? 'all' : 'none',
+            }}
+          />
+        ) : null}
       </HTMLContainer>
     )
   })
