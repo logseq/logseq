@@ -66,7 +66,8 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format left page uuid level pre-block?] :as block}]
+  [{:block/keys [content format left page uuid level pre-block?] :as block
+    :or {format :markdown}}]
   (let [repo (state/get-current-repo)
         block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block

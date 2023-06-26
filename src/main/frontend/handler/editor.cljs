@@ -236,8 +236,9 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block (assoc block :block/content value)
-        block (apply dissoc block db-schema/retract-attributes)]
+  (let [block {:db/id (:db/id block)
+               :block/uuid (:block/uuid block)
+               :block/content value}]
     (profile
      "Save block: "
      (let [original-uuid (:block/uuid (db/entity (:db/id block)))
@@ -250,6 +251,7 @@
                                uuid-changed?
                                (assoc :uuid-changed {:from (:block/uuid block)
                                                      :to original-uuid})))]
+
        (outliner-tx/transact!
         opts'
         (outliner-core/save-block! block'))
