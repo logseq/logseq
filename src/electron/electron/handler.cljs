@@ -231,6 +231,7 @@
   []
   (let [dir (get-db-based-graphs-dir)]
     (->> (common-graph/read-directories dir)
+         (remove (fn [s] (= s "Unlinked graphs")))
          (map graph-name->path)
          (map (fn [s] (str "logseq_db_" s))))))
 
@@ -301,11 +302,13 @@
     (when-let [file-path (get-graph-path graph-name)]
       (fs/writeFileSync file-path value-str))))
 
-(defmethod handle :deleteGraph [_window [_ graph-name]]
+(defmethod handle :deleteGraph [_window [_ graph graph-name db-based?]]
   (when graph-name
-    (when-let [file-path (get-graph-path graph-name)]
-      (when (fs/existsSync file-path)
-        (fs-extra/removeSync file-path)))))
+    (if (and db-based? graph)
+      (db/unlink-graph! graph)
+      (when-let [file-path (get-graph-path graph-name)]
+       (when (fs/existsSync file-path)
+         (fs-extra/removeSync file-path))))))
 
 (defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)

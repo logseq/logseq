@@ -154,3 +154,13 @@
   (when-let [db (get-db repo)]
     (query repo db (str "select * from blocks where type = 1 and uuid not in "
                         (clj-list->sql journal-block-uuids)))))
+
+(defn unlink-graph!
+  [repo]
+  (let [db-name (sanitize-db-name repo)
+        path (node-path/join (get-graphs-dir) db-name)
+        unlinked (node-path/join (get-graphs-dir) "Unlinked graphs")
+        new-path (node-path/join unlinked db-name)]
+    (when (fs/existsSync path)
+      (fs/ensureDirSync unlinked)
+      (fs/moveSync path new-path))))
