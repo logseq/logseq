@@ -78,10 +78,11 @@
    (start! repo {}))
   ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
-         db-conn (ldb/start-conn)]
+         db-conn (ldb/start-conn :create-default-pages? false)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
-       (listen-handler repo)))))
+       (listen-handler repo))
+     (ldb/create-default-pages! db-conn))))
 
 (defn destroy-all!
   []
