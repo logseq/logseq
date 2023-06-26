@@ -36,7 +36,7 @@
 
   (h/render-html
    [:div.steps
-    [:strong (str (t :on-boarding/quick-tour-steps) current)]
+    [:strong (str (t :on-boarding/quick-tour-steps current))]
     [:ul (for [i (range total)] [:li {:class (when (= current (inc i)) "active")} i])]]))
 
 (defn- create-steps! [^js jsTour]
@@ -60,9 +60,7 @@
    {:id                "nav-journal-page"
     :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-journal-page-title)]
                                        [:p
-                                        [:span (t :on-boarding/quick-tour-journal-page-desc-1)]
-                                        [:a (t :on-boarding/quick-tour-journal-page-desc-2)]
-                                        [:span (t :on-boarding/quick-tour-journal-page-desc-3)]]])
+                                        [:span (t :on-boarding/quick-tour-journal-page-desc)]]])
 
     :attachTo          {:element ".page.is-journals .page-title" :on "top-end"}
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
