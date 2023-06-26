@@ -46,15 +46,8 @@
    (cond
      (mobile-util/native-android?)
      [:div.px-4
-      (t :on-boarding/android-intro-sync-title)
-      (t :on-boarding/android-intro-sync-desc-1)
-      [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
-           :target "_blank"}
-       "Dropsync"]
-      (t :on-boarding/android-intro-sync-desc-2)
-      [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
-           :target "_blank"}
-       "FolderSync"]
+      (t :on-boarding/android-intro-dropsync)
+      (t :on-boarding/android-intro-foldersync)
       "."]
 
      :else
