@@ -6,11 +6,14 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.util :as util]
+            [frontend.state :as state]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
-            [frontend.schema.handler.repo-config :as repo-config-schema]))
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.schema.handler.repo-config :as repo-config-schema]
+            [promesa.core :as p]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -87,13 +90,19 @@
     result))
 
 (defn save-file!
+  "This fn is the db version of file-handler/alter-file"
   [path content]
-  (when path
-    (when (= path "logseq/config.edn")
-      (config-edn-common-handler/detect-deprecations path content)
-      (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
+  ;; Pre save
+  (when (= path "logseq/config.edn")
+    (config-edn-common-handler/detect-deprecations path content)
+    (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
 
-    (db/transact! [{:file/path path
-                    :file/content content}])
-    (when (= path "logseq/custom.css")
-      (ui-handler/add-style-if-exists!))))
+  (db/transact! [{:file/path path
+                  :file/content content}])
+
+  ;; Post save
+  (cond (= path "logseq/config.edn")
+        (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
+          (state/pub-event! [:shortcut/refresh]))
+        (= path "logseq/custom.css")
+        (ui-handler/add-style-if-exists!)))
