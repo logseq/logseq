@@ -18,7 +18,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.recent :as recent-handler]
+            [frontend.handler.file-based.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]

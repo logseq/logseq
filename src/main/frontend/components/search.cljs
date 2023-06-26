@@ -13,6 +13,7 @@
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -417,10 +418,7 @@
                     :on-click #(state/pub-event! [:modal/command-palette])}
                    (ui/icon "command" {:style {:font-size 20}})])])]]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-         pages (->> (db/get-key-value :recent/pages)
-                    (remove nil?)
-                    (filter string?)
-                    (remove #(= (string/lower-case %) "contents"))
+         pages (->> (recent-handler/get-recent-pages)
                     (mapv (fn [page] {:type :page :data page})))
          result (concat (take 5 recent-search) pages)]
      (ui/auto-complete

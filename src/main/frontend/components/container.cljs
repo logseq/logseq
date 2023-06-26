@@ -25,6 +25,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -166,13 +167,7 @@
 
    {:class "recent"}
 
-   (let [pages (->> (db/sub-key-value :recent/pages)
-                    (remove string/blank?)
-                    (filter string?)
-                    (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
-                                     :page page}))
-                    (util/distinct-by :lowercase)
-                    (map :page))]
+   (let [pages (recent-handler/get-recent-pages)]
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]

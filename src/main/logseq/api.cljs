@@ -13,6 +13,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -129,9 +130,7 @@
 
 (def ^:export get_current_graph_recent
   (fn []
-    (some->> (db/get-key-value :recent/pages)
-             (remove string/blank?)
-             (filter string?)
+    (some->> (recent-handler/get-recent-pages)
              (bean/->js))))
 
 (def ^:export get_current_graph_templates
