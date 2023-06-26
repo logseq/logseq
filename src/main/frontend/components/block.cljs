@@ -2752,7 +2752,6 @@
         navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
         block (build-block repo config* block* {:navigating-block navigating-block :navigated? navigated?})
         {:block/keys [uuid pre-block? refs level content properties]} block
-        children (db/sort-by-left (:block/_parent block) block)
         {:block.temp/keys [top?]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         blocks-container-id (:blocks-container-id config)
@@ -2860,7 +2859,9 @@
                                            (:block/properties-text-values block)
                                            edit-input-id))
 
-     (block-children config block children collapsed?)
+     (when-not (:hide-children? config)
+       (let [children (db/sort-by-left (:block/_parent block) block)]
+         (block-children config block children collapsed?)))
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2912,7 +2913,7 @@
                        (attach-order-list-state!)))
 
    :should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or

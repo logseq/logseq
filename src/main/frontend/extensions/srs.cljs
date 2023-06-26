@@ -231,7 +231,7 @@
       (case phase
         1
         (let [blocks-count (count blocks)]
-          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) (nil? cloze?)) 2 3)})
+          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) cloze?) 2 3)})
         2
         {:value blocks :next-phase (if cloze? 3 1)}
         3
@@ -240,7 +240,7 @@
   (show-cycle-config [_this phase]
     (case phase
       1
-      {}
+      {:hide-children? true}
       2
       {}
       3
