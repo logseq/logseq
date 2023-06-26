@@ -39,6 +39,7 @@
                     blocks levels)]
     blocks))
 
+;; TODO: Switch to ast->diff-blocks-alt
 ;; Diverged from gp-block/extract-blocks for decoupling
 ;; The process of doing 2 way diff is like:
 ;; 1. Given a base ver. of page (AST in DB), and a branch ver. of page (externally modified file content)
@@ -97,6 +98,8 @@
   (let [{:keys [start_pos end_pos]} pos-meta]
     (utf8/substring raw-content start_pos end_pos)))
 
+;; Diverged from ast->diff-blocks
+;; Add :meta :raw-body to the block
 (defn- ast->diff-blocks-alt
   "Prepare the blocks for diff-merge
    blocks: ast of blocks
@@ -145,7 +148,7 @@
               content-raw (get-sub-content-from-pos-meta utf8-encoded-content pos-meta)
               uuid (:id properties)]
           (cons {:body content
-                 :raw-body (string/trimr content-raw)
+                 :meta {:raw-body (string/trimr content-raw)}
                  :level 1
                  :uuid uuid}
                 (reverse headings)))))))
