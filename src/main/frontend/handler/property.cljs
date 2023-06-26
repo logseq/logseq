@@ -1,37 +1,40 @@
 (ns frontend.handler.property
   "Block properties handler."
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.util :as util]
-            [frontend.format.block :as block]
+  (:require [clojure.edn :as edn]
             [clojure.string :as string]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [frontend.db :as db]
+            [frontend.format.block :as block]
+            [frontend.handler.notification :as notification]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [malli.core :as m]
-            [clojure.edn :as edn]
-            [frontend.handler.notification :as notification]))
+            [malli.util :as mu]))
 
 (defn add-property!
   [repo block k-name v]
-  (let [v*                  (edn/read-string v)
-        property-class      (db/pull repo '[*] [:block/name k-name])
-        property-class-uuid (or (:block/uuid property-class) (random-uuid))]
-    (if-let [msg (some-> (:block/schema property-class)
-                         (m/explain v*))]
-      (notification/show! msg :error false)
-      (let [tx-data (cond-> []
-                      (nil? property-class) (conj {:block/schema :any
-                                                   :block/name k-name
-                                                   :block/uuid property-class-uuid
-                                                   :block/type "property"})
-                      true (conj {:block/uuid (:block/uuid block)
-                                  :block/properties (assoc (:block/properties block) (str property-class-uuid) v*)}))]
-        (db/transact! repo tx-data)))))
+  (when-let [v* (try (edn/read-string v)
+                     (catch :default e
+                       (notification/show! (str e) :error false)
+                       nil))]
+    (let [property-class      (db/pull repo '[*] [:block/name k-name])
+          property-class-uuid (or (:block/uuid property-class) (random-uuid))]
+      (if-let [msg (some-> (:block/schema property-class)
+                           (malli.util/explain-data v*))]
+        (notification/show! (str msg) :error false)
+        (let [tx-data (cond-> []
+                        (nil? property-class) (conj {:block/schema :any
+                                                     :block/name k-name
+                                                     :block/uuid property-class-uuid
+                                                     :block/type "property"})
+                        true (conj {:block/uuid (:block/uuid block)
+                                    :block/properties (assoc (:block/properties block) (str property-class-uuid) v*)}))]
+          (db/transact! repo tx-data))))))
 
 (defn remove-property!
   [repo block k-uuid-or-builtin-k-name]
@@ -160,7 +163,7 @@
           (state/clear-editor-action!)
           (state/clear-edit!))))))
 
-(defn- set-editing-new-property!
+(defn set-editing-new-property!
   [value]
   (state/set-state! :ui/new-property-input-id value))
 
