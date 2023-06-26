@@ -360,6 +360,7 @@
 
 (defn- type-of-block
   "
+  TODO: use :block/type
   | value | meaning                                        |
   |-------+------------------------------------------------|
   |     1 | normal block                                   |
@@ -372,9 +373,9 @@
   [block]
   (cond
     (:block/page block) 1
-    (:block/name block) 2
     (:file/content block) 3
     (= "property" (:block/type block)) 6
+    (:block/name block) 2
     :else 5))
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
