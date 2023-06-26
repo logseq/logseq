@@ -231,7 +231,8 @@
   []
   (let [dir (get-db-based-graphs-dir)]
     (->> (common-graph/read-directories dir)
-         (map graph-name->path))))
+         (map graph-name->path)
+         (map (fn [s] (str "logseq_db_" s))))))
 
 (defn- get-graphs
   []
