@@ -467,9 +467,7 @@
  :whiteboard/snap-to-grid "Snap to grid"
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
- :flashcards/modal-welcome-desc-2 "You can "
- :flashcards/modal-welcome-desc-3 "click this link"
- :flashcards/modal-welcome-desc-4 " to check the documentation."
+ :flashcards/modal-welcome-desc-2 (fn [] ["You can " [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"} "click this link"] " to check the documentation."])
  :flashcards/modal-btn-show-answers "Show answers"
  :flashcards/modal-btn-hide-answers "Hide answers"
  :flashcards/modal-btn-show-clozes "Show clozes"

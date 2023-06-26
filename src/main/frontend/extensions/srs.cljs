@@ -708,10 +708,7 @@
          [:div
           [:p (t :flashcards/modal-welcome-desc-1)]
           [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
-          [:p (t :flashcards/modal-welcome-desc-2)
-           [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"}
-            (t :flashcards/modal-welcome-desc-3)]
-           (t :flashcards/modal-welcome-desc-4)]]]
+          [:p :flashcards/modal-welcome-desc-2]]]
         [:div.opacity-60.custom-query-title.ls-card.content
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]
