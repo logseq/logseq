@@ -22,8 +22,8 @@
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
                  (let [[repo property-uuid] (:rum/args state)]
-                   (reset! (::property-name state) (:property/name (db/pull repo '[*] [:block/uuid property-uuid])))
-                   (reset! (::property-schema state) (:property/schema (db/pull repo '[*] [:block/uuid property-uuid])))
+                   (reset! (::property-name state) (:block/name (db/pull repo '[*] [:block/uuid property-uuid])))
+                   (reset! (::property-schema state) (:block/schema (db/pull repo '[*] [:block/uuid property-uuid])))
                    state))}
   [state repo property-uuid]
   (let [*property-name (::property-name state)
@@ -95,7 +95,7 @@
               [:div
                [:a.mr-2
                 {:on-click (fn [] (state/set-modal! #(property-class-config repo (uuid prop-uuid-or-built-in-prop))))}
-                (:property/name property-class)]
+                (:block/name property-class)]
                [:span v]
                [:a.ml-8 {:on-click
                          (fn []

@@ -12,20 +12,26 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util.property-edit :as property-edit]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [clojure.edn :as edn]
+            [frontend.handler.notification :as notification]))
 
 (defn add-property!
   [repo block k-name v]
-  (let [property-class      (db/pull repo '[*] [:property/name k-name])
-        property-class-uuid (or (:block/uuid property-class) (random-uuid))
-        tx-data (cond-> []
-                  (nil? property-class) (conj {:property/schema {}
-                                               :property/name k-name
-                                               :block/uuid property-class-uuid
-                                               :block/type "property"})
-                  true (conj {:block/uuid (:block/uuid block)
-                              :block/properties (assoc (:block/properties block) (str property-class-uuid) v)}))]
-    (db/transact! repo tx-data)))
+  (let [v*                  (edn/read-string v)
+        property-class      (db/pull repo '[*] [:block/name k-name])
+        property-class-uuid (or (:block/uuid property-class) (random-uuid))]
+    (if-let [msg (some-> (:block/schema property-class)
+                         (m/explain v*))]
+      (notification/show! msg :error false)
+      (let [tx-data (cond-> []
+                      (nil? property-class) (conj {:block/schema :any
+                                                   :block/name k-name
+                                                   :block/uuid property-class-uuid
+                                                   :block/type "property"})
+                      true (conj {:block/uuid (:block/uuid block)
+                                  :block/properties (assoc (:block/properties block) (str property-class-uuid) v*)}))]
+        (db/transact! repo tx-data)))))
 
 (defn remove-property!
   [repo block k-uuid-or-builtin-k-name]
@@ -41,8 +47,8 @@
   [repo property-uuid {:keys [property-name property-schema]}]
   {:pre [(uuid? property-uuid)]}
   (let [tx-data (cond-> {:block/uuid property-uuid}
-                  property-name (assoc :property/name property-name)
-                  property-schema (assoc :property/schema property-schema))]
+                  property-name (assoc :block/name property-name)
+                  property-schema (assoc :block/schema property-schema))]
     (db/transact! repo [tx-data])))
 
 (defn explain-property-value
@@ -50,7 +56,7 @@
   {:pre [(uuid? property-uuid)]}
   (let [prop-entity (db/entity repo [:block/uuid property-uuid])]
     (assert (= "property" (:block/type prop-entity)) prop-entity)
-    (when-let [schema (:property/schema prop-entity)]
+    (when-let [schema (:block/schema prop-entity)]
       (m/explain schema property-value))))
 
 (defn- extract-refs

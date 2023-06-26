@@ -20,6 +20,7 @@
    ;; "macros" for macro
    ;; "property" for property blocks
    :block/type {:db/index true}
+   :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}
@@ -109,8 +110,7 @@
 (def schema-for-db-based-graph
   (merge
    schema
-   {:property/schema {}
-    :property/name {:db/unique :db.unique/identity}}))
+   {}))
 
 (defn get-schema
   ([]
