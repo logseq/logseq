@@ -83,7 +83,7 @@
        (ui/icon "circle-plus")])))
 
 (rum/defc properties-area < rum/static
-  [block properties edit-input-id]
+  [block properties properties-text-values edit-input-id]
   (let [repo (state/get-current-repo)]
     [:div.ls-properties-area.pl-6
      (when (seq properties)
@@ -96,7 +96,7 @@
                [:a.mr-2
                 {:on-click (fn [] (state/set-modal! #(property-class-config repo (uuid prop-uuid-or-built-in-prop))))}
                 (:block/name property-class)]
-               [:span v]
+               [:span (or (get properties-text-values prop-uuid-or-built-in-prop) v)]
                [:a.ml-8 {:on-click
                          (fn []
                            (property-handler/remove-property! repo block prop-uuid-or-built-in-prop))}

@@ -13,8 +13,22 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [malli.core :as m]
             [malli.util :as mu]))
+
+(def builtin-schema-types
+  {:string-contains-refs :string        ;default
+   :refs [:sequential :string]})
+
+(def ^:private gp-mldoc-config (gp-mldoc/default-config :markdown))
+
+(defn extract-page-refs-from-prop-str-value
+  [str-v]
+  (let [ast-refs (gp-mldoc/get-references str-v gp-mldoc-config)
+        refs (map #(gp-block/get-page-reference % #{}) ast-refs)
+        refs' (->> refs
+                   (remove string/blank?)
+                   distinct)]
+    refs'))
 
 (defn add-property!
   [repo block k-name v]
@@ -23,27 +37,41 @@
                        (notification/show! (str e) :error false)
                        nil))]
     (let [property-class      (db/pull repo '[*] [:block/name k-name])
-          property-class-uuid (or (:block/uuid property-class) (random-uuid))]
-      (if-let [msg (some-> (:block/schema property-class)
-                           (malli.util/explain-data v*))]
+          property-class-uuid (or (:block/uuid property-class) (random-uuid))
+          property-schema (:block/schema property-class)
+          schema* (get builtin-schema-types property-schema property-schema)]
+      (if-let [msg (some-> schema* (malli.util/explain-data v*))]
         (notification/show! (str msg) :error false)
-        (let [tx-data (cond-> []
-                        (nil? property-class) (conj {:block/schema :any
-                                                     :block/name k-name
-                                                     :block/uuid property-class-uuid
-                                                     :block/type "property"})
-                        true (conj {:block/uuid (:block/uuid block)
-                                    :block/properties (assoc (:block/properties block) (str property-class-uuid) v*)}))]
-          (db/transact! repo tx-data))))))
+        (do (when (nil? property-class) ;if property-class not exists yet
+              (db/transact! repo [{:block/schema :string-contains-refs
+                                   :block/name k-name
+                                   :block/uuid property-class-uuid
+                                   :block/type "property"}]))
+            (let [block-properties (assoc (:block/properties block)
+                                          (str property-class-uuid)
+                                          (if (= property-schema :string-contains-refs)
+                                            (set (extract-page-refs-from-prop-str-value v*))
+                                            v*))
+                  block-properties-text-values (cond-> (:block/properties-text-values block)
+                                                 (= property-schema :string-contains-refs)
+                                                 (assoc (str property-class-uuid) v*))]
+              (outliner-tx/transact!
+               {:outliner-op :save-block}
+               (outliner-core/save-block!
+                {:block/uuid (:block/uuid block)
+                 :block/properties block-properties
+                 :block/properties-text-values block-properties-text-values}))))))))
 
 (defn remove-property!
   [repo block k-uuid-or-builtin-k-name]
   {:pre (string? k-uuid-or-builtin-k-name)}
   (let [origin-properties (:block/properties block)]
     (assert (contains? (set (keys origin-properties)) k-uuid-or-builtin-k-name))
-    (db/transact! repo
-                  [{:block/uuid (:block/uuid block)
-                    :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)}])))
+    (db/transact!
+     repo
+     [{:block/uuid (:block/uuid block)
+       :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)
+       :block/properties-text-values (dissoc (:block/properties-text-values block) k-uuid-or-builtin-k-name)}])))
 
 
 (defn update-property-class!
@@ -54,13 +82,7 @@
                   property-schema (assoc :block/schema property-schema))]
     (db/transact! repo [tx-data])))
 
-(defn explain-property-value
-  [repo property-uuid property-value]
-  {:pre [(uuid? property-uuid)]}
-  (let [prop-entity (db/entity repo [:block/uuid property-uuid])]
-    (assert (= "property" (:block/type prop-entity)) prop-entity)
-    (when-let [schema (:block/schema prop-entity)]
-      (m/explain schema property-value))))
+
 
 (defn- extract-refs
   [entity properties]
