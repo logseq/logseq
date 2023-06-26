@@ -171,10 +171,24 @@ const handleCreatingShapes = async (
     const file = item.getData('file')
     if (!file) return null
 
-    const dataTransfer = new DataTransfer()
-    dataTransfer.items.add(new File([new Blob([''])], file))
+    const asset = await createAssetsFromURL(file, 'pdf')
+    app.addAssets([asset])
 
-    return await tryCreateShapeFromFiles(dataTransfer)
+    const newShape = {
+      ...PdfShape.defaultProps,
+      id: uniqueId(),
+      assetId: asset.id,
+      url: file,
+      opacity: 1,
+    }
+
+    if (asset.size) {
+      Object.assign(newShape, {
+        point: [point[0] - asset.size[0] / 4 + 16, point[1] - asset.size[1] / 4 + 16],
+        size: Vec.div(asset.size, 2),
+      })
+    }
+    return [newShape]
   }
 
   async function tryCreateShapeFromFiles(item: DataTransfer) {
