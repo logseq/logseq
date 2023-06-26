@@ -149,7 +149,8 @@
           init-data' (doall
                       (keep (fn [b]
                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                (if (and (uuid-string? (:uuid b)) (not= (:type b) 3)) ; deleted blocks still refed
+                                (if (and (uuid-string? (:uuid b))
+                                         (not (contains?  #{3 6} (:type b)))) ; deleted blocks still refed
                                   [[eid :block/uuid (:uuid b)]]
                                   (->> b
                                        :datoms
@@ -164,14 +165,14 @@
                                     :datoms
                                     (transit/read t-reader)
                                     (mapv (partial apply vector eid)))))
-                               journal-blocks)
+                           journal-blocks)
           pages-eav-coll (apply concat pages)
           blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
                                 (apply concat))
           all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
           datoms (map
-                   (partial eav->datom uuid->db-id-map)
-                   all-eav-coll)
+                  (partial eav->datom uuid->db-id-map)
+                  all-eav-coll)
           db-name (db-conn/datascript-db repo)
           db-conn (util/profile :restore-graph-from-sqlite!-init-db
                                 (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph))
