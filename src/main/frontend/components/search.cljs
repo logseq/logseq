@@ -408,7 +408,7 @@
                     true)]
         (ui/tippy {:html [:div
                           ;; TODO: fetch from config
-                          (t :search/command-palette-tip-1) [:code (util/->platform-shortcut "Ctrl + Shift + p")] (t :search/command-palette-tip-2)]
+                          (t :search/command-palette-tip)]
                    :interactive     true
                    :arrow           true
                    :theme       "monospace"}
