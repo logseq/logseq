@@ -245,7 +245,7 @@
                                 " |")
 
                            (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
-                           (export-hiccup x)
+                           (throw (js/Error. (str "HTML->Hiccup: " tag " not supported yet")))
 
                            :ul (map-join children :list? true)
                            :ol (map-join children :list? true)
@@ -280,12 +280,19 @@
                      (goog.string.unescapeEntities f)
                      f)) hiccup))
 
+(defn- remove-ending-dash-lines
+  [s]
+  (if (string? s)
+    (string/replace s #"(\n*-\s*\n*)*$" "")
+    s))
+
 (defn convert
   [format html]
   (when-not (string/blank? html)
     (let [hiccup (hickory/as-hiccup (hickory/parse html))
-          decoded-hiccup (html-decode-hiccup hiccup)]
-      (hiccup->doc format decoded-hiccup))))
+          decoded-hiccup (html-decode-hiccup hiccup)
+          result (hiccup->doc format decoded-hiccup)]
+      (remove-ending-dash-lines result))))
 
 (comment
   ;; | Syntax      | Description | Test Text     |``
