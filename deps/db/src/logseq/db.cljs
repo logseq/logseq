@@ -7,7 +7,7 @@
 (defn start-conn
   "Create datascript conn with schema and default data"
   []
-  (let [db-conn (d/create-conn db-schema/schema)]
+  (let [db-conn (d/create-conn (db-schema/get-schema))]
     (d/transact! db-conn [{:schema/version db-schema/version}
                           {:block/name "card"
                            :block/original-name "card"
