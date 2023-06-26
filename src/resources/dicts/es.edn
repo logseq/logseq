@@ -53,7 +53,6 @@
  :left-side-bar/new-page "Nueva página"
  :left-side-bar/nav-favorites "Favoritos"
  :left-side-bar/nav-recent-pages "Recientes"
- :page/presentation-mode "Modo presentación"
  :page/delete-confirmation "¿Está seguro que desea eliminar esta página y su archivo?"
  :page/open-in-finder "Abrir ubicación del archivo"
  :page/open-with-default-app "Abrir con la aplicación predeterminada"

@@ -86,7 +86,6 @@
  :page/logseq-is-having-a-problem                      "У Logseq возникла проблема. Чтобы попытаться вернуть его в рабочее состояние, пожалуйста, попробуйте выполнить следующие безопасные шаги по порядку:"
  :page/step                                            "Шаг {1}"
  :page/try                                             "Попробовать"
- :page/presentation-mode                               "Презентация"
  :page/delete-confirmation                             "Вы уверены, что хотите удалить эту страницу и её файл(ы)?"
  :page/open-in-finder                                  "Открыть в каталоге"
  :page/open-with-default-app                           "Открыть в приложении по умолчанию"
@@ -267,7 +266,7 @@
  :sync-from-local-files                                "Обновить"
  :sync-from-local-files-detail                         "Импортировать изменения из локальных файлов"
  :sync-from-local-changes-detected                     "При обновлении будут найдены и обработаны файлы, изменённые на диске и отличающиеся от текущего содержимого страниц Logseq. Продолжить?"
- 
+
  :search/publishing                                    "Искать"
  :search                                               "Искать или создать страницу"
  :whiteboard/link-whiteboard-or-block                  "Ссылка на доску/страницу/блок"
@@ -339,7 +338,7 @@
  :whiteboard/circle                                    "Круг"
  :whiteboard/triangle                                  "Треугольник"
  :whiteboard/shape                                     "Фигура"
- :whiteboard/open-page                                 "Открыть страницу" 
+ :whiteboard/open-page                                 "Открыть страницу"
  :whiteboard/open-page-in-sidebar                      "Открыть страницу на боковой панели"
  :whiteboard/remove-link                               "Удалить ссылку"
  :whiteboard/link                                      "Ссылка"
@@ -487,9 +486,9 @@
  :file-sync/other-user-graph                           "Текущий локальный граф привязан к удаленному графу другого пользователя. Поэтому синхронизацию начать нельзя."
  :file-sync/graph-deleted                              "Текущий удаленный граф был удален"
  :file-sync/rsapi-cannot-upload-err                    "Не удалось начать синхронизацию, пожалуйста, проверьте, правильно ли установлено локальное время."
- 
+
  :notification/clear-all                               "Очистить всё"
- 
+
  :shortcut.category/basics                             "Базовые"
  :shortcut.category/formatting                         "Форматирование"
  :shortcut.category/navigating                         "Навигация"

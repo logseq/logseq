@@ -82,7 +82,6 @@
  :left-side-bar/nav-recent-pages "最近使用"
  :left-side-bar/new-whiteboard "新建白板"
  :left-side-bar/create "新建"
- :page/presentation-mode "打开幻灯片"
  :page/delete-confirmation "您确定要删除此页面和文件吗？"
  :page/open-in-finder "打开文件对应目录"
  :page/open-with-default-app "用默认应用打开文件"

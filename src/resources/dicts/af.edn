@@ -23,7 +23,6 @@
  :right-side-bar/switch-theme "Skakel oor na die {1} tema"
  :right-side-bar/contents "Inhoud"
  :right-side-bar/block-ref "Blok verwysing"
- :page/presentation-mode "Aanbiedings modus"
  :page/delete-confirmation "Is jy seker jy wil die bladsy uitvee?"
  :page/show-journals "Wys joernale"
  :file/name "Lêer naam"
@@ -60,7 +59,7 @@
  :language "Taal"
 
  :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."
- :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap" 
+ :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap"
 
  :shortcut.category/formatting           "Formatering"
  :command.editor/indent                  "Ingekeepte blok oortjie"
