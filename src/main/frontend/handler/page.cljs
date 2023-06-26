@@ -158,7 +158,7 @@
                              ;; only apply uuid to the deepest hierarchy of page to create if provided.
                              (-> (block/page-name->map page (if (= page title) with-uuid? true))
                                  (assoc :block/format format)))
-                           pages)
+                        pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last

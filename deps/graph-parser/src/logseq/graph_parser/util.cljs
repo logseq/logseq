@@ -116,13 +116,15 @@
 (defn split-namespace-pages
   [title]
   (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
+    (->>
+     (loop [others (rest parts)
+            result [(first parts)]]
+       (if (seq others)
+         (let [prev (last result)]
+           (recur (rest others)
+                  (conj result (str prev "/" (first others)))))
+         result))
+     (map string/trim))))
 
 (defn decode-namespace-underlines
   "Decode namespace underlines to slashed;

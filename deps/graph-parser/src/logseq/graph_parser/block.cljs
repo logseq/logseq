@@ -294,9 +294,10 @@
        {:block/name page-name
         :block/original-name original-page-name}
        (when with-id?
-         (let [new-uuid (cond page-entity      (:block/uuid page-entity)
-                              (uuid? with-id?) with-id?
-                              :else            (d/squuid))]
+         (let [new-uuid (or
+                         (cond page-entity      (:block/uuid page-entity)
+                               (uuid? with-id?) with-id?)
+                         (d/squuid))]
            {:block/uuid new-uuid}))
        (when namespace?
          (let [namespace (first (gp-util/split-last "/" original-page-name))]

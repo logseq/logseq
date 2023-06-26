@@ -122,7 +122,8 @@
    :properties - map
    "
   [{:keys [type uuid title children properties] :as tree}]
-  (let [has-children? (seq children)
+  (let [title (string/trim title)
+        has-children? (seq children)
         page-format (or (some-> tree (:children) (first) (:format)) :markdown)
         whiteboard? (= type "whiteboard")]
     (try (page-handler/create! title {:redirect?           false
