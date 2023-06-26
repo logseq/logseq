@@ -751,6 +751,7 @@
           block (first blocks)
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
+      (prn {:blocks blocks})
       (outliner-tx/transact!
        {:outliner-op :delete-blocks}
        (outliner-core/delete-blocks! blocks {}))
@@ -954,13 +955,9 @@
   [copy?]
   (when copy? (copy-selection-blocks true))
   (when-let [blocks (seq (get-selected-blocks))]
-    ;; remove embeds, references and queries
+    ;; remove queries
     (let [dom-blocks (remove (fn [block]
-                              (or (= "true" (dom/attr block "data-transclude"))
-                                  (= "true" (dom/attr block "data-query")))) blocks)
-          dom-blocks (if (seq dom-blocks) dom-blocks
-                         (remove (fn [block]
-                                   (= "true" (dom/attr block "data-transclude"))) blocks))]
+                               (= "true" (dom/attr block "data-query"))) blocks)]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
