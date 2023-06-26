@@ -458,8 +458,10 @@
   ([]
    (get-custom-css-path (state/get-current-repo)))
   ([repo]
-   (when-let [repo-dir (get-repo-dir repo)]
-     (path/path-join repo-dir app-name custom-css-file))))
+   (if (db-based-graph? repo)
+     (path/path-join app-name custom-css-file)
+     (when-let [repo-dir (get-repo-dir repo)]
+       (path/path-join repo-dir app-name custom-css-file)))))
 
 (defn get-export-css-path
   ([]
@@ -494,7 +496,7 @@
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
    (if (db-based-graph? repo)
-     (str app-name "/" custom-js-file)
+     (path/path-join app-name custom-js-file)
      (when-let [repo-dir (get-repo-dir repo)]
        (path/path-join repo-dir app-name custom-js-file)))))
 
