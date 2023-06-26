@@ -89,7 +89,7 @@
                          (if favorited?
                            (page-handler/unfavorite-page! page-original-name)
                            (page-handler/favorite-page! page-original-name)))}})
-          
+
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
              :options {:on-click
@@ -117,12 +117,12 @@
 
           (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
-            {:title (t :page/presentation-mode)
+            {:title (t :page/slide-view)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
                                     repo
                                     (:db/id page)
-                                    :page-presentation))}})
+                                    :page-slide-view))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of

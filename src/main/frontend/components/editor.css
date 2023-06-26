@@ -1,13 +1,13 @@
 #audio-record-toolbar {
-    position: fixed;
-    background-color: var(--ls-secondary-background-color);
-    width: 90px;
-    justify-content: left;
-    left: 5px;
-    transition: none;
-    z-index: 9999;
-    padding: 5px 5px 5px 8px;
-    border-radius: 5px;
+  position: fixed;
+  background-color: var(--ls-secondary-background-color);
+  width: 90px;
+  justify-content: left;
+  left: 5px;
+  transition: none;
+  z-index: 9999;
+  padding: 5px 5px 5px 8px;
+  border-radius: 5px;
 }
 
 .editor-wrapper {
@@ -41,7 +41,8 @@
     transform: translateY(calc(-100% - 2rem));
   }
 
-  &[data-modal-name="commands"] {
+  &[data-modal-name="commands"],
+  &[data-modal-name="select-code-block-mode"] {
     @screen sm {
       width: 380px !important;
       max-width: 90vw !important;
@@ -76,11 +77,11 @@ pre {
 }
 
 #time-repeater {
-    width: 135px;
-    
-    @screen sm {
-        min-width: 300px;
-    }
+  width: 135px;
+
+  @screen sm {
+    min-width: 300px;
+  }
 }
 
 

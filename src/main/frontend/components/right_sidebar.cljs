@@ -16,7 +16,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]            
+            [frontend.util :as util]
             [frontend.config :as config]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [goog.object :as gobj]
@@ -114,7 +114,7 @@
 
 (defn build-sidebar-item
   [repo idx db-id block-type]
-  (case block-type
+  (case (keyword block-type)
     :contents
     [(t :right-side-bar/contents)
      (contents)]
@@ -159,7 +159,7 @@
        [:div.ml-2
         (page-cp repo page-name)]])
 
-    :page-presentation
+    :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
       [[:a.page-title {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
