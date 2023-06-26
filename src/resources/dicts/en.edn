@@ -152,7 +152,7 @@
  :page/logseq-is-having-a-problem "Logseq is having a problem. To try to get it back to a working state, please try the following safe steps in order:"
  :page/step "Step {1}"
  :page/try "Try"
- :page/presentation-mode "Presentation"
+ :page/slide-view "View as slides"
  :page/delete-confirmation "Are you sure you want to delete this page and its file?"
  :page/open-in-finder "Open in directory"
  :page/open-with-default-app "Open with default app"
