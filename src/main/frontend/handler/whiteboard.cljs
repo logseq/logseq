@@ -186,7 +186,8 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  [#:block{:name (util/page-name-sanity-lc page-name),
+  [#:block{:uuid id
+           :name (util/page-name-sanity-lc page-name),
            :original-name page-name
            :type "whiteboard",
            :properties
@@ -211,13 +212,11 @@
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
          name (or name (str uuid))]
      (db/transact! (get-default-new-whiteboard-tx name (str uuid)))
-     (let [entity (get-whiteboard-entity name)
-           tx (assoc (select-keys entity [:db/id])
-                     :block/uuid uuid)]
-       (db-utils/transact! [tx])
-       (let [page-entity (get-whiteboard-entity name)]
-         (when (and page-entity (nil? (:block/file page-entity)))
-           (outliner-file/sync-to-file page-entity)))))))
+     (let [page-entity (get-whiteboard-entity name)]
+       (when (and page-entity
+                  (nil? (:block/file page-entity))
+                  (not (config/db-based-graph? (state/get-current-repo))))
+         (outliner-file/sync-to-file page-entity))))))
 
 (defn create-new-whiteboard-and-redirect!
   ([]

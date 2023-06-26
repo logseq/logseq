@@ -85,7 +85,7 @@
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
         conn (db-conn/get-db repo false)
-        datoms (transient (vec (d/datoms @conn :eavt)))]
+        datoms (transient (set (d/datoms @conn :eavt)))]
 
     (doseq [block data]
       (let [uuid (gobj/get block "uuid")
@@ -171,8 +171,8 @@
                                 (apply concat))
           all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
           datoms (map
-                  (partial eav->datom uuid->db-id-map)
-                  all-eav-coll)
+                   (partial eav->datom uuid->db-id-map)
+                   all-eav-coll)
           db-name (db-conn/datascript-db repo)
           db-conn (util/profile :restore-graph-from-sqlite!-init-db
                                 (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph))
