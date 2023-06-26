@@ -119,7 +119,81 @@
 [{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58"
   :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
  {:body "b" :uuid nil :level 2}
- {:body "c" :uuid nil :level 3}]))
+ {:body "c" :uuid nil :level 3}]
+  
+  "alias:: ⭐️\nicon:: ⭐️"
+[{:body "alias:: ⭐️\nicon:: ⭐️", :level 1, :uuid nil}]))
+
+(defn text->diffblocks-alt
+  [text]
+  (-> (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))
+      (#'fs-diff/ast->diff-blocks-alt text :markdown {:block-pattern "-"})))
+
+(deftest md->ast->diff-blocks-alt-test
+  (are [text diff-blocks]
+       (= (text->diffblocks-alt text)
+          diff-blocks)
+    "- a
+\t- b
+\t\t- c"
+    [{:body "a" :uuid nil :level 1 :meta {:raw-body "- a"}}
+     {:body "b" :uuid nil :level 2 :meta {:raw-body "\t- b"}}
+     {:body "c" :uuid nil :level 3 :meta {:raw-body "\t\t- c"}}]
+
+    "- a
+\t- b
+\t\t- c
+\t\t  multiline
+- d"
+    [{:body "a" :uuid nil :level 1 :meta {:raw-body "- a"}}
+     {:body "b" :uuid nil :level 2 :meta {:raw-body "\t- b"}}
+     {:body "c\nmultiline" :uuid nil :level 3 :meta {:raw-body "\t\t- c\n\t\t  multiline"}}
+     {:body "d" :uuid nil :level 1 :meta {:raw-body "- d"}}]
+
+    "## hello
+\t- world
+\t\t- nice
+\t\t\t- nice
+\t\t\t- bingo
+\t\t\t- world"
+    [{:body "## hello" :uuid nil :level 1 :meta {:raw-body "## hello"}}
+     {:body "world" :uuid nil :level 2 :meta {:raw-body "\t- world"}}
+     {:body "nice" :uuid nil :level 3 :meta {:raw-body "\t\t- nice"}}
+     {:body "nice" :uuid nil :level 4 :meta {:raw-body "\t\t\t- nice"}}
+     {:body "bingo" :uuid nil :level 4 :meta {:raw-body "\t\t\t- bingo"}}
+     {:body "world" :uuid nil :level 4 :meta {:raw-body "\t\t\t- world"}}]
+
+    "# a
+## b
+### c
+#### d
+### e
+- f
+\t- g
+\t\t- h
+\t- i
+- j"
+    [{:body "# a" :uuid nil :level 1 :meta {:raw-body "# a"}}
+     {:body "## b" :uuid nil :level 1 :meta {:raw-body "## b"}}
+     {:body "### c" :uuid nil :level 1 :meta {:raw-body "### c"}}
+     {:body "#### d" :uuid nil :level 1 :meta {:raw-body "#### d"}}
+     {:body "### e" :uuid nil :level 1 :meta {:raw-body "### e"}}
+     {:body "f" :uuid nil :level 1 :meta {:raw-body "- f"}}
+     {:body "g" :uuid nil :level 2 :meta {:raw-body "\t- g"}}
+     {:body "h" :uuid nil :level 3 :meta {:raw-body "\t\t- h"}}
+     {:body "i" :uuid nil :level 2 :meta {:raw-body "\t- i"}}
+     {:body "j" :uuid nil :level 1 :meta {:raw-body "- j"}}]
+
+    "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58
+\t- b
+\t\t- c"
+    [{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58"
+      :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1 :meta {:raw-body "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58"}}
+     {:body "b" :uuid nil :level 2 :meta {:raw-body "\t- b"}}
+     {:body "c" :uuid nil :level 3 :meta {:raw-body "\t\t- c"}}]
+    
+    "alias:: ⭐️\nicon:: ⭐️"
+    [{:body "alias:: ⭐️\nicon:: ⭐️", :meta {:raw-body "alias:: ⭐️\nicon:: ⭐️"}, :level 1, :uuid nil}]))
 
 (deftest diff-test
   (are [text1 text2 diffs]
