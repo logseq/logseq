@@ -8,7 +8,9 @@
             [frontend.util :as util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.handler.ui :as ui-handler]))
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
+            [frontend.schema.handler.repo-config :as repo-config-schema]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -87,6 +89,10 @@
 (defn save-file!
   [path content]
   (when path
+    (when (= path "logseq/config.edn")
+      (config-edn-common-handler/detect-deprecations path content)
+      (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
+
     (db/transact! [{:file/path path
                     :file/content content}])
     (when (= path "logseq/custom.css")
