@@ -28,8 +28,7 @@
      (fn []
        (when-let [^js popup-el (rum/deref popup-ref)]
          (comp
-          (layout/setup-draggable-container! popup-el nil)
-          (layout/setup-resizable-container! popup-el nil))))
+          (layout/setup-draggable-container! popup-el nil))))
      [])
 
     [:div.cp__handbooks-popup
