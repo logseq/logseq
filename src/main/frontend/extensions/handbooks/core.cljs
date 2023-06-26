@@ -8,6 +8,7 @@
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [camel-snake-kebab.core :as csk]
@@ -238,7 +239,7 @@
                                                                          (parse-key-from-href link parent-key))]
                                                       (if-let [to (get handbook-nodes to-k)]
                                                         (nav! [:topic-detail to (:title parent)] pane-state)
-                                                        (js/console.error "ERROR: handbook link resource not found: " link))
+                                                        (js/console.error "ERROR: handbook link resource not found: " to-k link))
                                                       (util/stop e))))))}]
 
                  (when-let [idx (and (> chapters-len 1) chapter-current-idx)]
@@ -272,7 +273,7 @@
             categories (conj (vec categories)
                              {:key      :ls-shortcuts
                               :title    [:span "Keyboard shortcuts"]
-                              :children [:span "work faster"]
+                              :children [:span (count shortcut-config/all-default-keyboard-shortcuts) " shortcuts"]
                               :color    "#2563EB"
                               :icon     "command"})]
         (for [{:keys [key title children color icon] :as category} categories]
@@ -449,6 +450,7 @@
 
      ;; more links
      [:div.flex.space-x-2
+      {:style {:padding-top "4px"}}
       (link-card
         {:class "flex-1" :href "https://discuss.logseq.com"}
         [:div.inner.flex.items-center.justify-center.space-x-1
