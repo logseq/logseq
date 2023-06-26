@@ -1461,13 +1461,13 @@ Similar to re-frame subscriptions"
 
 (defn get-plugins-commands-with-type
   [type]
-  (filterv #(= (keyword (first %)) (keyword type))
-           (apply concat (vals (:plugin/simple-commands @state)))))
+  (->> (apply concat (vals (:plugin/simple-commands @state)))
+       (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugins-ui-items-with-type
   [type]
-  (filterv #(= (keyword (first %)) (keyword type))
-           (apply concat (vals (:plugin/installed-ui-items @state)))))
+  (->> (apply concat (vals (:plugin/installed-ui-items @state)))
+       (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugin-resources-with-type
   [pid type]

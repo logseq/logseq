@@ -114,7 +114,7 @@
       (register-shortcut! handler id))
 
     (let [f (fn [e]
-              (let [shortcut-map (dh/shortcut-map handler-id state)
+              (let [shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
                     dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
                 ;; trigger fn
                 (when dispatch-fn (dispatch-fn e))))
