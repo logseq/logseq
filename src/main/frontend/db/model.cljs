@@ -1107,29 +1107,28 @@ independent of format as format specific heading characters are stripped"
 (defn get-page-unlinked-references
   [page]
   (when-let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (let [page (util/safe-page-name-sanity-lc page)
-            page-id     (:db/id (db-utils/entity [:block/name page]))
-            alias-names (get-page-alias-names repo page)
-            patterns    (->> (conj alias-names page)
-                             (map pattern))
-            filter-fn   (fn [datom]
-                          (some (fn [p]
-                                  (re-find p (->> (:v datom)
-                                                  (drawer/remove-logbook))))
-                                patterns))]
-        (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
-                      {:query-fn (fn [db _tx-report _result]
-                                   (let [ids
-                                         (->> (d/datoms db :aevt :block/content)
-                                              (filter filter-fn)
-                                              (map :e))
-                                         result (db-utils/pull-many db block-attrs ids)]
-                                     (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
-                      nil)
-             react
-             (sort-by-left-recursive)
-             db-utils/group-by-page)))))
+    (let [page (util/safe-page-name-sanity-lc page)
+          page-id     (:db/id (db-utils/entity [:block/name page]))
+          alias-names (get-page-alias-names repo page)
+          patterns    (->> (conj alias-names page)
+                           (map pattern))
+          filter-fn   (fn [datom]
+                        (some (fn [p]
+                                (re-find p (->> (:v datom)
+                                                (drawer/remove-logbook))))
+                              patterns))]
+      (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
+             {:query-fn (fn [db _tx-report _result]
+                          (let [ids
+                                (->> (d/datoms db :aevt :block/content)
+                                     (filter filter-fn)
+                                     (map :e))
+                                result (db-utils/pull-many repo block-attrs ids)]
+                            (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
+             nil)
+           react
+           (sort-by-left-recursive)
+           db-utils/group-by-page))))
 
 (defn get-block-referenced-blocks
   ([block-uuid]
