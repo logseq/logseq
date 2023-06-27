@@ -254,3 +254,8 @@
   [value]
   (storage/set :logseq-sync-enabled value)
   (state/set-state! :feature/enable-sync? value))
+
+(defn set-sync-diff-merge-enabled!
+  [value]
+  (storage/set :logseq-sync-diff-merge-enabled value)
+  (state/set-state! :feature/enable-sync-diff-merge? value))
