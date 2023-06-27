@@ -318,6 +318,7 @@
  :settings-page/sync-desc-1 "Click"
  :settings-page/sync-desc-2 "here"
  :settings-page/sync-desc-3 "for instructions on how to set up and use Sync."
+ :settings-page/sync-diff-merge "Merge editing when syncing"
  :settings-page/enable-whiteboards "Whiteboards"
  :settings-page/native-titlebar "Native title bar"
  :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux."

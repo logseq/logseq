@@ -393,7 +393,7 @@
                       :interactive true
                       :disabled    false}
                      (svg/info))]
-          preferred-pasting-file? 
+          preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
@@ -691,7 +691,7 @@
     (ui/admonition
      :tip
      [:p (t :settings-page/git-tip)])
-    [:span.text-sm.opacity-50.my-4 
+    [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-1)]
     [:br][:br]
     [:span.text-sm.opacity-50.my-4
@@ -737,6 +737,11 @@
    {:left-label (t :settings-page/sync)
     :action (sync-enabled-switcher enabled?)}))
 
+(defn sync-diff-merge-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (t :settings-page/sync-diff-merge)
+    :action (sync-enabled-switcher enabled?)}))
+
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -755,12 +760,12 @@
         count-limit (if pro-account? 10 1)
         count-percent (js/Math.round (/ count-usage count-limit 0.01))
         storage-usage (->> (map :used-gbs graph-usage)
-                           (reduce + 0)) 
-        storage-usage-formatted (cond 
+                           (reduce + 0))
+        storage-usage-formatted (cond
                                   (zero? storage-usage) "0.0"
                                   (< storage-usage 0.01) "Less than 0.01"
                                   :else (gstring/format "%.2f" storage-usage))
-        ;; TODO: check logic on this. What are the rules around storage limits?  
+        ;; TODO: check logic on this. What are the rules around storage limits?
         ;; do we, and should we be able to, give individual users more storage?
         ;; should that be on a per graph or per user basis?
         default-storage-limit (if pro-account? 10 0.05)
@@ -774,7 +779,7 @@
        [:<>
         (gstring/format "%s of %s synced graphs " count-usage count-limit)
         [:strong.text-white (gstring/format "(%s%%)" count-percent)]
-        ", "]) 
+        ", "])
      (gstring/format "%sGB of %sGB total storage " storage-usage-formatted storage-limit)
      [:strong.text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
      ; storage-usage-formatted "GB of " storage-limit "GB total storage"
@@ -786,13 +791,13 @@
    [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
     (for [{:keys [name used-percent]} graph-usage
           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
-     [:div.rounded-full.w-full.h-2 {:class "bg-black/50" 
+     [:div.rounded-full.w-full.h-2 {:class "bg-black/50"
                                     :tooltip name}
       [:div.rounded-full.h-2 {:class color
-                              :style {:width (str used-percent "%") 
-                                      :min-width "0.5rem" 
+                              :style {:width (str used-percent "%")
+                                      :min-width "0.5rem"
                                       :max-width "100%"}}]])]))
-  
+
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
   (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
@@ -812,13 +817,13 @@
         logged-in?
         [:div.grid.grid-cols-3.gap-8.pt-2
          [:div "Current plan"]
-         [:div.col-span-2 
+         [:div.col-span-2
           [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
            [:div.flex.gap-4.items-center
             (if pro-account?
               [:div.flex-1 "Pro"]
               [:div.flex-1 "Free"])
-            (cond 
+            (cond
               has-subscribed?
               (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
                                         :disabled true
@@ -844,26 +849,26 @@
           [:<>
            [:div "Billing"]
            [:div.col-span-2.flex.flex-col.gap-4
-            (cond 
+            (cond
               ;; If there is no expiration date, print the renewal date
-              (and renewal-date (nil? expiration-date)) 
-              [:div 
-               [:strong.font-semibold "Next billing date: " 
+              (and renewal-date (nil? expiration-date))
+              [:div
+               [:strong.font-semibold "Next billing date: "
                 (date/get-locale-string renewal-date)]]
               ;; If the expiration date is in the future, word it as such
-              (< (js/Date.) expiration-date) 
+              (< (js/Date.) expiration-date)
               [:div
-               [:strong.font-semibold "Pro plan expires on: " 
+               [:strong.font-semibold "Pro plan expires on: "
                 (date/get-locale-string expiration-date)]]
               ;; Otherwise, ind
-              :else 
-              [:div 
-               [:strong.font-semibold "Pro plan expired on: " 
+              :else
+              [:div
+               [:strong.font-semibold "Pro plan expired on: "
                 (date/get-locale-string expiration-date)]])
-                               
-            [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center" 
-                                              :disabled true 
-                                              :background "gray" 
+
+            [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center"
+                                              :disabled true
+                                              :background "gray"
                                               :icon "receipt"})]]])
          [:div "Profile"]
          [:div.col-span-2.grid.grid-cols-2.gap-4
@@ -875,7 +880,7 @@
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
           [:div.flex-1.flex.flex-col.gap-2.col-span-2
            [:label.text-sm.font-semibold "Username"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25" 
+           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
                                                         :value (user-handler/email)}]]]
          [:div "Authentication"]
          [:div.col-span-2
@@ -889,10 +894,10 @@
                                               :background "gray"
                                               :icon "key"
                                               :on-click user-handler/logout})]
-           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full" 
+           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full"
                                                          :disabled true
-                                                         :background "red"})]]]] 
-                                            
+                                                         :background "red"})]]]]
+
         (not logged-in?)
         [:div.grid.grid-cols-3.gap-8.pt-2
          [:div "Authentication"]
@@ -902,25 +907,25 @@
                                              :on-click (fn []
                                                          (state/close-settings!)
                                                          (state/pub-event! [:user/login]))})]
-          [:div.flex-1 (ui/button (t :login) {:icon "login" 
-                                              :class "h-8 w-full text-center justify-center" 
+          [:div.flex-1 (ui/button (t :login) {:icon "login"
+                                              :class "h-8 w-full text-center justify-center"
                                               :background "gray"
                                               :on-click (fn []
                                                           (state/close-settings!)
                                                           (state/pub-event! [:user/login]))})]]
          [:div.col-span-3.flex.flex-col.gap-4 {:class "bg-black/20 p-4 rounded-lg"}
           [:div.flex.w-full.items-center
-           [:div {:class "w-1/2 text-lg"} 
-            "Discover the power of " 
+           [:div {:class "w-1/2 text-lg"}
+            "Discover the power of "
             [:strong {:class "text-white/80"} "Logseq Sync"]]
-           [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"} 
+           [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"}
             [:div.w-3.h-3.rounded-full.bg-green-500]
             "Synced"]]
           [:div.flex.w-full.gap-4
            [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
             [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Free"]
             [:div
-             [:strong.text-white.text-xl.font-normal "$0"]] 
+             [:strong.text-white.text-xl.font-normal "$0"]]
             [:div.text-white.font-bold {:class "h-[2.5rem] "} "Get started with basic syncing"]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
              [:li "Unlimited unsynced graphs"]
@@ -930,7 +935,7 @@
            [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
             [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Pro"]
             [:div
-             [:strong.text-white.text-xl.font-normal "$10"] 
+             [:strong.text-white.text-xl.font-normal "$10"]
              [:span.text-xs.font-base {:class "ml-0.5"} "/ month"]]
             [:div.text-white.font-bold {:class "h-[2.5rem]"} "Unlock advanced syncing and more"]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
@@ -946,6 +951,7 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
+        enable-sync-diff-merge? (state/enable-sync-diff-merge?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
@@ -990,10 +996,13 @@
      (when-not web-platform?
        [:<>
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+         [:label.flex.font-medium.leading-5.self-start.mt-1
+          (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
+         (when enable-sync?
+           (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm
           (t :settings-page/sync-desc-1)
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
@@ -1010,7 +1019,7 @@
      ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
      ;;     ;; features
      ;;     ]])
-     
+
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
@@ -1082,7 +1091,7 @@
            (reset! *active [label label])
            nil)
 
-         :account 
+         :account
          (settings-account)
 
          :general
