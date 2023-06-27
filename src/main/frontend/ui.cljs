@@ -22,6 +22,7 @@
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -568,7 +569,7 @@
   (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
         binding         (or custom-binding built-in-binding)]
-    (shortcut-helper/decorate-binding binding)))
+    (shortcut-utils/decorate-binding binding)))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]

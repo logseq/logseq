@@ -67,19 +67,6 @@
   [parts]
   (string/join "/" parts))
 
-(defn normalize-user-keyname
-  [k]
-  (let [keynames {";" "semicolon"
-                  "=" "equals"
-                  "-" "dash"
-                  "[" "open-square-bracket"
-                  "]" "close-square-bracket"
-                  "'" "single-quote"}]
-    (some-> (str k)
-            (string/lower-case)
-            (string/replace #"[;=-\[\]']" (fn [s]
-                                            (get keynames s))))))
-
 #?(:cljs
    (defn safe-re-find
      {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}

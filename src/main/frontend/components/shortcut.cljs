@@ -3,6 +3,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.extensions.latex :as latex]
@@ -104,7 +105,7 @@
                                [:code.text-xs (namespace k)]
                                [:small.pl-1 (:desc cmd)]]
 
-                              (not plugin?) (-> k (dh/decorate-namespace) (t))
+                              (not plugin?) (-> k (shortcut-utils/decorate-namespace) (t))
                               :else (str k))]
                   [:tr {:key (str k)}
                    [:td.text-left.flex.items-center label]

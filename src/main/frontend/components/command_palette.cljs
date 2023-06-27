@@ -2,6 +2,7 @@
   (:require [frontend.handler.command-palette :as cp]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.ui :as ui]
@@ -11,7 +12,7 @@
 
 (defn translate [t {:keys [id desc]}]
   (when id
-    (let [desc-i18n (t (shortcut-helper/decorate-namespace id))]
+    (let [desc-i18n (t (shortcut-utils/decorate-namespace id))]
       (if (string/starts-with? desc-i18n "{Missing key")
         desc
         desc-i18n))))

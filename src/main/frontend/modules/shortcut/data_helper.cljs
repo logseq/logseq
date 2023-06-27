@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.handler.file :as file]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -87,23 +88,6 @@
                            (assoc r k (before v)))
                          {})))))
 
-(defn decorate-namespace [k]
-  (let [n (name k)
-        ns (namespace k)]
-    (keyword (str "command." ns) n)))
-
-(defn decorate-binding [binding]
-  (-> (if (string? binding) binding (str/join "+"  binding))
-      (str/replace "mod" (if util/mac? "⌘" "ctrl"))
-      (str/replace "alt" (if util/mac? "opt" "alt"))
-      (str/replace "shift+/" "?")
-      (str/replace "left" "←")
-      (str/replace "right" "→")
-      (str/replace "shift" "⇧")
-      (str/replace "open-square-bracket" "[")
-      (str/replace "close-square-bracket" "]")
-      (str/lower-case)))
-
 ;; if multiple bindings, gen seq for first binding only for now
 (defn gen-shortcut-seq [id]
   (let [bindings (shortcut-binding id)]
@@ -124,11 +108,11 @@
                 :else "disabled")
 
               (string? binding)
-              (decorate-binding binding)
+              (shortcut-utils/decorate-binding binding)
 
               :else
               (->> binding
-                   (map decorate-binding)
+                   (map shortcut-utils/decorate-binding)
                    (str/join " | ")))]
 
     ;; Display "cmd" rather than "meta" to the user to describe the Mac

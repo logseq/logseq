@@ -7,6 +7,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
@@ -297,7 +298,7 @@
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
         binding (some->> (if (string? binding) [binding] (seq binding))
-                         (map util/normalize-user-keyname))
+                         (map shortcut-utils/undecorate-binding))
         binding (if util/mac?
                   (or (:mac keybinding) binding) binding)
         mode    (or (:mode keybinding) :global)

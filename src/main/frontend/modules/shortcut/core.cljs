@@ -4,6 +4,7 @@
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.events :as events]
@@ -66,7 +67,7 @@
          (doseq [k (dh/shortcut-binding id)]
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
-             (.registerShortcut handler (util/keyname id) (util/normalize-user-keyname k))
+             (.registerShortcut handler (util/keyname id) (shortcut-utils/undecorate-binding k))
              (catch :default e
                (log/error :shortcut/register-shortcut {:id      id
                                                        :binding k
@@ -81,7 +82,7 @@
   (when-let [handler (get-handler-by-id handler-id)]
     (when-let [ks (dh/shortcut-binding shortcut-id)]
       (doseq [k ks]
-        (.unregisterShortcut ^js handler (util/normalize-user-keyname k))))
+        (.unregisterShortcut ^js handler (shortcut-utils/undecorate-binding k))))
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut-handler!
