@@ -96,7 +96,7 @@
                [:a.mr-2
                 {:on-click (fn [] (state/set-modal! #(property-class-config repo (uuid prop-uuid-or-built-in-prop))))}
                 (:block/name property-class)]
-               [:span (or (get properties-text-values prop-uuid-or-built-in-prop) v)]
+               [:span (or (get properties-text-values prop-uuid-or-built-in-prop) (str v))]
                [:a.ml-8 {:on-click
                          (fn []
                            (property-handler/remove-property! repo block prop-uuid-or-built-in-prop))}
