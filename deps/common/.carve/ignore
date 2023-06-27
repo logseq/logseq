@@ -2,3 +2,5 @@
 logseq.common.config/remove-hidden-files
 ;; API fn
 logseq.common.graph/get-files
+;; API fn
+logseq.common.graph/read-directories
