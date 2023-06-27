@@ -1650,12 +1650,12 @@
 
                                       :else
                                       (do
-                                        (prn "[diff-merge]no base found, use empty content as base, avoid loosing data")
+                                        (prn "[diff-merge]no base found, failback")
                                         (p/let [current-content (-> (fs/read-file repo-dir current-change-file)
                                                                     (p/catch (fn [_] nil)))
                                                 current-content (or current-content "")
                                                 incoming-content (fs/read-file repo-dir incoming-file)
-                                                merged-content (diff-merge/three-way-merge "" current-content incoming-content format)]
+                                                merged-content (diff-merge/three-way-merge current-content current-content incoming-content format)]
                                           (if (= incoming-content merged-content)
                                             (p/do!
                                              (fs/copy! repo
