@@ -82,7 +82,10 @@
          before    (-> raw meta :before)]
      (cond->> handler-m
        state  (reduce-kv (fn [r k handle-fn]
-                           (assoc r k (partial handle-fn state)))
+                           (let [handle-fn' (if (volatile? state)
+                                              (fn [*state & args] (apply handle-fn (cons @*state args)))
+                                              handle-fn)]
+                             (assoc r k (partial handle-fn' state))))
                          {})
        before (reduce-kv (fn [r k v]
                            (assoc r k (before v)))

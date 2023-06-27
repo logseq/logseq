@@ -168,6 +168,31 @@
            (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
              (assoc new-state ::install-id install-id))))))))
 
+(defn mixin*
+  "This is an optimized version compared to (mixin).
+   And the shortcuts will not be frequently loaded and unloaded.
+   As well as ensuring unnecessary updates of components."
+  [handler-id]
+  {:did-mount
+   (fn [state]
+     (let [*state     (volatile! state)
+           install-id (install-shortcut-handler! handler-id {:state *state})]
+       (assoc state ::install-id install-id
+                    ::*state *state)))
+
+   :will-remount
+   (fn [old-state new-state]
+     (when-let [*state (::*state old-state)]
+       (vreset! *state new-state))
+     new-state)
+
+   :will-unmount
+   (fn [state]
+     (when-let [install-id (::install-id state)]
+       (uninstall-shortcut-handler! install-id)
+       (some-> (::*state state) (vreset! nil)))
+     state)})
+
 (defn unlisten-all []
   (doseq [{:keys [handler group]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]

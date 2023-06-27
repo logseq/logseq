@@ -506,7 +506,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (shortcut/mixin :shortcut.handler/auto-complete true)
+  (shortcut/mixin* :shortcut.handler/auto-complete)
   [state
    matched
    {:keys [on-chosen
