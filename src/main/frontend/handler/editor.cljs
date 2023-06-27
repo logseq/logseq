@@ -3232,7 +3232,7 @@
 
 (defn- valid-dsl-query-block?
   "Whether block has a valid dsl query."
-  [block]
+  [repo block]
   (->> (:block/macros (db/entity (:db/id block)))
        (some (fn [macro]
                (when-let [query-body (and
@@ -3240,7 +3240,7 @@
                                       (first (:logseq.macro-arguments (:block/properties macro))))]
                  (seq (:query
                        (try
-                         (query-dsl/parse-query query-body)
+                         (query-dsl/parse-query query-body (config/db-based-graph? repo))
                          (catch :default _e
                            nil)))))))))
 
@@ -3263,7 +3263,7 @@
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (or (db-model/has-children? block-id)
-           (valid-dsl-query-block? block)
+           (valid-dsl-query-block? (state/get-current-repo) block)
            (valid-custom-query-block? block)
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))

@@ -16,7 +16,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.config :as config]))
 
 
 ;; Query fields:
@@ -252,7 +253,7 @@
       result)))
 
 (defn- build-property-two-arg
-  [e]
+  [e db-version?]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
@@ -260,21 +261,21 @@
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
-     :rules [:property]}))
+     :rules [(if db-version? :property-db-version :property)]}))
 
 (defn- build-property-one-arg
-  [e]
+  [e db-version?]
   (let [k (string/replace (name (nth e 1)) "_" "-")]
     {:query (list 'has-property '?b (keyword k))
-     :rules [:has-property]}))
+     :rules [(if db-version? :has-property-db-version :has-property)]}))
 
-(defn- build-property [e]
+(defn- build-property [e db-version?]
   (cond
     (= 3 (count e))
-    (build-property-two-arg e)
+    (build-property-two-arg e db-version?)
 
     (= 2 (count e))
-    (build-property-one-arg e)))
+    (build-property-one-arg e db-version?)))
 
 (defn- build-task
   [e]
@@ -385,7 +386,7 @@ Some bindings in this fn:
 * fe - the query operator e.g. `property`"
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
-  ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
+  ([e {:keys [sort-by blocks? sample db-version?] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
@@ -412,7 +413,7 @@ Some bindings in this fn:
        (build-between e)
 
        (= 'property fe)
-       (build-property e)
+       (build-property e db-version?)
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
@@ -529,7 +530,7 @@ Some bindings in this fn:
 
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
-  [s]
+  [s db-version?]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
@@ -543,7 +544,8 @@ Some bindings in this fn:
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
-                                        :sample sample}))
+                                        :sample sample
+                                        :db-version? db-version?}))
           result' (when (seq result)
                     (let [key (if (coll? (first result))
                                 ;; Only queries for this branch are not's like:
@@ -576,9 +578,9 @@ Some bindings in this fn:
       (conj q where))))
 
 (defn parse-query
-  [q]
+  [q db-version?]
   (let [q' (template/resolve-dynamic-template! q)]
-    (parse q')))
+    (parse q' db-version?)))
 
 (defn pre-transform-query
   [q]
@@ -591,7 +593,7 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
+     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string (config/db-based-graph? repo))]
        (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
          (let [sort-by (or sort-by identity)
                random-samples (if @sample
@@ -613,7 +615,7 @@ Some bindings in this fn:
   [repo query-m query-opts]
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
-          {:keys [query sort-by blocks? rules]} (parse query-string)]
+          {:keys [query sort-by blocks? rules]} (parse query-string (config/db-based-graph? repo))]
       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (query-react/react-query repo
                            (merge

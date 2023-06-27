@@ -109,16 +109,18 @@
    '[(has-property ?b ?prop)
      [?b :block/properties ?bp]
      [(missing? $ ?b :block/name)]
-     (or-join [?bp]
-              [(get ?bp ?prop)]
-              ;; for db version, :block/properties looks like: {<uuid> <vals>, ...}
-              ;; keys are uuid-string instead of property name
-              (and [(name ?prop) ?prop-name-str]
-                   [?prop-b :block/name ?prop-name-str]
-                   [?prop-b :block/type "property"]
-                   [?prop-b :block/uuid ?prop-uuid]
-                   [(str ?prop-uuid) ?prop-uuid-str]
-                   [(get ?bp ?prop-uuid-str)]))]
+     [(get ?bp ?prop)]]
+
+   :has-property-db-version
+   '[(has-property ?b ?prop)
+     [?b :block/properties ?bp]
+     [(missing? $ ?b :block/name)]
+     [(name ?prop) ?prop-name-str]
+     [?prop-b :block/name ?prop-name-str]
+     [?prop-b :block/type "property"]
+     [?prop-b :block/uuid ?prop-uuid]
+     [(str ?prop-uuid) ?prop-uuid-str]
+     [(get ?bp ?prop-uuid-str)]]
 
    :block-content
    '[(block-content ?b ?query)
@@ -139,15 +141,23 @@
    '[(property ?b ?key ?val)
      [?b :block/properties ?prop]
      [(missing? $ ?b :block/name)]
-     (or-join [?v ?prop]
-              [(get ?prop ?key) ?v]
-              ;; for db version
-              (and [(name ?key) ?key-str]
-                   [?prop-b :block/name ?key-str]
-                   [?prop-b :block/type "property"]
-                   [?prop-b :block/uuid ?prop-uuid]
-                   [(str ?prop-uuid) ?prop-uuid-str]
-                   [(get ?prop ?prop-uuid-str) ?v]))
+     [(get ?prop ?key) ?v]
+     [(str ?val) ?str-val]
+     (or [(= ?v ?val)]
+         [(contains? ?v ?val)]
+         ;; For integer pages that aren't strings
+         [(contains? ?v ?str-val)])]
+
+   :property-db-version
+   '[(property ?b ?key ?val)
+     [?b :block/properties ?prop]
+     [(missing? $ ?b :block/name)]
+     [(name ?key) ?key-str]
+     [?prop-b :block/name ?key-str]
+     [?prop-b :block/type "property"]
+     [?prop-b :block/uuid ?prop-uuid]
+     [(str ?prop-uuid) ?prop-uuid-str]
+     [(get ?prop ?prop-uuid-str) ?v]
      [(str ?val) ?str-val]
      (or [(= ?v ?val)]
          [(contains? ?v ?val)]

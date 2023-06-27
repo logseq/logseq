@@ -16,7 +16,8 @@
             [rum.core :as rum]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [frontend.config :as config]))
 
 (rum/defc page-block-selector
   [*find]
@@ -455,7 +456,7 @@
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
                  (let [q-str (first (:rum/args state))
-                       parsed-query (query-dsl/parse-query q-str)
+                       parsed-query (query-dsl/parse-query q-str (config/db-based-graph? (state/get-current-repo)))
                        blocks-query? (:blocks? parsed-query)
                        find-mode (cond
                                    blocks-query?

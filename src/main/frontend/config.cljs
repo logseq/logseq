@@ -368,8 +368,9 @@
 
 (defn db-based-graph?
   [s]
-  (and (string? s)
-       (string/starts-with? s db-version-prefix)))
+  (boolean
+   (and (string? s)
+        (string/starts-with? s db-version-prefix))))
 
 (defn get-local-asset-absolute-path
   [s]

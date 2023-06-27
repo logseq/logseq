@@ -13,7 +13,8 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.property :as editor-property]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.config :as config]))
 
 (defn built-in-custom-query?
   [title]
@@ -162,7 +163,8 @@
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         dsl-page-query? (and dsl-query?
-                             (false? (:blocks? (query-dsl/parse-query query))))
+                             (false? (:blocks? (query-dsl/parse-query
+                                                query (config/db-based-graph? (state/get-current-repo))))))
         ;; FIXME: This isn't getting set for full-text searches
         full-text-search? (and dsl-query?
                                (util/electron?)
