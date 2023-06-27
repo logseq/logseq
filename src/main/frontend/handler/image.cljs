@@ -13,9 +13,9 @@
   []
   (when-not (and (or (util/electron?)
                      (mobile-util/native-ios?))
-                 (config/local-file-based-graph? (state/get-current-repo)))
+                 (or (config/local-file-based-graph? (state/get-current-repo))
+                     (config/db-based-graph? (state/get-current-repo))))
     (try
-      (prn "render local images")
       (let [images (array-seq (gdom/getElementsByTagName "img"))
             get-src (fn [image] (.getAttribute image "src"))
             local-images (filter
