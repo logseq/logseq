@@ -202,8 +202,7 @@
                           current-editor-cursor)]
       (push-redo e)
       (transact! new-txs (merge {:undo? true}
-                                tx-meta
-                                (select-keys e [:pagination-blocks-range])))
+                                tx-meta))
       (set-editor-content!)
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/undo e]))
@@ -221,8 +220,7 @@
                           (get-next-tx-editor-cursor tx-id))]
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
-                                tx-meta
-                                (select-keys e [:pagination-blocks-range])))
+                                tx-meta))
       (set-editor-content!)
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/redo e]))
@@ -264,9 +262,6 @@
                     :blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
-                    :pagination-blocks-range
-                    (get @(get @state/state :ui/pagination-blocks-range)
-                         (get-in tx-report [:db-after :max-tx]))
                     :app-state (select-keys @state/state
                                             [:route-match
                                              :ui/sidebar-open?

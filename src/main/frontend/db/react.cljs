@@ -70,12 +70,6 @@
 (defn set-new-result!
   [k new-result tx-report]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (when tx-report
-      (when-let [range (get-blocks-range result-atom new-result)]
-        (state/set-state!
-         :ui/pagination-blocks-range
-         range
-         :path-in-sub-atom (get-in tx-report [:db-after :max-tx]))))
     (reset! result-atom new-result)))
 
 (defn swap-new-result!
