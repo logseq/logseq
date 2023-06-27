@@ -597,129 +597,129 @@
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/block-editing-only
-    (->
-     (build-category-map [:editor/escape-editing
-                          :editor/backspace
-                          :editor/delete
-                          :editor/new-block
-                          :editor/new-line
-                          :editor/follow-link
-                          :editor/open-link-in-sidebar
-                          :editor/bold
-                          :editor/italics
-                          :editor/highlight
-                          :editor/strike-through
-                          :editor/clear-block
-                          :editor/kill-line-before
-                          :editor/kill-line-after
-                          :editor/beginning-of-block
-                          :editor/end-of-block
-                          :editor/forward-word
-                          :editor/backward-word
-                          :editor/forward-kill-word
-                          :editor/backward-kill-word
-                          :editor/replace-block-reference-at-point
-                          :editor/copy-embed
-                          :editor/paste-text-in-one-block-at-point
-                          :editor/insert-youtube-timestamp])
-     (with-meta {:before m/enable-when-editing-mode!}))
+    (-> (build-category-map
+          [:editor/escape-editing
+           :editor/backspace
+           :editor/delete
+           :editor/new-block
+           :editor/new-line
+           :editor/follow-link
+           :editor/open-link-in-sidebar
+           :editor/bold
+           :editor/italics
+           :editor/highlight
+           :editor/strike-through
+           :editor/clear-block
+           :editor/kill-line-before
+           :editor/kill-line-after
+           :editor/beginning-of-block
+           :editor/end-of-block
+           :editor/forward-word
+           :editor/backward-word
+           :editor/forward-kill-word
+           :editor/backward-kill-word
+           :editor/replace-block-reference-at-point
+           :editor/copy-embed
+           :editor/paste-text-in-one-block-at-point
+           :editor/insert-youtube-timestamp])
+        (with-meta {:before m/enable-when-editing-mode!}))
 
     :shortcut.handler/editor-global
-    (->
-      (build-category-map [:graph/export-as-html
-                           :graph/open
-                           :graph/remove
-                           :graph/add
-                           :graph/save
-                           :graph/re-index
-                           :editor/cycle-todo
-                           :editor/up
-                           :editor/down
-                           :editor/left
-                           :editor/right
-                           :editor/select-up
-                           :editor/select-down
-                           :editor/move-block-up
-                           :editor/move-block-down
-                           :editor/open-edit
-                           :editor/select-block-up
-                           :editor/select-block-down
-                           :editor/select-parent
-                           :editor/delete-selection
-                           :editor/expand-block-children
-                           :editor/collapse-block-children
-                           :editor/indent
-                           :editor/outdent
-                           :editor/copy
-                           :editor/copy-text
-                           :editor/cut
-                           :command/toggle-favorite])
-      (with-meta {:before m/enable-when-not-component-editing!}))
+    (-> (build-category-map
+          [:graph/export-as-html
+           :graph/open
+           :graph/remove
+           :graph/add
+           :graph/save
+           :graph/re-index
+           :editor/cycle-todo
+           :editor/up
+           :editor/down
+           :editor/left
+           :editor/right
+           :editor/select-up
+           :editor/select-down
+           :editor/move-block-up
+           :editor/move-block-down
+           :editor/open-edit
+           :editor/select-block-up
+           :editor/select-block-down
+           :editor/select-parent
+           :editor/delete-selection
+           :editor/expand-block-children
+           :editor/collapse-block-children
+           :editor/indent
+           :editor/outdent
+           :editor/copy
+           :editor/copy-text
+           :editor/cut
+           :command/toggle-favorite])
+        (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
-    (->
-      (build-category-map [:editor/insert-link
-                           :editor/select-all-blocks
-                           :editor/zoom-in
-                           :editor/zoom-out
-                           :editor/toggle-undo-redo-mode
-                           :editor/toggle-number-list
-                           :editor/undo
-                           :editor/redo
-                           :ui/toggle-brackets
-                           :go/search-in-page
-                           :go/search
-                           :go/electron-find-in-page
-                           :go/electron-jump-to-the-next
-                           :go/electron-jump-to-the-previous
-                           :go/backward
-                           :go/forward
-                           :search/re-index
-                           :sidebar/open-today-page
-                           :sidebar/clear
-                           :command/run
-                           :command-palette/toggle])
-      (with-meta {:before m/prevent-default-behavior}))
+    (-> (build-category-map
+          [:editor/insert-link
+           :editor/select-all-blocks
+           :editor/zoom-in
+           :editor/zoom-out
+           :editor/toggle-undo-redo-mode
+           :editor/toggle-number-list
+           :editor/undo
+           :editor/redo
+           :ui/toggle-brackets
+           :go/search-in-page
+           :go/search
+           :go/electron-find-in-page
+           :go/electron-jump-to-the-next
+           :go/electron-jump-to-the-previous
+           :go/backward
+           :go/forward
+           :search/re-index
+           :sidebar/open-today-page
+           :sidebar/clear
+           :command/run
+           :command-palette/toggle])
+        (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/global-non-editing-only
-    (->
-      (build-category-map [:go/home
-                           :go/journals
-                           :go/all-pages
-                           :go/flashcards
-                           :go/graph-view
-                           :go/all-graphs
-                           :go/whiteboards
-                           :go/keyboard-shortcuts
-                           :go/tomorrow
-                           :go/next-journal
-                           :go/prev-journal
-                           :ui/toggle-document-mode
-                           :ui/toggle-settings
-                           :ui/toggle-right-sidebar
-                           :ui/toggle-left-sidebar
-                           :ui/toggle-help
-                           :ui/toggle-theme
-                           :ui/toggle-contents
-                           :editor/open-file-in-default-app
-                           :editor/open-file-in-directory
-                           :editor/copy-current-file
-                           :editor/copy-page-url
-                           :editor/new-whiteboard
-                           :ui/toggle-wide-mode
-                           :ui/select-theme-color
-                           :ui/goto-plugins
-                           :ui/install-plugins-from-file
-                           :editor/toggle-open-blocks
-                           :ui/toggle-cards
-                           :ui/clear-all-notifications
-                           :git/commit
-                           :sidebar/close-top
-                           :dev/show-block-data
-                           :dev/show-block-ast
-                           :dev/show-page-data
-                           :dev/show-page-ast])
-      (with-meta {:before m/enable-when-not-editing-mode!}))
+    (-> (build-category-map
+          [:go/home
+           :go/journals
+           :go/all-pages
+           :go/flashcards
+           :go/graph-view
+           :go/all-graphs
+           :go/whiteboards
+           :go/keyboard-shortcuts
+           :go/tomorrow
+           :go/next-journal
+           :go/prev-journal
+           :ui/toggle-document-mode
+           :ui/toggle-settings
+           :ui/toggle-right-sidebar
+           :ui/toggle-left-sidebar
+           :ui/toggle-help
+           :ui/toggle-theme
+           :ui/toggle-contents
+           :editor/open-file-in-default-app
+           :editor/open-file-in-directory
+           :editor/copy-current-file
+           :editor/copy-page-url
+           :editor/new-whiteboard
+           :ui/toggle-wide-mode
+           :ui/select-theme-color
+           :ui/goto-plugins
+           :ui/install-plugins-from-file
+           :editor/toggle-open-blocks
+           :ui/toggle-cards
+           :ui/clear-all-notifications
+           :git/commit
+           :sidebar/close-top
+           :dev/show-block-data
+           :dev/show-block-ast
+           :dev/show-page-data
+           :dev/show-page-ast])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"

@@ -14,7 +14,7 @@
   (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
-(def *installed-handlers (atom {}))
+(defonce *installed-handlers (atom {}))
 (defonce *pending-inited? (atom false))
 (defonce *pending-shortcuts (atom []))
 
@@ -37,9 +37,10 @@
 
 (defn- get-handler-by-id
   [handler-id]
-  (-> (filter #(= (:group %) handler-id) (vals @*installed-handlers))
-      first
-      :handler))
+  (->> (vals @*installed-handlers)
+       (filter #(= (:group %) handler-id))
+       first
+       :handler))
 
 (defn register-shortcut!
   "Register a shortcut, notice the id need to be a namespaced keyword to avoid
@@ -86,11 +87,13 @@
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut-handler!
-  [install-id]
-  (when-let [handler (-> (get @*installed-handlers install-id)
-                         :handler)]
-    (.dispose ^js handler)
-    (swap! *installed-handlers dissoc install-id)))
+  ([install-id] (uninstall-shortcut-handler! install-id false))
+  ([install-id refresh?]
+   (when-let [handler (-> (get @*installed-handlers install-id)
+                          :handler)]
+     (.dispose ^js handler)
+     (println "[shortcuts]" (if refresh? "[R]" "") "uninstall handler" (-> @*installed-handlers (get install-id) :group str))
+     (swap! *installed-handlers dissoc install-id))))
 
 (defn install-shortcut-handler!
   [handler-id {:keys [set-global-keys?
@@ -99,7 +102,7 @@
                :or   {set-global-keys? true
                       prevent-default? false}}]
   (when-let [install-id (get-handler-by-id handler-id)]
-    (uninstall-shortcut-handler! install-id))
+    (uninstall-shortcut-handler! install-id true))
 
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
@@ -127,6 +130,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
+      (println "[shortcuts] install handler" (str handler-id))
       (swap! *installed-handlers merge data)
 
       install-id)))
@@ -159,9 +163,10 @@
      (assoc
        :will-remount
        (fn [old-state new-state]
-         (uninstall-shortcut-handler! (::install-id old-state))
-         (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-           (assoc new-state ::install-id install-id)))))))
+         (util/profile "[shortcuts] reinstalled:"
+           (uninstall-shortcut-handler! (::install-id old-state))
+           (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+             (assoc new-state ::install-id install-id))))))))
 
 (defn unlisten-all []
   (doseq [{:keys [handler group]} (vals @*installed-handlers)
