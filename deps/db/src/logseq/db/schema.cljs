@@ -1,8 +1,5 @@
 (ns logseq.db.schema
-  "Main db schema for the Logseq app"
-  (:require [frontend.config :as config]
-            [frontend.state :as state]))
-
+  "Main db schemas for the Logseq app")
 
 (defonce version 2)
 (defonce ast-version 1)
@@ -111,14 +108,6 @@
   (merge
    schema
    {}))
-
-(defn get-schema
-  ([]
-   (get-schema (state/get-current-repo)))
-  ([repo]
-   (if (config/db-based-graph? repo)
-     schema-for-db-based-graph
-     schema)))
 
 (def retract-attributes
   #{

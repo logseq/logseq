@@ -44,13 +44,13 @@
    stored: the text to restore from"
   [repo stored]
   (p/let [db-name (db-conn/datascript-db repo)
-          db-conn (d/create-conn (db-schema/get-schema repo))
+          db-conn (d/create-conn (db-conn/get-schema repo))
           _ (swap! db-conn/conns assoc db-name db-conn)
           _ (when stored
               (let [stored-db (try (db-utils/string->db stored)
                                    (catch :default _e
                                      (js/console.warn "Invalid graph cache")
-                                     (d/empty-db (db-schema/get-schema repo))))
+                                     (d/empty-db (db-conn/get-schema repo))))
                     attached-db (d/db-with stored-db
                                            default-db/built-in-pages) ;; TODO bug overriding uuids?
                     db (if (old-schema? attached-db)

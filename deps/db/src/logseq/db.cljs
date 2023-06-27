@@ -19,9 +19,10 @@
 
 (defn start-conn
   "Create datascript conn with schema and default data"
-  [& {:keys [create-default-pages?]
-      :or {create-default-pages? true}}]
-  (let [db-conn (d/create-conn (db-schema/get-schema))]
+  [& {:keys [create-default-pages? schema]
+      :or {create-default-pages? true
+           schema db-schema/schema}}]
+  (let [db-conn (d/create-conn schema)]
     (when create-default-pages?
       (create-default-pages! db-conn))
     db-conn))

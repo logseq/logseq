@@ -4,8 +4,8 @@
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.db.listener :as db-listener]
-            [logseq.db.schema :as db-schema]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.page :as page]
@@ -53,7 +53,7 @@
   (state/set-current-repo! "local")
   (when-let [data js/window.logseq_db]
     (let [data (unescape-html data)
-          db-conn (d/create-conn (db-schema/get-schema))
+          db-conn (d/create-conn (conn/get-schema (state/get-current-repo)))
           _ (swap! db/conns assoc "logseq-db/local" db-conn)
           db (db/string->db data)]
       (reset! db-conn db))))

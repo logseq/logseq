@@ -71,9 +71,3 @@
 (defn new-block-id
   []
   (d/squuid))
-
-(defn get-schema
-  [repo]
-  (if (config/db-based-graph? repo)
-    db-schema/schema-for-db-based-graph
-    db-schema/schema))
