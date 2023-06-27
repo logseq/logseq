@@ -2740,7 +2740,7 @@
                 (db/entity [:block/uuid navigating-block])
                 block*)]
     (merge (db/sub-block (:db/id block))
-           (select-keys block [:block/level]))))
+           (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   [state repo config* block* {:keys [edit? edit-input-id]}]
