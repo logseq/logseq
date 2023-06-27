@@ -109,7 +109,16 @@
    '[(has-property ?b ?prop)
      [?b :block/properties ?bp]
      [(missing? $ ?b :block/name)]
-     [(get ?bp ?prop)]]
+     (or-join [?bp]
+              [(get ?bp ?prop)]
+              ;; for db version, :block/properties looks like: {<uuid> <vals>, ...}
+              ;; keys are uuid-string instead of property name
+              (and [(name ?prop) ?prop-name-str]
+                   [?prop-b :block/name ?prop-name-str]
+                   [?prop-b :block/type "property"]
+                   [?prop-b :block/uuid ?prop-uuid]
+                   [(str ?prop-uuid) ?prop-uuid-str]
+                   [(get ?bp ?prop-uuid-str)]))]
 
    :block-content
    '[(block-content ?b ?query)
@@ -130,7 +139,15 @@
    '[(property ?b ?key ?val)
      [?b :block/properties ?prop]
      [(missing? $ ?b :block/name)]
-     [(get ?prop ?key) ?v]
+     (or-join [?v ?prop]
+              [(get ?prop ?key) ?v]
+              ;; for db version
+              (and [(name ?key) ?key-str]
+                   [?prop-b :block/name ?key-str]
+                   [?prop-b :block/type "property"]
+                   [?prop-b :block/uuid ?prop-uuid]
+                   [(str ?prop-uuid) ?prop-uuid-str]
+                   [(get ?prop ?prop-uuid-str) ?v]))
      [(str ?val) ?str-val]
      (or [(= ?v ?val)]
          [(contains? ?v ?val)]
