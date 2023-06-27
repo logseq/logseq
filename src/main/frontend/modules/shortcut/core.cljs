@@ -15,8 +15,8 @@
            [goog.ui KeyboardShortcutHandler]))
 
 (def *installed-handlers (atom {}))
-(def *pending-inited? (atom false))
-(def *pending-shortcuts (atom []))
+(defonce *pending-inited? (atom false))
+(defonce *pending-shortcuts (atom []))
 
 (def global-keys #js
                   [KeyCodes/TAB
