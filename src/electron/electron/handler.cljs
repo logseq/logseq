@@ -795,6 +795,9 @@
 (defmethod handle :server/set-config [^js _win [_ config]]
   (server/set-config! config))
 
+(defmethod handle :system/info [^js _win _]
+  {:home-dir (.homedir os)})
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel

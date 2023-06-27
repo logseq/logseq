@@ -289,7 +289,8 @@
       :history/page-only-mode?               false
       ;; db tx-id -> editor cursor
       :history/tx->editor-cursor             (atom {})
-      :ui/pagination-blocks-range            (atom {})})))
+      :ui/pagination-blocks-range            (atom {})
+      :system/info                           {}})))
 
 ;; Block ast state
 ;; ===============

@@ -376,8 +376,13 @@
   (str "/" (string/replace s #"^[./]*" "")))
 
 (defn get-local-dir
-  [s]
-  (string/replace s local-db-prefix ""))
+  [repo]
+  (if (db-based-graph? repo)
+    (path/path-join (get-in @state/state [:system/info :home-dir])
+                    "logseq"
+                    "graphs"
+                    (string/replace repo db-version-prefix ""))
+    (string/replace repo local-db-prefix "")))
 
 ;; FIXME(andelf): this is not the reverse op of get-repo-dir, should be fixed
 (defn get-local-repo
@@ -392,8 +397,8 @@
       (js/console.error "BUG: nil repo")
       nil)
 
-    (db-based-graph? repo-url)
-    nil
+    (and (util/electron?) (db-based-graph? repo-url))
+    (get-local-dir repo-url)
 
     (and (util/electron?) (local-file-based-graph? repo-url))
     (get-local-dir repo-url)

@@ -45,7 +45,8 @@
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
             [frontend.db.react :as db-react]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [cljs-bean.core :as bean]))
 
 (defn set-global-error-notification!
   []
@@ -200,8 +201,15 @@
 
 (reset! db-listener/*db-listener outliner-db/after-transact-pipelines)
 
+(defn- get-system-info
+  []
+  (when (util/electron?)
+    (p/let [info (ipc/ipc :system/info)]
+      (state/set-state! :system/info (bean/->clj info)))))
+
 (defn start!
   [render]
+  (get-system-info)
   (set-global-error-notification!)
   (register-components-fns!)
   (user-handler/restore-tokens-from-localstorage)

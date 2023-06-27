@@ -145,7 +145,6 @@
 
 (defn- get-file-absolute-path
   [config path]
-  (js/console.error "TODO: buggy path fn")
   (let [path (string/replace path "file:" "")
         block-id (:block/uuid config)
         current-file (and block-id
@@ -232,7 +231,6 @@
         type (cond img? "image"
                    audio? "audio"
                    :else "asset")]
-
     (if (not sync-enabled?)
       (content-fn)
       (if (and asset-file? (or loading? (nil? exist?)))
@@ -435,11 +433,13 @@
   (let [metadata (if (string/blank? metadata)
                    nil
                    (gp-util/safe-read-string metadata))
-        title (second (first label))]
+        title (second (first label))
+        repo (state/get-current-repo)]
     (ui/catch-error
      [:span.warning full_text]
      (if (and (gp-config/local-asset? href)
-              (config/local-file-based-graph? (state/get-current-repo)))
+              (or (config/local-file-based-graph? repo)
+                  (config/db-based-graph? repo)))
        (asset-link config title href metadata full_text)
        (let [href (cond
                     (util/starts-with? href "http")
