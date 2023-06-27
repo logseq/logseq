@@ -273,7 +273,10 @@
             categories (conj (vec categories)
                              {:key      :ls-shortcuts
                               :title    [:span "Keyboard shortcuts"]
-                              :children [:span (count shortcut-config/all-default-keyboard-shortcuts) " shortcuts"]
+                              :children [:span (->> (vals @shortcut-config/config)
+                                                    (map count)
+                                                    (apply +))
+                                         " shortcuts"]
                               :color    "#2563EB"
                               :icon     "command"})]
         (for [{:keys [key title children color icon] :as category} categories]
