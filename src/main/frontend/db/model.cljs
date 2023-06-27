@@ -1175,15 +1175,20 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-properties
   []
-  (let [properties (d/q
+  (let [db (conn/get-db)
+        properties (d/q
                     '[:find [?p ...]
                       :where
                       [_ :block/properties ?p]]
-                    (conn/get-db))
+                    db)
         properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
          distinct
+         (map (fn [k]
+                (if (and (string? k) (util/uuid-string? k))
+                  (keyword (:block/name (d/entity db [:block/uuid (uuid k)])))
+                  k)))
          sort)))
 
 (defn- property-value-for-refs-and-text
