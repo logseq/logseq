@@ -732,6 +732,13 @@
                (file-sync-handler/set-sync-enabled! (not enabled?)))
              true))
 
+(rum/defc sync-diff-merge-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
+             true))
+
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
    {:left-label (t :settings-page/sync)
@@ -739,8 +746,15 @@
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/sync-diff-merge)
-    :action (sync-enabled-switcher enabled?)}))
+   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
+    :action (sync-diff-merge-enabled-switcher enabled?)
+    :desc (ui/tippy {:html        [:div
+                                   [:div (t :settings-page/sync-diff-merge-desc)]
+                                   [:div (t :settings-page/sync-diff-merge-warn)]]
+                     :class       "tippy-hover ml-2"
+                     :interactive true
+                     :disabled    false}
+                    (svg/info))}))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
