@@ -60,7 +60,7 @@
    {:id                "nav-journal-page"
     :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-journal-page-title)]
                                        [:p
-                                        [:span (t :on-boarding/quick-tour-journal-page-desc)]]])
+                                        (t :on-boarding/quick-tour-journal-page-desc)]])
 
     :attachTo          {:element ".page.is-journals .page-title" :on "top-end"}
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
