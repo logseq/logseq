@@ -47,7 +47,7 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
         {asset ? (
           <embed
             src={handlers ? handlers.inflateAsset(asset.src).url : asset.src}
-            className="relative tl-pdf-container hide-scrollbar"
+            className="relative tl-pdf-container"
             onWheelCapture={stop}
             onPointerDown={stop}
             onPointerUp={stop}
