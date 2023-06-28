@@ -316,6 +316,7 @@ inspectors for block/page data and AST.
 Since the desktop app is built with Electron, a full set of Chromium developer
 tools is available under the menu `View > Toggle Developer Tools`. Handy tools
 include a JS console and HTML inspector.
+
 ## Security Practices
 
 * Our builds should not include unverified, third-party resources as this opens
