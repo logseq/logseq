@@ -274,6 +274,7 @@
 
      :ui/loading?                           {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+     :feature/enable-sync-diff-merge?       (storage/get :logseq-sync-diff-merge-enabled)
 
      :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
@@ -592,6 +593,10 @@ Similar to re-frame subscriptions"
 (defn enable-sync?
   []
   (sub :feature/enable-sync?))
+
+(defn enable-sync-diff-merge?
+  []
+  (sub :feature/enable-sync-diff-merge?))
 
 (defn enable-whiteboards?
   ([]
