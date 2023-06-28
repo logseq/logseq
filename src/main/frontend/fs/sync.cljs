@@ -1713,7 +1713,9 @@
                 (swap! *sync-state sync-state--remove-recent-remote->local-files
                        [recent-remote->local-file-item])))))
 
-        (let [update-local-files-ch (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
+        (let [update-local-files-ch (if (state/enable-sync-diff-merge?)
+                                      (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
+                                      (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
               r (<! (<with-pause update-local-files-ch *paused))]
           (doseq [[filetxn origin-db-content] txn->db-content-vec]
             (when (<! (need-add-version-file? filetxn origin-db-content))
@@ -1731,7 +1733,9 @@
         (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
           true
-          (let [r (<! (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)]))]
+          (let [r (<! (if (state/enable-sync-diff-merge?)
+                        (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)])
+                        (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)])))]
             (if (and (instance? ExceptionInfo r)
                      (string/index-of (str (ex-cause r)) "No such file or directory"))
               true
