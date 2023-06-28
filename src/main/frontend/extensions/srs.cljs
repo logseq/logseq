@@ -512,7 +512,7 @@
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
-  (shortcut/mixin :shortcut.handler/cards)
+  (shortcut/mixin :shortcut.handler/cards false)
   [blocks option card-index]
   [:div#cards-modal
    (if (seq blocks)
