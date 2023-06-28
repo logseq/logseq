@@ -15,7 +15,7 @@
   (:import [goog.ui KeyboardShortcutHandler]))
 
 ;; function vals->bindings is too time-consuming. Here we cache the results.
-(defn- flatten-key-bindings
+(defn- flatten-bindings-by-id
   [config]
   (->> config
        (into {})
@@ -23,11 +23,31 @@
               {k binding}))
        (into {})))
 
-(def m-flatten-key-bindings (util/memoize-last flatten-key-bindings))
+(defn- flatten-bindings-by-key
+  [config]
+  (reduce-kv
+    (fn [r handler-id vs]
+      (reduce-kv
+        (fn [r id binding]
+          (if-let [ks (:binding binding)]
+            (let [ks (if (sequential? ks) ks [ks])]
+              (reduce (fn [a k] (assoc-in a [(shortcut-utils/undecorate-binding k) id] handler-id)) r ks))
+            r)) r vs))
+    {} config))
+
+(def m-flatten-bindings-by-id
+  (util/memoize-last flatten-bindings-by-id))
+
+(def m-flatten-bindings-by-key
+  (util/memoize-last flatten-bindings-by-key))
 
 (defn get-bindings
   []
-  (m-flatten-key-bindings (vals @shortcut-config/config)))
+  (m-flatten-bindings-by-id (vals @shortcut-config/config)))
+
+(defn get-bindings-keys-map
+  []
+  (m-flatten-bindings-by-key @shortcut-config/config))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"
