@@ -58,8 +58,7 @@
       (let [sorted-missing (->> all-missing
                                 (map (fn [[k v]]
                                        {:translation-key k
-                                                  ;; Shorten values
-                                        :string-to-translate (shorten v 50)
+                                        :string-to-translate v
                                         :file (if (= "tutorial" (namespace k))
                                                 (str "Under tutorials/")
                                                 (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
@@ -69,7 +68,9 @@
             (println "\n;; For" file)
             (doseq [{:keys [translation-key string-to-translate]} missing-for-file]
               (println translation-key (pr-str string-to-translate))))
-          (task-util/print-table sorted-missing))))))
+          (task-util/print-table
+           ;; Shorten values
+           (map #(update % :string-to-translate shorten 50) sorted-missing)))))))
 
 (defn- validate-non-default-languages
   "This validation finds any translation keys that don't exist in the default
