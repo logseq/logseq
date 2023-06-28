@@ -148,7 +148,7 @@
 
 (defn row-with-button-action
   [{:keys [left-label action button-label href on-click desc -for]}]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
 
    ;; left column
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -156,8 +156,8 @@
     left-label]
 
    ;; right column
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+   [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
+    {:style {:gap "0.5rem"}}
     [:div (if action action (ui/button
                               button-label
                               :class    "text-sm p-1"
@@ -165,7 +165,7 @@
                               :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
-      [:div.text-sm desc])]])
+      [:div.text-sm.flex desc])]])
 
 (defn edit-config-edn []
   (row-with-button-action
