@@ -16,7 +16,8 @@
                   "~" "shift+`"}]
     (some-> (str binding)
             (str/lower-case)
-            (str/replace #"[;=-\[\]'\(\)\~]" #(get keynames %)))))
+            (str/replace #"[;=-\[\]'\(\)\~]" #(get keynames %))
+            (str/replace #"\s+" " "))))
 
 (defn decorate-namespace [k]
   (let [n  (name k)
