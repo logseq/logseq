@@ -64,9 +64,7 @@
   [loading? style config blocks]
   [:div
    [:p.text-sm
-    [:span.opacity-70 (t :page/slide-view-tips)]
-    [:code "f"]
-    [:span.opacity-70 (t :page/slide-view-go-fullscreen)]]
+    (t :page/slide-view-tip-go-fullscreen)]
    [:div.reveal {:style style}
     (when loading?
       [:div.ls-center (ui/loading "")])
