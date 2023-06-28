@@ -33,7 +33,6 @@
 (defn broken-page?
   "Whether `page` is broken."
   [db page-id]
-  (prn :debug " Validate page: " page-id)
   (let [parent-left-f (fn [b]
                         [(get-in b [:block/parent :db/id])
                          (get-in b [:block/left :db/id])])
