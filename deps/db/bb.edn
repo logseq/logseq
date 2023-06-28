@@ -30,7 +30,7 @@
           (into (mapcat val rules/rules)
                 (-> rules/query-dsl-rules
                     ;; TODO: Update linter to handle false positive on ?str-val
-                    (dissoc :property)
+                    (dissoc :property :property-db-version)
                     vals)))}}
 
  :tasks/config
