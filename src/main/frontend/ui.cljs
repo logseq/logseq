@@ -167,7 +167,7 @@
                    sequence)]
     [:span.keyboard-shortcut
      (map-indexed (fn [i key]
-                    (let [key' (shortcut-helper/decorate-binding (str key))]
+                    (let [key' (shortcut-utils/decorate-binding (str key))]
                       [:code {:key i}
                       ;; Display "cmd" rather than "meta" to the user to describe the Mac
                       ;; mod key, because that's what the Mac keyboards actually say.
