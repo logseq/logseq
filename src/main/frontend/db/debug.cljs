@@ -2,7 +2,8 @@
   (:require [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [datascript.core :as d]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.state :as state]))
 
 ;; shortcut for query a block with string ref
 (defn qb
@@ -45,3 +46,10 @@
             (vector? x)
             (= :block/uuid (first x))
             (nil? (second x)))))))
+
+(defn get-all-blocks
+  []
+  (when-let [db (db/get-db)]
+    (->> (d/datoms db :avet :block/uuid)
+         (map :e)
+         db/pull-many)))
