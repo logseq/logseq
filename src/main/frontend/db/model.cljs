@@ -1170,8 +1170,8 @@ independent of format as format specific heading characters are stripped"
          (apply concat)
          distinct
          (map (fn [k]
-                (if (and (string? k) (util/uuid-string? k))
-                  (keyword (:block/name (d/entity db [:block/uuid (uuid k)])))
+                (if (uuid? k)
+                  (keyword (:block/name (d/entity db [:block/uuid k])))
                   k)))
          sort)))
 

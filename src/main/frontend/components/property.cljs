@@ -82,12 +82,11 @@
      (when (seq properties)
        [:div
         (for [[prop-uuid-or-built-in-prop v] properties]
-          (if (and (string? prop-uuid-or-built-in-prop)
-                   (util/uuid-string? prop-uuid-or-built-in-prop))
-            (when-let [property-class (db/pull [:block/uuid (uuid prop-uuid-or-built-in-prop)])]
+          (if (uuid? prop-uuid-or-built-in-prop)
+            (when-let [property-class (db/pull [:block/uuid prop-uuid-or-built-in-prop])]
               [:div
                [:a.mr-2
-                {:on-click (fn [] (state/set-modal! #(property-class-config repo (uuid prop-uuid-or-built-in-prop))))}
+                {:on-click (fn [] (state/set-modal! #(property-class-config repo prop-uuid-or-built-in-prop)))}
                 (:block/name property-class)]
                [:span (or (get properties-text-values prop-uuid-or-built-in-prop) (str v))]
                [:a.ml-8 {:on-click

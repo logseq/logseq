@@ -90,14 +90,14 @@
                                    :block/uuid property-class-uuid
                                    :block/type "property"}]))
             (let [block-properties (assoc (:block/properties block)
-                                          (str property-class-uuid)
+                                          property-class-uuid
                                           (if (= property-schema :string-contains-refs)
                                             (set (extract-page-refs-from-prop-str-value v*))
                                             v*))
                   block-properties-text-values
                   (if (= property-schema :string-contains-refs)
-                    (assoc (:block/properties-text-values block) (str property-class-uuid) v*)
-                    (dissoc (:block/properties-text-values block) (str property-class-uuid)))]
+                    (assoc (:block/properties-text-values block) property-class-uuid v*)
+                    (dissoc (:block/properties-text-values block) property-class-uuid))]
               (outliner-tx/transact!
                {:outliner-op :save-block}
                (outliner-core/save-block!
