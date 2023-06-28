@@ -941,6 +941,11 @@
                             {:set-dirty-hls! set-dirty-hls!
                              :set-hls-extra! set-hls-extra!}) "pdf-viewer")])))])))
 
+(rum/defc pdf-container-outer
+  < (shortcut/mixin :shortcut.handler/pdf false)
+  [child]
+  [:<> child])
+
 (rum/defc pdf-container
   [{:keys [identity] :as pdf-current}]
   (let [[prepared set-prepared!] (rum/use-state false)
@@ -982,7 +987,6 @@
 
 (rum/defcs default-embed-playground
   < rum/static rum/reactive
-    (shortcut/mixin :shortcut.handler/pdf false)
   [_state]
   (let [pdf-current (state/sub :pdf/current)
         system-win? (state/sub :pdf/system-win?)]
@@ -993,8 +997,9 @@
 
      (when (and (not system-win?) pdf-current)
        (js/ReactDOM.createPortal
-        (pdf-container pdf-current)
-        (js/document.querySelector "#app-single-container")))]))
+         (pdf-container-outer
+           (pdf-container pdf-current))
+         (js/document.querySelector "#app-single-container")))]))
 
 (rum/defcs system-embed-playground
   < rum/reactive
