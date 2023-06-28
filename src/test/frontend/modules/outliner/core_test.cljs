@@ -363,16 +363,16 @@
 
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
-    (let [tree [[1 [[2] [3]]]]]
+    (let [tree [[10 [[2] [3]]]]]
       (transact-tree! tree)
       (let [new-blocks (build-blocks [[4 [5]]])
             target-block (get-block 2)]
         (outliner-tx/transact!
-         {:graph test-db}
-         (outliner-core/insert-blocks!  new-blocks target-block {:sibling? false
+          {:graph test-db}
+          (outliner-core/insert-blocks! new-blocks target-block {:sibling? false
                                                                  :keep-uuid? true
                                                                  :replace-empty-target? false})
-         (outliner-core/delete-blocks! [(get-block 3)] {}))
+          (outliner-core/delete-blocks! [(get-block 3)] {}))
 
         (is (= [4] (get-children 2)))
 
