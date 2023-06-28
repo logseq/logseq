@@ -7,7 +7,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
-            [frontend.extensions.pdf.core :as pdf]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -47,12 +46,6 @@
 (rum/defc tweet
   [props]
   (ui/tweet-embed (gobj/get props "tweetId")))
-
-(rum/defc pdf
-  [props]
-  (let [pdf-current (state/sub :pdf/current)
-        pdf (pdf-assets/inflate-asset (gobj/get props "src"))]
-    (pdf/pdf-container (or pdf-current pdf))))
 
 (rum/defc block-reference
   [props]
@@ -94,7 +87,6 @@
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :Tweet tweet
-                       :Pdf pdf
                        :PageName page-name-link
                        :BacklinksCount references-count
                        :BlockReference block-reference

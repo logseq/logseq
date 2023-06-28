@@ -22,9 +22,6 @@ export interface LogseqContextValue {
     Tweet: React.FC<{
       tweetId: string
     }>
-    Pdf: React.FC<{
-      src: string
-    }>
     PageName: React.FC<{
       pageName: string
     }>
