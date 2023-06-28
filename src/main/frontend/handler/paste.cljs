@@ -126,7 +126,7 @@
                                    (get-whiteboard-tldr-from-text html))
                           ;; text should always be prepared block-ref generated in tldr
                           text)
-        {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+        {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
         text-url? (gp-util/url? text)
         selection-url? (gp-util/url? selection)]
     (cond
@@ -139,9 +139,8 @@
           (and text-url? selection-url?))
       (replace-text-f text)
 
-      ;; Pastes a formatted link over selected text
-      (and (or text-url?
-               (and value (gp-util/url? (string/trim value))))
+      ;; Paste a formatted link over selected text or paste text over a selected formatted link
+      (and (or text-url? selection-url?)
            (not (string/blank? (util/get-selected-text))))
       (editor-handler/html-link-format! text)
 

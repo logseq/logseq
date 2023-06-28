@@ -59,7 +59,7 @@ export async function searchPage(page: Page, query: string): Promise<ElementHand
     await closeSearchBox(page)
     await page.click('#search-button')
     await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.type('[placeholder="Search or create page"]', query, { delay: 10 })
+    await page.fill('[placeholder="Search or create page"]', query)
     await page.waitForTimeout(2000) // wait longer for search contents to render
 
     return page.$$('#ui__ac-inner>div');
