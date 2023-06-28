@@ -200,7 +200,6 @@
  :settings-page/edit-custom-css "Bewerk custom.css"
  :settings-page/edit-export-css "Bewerk export.css"
  :settings-page/enable-all-pages-public "Alle pagina's openbaar bij publiceren"
- :settings-page/enable-block-time "Tijdstempel voor blokken inschakelen"
 
  :settings-page/enable-journals "Journaals"
  :settings-page/enable-shortcut-tooltip "Snelkoppeling tooltip inschakelen"

@@ -155,18 +155,6 @@
             [:block/uuid (uuid %)]
             (block/page-name->map % true)) refs')))
 
-(defn delete-property!
-  [entity property-id]
-  (when (and entity (uuid? property-id))
-    (let [properties' (dissoc (:block/properties entity) property-id)
-          refs (extract-refs entity properties')]
-      (outliner-tx/transact!
-        {:outliner-op :save-block}
-        (outliner-core/save-block!
-         {:block/uuid (:block/uuid entity)
-          :block/properties properties'
-          :block/refs refs})))))
-
 (defn validate
   "Check whether the `value` validate against the `schema`."
   [schema value]
@@ -205,6 +193,18 @@
                                   (catch :default _))
                                 value)]
                  [true page-name]))))
+
+(defn delete-property!
+  [entity property-id]
+  (when (and entity (uuid? property-id))
+    (let [properties' (dissoc (:block/properties entity) property-id)
+          refs (extract-refs entity properties')]
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
+        (outliner-core/save-block!
+         {:block/uuid (:block/uuid entity)
+          :block/properties properties'
+          :block/refs refs})))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"

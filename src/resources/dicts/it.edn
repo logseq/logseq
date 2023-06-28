@@ -105,7 +105,6 @@
  :settings-page/customize-shortcuts "Scorciatoie da tastiera"
  :settings-page/shortcut-settings "Personalizza scorciatoie"
  :settings-page/home-default-page "Imposta la home page predefinita"
- :settings-page/enable-block-time "Indicatori temporali sui blocchi"
  :settings-page/clear-cache "Pulisci cache"
  :settings-page/clear "Pulisci"
  :settings-page/developer-mode "Modalità sviluppatore"

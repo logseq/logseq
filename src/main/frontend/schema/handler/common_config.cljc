@@ -15,7 +15,6 @@
     [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
-    [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]

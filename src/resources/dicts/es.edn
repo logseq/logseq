@@ -134,7 +134,6 @@
  :settings-page/customize-shortcuts "Atajos de teclado"
  :settings-page/shortcut-settings "Personalizar atajos"
  :settings-page/home-default-page "Establecer página de inicio"
- :settings-page/enable-block-time "Habilitar marcas temporales de bloque"
  :settings-page/clear-cache "Limpiar caché"
  :settings-page/clear "Limpiar"
  :settings-page/developer-mode "Modo desarrollador"

@@ -218,7 +218,6 @@
  :settings-page/customize-shortcuts                    "Сочетания клавиш"
  :settings-page/shortcut-settings                      "Настроить горячие клавиши"
  :settings-page/home-default-page                      "Установить домашнюю страницу по умолчанию"
- :settings-page/enable-block-time                      "Временные метки блока"
  :settings-page/clear-cache                            "Очистить кэш"
  :settings-page/clear                                  "Очистить"
  :settings-page/clear-cache-warning                    "Очистка кэша приведет к удалению открытых графов. Вы потеряете несохраненные изменения."

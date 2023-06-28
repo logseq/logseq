@@ -5,7 +5,6 @@
    [clojure.walk :as walk]
    [frontend.db :as db]
    [frontend.db.model :as db-model]
-   [frontend.db.react :as react]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
@@ -15,10 +14,6 @@
    [logseq.graph-parser.block :as gp-block]))
 
 ;;  Fns
-
-(defn long-page?
-  [repo page-id]
-  (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
 
 ;; TODO: reduced version
 (defn- walk-block

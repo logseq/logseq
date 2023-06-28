@@ -31,8 +31,6 @@
   [repo]
   (get @databases (sanitize-db-name repo)))
 
-(declare delete-db!)
-
 (defn prepare
   [^object db sql db-name]
   (when db

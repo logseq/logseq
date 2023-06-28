@@ -22,14 +22,8 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
+            ;; add map ops to datascript Entity
             [frontend.db.datascript.entity-plus :as entity-plus]))
-
-;; lazy loading
-
-(def initial-blocks-length 100)
-
-(def step-loading-blocks 50)
-
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -563,15 +557,6 @@ independent of format as format specific heading characters are stripped"
              all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
              all-ids (set (map :db/id children))]
          (first (set/difference all-ids all-left)))))))
-
-(defn get-block-last-child
-  [db db-id]
-  (let [last-child (get-block-last-direct-child db db-id)]
-    (loop [prev last-child
-           last-child last-child]
-      (if last-child
-        (recur last-child (get-block-last-direct-child db last-child))
-        prev))))
 
 (defn get-prev-sibling
   [db id]

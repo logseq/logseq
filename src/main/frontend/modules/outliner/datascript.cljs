@@ -2,7 +2,6 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.db :as db]
-            [frontend.db.react :as react]
             [frontend.modules.outliner.pipeline :as pipelines]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.state :as state]

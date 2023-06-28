@@ -387,8 +387,7 @@
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
   (let [data (reader/read-string data-str)
-        {:keys [blocks deleted-block-uuids tx-data]} data]
-    ;; TODO: store files
+        {:keys [blocks deleted-block-uuids]} data]
     (when (seq deleted-block-uuids)
       (db/delete-blocks! repo deleted-block-uuids))
     (when (seq blocks)
@@ -407,11 +406,11 @@
 
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
-(defmethod handle :get-initial-data [window [_ repo _opts]]
+(defmethod handle :get-initial-data [_window [_ repo _opts]]
   (db/open-db! repo)
   (db/get-initial-data repo))
 
-(defmethod handle :get-other-data [window [_ repo journal-block-uuids _opts]]
+(defmethod handle :get-other-data [_window [_ repo journal-block-uuids _opts]]
   (db/get-other-data repo journal-block-uuids))
 
 ;; DB related IPCs End

@@ -56,27 +56,10 @@
 ;; component -> query-key
 (defonce query-components (atom {}))
 
-(defn- get-blocks-range
-  [result-atom new-result]
-  (let [block? (and (coll? new-result)
-                    (map? (first new-result))
-                    (:block/uuid (first new-result)))]
-    (when block?
-      {:old [(:db/id (first @result-atom))
-             (:db/id (last @result-atom))]
-       :new [(:db/id (first new-result))
-             (:db/id (last new-result))]})))
-
 (defn set-new-result!
-  [k new-result tx-report]
+  [k new-result]
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
-
-(defn swap-new-result!
-  [k f]
-  (when-let [result-atom (get-in @query-state [k :result])]
-    (let [new-result' (f @result-atom)]
-      (reset! result-atom new-result'))))
 
 (defn kv
   [key value]
@@ -87,7 +70,7 @@
 (defn remove-key!
   [repo-url key]
   (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil nil))
+  (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
   []
@@ -287,8 +270,9 @@
      set)))
 
 (defn- execute-query!
-  [graph db k tx {:keys [query query-time inputs transform-fn query-fn inputs-fn result]}
-   {:keys [skip-query-time-check?]}]
+  [graph db k tx {:keys [query _query-time inputs transform-fn query-fn inputs-fn result]}
+   {:keys [_skip-query-time-check?]}]
+  ;; FIXME:
   (when true
       ;; (or skip-query-time-check?
       ;;       (<= (or query-time 0) 80))
@@ -314,7 +298,7 @@
                        (d/q query db))
                      transform-fn)]
      (when-not (= new-result result)
-       (set-new-result! k new-result tx)))))
+       (set-new-result! k new-result)))))
 
 (defn path-refs-need-recalculated?
   [tx-meta]
@@ -387,7 +371,8 @@
       (recur))
     chan))
 
-(defn db-graph?
-  "Whether the current graph is db-only"
-  [graph]
-  (= "db" (sub-key-value :db/type)))
+(comment
+  (defn db-graph?
+   "Whether the current graph is db-only"
+   []
+   (= "db" (sub-key-value :db/type))))

@@ -7,7 +7,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.block :as block-handler]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.db.model :as model]
@@ -174,14 +173,13 @@
     (let [block-uuid (uuid (:block/uuid data))
           collapsed? (db/parents-collapsed? repo block-uuid)
           page (:block/page (db/entity [:block/uuid block-uuid]))
-          page-name (:block/name page)
-          long-page? (block-handler/long-page? repo (:db/id page))]
+          page-name (:block/name page)]
       (if page
         (cond
           (model/whiteboard-page? page-name)
           (route-handler/redirect-to-whiteboard! page-name {:block-id block-uuid})
 
-          (or collapsed? long-page?)
+          collapsed?
           (route-handler/redirect-to-page! block-uuid)
 
           :else

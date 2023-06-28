@@ -2,8 +2,7 @@
   (:require [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [datascript.core :as d]
-            [frontend.util :as util]
-            [frontend.state :as state]))
+            [frontend.util :as util]))
 
 ;; shortcut for query a block with string ref
 (defn qb

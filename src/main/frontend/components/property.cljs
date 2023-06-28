@@ -2,18 +2,11 @@
   "Block properties management."
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
-            [clojure.string :as string]
             [frontend.handler.property :as property-handler]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.state :as state]
-            [goog.dom :as gdom]
-            [frontend.search :as search]
             [frontend.mixins :as mixins]
-            ;; [frontend.components.search.highlight :as highlight]
-            [frontend.components.svg :as svg]
-            [frontend.modules.shortcut.core :as shortcut]
-            [medley.core :as medley]
             [clojure.edn :as edn]))
 
 (rum/defcs property-class-config <

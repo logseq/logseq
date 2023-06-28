@@ -870,7 +870,7 @@
        {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
-(defmethod handle :graph/new-db-graph [[_ opts]]
+(defmethod handle :graph/new-db-graph [[_ _opts]]
   (state/set-modal!
    repo/new-db-graph
    {:id :new-db-graph

@@ -177,7 +177,6 @@
  :settings-page/customize-shortcuts "Atalhos de teclado"
  :settings-page/shortcut-settings "Personalizar atalhos"
  :settings-page/home-default-page "Definir a página inicial predefinida"
- :settings-page/enable-block-time "Marcas de tempo em blocos"
  :settings-page/clear-cache "Limpar cache"
  :settings-page/clear "Limpar"
  :settings-page/clear-cache-warning "Limpar a cache irá descartar todos os grafos abertos. Perderá as alterações não guardadas."

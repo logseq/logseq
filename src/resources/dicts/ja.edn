@@ -110,7 +110,6 @@
  :settings-page/customize-shortcuts "キーボードショートカット"
  :settings-page/shortcut-settings "ショートカットをカスタマイズ"
  :settings-page/home-default-page "デフォルトのホームページを設定"
- :settings-page/enable-block-time "ブロックタイムスタンプ"
  :settings-page/clear-cache "キャッシュをクリア"
  :settings-page/clear "クリア"
  :settings-page/developer-mode "開発者モード"

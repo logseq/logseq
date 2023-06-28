@@ -7,9 +7,8 @@
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.core :as d]
-            [datascript.impl.entity :as de]
+            [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
@@ -80,7 +79,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [datascript.impl.entity :as e]
             [logseq.common.path :as path]))
 
 
@@ -2731,7 +2729,7 @@
     (:ref? config)
     (block-handler/attach-order-list-state block)))
 
-(defn- build-block [repo config block* {:keys [navigating-block navigated?]}]
+(defn- build-block [config block* {:keys [navigating-block navigated?]}]
   (let [block (if (or (and (:custom-query? config)
                            (empty? (:block/_parent block*))
                            (not (and (:dsl-query? config)
@@ -2750,7 +2748,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
-        block (build-block repo config* block* {:navigating-block navigating-block :navigated? navigated?})
+        block (build-block config* block* {:navigating-block navigating-block :navigated? navigated?})
         {:block/keys [uuid pre-block? refs level content properties]} block
         {:block.temp/keys [top?]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
@@ -3353,8 +3351,7 @@
                     ::initial-block    first-block
                     ::navigating-block (atom (:block/uuid first-block)))))}
   [state blocks config]
-  (let [repo (state/get-current-repo)
-        *navigating-block (::navigating-block state)
+  (let [*navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
         navigated? (and

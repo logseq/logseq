@@ -175,7 +175,6 @@
  :settings-page/customize-shortcuts "個人化快捷鍵"
  :settings-page/shortcut-settings "設定快捷鍵"
  :settings-page/home-default-page "設定預設首頁"
- :settings-page/enable-block-time "啟用區塊時間截記"
  :settings-page/clear-cache "清除快取資料"
  :settings-page/clear "清除"
  :settings-page/clear-cache-warning "清除快取將捨棄目前的圖表。未儲存的資料將無法復原。"

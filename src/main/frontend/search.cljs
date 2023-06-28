@@ -16,7 +16,6 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.set :as set]
-            [frontend.modules.datascript-report.core :as db-report]
             [datascript.core :as d]))
 
 (defn get-engine

@@ -44,7 +44,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
-            [frontend.db.react :as db-react]
             [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]))
 
@@ -68,7 +67,7 @@
             #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
               (when (or
-                     (db-react/db-graph? repo)
+                     (config/db-based-graph? repo)
                      (and (not (state/nfs-refreshing?))
                           (not (contains? (:file/unlinked-dirs @state/state)
                                           (config/get-repo-dir repo)))))

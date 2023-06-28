@@ -293,7 +293,6 @@
  :settings-page/customize-shortcuts "Keyboard shortcuts"
  :settings-page/shortcut-settings "Customize shortcuts"
  :settings-page/home-default-page "Set the default home page"
- :settings-page/enable-block-time "Block timestamps"
  :settings-page/clear-cache "Clear cache"
  :settings-page/clear "Clear"
  :settings-page/clear-cache-warning "Clearing the cache will discard open graphs. You will lose unsaved changes."

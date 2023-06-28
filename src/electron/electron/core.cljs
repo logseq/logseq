@@ -219,9 +219,78 @@
              (when-let [win @*win]
                (open-url-handler win url))))))
 
+(defn- on-app-ready!
+  [^js app]
+  (.on app "ready"
+       (fn []
+         (let [t0 (setup-interceptor! app)
+               ^js win (win/create-main-window!)
+               _ (reset! *win win)]
+           (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
+
+           (utils/<restore-proxy-settings)
+
+           (js-utils/disableXFrameOptions win)
+
+           (search/ensure-search-dir!)
+           (db/ensure-graphs-dir!)
+
+           (search/open-dbs!)
+
+           (git/auto-commit-current-graph!)
+
+           (vreset! *setup-fn
+                    (fn []
+                      (let [t1 (setup-updater! win)
+                            t2 (setup-app-manager! win)
+                            t3 (handler/set-ipc-handler! win)
+                            t4 (server/setup! win)
+                            tt (exceptions/setup-exception-listeners!)]
+
+                        (vreset! *teardown-fn
+                                 #(doseq [f [t0 t1 t2 t3 t4 tt]]
+                                    (and f (f)))))))
+
+           ;; setup effects
+           (@*setup-fn)
+
+           ;; main window events
+           ;; TODO merge with window/on-close-actions!
+           ;; TODO elimilate the difference between main and non-main windows
+           (.on win "close" (fn [e]
+                              (when @*quit-dirty? ;; when not updating
+                                (.preventDefault e)
+                                (let [web-contents (. win -webContents)]
+                                  (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
+                                  (.send web-contents "persistent-dbs"))
+                                (async/go
+                                  (let [_ (async/<! state/persistent-dbs-chan)]
+                                    (if (or @win/*quitting? (not mac?))
+                                      ;; MacOS: only cmd+q quitting will trigger actual closing
+                                      ;; otherwise, it's just hiding - don't do any actual closing in that case
+                                      ;; except saving transit
+                                      (when-let [win @*win]
+                                        (when-let [dir (state/get-window-graph-path win)]
+                                          (handler/close-watcher-when-orphaned! win dir))
+                                        (state/close-window! win)
+                                        (win/destroy-window! win)
+                                        ;; FIXME: what happens when closing main window on Windows?
+                                        (reset! *win nil))
+                                      ;; Just hiding - don't do any actual closing operation
+                                      (do (.preventDefault ^js/Event e)
+                                          (if (and mac? (.isFullScreen win))
+                                            (do (.once win "leave-full-screen" #(.hide win))
+                                                (.setFullScreen win false))
+                                            (.hide win)))))))))
+           (.on app "before-quit" (fn [_e]
+                                    (reset! win/*quitting? true)))
+
+           (.on app "activate" #(when @*win (.show win)))))))
+
 (defn main []
   (if-not (.requestSingleInstanceLock app)
     (do
+      (db/close!)
       (search/close!)
       (.quit app))
     (let [privileges {:standard        true
@@ -251,75 +320,12 @@
                                      (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
+                                       (db/close!)
                                        (search/close!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))
-      (.on app "ready"
-           (fn []
-             (let [t0 (setup-interceptor! app)
-                   ^js win (win/create-main-window!)
-                   _ (reset! *win win)]
-               (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
-
-               (utils/<restore-proxy-settings)
-
-               (js-utils/disableXFrameOptions win)
-
-               (search/ensure-search-dir!)
-               (db/ensure-graphs-dir!)
-
-               (search/open-dbs!)
-
-               (git/auto-commit-current-graph!)
-
-               (vreset! *setup-fn
-                        (fn []
-                          (let [t1 (setup-updater! win)
-                                t2 (setup-app-manager! win)
-                                t3 (handler/set-ipc-handler! win)
-                                t4 (server/setup! win)
-                                tt (exceptions/setup-exception-listeners!)]
-
-                            (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
-                                        (and f (f)))))))
-
-               ;; setup effects
-               (@*setup-fn)
-
-               ;; main window events
-               ;; TODO merge with window/on-close-actions!
-               ;; TODO elimilate the difference between main and non-main windows
-               (.on win "close" (fn [e]
-                                  (when @*quit-dirty? ;; when not updating
-                                    (.preventDefault e)
-                                    (let [web-contents (. win -webContents)]
-                                      (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
-                                      (.send web-contents "persistent-dbs"))
-                                    (async/go
-                                      (let [_ (async/<! state/persistent-dbs-chan)]
-                                        (if (or @win/*quitting? (not mac?))
-                                          ;; MacOS: only cmd+q quitting will trigger actual closing
-                                          ;; otherwise, it's just hiding - don't do any actual closing in that case
-                                          ;; except saving transit
-                                          (when-let [win @*win]
-                                            (when-let [dir (state/get-window-graph-path win)]
-                                              (handler/close-watcher-when-orphaned! win dir))
-                                            (state/close-window! win)
-                                            (win/destroy-window! win)
-                                            ;; FIXME: what happens when closing main window on Windows?
-                                            (reset! *win nil))
-                                          ;; Just hiding - don't do any actual closing operation
-                                          (do (.preventDefault ^js/Event e)
-                                              (if (and mac? (.isFullScreen win))
-                                                (do (.once win "leave-full-screen" #(.hide win))
-                                                    (.setFullScreen win false))
-                                                (.hide win)))))))))
-               (.on app "before-quit" (fn [_e]
-                                        (reset! win/*quitting? true)))
-
-               (.on app "activate" #(when @*win (.show win)))))))))
+      (on-app-ready! app))))
 
 (defn start []
   (logger/debug "Main - start")

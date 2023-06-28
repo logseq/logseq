@@ -294,7 +294,6 @@
  :settings-page/edit-global-config-edn "Globale config.edn bearbeiten"
  :settings-page/edit-setting "Bearbeiten"
  :settings-page/enable-all-pages-public "Alle Seiten bei Veröffentlichung öffentlich"
- :settings-page/enable-block-time "Zeitstempel für Blöcke aktivieren"
  :settings-page/enable-flashcards "Karteikarten"
  :settings-page/enable-journals "Journale einschalten"
  :settings-page/enable-shortcut-tooltip "Tooltips für Verknüpfungen aktivieren"

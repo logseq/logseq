@@ -52,10 +52,6 @@
  ;; Default value: true
  :ui/auto-expand-block-refs? true
 
- ;; Enable Block timestamps.
- ;; Default value: false
- :feature/enable-block-timestamps? false
-
  ;; Disable accent marks when searching.
  ;; After changing this setting, rebuild the search index by pressing (^C ^S).
  ;; Default value: true

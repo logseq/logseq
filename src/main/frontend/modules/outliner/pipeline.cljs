@@ -17,7 +17,7 @@
 (defn updated-page-hook
   [tx-report page]
   (when (and
-         (not (react/db-graph? (state/get-current-repo)))
+         (not (config/db-based-graph? (state/get-current-repo)))
          (not (get-in tx-report [:tx-meta :created-from-journal-template?])))
     (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
@@ -157,10 +157,10 @@
                                    (map (fn [b]
                                           (let [uuid (or (:block/uuid b) (random-uuid))]
                                             (assoc b :block/uuid uuid)))))]
-            (p/let [ipc-result (ipc/ipc :db-transact-data repo
-                                        (pr-str
-                                         {:blocks upsert-blocks
-                                          :deleted-block-uuids deleted-block-uuids}))]
+            (p/let [_ipc-result (ipc/ipc :db-transact-data repo
+                                         (pr-str
+                                          {:blocks upsert-blocks
+                                           :deleted-block-uuids deleted-block-uuids}))]
               ;; TODO: disable edit when transact failed to avoid future data-loss
               ;; (prn "DB transact result: " ipc-result)
               )))

@@ -110,7 +110,6 @@
  :settings-page/customize-shortcuts "Skróty klawiszowe"
  :settings-page/shortcut-settings "Zmień skróty"
  :settings-page/home-default-page "Ustaw domyślną stronę startową"
- :settings-page/enable-block-time "Włącz czas dla bloków"
  :settings-page/clear-cache "Wyczyść cache"
  :settings-page/clear "Wyczyść"
  :settings-page/developer-mode "Tryb programisty"

@@ -618,10 +618,6 @@ Similar to re-frame subscriptions"
   [repo]
   (not (false? (:git-auto-push (sub-config repo)))))
 
-(defn enable-block-timestamps?
-  []
-  (true? (:feature/enable-block-timestamps? (sub-config))))
-
 (defn graph-settings
   []
   (:graph/settings (sub-config)))

@@ -105,7 +105,6 @@
  :settings-page/customize-shortcuts "Tastatursnarveier"
  :settings-page/shortcut-settings "Tilpass snarveier"
  :settings-page/home-default-page "Angi standard hjemmeside"
- :settings-page/enable-block-time "Aktiver tidsstempel for blokker"
  :settings-page/clear-cache "Slett hurtigbuffer"
  :settings-page/clear "Slett"
  :settings-page/developer-mode "Utviklermodus"
