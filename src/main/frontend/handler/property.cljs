@@ -13,7 +13,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [malli.core :as m]))
 
 (def builtin-schema-types
   {:string-contains-refs :string        ;default
@@ -30,20 +31,61 @@
                    distinct)]
     refs'))
 
+(defn- is-type-x?
+  [schema-ast x]
+  (or (= x (:type schema-ast))
+      (and (= :and (:type schema-ast))
+           (some #(= x (:type %)) (:children schema-ast)))))
+
+(defn- schema-base-type
+  [schema]
+  (when-let [ast (try (m/ast schema) (catch :default _))]
+    (cond
+      (is-type-x? ast :int)
+      :int
+
+      (is-type-x? ast :float)
+      :float
+
+      (is-type-x? ast :string)
+      :string
+
+      :else
+      nil)))
+
+(defn- infer-schema-from-input-string
+  [v-str]
+  (cond
+    (parse-long v-str) :int
+    (parse-double v-str) :float
+    :else nil))
+
+(defn convert-property-input-string
+  [schema v-str]
+  (case (schema-base-type schema)
+    :string
+    v-str
+
+    (:int :float nil)
+    (edn/read-string v-str)))
+
 (defn add-property!
   [repo block k-name v]
-  (when-let [v* (try (edn/read-string v)
-                     (catch :default e
-                       (notification/show! (str e) :error false)
-                       nil))]
-    (let [property-class      (db/pull repo '[*] [:block/name k-name])
-          property-class-uuid (or (:block/uuid property-class) (random-uuid))
-          property-schema (:block/schema property-class)
-          schema* (get builtin-schema-types property-schema property-schema)]
-      (if-let [msg (some-> schema* (malli.util/explain-data v*))]
+  (let [property-class      (db/pull repo '[*] [:block/name k-name])
+        property-class-uuid (or (:block/uuid property-class) (random-uuid))
+        property-schema (:block/schema property-class)
+        infer-schema (infer-schema-from-input-string v)
+        property-schema (or property-schema infer-schema :string-contains-refs)
+        schema (get builtin-schema-types property-schema property-schema)]
+    (when-let [v* (try
+                    (convert-property-input-string schema v)
+                    (catch :default e
+                      (notification/show! (str e) :error false)
+                      nil))]
+      (if-let [msg (malli.util/explain-data schema v*)]
         (notification/show! (str msg) :error false)
         (do (when (nil? property-class) ;if property-class not exists yet
-              (db/transact! repo [{:block/schema :string-contains-refs
+              (db/transact! repo [{:block/schema property-schema
                                    :block/name k-name
                                    :block/uuid property-class-uuid
                                    :block/type "property"}]))
@@ -52,9 +94,10 @@
                                           (if (= property-schema :string-contains-refs)
                                             (set (extract-page-refs-from-prop-str-value v*))
                                             v*))
-                  block-properties-text-values (cond-> (:block/properties-text-values block)
-                                                 (= property-schema :string-contains-refs)
-                                                 (assoc (str property-class-uuid) v*))]
+                  block-properties-text-values
+                  (if (= property-schema :string-contains-refs)
+                    (assoc (:block/properties-text-values block) (str property-class-uuid) v*)
+                    (dissoc (:block/properties-text-values block) (str property-class-uuid)))]
               (outliner-tx/transact!
                {:outliner-op :save-block}
                (outliner-core/save-block!
