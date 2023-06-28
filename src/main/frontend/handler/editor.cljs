@@ -2066,7 +2066,7 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks
-       :additional-tx revert-cut-tx}
+       :additional-tx revert-cut-txs}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
