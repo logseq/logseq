@@ -51,7 +51,7 @@ test('switch to auto heading', async ({ page }) => {
 
   await page.keyboard.press('Escape', { delay: 50 })
 
-  expect(await page.locator('.ls-block .block-content >> nth=0').innerHTML()).toContain('<h2>foo</h2>')
+  expect(await page.locator('.ls-block .block-content >> nth=0').innerHTML()).toContain('<h1>foo</h1>')
 })
 
 test('set heading of nested block to auto', async ({ page }) => {
