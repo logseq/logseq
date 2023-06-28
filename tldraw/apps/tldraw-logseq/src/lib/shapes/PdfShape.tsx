@@ -30,9 +30,7 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
 
   ReactComponent = observer(({ events, asset, isErasing, isEditing }: TLComponentProps) => {
     const ref = React.useRef<HTMLElement>(null)
-    const {
-      handlers,
-    } = React.useContext(LogseqContext)
+    const { handlers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
 
     const isMoving = useCameraMovingRef()

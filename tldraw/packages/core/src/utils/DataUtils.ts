@@ -101,7 +101,7 @@ export function getSizeFromSrc(dataURL: string, type: string): Promise<number[]>
       img.onload = () => resolve([img.width, img.height])
       img.src = dataURL
       img.onerror = err => reject(err)
-    } else if(type === 'pdf'){
+    } else if (type === 'pdf') {
       resolve([595, 842]) // A4 portrait dimensions at 72 ppi
     }
   })

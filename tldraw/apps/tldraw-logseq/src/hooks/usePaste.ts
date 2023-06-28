@@ -42,9 +42,9 @@ interface Asset extends TLAsset {
 }
 
 const assetExtensions = {
-  'image': ['.png', '.svg', '.jpg', '.jpeg', '.gif'],
-  'video': ['.mp4', '.webm', '.ogg'],
-  'pdf': ['.pdf']
+  image: ['.png', '.svg', '.jpg', '.jpeg', '.gif'],
+  video: ['.mp4', '.webm', '.ogg'],
+  pdf: ['.pdf'],
 }
 
 function getFileType(filename: string) {
@@ -53,7 +53,9 @@ function getFileType(filename: string) {
   if (!extensionMatch) return 'unknown'
   const extension = extensionMatch[0].toLowerCase()
 
-  const [type, _extensions] = Object.entries(assetExtensions).find(([_type, extensions]) => extensions.includes(extension)) ?? ['unknown', null]
+  const [type, _extensions] = Object.entries(assetExtensions).find(([_type, extensions]) =>
+    extensions.includes(extension)
+  ) ?? ['unknown', null]
 
   return type
 }
