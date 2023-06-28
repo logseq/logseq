@@ -31,7 +31,6 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
   ReactComponent = observer(({ events, asset, isErasing, isEditing }: TLComponentProps) => {
     const ref = React.useRef<HTMLElement>(null)
     const {
-      renderers: { Pdf },
       handlers,
     } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -49,7 +48,7 @@ export class PdfShape extends TLBoxShape<PdfShapeProps> {
       >
         {asset ? (
           <embed
-            src={handlers ? handlers.inflateAsset(asset.src).url : asset.src + '#toolbar=0&navpanes=0&scrollbar=0'}
+            src={handlers ? handlers.inflateAsset(asset.src).url : asset.src}
             className="relative tl-pdf-container hide-scrollbar"
             onWheelCapture={stop}
             onPointerDown={stop}
