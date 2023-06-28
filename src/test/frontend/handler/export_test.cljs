@@ -6,6 +6,7 @@
             [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [logseq.db.default :as default-db]
             [promesa.core :as p]))
 
 (def test-files
@@ -147,5 +148,7 @@
                      (@#'export/export-repo-as-edn-str (state/get-current-repo)))]
      (is (= #{:version :blocks} (set (keys edn-output)))
          "Correct top-level keys")
-     (is (= ["page1" "page2"] (map :block/page-name (:blocks edn-output)))
+     (is (= (sort (concat (map :block/original-name default-db/built-in-pages)
+                          ["page1" "page2"]))
+            (sort (map :block/page-name (:blocks edn-output))))
          "Correct pages"))))
