@@ -74,7 +74,6 @@
  :page/logseq-is-having-a-problem "Logseq 出了些問題。請按照以下安全步驟將其恢復到正常狀態："
  :page/step "步驟 {1}"
  :page/try "嘗試"
- :page/presentation-mode "簡報模式"
  :page/delete-confirmation "你確定想刪除此頁面檔案嗎？"
  :page/open-in-finder "開啟資料夾"
  :page/open-with-default-app "使用預設應用程式開啟"

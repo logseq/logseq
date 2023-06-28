@@ -27,17 +27,19 @@
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
 
-    #{}
+    #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
     #{(sync/->FileMetadata 1 22 "3" 4 6 nil nil nil)}
 
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
-    #{(sync/->FileMetadata 1 22 "3" 4 4 nil nil nil) (sync/->FileMetadata 1 22 "3" 44 5 nil nil nil)}
+    #{(sync/->FileMetadata 1 22 "3" 4 4 nil nil nil) 
+      (sync/->FileMetadata 1 22 "3" 44 5 nil nil nil)}
 
     #{}
     #{(sync/->FileMetadata 1 2 "3" 4 5 nil nil nil)}
-    #{(sync/->FileMetadata 1 2 "3" 4 4 nil nil nil) (sync/->FileMetadata 1 2 "3" 4 6 nil nil nil)}
+    #{(sync/->FileMetadata 1 2 "3" 4 4 nil nil nil) 
+      (sync/->FileMetadata 1 2 "3" 4 6 nil nil nil)}
 
     )
   )

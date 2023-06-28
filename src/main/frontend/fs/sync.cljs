@@ -1,41 +1,45 @@
 (ns frontend.fs.sync
   "Main ns for providing file sync functionality"
-  (:require [cljs-http.client :as http]
+  (:require ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
+            ["path" :as node-path]
+            [cljs-http.client :as http]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [cljs-time.coerce :as tc]
-            [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
+                                               poll! timeout]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
+            [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.pprint :as pp]
             [electron.ipc :as ipc]
-            [goog.string :as gstring]
             [frontend.config :as config]
-            [frontend.debug :as debug]
-            [frontend.handler.user :as user]
-            [frontend.state :as state]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.util.fs :as fs-util]
-            [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
-            [frontend.diff :as diff]
             [frontend.db :as db]
-            [frontend.fs :as fs]
+            [frontend.debug :as debug]
+            [frontend.diff :as diff]
             [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs.diff-merge :as diff-merge]
+            [frontend.handler.file :as file-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user]
+            [frontend.mobile.util :as mobile-util]
             [frontend.pubsub :as pubsub]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.fs :as fs-util]
+            [frontend.util.persist-var :as persist-var]
+            [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
             [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as node-path]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -606,7 +610,7 @@
 (defn diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
-  if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
+  if s1.path = s2.path & s1.checksum <> s2.checksum
   (except some default created files),
   keep this `FileMetadata` in result"
   [s1 s2]
@@ -632,7 +636,11 @@
                (and (contains? ignore-default-value-files path)
                     (#{config/config-default-content-md5 empty-custom-css-md5} (:etag %)))
                false
-               (< last-modified (:last-modified %))
+               ;; special handling for css & edn files
+               (and
+                (or (string/ends-with? lower-case-path ".css")
+                    (string/ends-with? lower-case-path ".edn"))
+                (< last-modified (:last-modified %)))
                true)
             s2)
          result
@@ -719,6 +727,7 @@
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
   (<update-local-files [this graph-uuid base-path filepaths] "remote -> local")
+  (<fetch-remote-files [this graph-uuid base-path filepaths] "remote -> local version-db")
   (<download-version-files [this graph-uuid base-path filepaths])
   (<delete-local-files [this graph-uuid base-path filepaths])
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
@@ -850,6 +859,12 @@
       (<! (<rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
+  (<fetch-remote-files [this graph-uuid base-path filepaths]
+    (go
+      (<! (<rsapi-cancel-all-requests))
+      (let [token (<! (<get-token this))]
+        (<! (p->c (ipc/ipc "fetch-remote-files" graph-uuid base-path filepaths token))))))
+
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -944,7 +959,16 @@
                                                                      :basePath base-path
                                                                      :filePaths filepaths'
                                                                      :token token})))))))
-
+  (<fetch-remote-files [this graph-uuid base-path filepaths]
+    (go
+      (let [token (<! (<get-token this))
+            r (<! (<retry-rsapi
+                   #(p->c (.fetchRemoteFiles mobile-util/file-sync
+                                             (clj->js {:graphUUID graph-uuid
+                                                       :basePath base-path
+                                                       :filePaths filepaths
+                                                       :token token})))))]
+        (js->clj (.-value r)))))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -980,12 +1004,13 @@
             r
             (get (js->clj r) "txid"))))))
 
-  (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
+  (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
                                               (clj->js {:graphUUID graph-uuid
+                                                        :basePath base-path
                                                         :filePaths normalized-filepaths
                                                         :txid local-txid
                                                         :token token}))))]
@@ -1461,7 +1486,10 @@
       (let [rpath (relative-path filetxn)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
-            content (<! (p->c (fs/read-file repo-dir rpath)))]
+            content (<! (p->c (-> (fs/file-exists? repo-dir rpath)
+                                  (p/then (fn [exists?]
+                                            (when exists?
+                                              (fs/read-file repo-dir rpath)))))))]
         (and (seq origin-db-content)
              (or (nil? content)
                  (some :removed (diff/diff origin-db-content content))))))))
@@ -1539,6 +1567,117 @@
                            delete-filetxns)]
     (set (concat update-file-items rename-file-items delete-file-items))))
 
+(defn- <apply-remote-deletion
+  "Apply remote deletion, if the file is not deleted locally, delete it locally.
+   if the file is changed locally, leave the changed part.
+
+   To replace <delete-local-files"
+  [graph-uuid base-path relative-paths]
+  (go
+    (p->c (p/all (->> relative-paths
+                      (map (fn [rpath]
+                             (p/let [base-file (path/path-join "logseq/version-files/base" rpath)
+                                     current-change-file rpath
+                                     format (gp-util/get-format current-change-file)
+                                     repo (state/get-current-repo)
+                                     repo-dir (config/get-repo-dir repo)
+                                     base-exists? (fs/file-exists? repo-dir base-file)]
+                               (if base-exists?
+                                 (p/let [base-content (fs/read-file repo-dir base-file)
+                                         current-content (-> (fs/read-file repo-dir current-change-file)
+                                                             (p/catch (fn [_] nil)))]
+                                   (if (= base-content current-content)
+                                     ;; base-content == current-content, delete current-change-file
+                                     (p/do!
+                                      (<delete-local-files rsapi graph-uuid base-path [rpath])
+                                      (fs/unlink! repo (path/path-join repo-dir base-file) {}))
+                                     ;; base-content != current-content, merge, do not delete
+                                     (p/let [merged-content (diff-merge/three-way-merge base-content "" current-content format)]
+                                       (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                       (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                         :from-disk? true
+                                                                                                         :fs/event :fs/remote-file-change}))))
+
+                                 ;; no base-version, use legacy approach, delete it
+                                 (<delete-local-files rsapi graph-uuid base-path [rpath]))))))))))
+
+(defn- <fetch-remote-and-update-local-files
+  [graph-uuid base-path relative-paths]
+  (go
+    (let [fetched-file-rpaths-or-ex (<! (<fetch-remote-files rsapi graph-uuid base-path relative-paths))]
+      (if (instance? ExceptionInfo fetched-file-rpaths-or-ex)
+        fetched-file-rpaths-or-ex
+        (<!
+         (p->c (p/all (->> fetched-file-rpaths-or-ex
+                           (map (fn [rpath]
+                                  (p/let [incoming-file (path/path-join "logseq/version-files/incoming" rpath)
+                                          base-file (path/path-join "logseq/version-files/base" rpath)
+                                          current-change-file rpath
+                                          format (gp-util/get-format current-change-file)
+                                          repo (state/get-current-repo)
+                                          repo-dir (config/get-repo-dir repo)
+                                          base-exists? (fs/file-exists? repo-dir base-file)]
+                                    (cond
+                                      base-exists?
+                                      (p/let [base-content (fs/read-file repo-dir base-file)
+                                              current-content (-> (fs/read-file repo-dir current-change-file)
+                                                                  (p/catch (fn [_] nil)))
+                                              incoming-content (fs/read-file repo-dir incoming-file)]
+                                        (if (= base-content current-content)
+                                          (do
+                                            (prn "[diff-merge]base=current, write directly")
+                                            (p/do!
+                                             (fs/copy! repo
+                                                       (path/path-join repo-dir incoming-file)
+                                                       (path/path-join repo-dir current-change-file))
+                                             (fs/copy! repo
+                                                       (path/path-join repo-dir incoming-file)
+                                                       (path/path-join repo-dir base-file))
+                                             (file-handler/alter-file repo current-change-file incoming-content {:re-render-root? true
+                                                                                                                 :from-disk? true
+                                                                                                                 :fs/event :fs/remote-file-change})))
+                                          (do
+                                            (prn "[diff-merge]base!=current, 3-way merge")
+                                            (p/let [current-content (or current-content "")
+                                                    incoming-content (fs/read-file repo-dir incoming-file)
+                                                    merged-content (diff-merge/three-way-merge base-content incoming-content current-content format)]
+                                              (when (seq merged-content)
+                                                (p/do!
+                                                 (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                                 (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                                   :from-disk? true
+                                                                                                                   :fs/event :fs/remote-file-change})))))))
+
+                                      :else
+                                      (do
+                                        (prn "[diff-merge]no base found, failback")
+                                        (p/let [current-content (-> (fs/read-file repo-dir current-change-file)
+                                                                    (p/catch (fn [_] nil)))
+                                                current-content (or current-content "")
+                                                incoming-content (fs/read-file repo-dir incoming-file)
+                                                merged-content (diff-merge/three-way-merge current-content current-content incoming-content format)]
+                                          (if (= incoming-content merged-content)
+                                            (p/do!
+                                             (fs/copy! repo
+                                                       (path/path-join repo-dir incoming-file)
+                                                       (path/path-join repo-dir current-change-file))
+                                             (fs/copy! repo
+                                                       (path/path-join repo-dir incoming-file)
+                                                       (path/path-join repo-dir base-file))
+                                             (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                               :from-disk? true
+                                                                                                               :fs/event :fs/remote-file-change}))
+
+                                          ;; else
+                                            (p/do!
+                                             (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
+                                             (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                               :from-disk? true
+                                                                                                               :fs/event :fs/remote-file-change})
+                                             (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
+                                                                                                               :from-disk? true
+                                                                                                               :fs/event :fs/remote-file-change})))))))))))))))))
+
 (defn- apply-filetxns
   [*sync-state graph-uuid base-path filetxns *paused]
   (go
@@ -1574,7 +1713,9 @@
                 (swap! *sync-state sync-state--remove-recent-remote->local-files
                        [recent-remote->local-file-item])))))
 
-        (let [update-local-files-ch (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns))
+        (let [update-local-files-ch (if (state/enable-sync-diff-merge?)
+                                      (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
+                                      (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
               r (<! (<with-pause update-local-files-ch *paused))]
           (doseq [[filetxn origin-db-content] txn->db-content-vec]
             (when (<! (need-add-version-file? filetxn origin-db-content))
@@ -1592,7 +1733,9 @@
         (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
           true
-          (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
+          (let [r (<! (if (state/enable-sync-diff-merge?)
+                        (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)])
+                        (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)])))]
             (if (and (instance? ExceptionInfo r)
                      (string/index-of (str (ex-cause r)) "No such file or directory"))
               true
@@ -2714,20 +2857,20 @@
 ;;; ### put all stuff together
 
 (defrecord ^:large-vars/cleanup-todo
-  SyncManager [user-uuid graph-uuid base-path *sync-state
-               ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
-               ^:mutable ratelimit-local-changes-chan
-               *txid *txid-for-get-deletion-log
-               ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
-               ^:mutable ops-chan ^:mutable app-awake-from-sleep-chan
+    SyncManager [user-uuid graph-uuid base-path *sync-state
+              ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
+              ^:mutable ratelimit-local-changes-chan
+              *txid *txid-for-get-deletion-log
+              ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
+              ^:mutable ops-chan ^:mutable app-awake-from-sleep-chan
                ;; control chans
-               private-full-sync-chan private-remote->local-sync-chan
-               private-remote->local-full-sync-chan private-pause-resume-chan]
+              private-full-sync-chan private-remote->local-sync-chan
+              private-remote->local-full-sync-chan private-pause-resume-chan]
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
     (println (str "[SyncManager " graph-uuid "]")
-             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
+             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :args args :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
     (go
@@ -2925,7 +3068,7 @@
                                       :epoch      (tc/to-epoch (t/now))}})
             (.schedule this ::idle nil nil))))))
 
-  (remote->local-full-sync [this _]
+  (remote->local-full-sync [this {:keys [retry-count]}]
     (go
       (let [{:keys [succ unknown stop pause]}
             (<! (<sync-remote->local-all-files! remote->local-syncer))]
@@ -2952,12 +3095,19 @@
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
                                       :epoch      (tc/to-epoch (t/now))}})
-            (let [next-state (if (string/includes? (str (ex-cause unknown)) "404 Not Found")
-                               ;; TODO: this should never happen
-                               ::stop
-                               ;; if any other exception occurred, re-exec remote->local-full-sync
-                               ::remote->local-full-sync)]
-              (.schedule this next-state nil nil)))))))
+            (let [next-state
+                  (cond
+                    (string/includes? (str (ex-cause unknown)) "404 Not Found")
+                    ;; TODO: this should never happen
+                    ::stop
+                    (> retry-count 3)
+                    ::stop
+
+                    :else ;; if any other exception occurred, re-exec remote->local-full-sync
+                    ::remote->local-full-sync)]
+              (.schedule this next-state
+                         (when (= ::remote->local-full-sync next-state) {:retry-count (inc retry-count)})
+                         nil)))))))
 
   (remote->local [this _next-state {remote-val :remote}]
     (go
@@ -3002,7 +3152,7 @@
       (let [distincted-local-changes (distinct-file-change-events local-changes)
             _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distincted-local-changes))
             change-events-partitions
-                                     (sequence (partition-file-change-events upload-batch-size) distincted-local-changes)
+            (sequence (partition-file-change-events upload-batch-size) distincted-local-changes)
             _ (put-sync-event! {:event :start
                                 :data  {:type       :local->remote
                                         :graph-uuid graph-uuid

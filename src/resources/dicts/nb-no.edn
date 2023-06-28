@@ -53,7 +53,6 @@
  :left-side-bar/new-page "Ny side"
  :left-side-bar/nav-favorites "Favoritter"
  :left-side-bar/nav-recent-pages "Nylig"
- :page/presentation-mode "Presentasjonsmodus"
  :page/delete-confirmation "Er du sikker på at du vil slette denne siden og filen dens?"
  :page/open-in-finder "Åpne i mappe"
  :page/open-with-default-app "Åpne med forhåndsvalgt app"
@@ -504,7 +503,7 @@
  :command.whiteboard/zoom-out "Zoom ut"
  :command.whiteboard/zoom-to-fit "Zoom til tegning"
  :command.whiteboard/zoom-to-selection "Zoom for å passe seleksjonen"
- 
+
  :home "Hjem"
  :importing "Importerer"
  :port "Port"

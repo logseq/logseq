@@ -41,7 +41,6 @@
  :right-side-bar/block-ref "Referência de bloco"
  :right-side-bar/new-page "Nova página"
  :left-side-bar/journals "Diários"
- :page/presentation-mode "Modo de apresentação"
  :page/delete-confirmation "Tem certeza que quer apagar esta página e o arquivo associado?"
  :page/open-in-finder "Abrir em pasta"
  :page/open-with-default-app "Abrir com a aplicação por omissão"
@@ -451,7 +450,7 @@
  :command.pdf/find                        "PDF: Pesquisar no documento PDF atual"
  :command.sidebar/close-top               "Fechar item superior na barra lateral direita"
  :command.ui/install-plugins-from-file    "Instalar plugins de plugins.edn"
- 
+
  :home "Início"
  :toggle-theme "Trocar tema"
  :whiteboard "Quadro Branco"
@@ -650,7 +649,7 @@
  :plugins "Plugins"
  :right-side-bar/flashcards "Flashcards"
  :settings-page/enable-flashcards "Flashcards"
- :page/backlinks "Backlinks" 
+ :page/backlinks "Backlinks"
  :host "Host"
  :settings-page/tab-editor "Editor"
  :shortcut.category/plugins "Plugins"
