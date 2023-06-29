@@ -138,6 +138,7 @@
         "remove-accents": "0.4.2",
         "sanitize-filename": "1.6.3",
         "send-intent": "3.0.11",
+        "swiped-events": "^1.1.7",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
         "url": "^0.11.0",
