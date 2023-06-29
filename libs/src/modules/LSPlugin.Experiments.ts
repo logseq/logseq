@@ -40,7 +40,20 @@ export class LSPluginExperiments {
     })
 
     scripts.unshift(this.ctx.baseInfo.id)
-    await this.invokeExperMethod('loadScripts', ...scripts)
+
+    // Load the remaining scripts with the original method
+    await this.invokeExperMethod('loadScripts', ...scripts);
+
+    // Load all .mjs scripts with import()
+    const modulePromises = scripts
+      .filter(script => script.endsWith('.mjs'))
+      .map(script => import(script));
+
+    // Wait for all .mjs scripts to be loaded
+    const modules = await Promise.allSettled(modulePromises);
+
+    // Return the modules for further use if necessary
+    return modules;
   }
 
   registerFencedCodeRenderer(
