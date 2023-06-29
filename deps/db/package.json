@@ -4,5 +4,11 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "^1.2.173"
+  },
+  "dependencies": {
+    "better-sqlite3": "8.0.1"
+  },
+  "scripts": {
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }

@@ -403,6 +403,8 @@
                         :created_at (or (:block/created-at b) (utils/time-ms))
                         :updated_at (or (:block/updated-at b) (utils/time-ms))})
                      blocks)]
+        (prn :BLOCKS blocks)
+        (prn :BLOCKS' blocks')
 
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
