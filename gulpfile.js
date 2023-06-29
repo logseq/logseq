@@ -56,8 +56,12 @@ const common = {
         .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
       () => gulp.src('node_modules/katex/dist/katex.min.js')
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src('node_modules/html2canvas/dist/html2canvas.min.js')
+        .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/@tabler/icons/iconfont/tabler-icons.min.css')
         .pipe(gulp.dest(path.join(outputPath, 'css'))),
+      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
+        .pipe(gulp.dest(path.join(outputPath, 'fonts', 'inter'))),
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2'
