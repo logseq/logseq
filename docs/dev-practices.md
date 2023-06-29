@@ -317,6 +317,14 @@ Since the desktop app is built with Electron, a full set of Chromium developer
 tools is available under the menu `View > Toggle Developer Tools`. Handy tools
 include a JS console and HTML inspector.
 
+## Security Practices
+
+* Our builds should not include unverified, third-party resources as this opens
+  up the app to possibly harmful injections. If a third-party resource is
+  included, it should be verified against an official distributor. Use
+  https://github.com/logseq/logseq/pull/9712 as an example to include a third
+  party resource and not the examples under resources/js/.
+
 ## FAQ
 
 If dev app launch failed after electron upgrade:
