@@ -60,8 +60,10 @@ const common = {
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/@tabler/icons/iconfont/tabler-icons.min.css')
         .pipe(gulp.dest(path.join(outputPath, 'css'))),
+      () => gulp.src('node_modules/inter-ui/inter.css')
+        .pipe(gulp.dest(path.join(outputPath, 'css'))),
       () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
-        .pipe(gulp.dest(path.join(outputPath, 'fonts', 'inter'))),
+        .pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2'
