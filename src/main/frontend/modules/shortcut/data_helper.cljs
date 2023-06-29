@@ -16,11 +16,13 @@
 
 ;; function vals->bindings is too time-consuming. Here we cache the results.
 (defn- flatten-bindings-by-id
-  [config]
-  (->> config
-       (into {})
-       (map (fn [[k {:keys [binding]}]]
-              {k binding}))
+  [config user-shortcuts binding-only?]
+  (->> (vals config)
+       (apply merge)
+       (map (fn [[id {:keys [binding] :as opts}]]
+              {id (if binding-only?
+                    (get user-shortcuts id binding)
+                    (assoc opts :user-binding (get user-shortcuts id)))}))
        (into {})))
 
 (defn- flatten-bindings-by-key
@@ -28,8 +30,8 @@
   (reduce-kv
     (fn [r handler-id vs]
       (reduce-kv
-        (fn [r id binding]
-          (if-let [ks (get user-shortcuts id (:binding binding))]
+        (fn [r id {:keys [binding]}]
+          (if-let [ks (get user-shortcuts id binding)]
             (let [ks (if (sequential? ks) ks [ks])]
               (reduce (fn [a k] (assoc-in a [(shortcut-utils/undecorate-binding k) id] handler-id)) r ks))
             r)) r vs))
@@ -42,13 +44,16 @@
   (util/memoize-last flatten-bindings-by-key))
 
 (defn get-bindings
-  "not include user custom binding"
   []
-  (m-flatten-bindings-by-id (vals @shortcut-config/config)))
+  (m-flatten-bindings-by-id @shortcut-config/config (state/shortcuts) true))
 
 (defn get-bindings-keys-map
   []
   (m-flatten-bindings-by-key @shortcut-config/config (state/shortcuts)))
+
+(defn get-bindings-ids-map
+  []
+  (m-flatten-bindings-by-id @shortcut-config/config (state/shortcuts) false))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"
@@ -57,8 +62,7 @@
 (defn shortcut-binding
   "override by user custom binding"
   [id]
-  (let [shortcut (get (state/shortcuts) id
-                      (get (get-bindings) id))]
+  (let [shortcut (get (get-bindings) id)]
     (cond
       (nil? shortcut)
       (log/warn :shortcut/binding-not-found {:id id})
@@ -81,16 +85,12 @@
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict    (->> (vals @shortcut-config/config)
-                     (apply merge)
-                     (map (fn [[k _]]
-                            {k {:binding (shortcut-binding k)}}))
-                     (into {}))
+  (let [dict    (get-bindings-ids-map)
         plugin? (= name :shortcut.category/plugins)]
     (->> (if plugin?
            (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
            (shortcut-config/category name))
-         (mapv (fn [k] [k (k dict)])))))
+         (mapv (fn [k] [k (get dict k)])))))
 
 (defn shortcut-map
   ([handler-id]
