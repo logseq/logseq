@@ -2,7 +2,7 @@
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
-@import "resources/css/inter.css";
+@import "inter-ui/inter.css";
 @import "resources/css/reveal.min.css";
 @import "resources/css/reveal_black.min.css";
 @import "resources/css/photoswipe.css";
