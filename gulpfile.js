@@ -58,6 +58,8 @@ const common = {
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/html2canvas/dist/html2canvas.min.js')
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src('node_modules/photoswipe/dist/umd/*.js')
+        .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/@tabler/icons/iconfont/tabler-icons.min.css')
         .pipe(gulp.dest(path.join(outputPath, 'css'))),
       () => gulp.src('node_modules/inter-ui/inter.css')
