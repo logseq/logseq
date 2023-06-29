@@ -90,7 +90,7 @@
     (->> (if plugin?
            (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
            (shortcut-config/category name))
-         (mapv (fn [k] [k (get dict k)])))))
+         (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
 
 (defn shortcut-map
   ([handler-id]

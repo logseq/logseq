@@ -26,3 +26,26 @@
     }
   }
 }
+
+.cp__shortcut-page-x {
+  @apply relative;
+
+  &-search-control {
+    @apply flex space-x-3 absolute top-3 right-1 items-center;
+
+    input.form-input {
+      @apply py-1;
+    }
+  }
+
+  > article {
+    > ul {
+      li {
+        &.th {
+          @apply rounded my-2 sticky top-[-1rem] cursor-pointer select-none
+          active:opacity-80;
+        }
+      }
+    }
+  }
+}

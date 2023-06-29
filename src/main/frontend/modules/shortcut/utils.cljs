@@ -34,4 +34,6 @@
       (str/replace "shift" "⇧")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
+      (str/replace "equals" "=")
+      (str/replace "semicolon" ";")
       (str/lower-case)))
