@@ -3,42 +3,66 @@
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clojure.string :as string]))
 
-(rum/defcs property-class-config <
+(rum/defcs property-config <
   rum/static
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
-                 (let [[repo property-uuid] (:rum/args state)]
-                   (reset! (::property-name state) (:block/name (db/pull repo '[*] [:block/uuid property-uuid])))
-                   (reset! (::property-schema state) (:block/schema (db/pull repo '[*] [:block/uuid property-uuid])))
+                 (let [[repo property-uuid] (:rum/args state)
+                       property (db/pull repo '[*] [:block/uuid property-uuid])]
+                   (reset! (::property-name state) (:block/name property))
+                   (reset! (::property-schema state) (:block/schema property))
                    state))}
   [state repo property-uuid]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)]
-    [:div
-     [:div
-      [:span.mr-8 "property name:"]
-      [:input
+    [:div.property-configure
+     [:h1.title "Configure property"]
+
+     [:div.grid.gap-2.p-1
+      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+      [:label.cols-1 "Name:"]
+      [:input.form-input
        {:on-change #(reset! *property-name (util/evalue %))
         :value @*property-name}]]
+
+     [:div.grid.grid-cols-4.gap-1.leading-8
+      [:label.cols-1 "Schema type:"]
+      (let [schema-types (->> (keys property-handler/builtin-schema-types)
+                              (map (comp string/capitalize name))
+                              (map (fn [type]
+                                     {:label type
+                                      :value type
+                                      :selected (= (keyword (string/lower-case type))
+                                                   (:type @*property-schema))})))]
+        (ui/select schema-types
+         (fn [_e v]
+           (let [type (keyword (string/lower-case v))]
+             (swap! *property-schema assoc :type type)))))]
+
+     [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+      [:label.cols-1 "Multiple values:"]
+      (ui/checkbox {:checked (= :many (:cardinality @*property-schema))
+                    :on-change (fn [v]
+                                 (swap! *property-schema assoc :cardinality (if (= "on" (util/evalue v)) :many :one)))})]
+
      [:div
-      [:span.mr-8 "property schema:"]
-      [:input
-       {:on-change #(reset! *property-schema (util/evalue %))
-        :value (str @*property-schema)}]]
-     [:a
-      {:on-click (fn []
-                   (property-handler/update-property-class!
-                    repo property-uuid
-                    {:property-name @*property-name
-                     :property-schema (edn/read-string @*property-schema)}))}
-      "Save"]]))
+      (ui/button
+        "Save"
+        :on-click (fn []
+                    (property-handler/update-property!
+                     repo property-uuid
+                     {:property-name @*property-name
+                      :property-schema @*property-schema})
+                    (state/close-modal!)))]]]))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
@@ -83,11 +107,11 @@
        [:div
         (for [[prop-uuid-or-built-in-prop v] properties]
           (if (uuid? prop-uuid-or-built-in-prop)
-            (when-let [property-class (db/pull [:block/uuid prop-uuid-or-built-in-prop])]
+            (when-let [property (db/pull [:block/uuid prop-uuid-or-built-in-prop])]
               [:div
                [:a.mr-2
-                {:on-click (fn [] (state/set-modal! #(property-class-config repo prop-uuid-or-built-in-prop)))}
-                (:block/name property-class)]
+                {:on-click (fn [] (state/set-modal! #(property-config repo prop-uuid-or-built-in-prop)))}
+                (:block/name property)]
                [:span (or (get properties-text-values prop-uuid-or-built-in-prop) (str v))]
                [:a.ml-8 {:on-click
                          (fn []

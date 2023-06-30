@@ -2,6 +2,7 @@
   "Block properties handler."
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.handler.notification :as notification]
@@ -14,11 +15,27 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [malli.util :as mu]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.error :as me]))
+
+(defn- date-str?
+  [value]
+  (when-let [d (js/Date. value)]
+    (not= (str d) "Invalid Date")))
 
 (def builtin-schema-types
-  {:string-contains-refs :string        ;default
-   :refs [:sequential :string]})
+  {:default string?                     ; default, might be mixed with refs, tags
+   :number  number?
+   :date    inst?
+   :boolean boolean?
+   :url     uri?
+   :object  uuid?})                     ; TODO: make sure block exists
+
+;; schema -> type, cardinality, object's class
+;;           min, max -> string length, number range, cardinality size limit
+
+(def builtin-schema->type
+  (set/map-invert builtin-schema-types))
 
 (def ^:private gp-mldoc-config (gp-mldoc/default-config :markdown))
 
@@ -31,79 +48,77 @@
                    distinct)]
     refs'))
 
-(defn- is-type-x?
-  [schema-ast x]
-  (or (= x (:type schema-ast))
-      (and (= :and (:type schema-ast))
-           (some #(= x (:type %)) (:children schema-ast)))))
-
-(defn- schema-base-type
-  [schema]
-  (when-let [ast (try (m/ast schema) (catch :default _))]
-    (cond
-      (is-type-x? ast :int)
-      :int
-
-      (is-type-x? ast :float)
-      :float
-
-      (is-type-x? ast :string)
-      :string
-
-      :else
-      nil)))
-
 (defn- infer-schema-from-input-string
   [v-str]
   (cond
-    (parse-long v-str) :int
-    (parse-double v-str) :float
-    :else nil))
+    (parse-long v-str) :number
+    (parse-double v-str) :number
+    (util/uuid-string? v-str) :object
+    (gp-util/url? v-str) :url
+    (date-str? v-str) :date
+    (contains? #{"true" "false"} (string/lower-case v-str)) :boolean
+    :else :default))
 
 (defn convert-property-input-string
-  [schema v-str]
-  (case (schema-base-type schema)
-    :string
+  [schema-type v-str]
+  (case schema-type
+    :default
     v-str
 
-    (:int :float nil)
-    (edn/read-string v-str)))
+    :number
+    (edn/read-string v-str)
+
+    :boolean
+    (edn/read-string (string/lower-case v-str))
+
+    :object
+    (uuid v-str)
+
+    :date
+    (js/Date. v-str)
+
+    :url
+    (goog.Uri. v-str)))
 
 (defn add-property!
   [repo block k-name v]
-  (let [property-class      (db/pull repo '[*] [:block/name k-name])
-        property-class-uuid (or (:block/uuid property-class) (random-uuid))
-        property-schema (:block/schema property-class)
+  (let [property      (db/pull repo '[*] [:block/name k-name])
+        property-uuid (or (:block/uuid property) (random-uuid))
+        existing-schema (:block/schema property)
+        property-type (:type existing-schema)
         infer-schema (infer-schema-from-input-string v)
-        property-schema (or property-schema infer-schema :string-contains-refs)
-        schema (get builtin-schema-types property-schema property-schema)]
+        property-type (or property-type infer-schema :default)
+        schema (get builtin-schema-types property-type)]
     (when-let [v* (try
-                    (convert-property-input-string schema v)
+                    (convert-property-input-string property-type v)
                     (catch :default e
                       (notification/show! (str e) :error false)
                       nil))]
-      (if-let [msg (malli.util/explain-data schema v*)]
-        (notification/show! (str msg) :error false)
-        (do (when (nil? property-class) ;if property-class not exists yet
-              (db/transact! repo [{:block/schema property-schema
-                                   :block/name k-name
-                                   :block/uuid property-class-uuid
-                                   :block/type "property"}]))
+      (if-let [msg (me/humanize (mu/explain-data schema v*))]
+        (notification/show! msg :error false)
+        (do (when (nil? property) ;if property not exists yet
+              (db/transact! repo [(outliner-core/block-with-timestamps
+                                   {:block/schema {:type property-type}
+                                    :block/original-name k-name
+                                    :block/name (util/page-name-sanity-lc k-name)
+                                    :block/uuid property-uuid
+                                    :block/type "property"})]))
             (let [block-properties (assoc (:block/properties block)
-                                          property-class-uuid
-                                          (if (= property-schema :string-contains-refs)
-                                            (set (extract-page-refs-from-prop-str-value v*))
+                                          property-uuid
+                                          (if (= property-type :default)
+                                            (let [refs (extract-page-refs-from-prop-str-value v*)]
+                                              (if (seq refs) (set refs) v*))
                                             v*))
                   block-properties-text-values
-                  (if (= property-schema :string-contains-refs)
-                    (assoc (:block/properties-text-values block) property-class-uuid v*)
-                    (dissoc (:block/properties-text-values block) property-class-uuid))]
+                  (if (= property-type :default)
+                    (assoc (:block/properties-text-values block) property-uuid v*)
+                    (dissoc (:block/properties-text-values block) property-uuid))]
               (outliner-tx/transact!
-               {:outliner-op :save-block}
-               (outliner-core/save-block!
-                {:block/uuid (:block/uuid block)
-                 :block/properties block-properties
-                 :block/properties-text-values block-properties-text-values}))))))))
+                {:outliner-op :save-block}
+                (outliner-core/save-block!
+                 {:block/uuid (:block/uuid block)
+                  :block/properties block-properties
+                  :block/properties-text-values block-properties-text-values}))))))))
 
 (defn remove-property!
   [repo block k-uuid-or-builtin-k-name]
@@ -111,29 +126,27 @@
   (let [origin-properties (:block/properties block)]
     (assert (contains? (set (keys origin-properties)) k-uuid-or-builtin-k-name))
     (db/transact!
-     repo
-     [{:block/uuid (:block/uuid block)
-       :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)
-       :block/properties-text-values (dissoc (:block/properties-text-values block) k-uuid-or-builtin-k-name)}])))
+      repo
+      [{:block/uuid (:block/uuid block)
+        :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)
+        :block/properties-text-values (dissoc (:block/properties-text-values block) k-uuid-or-builtin-k-name)}])))
 
-
-(defn update-property-class!
+(defn update-property!
   [repo property-uuid {:keys [property-name property-schema]}]
   {:pre [(uuid? property-uuid)]}
   (let [tx-data (cond-> {:block/uuid property-uuid}
                   property-name (assoc :block/name property-name)
-                  property-schema (assoc :block/schema property-schema))]
+                  property-schema (assoc :block/schema property-schema)
+                  true outliner-core/block-with-updated-at)]
     (db/transact! repo [tx-data])))
-
-
 
 (defn- extract-refs
   [entity properties]
   (let [property-values (->>
                          properties
                          (map (fn [[k v]]
-                                (let [schema (:block/property-schema (db/pull [:block/uuid k]))
-                                      object? (= (:type schema) "object")
+                                (let [schema (:block/schema (db/pull [:block/uuid k]))
+                                      object? (= (:type schema) :object)
                                       f (if object? page-ref/->page-ref identity)]
                                   (->> (if (coll? v)
                                          v
@@ -155,78 +168,28 @@
             [:block/uuid (uuid %)]
             (block/page-name->map % true)) refs')))
 
-(defn validate
-  "Check whether the `value` validate against the `schema`."
-  [schema value]
-  (if (string/blank? value)
-    [true value]
-    (case (:type schema)
-      "any" [true value]
-      "number" (if-let [n (parse-double value)]
-                 (let [[min-n max-n] [(:min schema) (:max schema)]
-                       min-result (if min-n (>= n min-n) true)
-                       max-result (if max-n (<= n max-n) true)]
-                   (cond
-                     (and min-result max-result)
-                     [true n]
-
-                     (false? min-result)
-                     [false (str "the min value is " min-n)]
-
-                     (false? max-result)
-                     [false (str "the max value is " max-n)]
-
-                     :else
-                     n))
-                 [false "invalid number"])
-      "date" (if-let [result (js/Date. value)]
-               (if (not= (str result) "Invalid Date")
-                 [true value]
-                 [false "invalid date"])
-               [false "invalid date"])
-      "url" (if (gp-util/url? value)
-              [true value]
-              [false "invalid URL"])
-      "object" (let [page-name (or
-                                (try
-                                  (page-ref/get-page-name value)
-                                  (catch :default _))
-                                value)]
-                 [true page-name]))))
-
-(defn delete-property!
-  [entity property-id]
-  (when (and entity (uuid? property-id))
-    (let [properties' (dissoc (:block/properties entity) property-id)
-          refs (extract-refs entity properties')]
-      (outliner-tx/transact!
-        {:outliner-op :save-block}
-        (outliner-core/save-block!
-         {:block/uuid (:block/uuid entity)
-          :block/properties properties'
-          :block/refs refs})))))
-
-(defn delete-property-value!
-  "Delete value if a property has multiple values"
-  [entity property-id property-value]
-  (when (and entity (uuid? property-id))
-    (when (not= property-id (:block/uuid entity))
-      (when-let [property (db/pull [:block/uuid property-id])]
-        (let [schema (:block/property-schema property)
-              [success? property-value-or-error] (validate schema property-value)
-              multiple-values? (:multiple-values? schema)]
-          (when (and multiple-values? success?)
-            (let [properties (:block/properties entity)
-                  properties' (update properties property-id disj property-value-or-error)
-                  refs (extract-refs entity properties')]
-              (outliner-tx/transact!
-               {:outliner-op :save-block}
-               (outliner-core/save-block!
-                {:block/uuid (:block/uuid entity)
-                 :block/properties properties'
-                 :block/refs refs}))))
-          (state/clear-editor-action!)
-          (state/clear-edit!))))))
+(comment
+  (defn delete-property-value!
+    "Delete value if a property has multiple values"
+    [entity property-id property-value]
+    (when (and entity (uuid? property-id))
+      (when (not= property-id (:block/uuid entity))
+        (when-let [property (db/pull [:block/uuid property-id])]
+          (let [schema (:block/schema property)
+                [success? property-value-or-error] (validate schema property-value)
+                multiple-values? (:multiple-values? schema)]
+            (when (and multiple-values? success?)
+              (let [properties (:block/properties entity)
+                    properties' (update properties property-id disj property-value-or-error)
+                    refs (extract-refs entity properties')]
+                (outliner-tx/transact!
+                  {:outliner-op :save-block}
+                  (outliner-core/save-block!
+                   {:block/uuid (:block/uuid entity)
+                    :block/properties properties'
+                    :block/refs refs}))))
+            (state/clear-editor-action!)
+            (state/clear-edit!)))))))
 
 (defn set-editing-new-property!
   [value]

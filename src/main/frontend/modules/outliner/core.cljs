@@ -63,6 +63,11 @@
                 (assoc :block/created-at updated-at))]
     block))
 
+(defn block-with-updated-at
+  [block]
+  (let [updated-at (util/time-ms)]
+    (assoc block :block/updated-at updated-at)))
+
 (defn- remove-orphaned-page-refs!
   [db-id txs-state old-refs new-refs]
   (when (not= old-refs new-refs)
