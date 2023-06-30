@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 (rum/defc export
   []
@@ -110,13 +111,13 @@
                      :scale scale
                      :windowHeight (when (string? block-uuids-or-page-name)
                                      (.-scrollHeight container))}]
-    (-> (js/html2canvas container options)
-        (.then (fn [canvas] (.toBlob canvas (fn [blob]
-                                              (when blob
-                                                (let [img (js/document.getElementById "export-preview")
-                                                      img-url (image/create-object-url blob)]
-                                                  (set! (.-src img) img-url)
-                                                  (callback blob)))) "image/png"))))))
+    (p/let [_ (util/js-load$ (str util/JS_ROOT "/html2canvas.min.js"))] (-> (js/html2canvas container options)
+                                       (.then (fn [canvas] (.toBlob canvas (fn [blob]
+                                                                             (when blob
+                                                                               (let [img (js/document.getElementById "export-preview")
+                                                                                     img-url (image/create-object-url blob)]
+                                                                                 (set! (.-src img) img-url)
+                                                                                 (callback blob)))) "image/png")))))))
 
 (rum/defcs ^:large-vars/cleanup-todo
   export-blocks < rum/static
