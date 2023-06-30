@@ -126,7 +126,8 @@
  :search/page-names "Search page names"
  :search/recent "Recent search:"
  :search/blocks-in-page "Search blocks in page:"
- :search/command-palette-tip (fn [] ["Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"])
+ :search/command-palette-tip-1 "Tip: "
+ :search/command-palette-tip-2 " to open the commands palette"
  :search/cache-outdated "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."
  :search-item/whiteboard "Whiteboard"
  :search-item/page "Page"

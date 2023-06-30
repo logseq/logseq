@@ -107,6 +107,8 @@
  :search/page-names "Sayfa adlarında ara"
  :search/recent "Son arama:"
  :search/blocks-in-page "Blokları sayfada ara:"
+ :search/command-palette-tip-1 "İpucu: "
+ :search/command-palette-tip-2 " komut paletini açar"
  :search/cache-outdated "Önbellek eski. Lütfen grafın açılır menüsündeki 'Yeniden dizin oluştur' düğmesini tıklayın."
  :search-item/whiteboard "Beyaz tahta"
  :search-item/page "Sayfa"
