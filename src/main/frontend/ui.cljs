@@ -9,6 +9,7 @@
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.shui :refer [make-shui-context]]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
@@ -584,11 +585,13 @@
 
 (rum/defc modal-panel-content <
   mixins/component-editing-mode
-  [panel-content close-fn]
-  (panel-content close-fn))
+  [panel-content close-fn shui?]
+  (if shui?
+    (panel-content {:close-fn close-fn} (make-shui-context nil nil))
+    (panel-content close-fn)))
 
 (rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen? close-btn?]
+  [show? panel-content transition-state close-fn fullscreen? close-btn? shui?]
   [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
@@ -611,7 +614,7 @@
 
    (when show?
      [:div {:class (if fullscreen? "" "panel-content")}
-      (modal-panel-content panel-content close-fn)])])
+      (modal-panel-content panel-content close-fn shui?)])])
 
 (rum/defc modal < rum/reactive
   (mixins/event-mixin
@@ -637,6 +640,7 @@
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
+        shui? (state/sub :modal/shui?)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
@@ -651,7 +655,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn?)))]))
+        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? shui?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
@@ -724,7 +728,7 @@
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
+            (modal-panel show? modal-panel-content state close-fn false close-btn? false)))]))))
 
 (defn loading
   ([] (loading (t :loading)))

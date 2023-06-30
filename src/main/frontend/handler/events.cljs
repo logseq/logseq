@@ -412,11 +412,12 @@
                      :label "ls-modal-search"}))
 
 (defmethod handle :go/cmdk [_]
-  (js/alert "handle cmdk")
-  (state/set-modal! cmdk 
-                    {:fullscreen? false 
-                     :close-btn?  false 
-                     :label "ls-modal-cmdk"}))
+  (when-not (= cmdk (:modal/panel-content @state/state))
+    (state/set-modal! cmdk 
+                      {:fullscreen? false 
+                       :close-btn?  false 
+                       :label "ls-modal-cmdk" 
+                       :shui? true})))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))

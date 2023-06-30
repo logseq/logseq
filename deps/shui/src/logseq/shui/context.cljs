@@ -42,4 +42,5 @@
    :color-gradient (state/get-color-gradient)
    :sub-color-gradient-bg-styles state/sub-color-gradient-bg-styles 
    :sub-color-gradient-text-styles state/sub-color-gradient-text-styles
-   :linear-gradient colors/linear-gradient})
+   :linear-gradient colors/linear-gradient
+   :state state/state})

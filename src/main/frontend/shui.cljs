@@ -22,4 +22,5 @@
   (make-context {:block-config block-config 
                  :app-config (state/get-config) 
                  :inline inline 
-                 :int->local-time-2 int->local-time-2}))
+                 :int->local-time-2 int->local-time-2 
+                 :state state/state}))

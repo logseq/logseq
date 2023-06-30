@@ -1,5 +1,6 @@
 .shui__button {
-  @apply bg-gradient-to-br from-red-500 via-green-500 to-blue-500 py-0.5 px-2 rounded-lg text-sm font-medium relative;
+  @apply font-medium relative flex items-center justify-center gap-1;
+  border-radius: 0.25rem;
   /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */ 
   /*             inset 0 -2px 0 0px rgba(0, 0, 0, 0.1); */
   /* background-image: linear-gradient(white, white), */
@@ -8,8 +9,29 @@
   /* background-clip: content-box, border-box; */
 }
 
-.shui__button:before {
-  @apply absolute inset-0 rounded-lg;
+.shui__button-size-sm {
+  @apply text-xs py-1 px-2;
+}
+
+.shui__button-size-md {
+  @apply text-sm py-1 px-3;
+}
+
+.shui__button-theme-color {
+  background: or(--lx-accent-09, --ls-active-primary-color);
+}
+
+.shui__button-theme-gray {
+  background: or(--lx-gray-05, --ls-quaternary-background-color);
+}
+
+.shui__button-theme-gradient {
+  background: linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC);
+}
+
+.shui__button-depth-1:before {
+  @apply absolute inset-0;
+  border-radius: 0.25rem;
   content: "";
   padding: 1px;
   background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
@@ -17,16 +39,11 @@
                 linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  /* background-image: linear-gradient(to bottom, white, transparent); */
-  /* background-clip: border-box, padding-box; */
-  /* padding: 1px; */
-  /* border: 1px solid transparent; */
-  /* border: 1px solid; */
-  /* border-image: linear-gradient(to bottom, black, transparent) 1; */ 
 }
 
-.shui__button:after {
-  @apply absolute inset-0 rounded-lg;
+.shui__button-depth-1:after {
+  @apply absolute inset-0;
+  border-radius: 0.25rem;
   content: "";
   padding: 1px;
   background: linear-gradient(to top, rgba(0,0,0,0.2), transparent);
@@ -34,8 +51,49 @@
                 linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  /* @apply absolute inset-0 rounded-lg; */
-  /* content: ""; */
-  /* border: 1px solid; */
-  /* border-image: linear-gradient(to top, white, transparent) 1; */ 
+}
+
+.shui__button-depth-2:before {
+  @apply absolute inset-0;
+  border-radius: 0.25rem;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.6), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.shui__button-depth-2:after {
+  @apply absolute inset-0;
+  border-radius: 0.25rem;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to top, rgba(0,0,0,0.4), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.shui__button-shortcut-key:first-of-type {
+  @apply ml-2;
+}
+
+.shui__button-shortcut-key {
+  @apply text-xs font-normal bg-white/10 h-5 w-5 flex items-center justify-center rounded;
+}
+
+.shui__cmdk-quick-capture-glow::before {
+  @apply absolute inset-0;
+  pointer-events: none;
+  border-radius: 0.25rem;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to bottom, var(--lx-accent-10), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }

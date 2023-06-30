@@ -1350,7 +1350,7 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center? shui?]}]
    (let [opened? (modal-opened?)]
      (when opened?
        (close-modal!))
@@ -1367,7 +1367,8 @@ Similar to re-frame subscriptions"
               :modal/panel-content modal-panel-content
               :modal/fullscreen? fullscreen?
               :modal/close-btn? close-btn?
-              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
+              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
+              :modal/shui? shui?)))
    nil))
 
 (defn close-modal!
