@@ -21,6 +21,25 @@
   [dir db-name]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true}))
 
+(deftest get-initial-data
+  (testing "Fetches file block"
+    (create-graph-dir "tmp/graphs" "test-db")
+    (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [blocks (mapv sqlite-util/ds->sqlite-block
+                       [{:block/uuid (random-uuid)
+                         :file/path "logseq/config.edn"
+                         :file/content "{:foo :bar}"}])
+          _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))]
+      (is (= {:content "{:foo :bar}"
+              :name nil
+              :type 3}
+             (-> (sqlite-db/get-initial-data "test-db")
+                 :init-data
+                 bean/->clj
+                 first
+                 (select-keys [:content :name :type])))
+          "Correct file with content is found"))))
+
 (deftest upsert-blocks!
   (let [page-uuid (random-uuid)
         block-uuid (random-uuid)
@@ -28,7 +47,7 @@
     (create-graph-dir "tmp/graphs" "test-db")
     (sqlite-db/open-db! "tmp/graphs" "test-db")
 
-    (testing "create a journal block"
+    (testing "Creates a journal block"
       (let [blocks (mapv sqlite-util/ds->sqlite-block
                          [{:block/uuid page-uuid
                            :block/journal-day 20230629
@@ -41,7 +60,7 @@
                            :block/created-at created-at
                            :block/updated-at created-at
                            :page_uuid page-uuid}])
-            _ (sqlite-db/upsert-blocks! "tmp/graphs" "test-db" (bean/->js blocks))
+            _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
             db-data (sqlite-db/get-initial-data "test-db")]
         (is (= {:uuid (str page-uuid) :page_journal_day 20230629
                 :name "jun 29th, 2023" :type 2
@@ -67,7 +86,7 @@
                (-> db-data :all-blocks bean/->clj))
             "Correct block and page uuid pairs exist")))
 
-    (testing "update a block"
+    (testing "Updates a block"
       (let [updated-at 1688072416134
             blocks (mapv sqlite-util/ds->sqlite-block
                          [{:block/uuid page-uuid
@@ -81,7 +100,7 @@
                            :block/created-at created-at
                            :block/updated-at updated-at
                            :page_uuid page-uuid}])
-            _ (sqlite-db/upsert-blocks! "tmp/graphs" "test-db" (bean/->js blocks))
+            _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
             db-data (sqlite-db/get-initial-data "test-db")]
         (is (= {:uuid (str page-uuid) :updated_at updated-at :created_at created-at}
                (-> db-data
@@ -98,3 +117,25 @@
                    bean/->clj
                    (select-keys [:content :created_at :updated_at])))
             "Updated block has correct content and timestamps")))))
+
+(deftest get-other-data
+  (testing "Retrieves a normal page block"
+    (create-graph-dir "tmp/graphs" "test-db")
+    (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [page-uuid (random-uuid)
+          block-uuid (random-uuid)
+          blocks (mapv sqlite-util/ds->sqlite-block
+                       [{:block/uuid page-uuid
+                         :block/name "some page"}
+                        {:block/content "test"
+                         :block/uuid block-uuid
+                         :block/page {:db/id 100022}
+                         :page_uuid page-uuid}])]
+      (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
+      (is (= {:content "test" :uuid (str block-uuid)
+              :page_uuid (str page-uuid) :type 1}
+             (-> (sqlite-db/get-other-data "test-db" [])
+                 bean/->clj
+                 first
+                 (select-keys [:content :page_uuid :type :uuid])))
+          "New page block is fetched with get-other-data"))))

@@ -29,6 +29,8 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
@@ -365,55 +367,21 @@
 (defmethod handle :db-new [_window [_ repo]]
   (db/open-db! repo))
 
-(defn- type-of-block
-  "
-  TODO: use :block/type
-  | value | meaning                                        |
-  |-------+------------------------------------------------|
-  |     1 | normal block                                   |
-  |     2 | page block                                     |
-  |     3 | init data, (config.edn, custom.js, custom.css) |
-  |     4 | db schema                                      |
-  |     5 | unknown type                                   |
-  |     6 | property block                                 |
-  "
-  [block]
-  (cond
-    (:block/page block) 1
-    (:file/content block) 3
-    (= "property" (:block/type block)) 6
-    (:block/name block) 2
-    :else 5))
-
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
   (let [data (reader/read-string data-str)
         {:keys [blocks deleted-block-uuids]} data]
     (when (seq deleted-block-uuids)
-      (db/delete-blocks! repo deleted-block-uuids))
+      (sqlite-db/delete-blocks! repo deleted-block-uuids))
     (when (seq blocks)
-      (let [blocks' (mapv
-                     (fn [b]
-                       {:uuid (str (:block/uuid b))
-                        :type (type-of-block b)
-                        :page_uuid (str (:page_uuid b))
-                        :page_journal_day (:block/journal-day b)
-                        :name (:block/name b)
-                        :content (or (:file/content b) (:block/content b))
-                        :datoms (:datoms b)
-                        :created_at (or (:block/created-at b) (utils/time-ms))
-                        :updated_at (or (:block/updated-at b) (utils/time-ms))})
-                     blocks)]
-        (prn :BLOCKS blocks)
-        (prn :BLOCKS' blocks')
-
+      (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
         (db/upsert-blocks! repo (bean/->js blocks'))))))
 
 (defmethod handle :get-initial-data [_window [_ repo _opts]]
   (db/open-db! repo)
-  (db/get-initial-data repo))
+  (sqlite-db/get-initial-data repo))
 
 (defmethod handle :get-other-data [_window [_ repo journal-block-uuids _opts]]
-  (db/get-other-data repo journal-block-uuids))
+  (sqlite-db/get-other-data repo journal-block-uuids))
 
 ;; DB related IPCs End
 

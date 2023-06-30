@@ -1,6 +1,6 @@
 {:paths ["src"]
- :api-namespaces [
+ :api-namespaces [logseq.db.sqlite.db
+                  logseq.db.sqlite.util
                   ;; Some fns are used by frontend but not worth moving over yet
-                  logseq.db.schema
-                  ]
+                  logseq.db.schema]
  :report {:format :ignore}}

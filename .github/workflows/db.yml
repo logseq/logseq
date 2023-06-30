@@ -56,6 +56,9 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
+      - name: Run nbb-logseq tests
+        run: yarn test
+
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
         run: bb test:load-all-namespaces-with-nbb .

@@ -107,6 +107,7 @@
              logseq.common.path path
              logseq.common.graph common-graph
              logseq.common.config common-config
+             logseq.db.sqlite.db sqlite-db
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block

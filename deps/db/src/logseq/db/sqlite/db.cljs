@@ -58,14 +58,12 @@
     (let [create-index-stmt (prepare db "CREATE INDEX IF NOT EXISTS block_type ON blocks(type)" db-name)]
       (.run ^object create-index-stmt))))
 
-;; TODO: Wrap in electron with (fs/ensureDirSync graph-dir)
 (defn get-db-full-path
   [graphs-dir db-name]
   (let [db-name' (sanitize-db-name db-name)
         graph-dir (node-path/join graphs-dir db-name')]
     [db-name' (node-path/join graph-dir "db.sqlite")]))
 
-;; TODO: Wrap in electron with try
 (defn open-db!
   [graphs-dir db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
@@ -83,18 +81,17 @@
                 (string/join ", ")) ")"))
 
 (defn upsert-blocks!
-  [graphs-dir repo blocks]
-  (if-let [db (get-db repo)]
+  "Creates or updates given js blocks. Returns true if transaction is successful"
+  [repo blocks]
+  (when-let [db (get-db repo)]
     (let [insert (prepare db "INSERT INTO blocks (uuid, type, page_uuid, page_journal_day, name, content,datoms, created_at, updated_at) VALUES (@uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at) ON CONFLICT (uuid) DO UPDATE SET (type, page_uuid, page_journal_day, name, content, datoms, created_at, updated_at) = (@type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at)"
                           repo)
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks))
-    (do
-      (open-db! graphs-dir repo)
-      (upsert-blocks! graphs-dir repo blocks))))
+      (insert-many blocks)
+      true)))
 
 (defn delete-blocks!
   [repo uuids]
