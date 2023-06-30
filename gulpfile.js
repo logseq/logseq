@@ -60,6 +60,8 @@ const common = {
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/swiped-events/dist/swiped-events.min.js')
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src('node_modules/interactjs/dist/interact.min.js')
+        .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/photoswipe/dist/umd/*.js')
         .pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src('node_modules/@tabler/icons/iconfont/tabler-icons.min.css')
