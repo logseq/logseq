@@ -3,6 +3,7 @@
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]
             [cljs-bean.core :as bean]
+            [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
@@ -54,8 +55,16 @@
         [refresh-v, refresh!] (rum/use-state 1)
         [q set-q!] (rum/use-state nil)
 
-        matched-list-map    (when-not (string/blank? q)
-                              [])
+        in-query?           (not (string/blank? (util/trim-safe q)))
+        matched-list-map    (when in-query?
+                              (->> categories-list-map
+                                   (map (fn [[c binding-map]]
+                                          [c (search/fuzzy-search
+                                               binding-map q
+                                               :extract-fn
+                                               #(let [[id {:keys [cmd]}] %]
+                                                  (str id " " (or (:desc cmd)
+                                                                  (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
         result-list-map     (or matched-list-map categories-list-map)]
 
     (rum/use-effect!
@@ -87,9 +96,10 @@
                :let [plugin? (= c :shortcut.category/plugins)]]
            [:<>
             ;; category row
-            [:li.bg-blue-600.text-center.text-md.th
-             {:key (str c)}
-             (t c)]
+            (when-not in-query?
+              [:li.bg-blue-600.text-center.text-md.th
+               {:key (str c)}
+               (t c)])
 
             ;; binding row
             (for [[id {:keys [cmd binding user-binding]}] binding-map
@@ -99,7 +109,7 @@
                                        (string? (:desc cmd))
                                        [:<>
                                         [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]
-                                        [:small.pl-1 (:desc cmd)]]
+                                        [:span.pl-1 (:desc cmd)]]
 
                                        (not plugin?)
                                        [:<>
