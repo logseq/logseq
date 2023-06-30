@@ -45,6 +45,14 @@
           @apply rounded my-2 sticky top-[-1rem] cursor-pointer select-none
           active:opacity-80;
         }
+
+        .action-wrap {
+          @apply flex space-x-2 items-center select-none active:opacity-70;
+
+          &.disabled {
+            @apply opacity-60 cursor-default;
+          }
+        }
       }
     }
   }

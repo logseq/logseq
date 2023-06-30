@@ -3,8 +3,10 @@
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]
             [cljs-bean.core :as bean]
+            [frontend.state :as state]
             [frontend.search :as search]
             [frontend.ui :as ui]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -23,7 +25,7 @@
           :shortcut.category/others))
 
 (defn- to-vector [v]
-  (when v
+  (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
 
 (rum/defc search-control
@@ -35,13 +37,54 @@
     (ui/icon "refresh")]
    [:span.pr-1
     [:input.form-input.is-small
-     {:placeholder   "Search"
-      :default-value q
-      :auto-focus    true
-      :on-change     #(let [v (util/evalue %)]
-                        (set-q! v))}]]
+     {:placeholder "Search"
+      :value       (or q "")
+      :auto-focus  true
+      :on-key-down #(when (= 27 (.-keyCode %))
+                      (util/stop %)
+                      (set-q! ""))
+      :on-change   #(let [v (util/evalue %)]
+                      (set-q! v))}]]
    [:a.flex.items-center (ui/icon "keyboard")]
    [:a.flex.items-center (ui/icon "filter")]])
+
+(rum/defc customize-shortcut-dialog-inner
+  [k action-name current-binding]
+  (let [[keystroke set-keystroke!] (rum/use-state "")
+        keypressed?       (not= "" keystroke)
+        keyboard-shortcut (if-not keypressed? current-binding keystroke)]
+
+    (rum/use-effect!
+      (fn []
+        (shortcut/unlisten-all)
+        #(shortcut/listen-all))
+      [])
+
+    [:<>
+     [:div.sm:w-lsm
+      [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
+      [:p.mb-4.mt-4
+       (ui/render-keyboard-shortcut (-> keyboard-shortcut
+                                        (string/trim)
+                                        (string/lower-case)
+                                        (string/split #" |\+")))
+       " "
+       (when keypressed?
+         [:a.text-sm
+          {:style    {:margin-left "12px"}
+           :on-click (fn []
+                       (dh/remove-shortcut k)
+                       (shortcut/refresh!)
+                       (set-keystroke! (constantly ""))     ;; Clear local state
+                       )}
+          "Reset"])]]
+     [:div.cancel-save-buttons.text-right.mt-4
+      (ui/button "Save" :on-click (fn []
+                                    (state/close-modal!)))
+      [:a.ml-4
+       {:on-click (fn []
+                    ;(reset! *keypress (dh/binding-for-storage current-binding))
+                    (state/close-modal!))} "Cancel"]]]))
 
 (defn build-categories-map
   []
@@ -116,15 +159,23 @@
                                         [:code.text-xs (str id)]
                                         [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]]
 
-                                       :else (str id))]]
+                                       :else (str id))
+                        disabled?    (false? (first binding))]]
               [:li.flex.items-center.justify-between.text-sm
                {:key (str id)}
                [:span label]
-               [:span.flex.space-x-2.items-center
+               [:a.action-wrap
+                {:class    (util/classnames [{:disabled disabled?}])
+                 :on-click (when-not disabled?
+                             #(state/set-sub-modal!
+                                (fn [] (customize-shortcut-dialog-inner
+                                         id label (str (or user-binding binding))))
+                                {:center? true}))}
                 (when user-binding
                   [:code.dark:bg-green-800.bg-green-300
                    (str "Custom: " (bean/->js (map #(some-> % (shortcut-utils/decorate-binding)) user-binding)))])
 
-                (for [x binding]
-                  (when x
-                    [:code.tracking-wide (shortcut-utils/decorate-binding (str x))]))]])])])]]))
+                (when-not user-binding
+                  (for [x binding]
+                    [:code.tracking-wide
+                     (dh/binding-for-display id x)]))]])])])]]))
