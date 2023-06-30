@@ -118,6 +118,7 @@
         "html2canvas": "^1.4.1",
         "ignore": "5.1.8",
         "inter-ui": "^3.19.3",
+        "interactjs": "^1.10.17",
         "jszip": "3.8.0",
         "katex": "^0.16.7",
         "mldoc": "1.5.7",

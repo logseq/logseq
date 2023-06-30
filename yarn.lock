@@ -362,6 +362,11 @@
   resolved "https://registry.yarnpkg.com/@hugotomazi/capacitor-navigation-bar/-/capacitor-navigation-bar-2.0.0.tgz#d5297025da12c486e7f733e311e367eeebd8a011"
   integrity sha512-hebf0ixGPugiZfH6g7HS/hrDzkKmNdJV/pV2jUz5lfoZXFMjE+7aeAr1AqwW6EGNej65WcEP8VUL5YUc3wSCjw==
 
+"@interactjs/types@1.10.17":
+  version "1.10.17"
+  resolved "https://registry.npmjs.org/@interactjs/types/-/types-1.10.17.tgz#1649de06d9ead790c81ecece76736b852bdfc77e"
+  integrity sha512-X2JpoM7xUw0p9Me0tMaI0HNfcF/Hd07ZZlzpnpEMpGerUZOLoyeThrV9P+CrBHxZrluWJrigJbcdqXliFd0YMA==
+
 "@ionic/cli-framework-output@^2.2.1", "@ionic/cli-framework-output@^2.2.5":
   version "2.2.5"
   resolved "https://registry.yarnpkg.com/@ionic/cli-framework-output/-/cli-framework-output-2.2.5.tgz#0db9fba7efe0c27bb5085b12ee01f22053e44152"
@@ -3731,6 +3736,13 @@ inter-ui@^3.19.3:
   version "3.19.3"
   resolved "https://registry.npmjs.org/inter-ui/-/inter-ui-3.19.3.tgz#cf4b4b6d30de8d5463e2462588654b325206488c"
   integrity sha512-5FG9fjuYOXocIfjzcCBhICL5cpvwEetseL3FU6tP3d6Bn7g8wODhB+I9RNGRTizCT7CUG4GOK54OPxqq3msQgg==
+
+interactjs@^1.10.17:
+  version "1.10.17"
+  resolved "https://registry.npmjs.org/interactjs/-/interactjs-1.10.17.tgz#aed66a63020cd092236133f9149e6448dc405d72"
+  integrity sha512-grjHJgnWkCoQLmAlk2yalNd1r0ztUhXLJNVjSOfWn1wfNNgU2tx1cDEkro9WYerDNC9UG3MZTeD4O6zOM5gbIA==
+  dependencies:
+    "@interactjs/types" "1.10.17"
 
 internal-slot@^1.0.3:
   version "1.0.3"
