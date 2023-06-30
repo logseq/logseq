@@ -40,4 +40,6 @@
    ;; We need some variable from the state to carry over 
    :color-accent (state/get-color-accent) 
    :color-gradient (state/get-color-gradient)
+   :sub-color-gradient-bg-styles state/sub-color-gradient-bg-styles 
+   :sub-color-gradient-text-styles state/sub-color-gradient-text-styles
    :linear-gradient colors/linear-gradient})

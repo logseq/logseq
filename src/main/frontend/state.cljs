@@ -2153,3 +2153,39 @@ Similar to re-frame subscriptions"
   (swap! state assoc :ui/radix-gradient nil)
   (storage/remove :ui/radix-gradient))
 
+(defn cycle-color! []
+  (let [current-color (get-color-accent)
+        next-color (->> (cons nil colors/color-list) 
+                        (drop-while #(not= % current-color)) 
+                        (second))]
+    (if next-color 
+      (set-color-accent! next-color) 
+      (unset-color-accent!))))
+
+(defn cycle-gradient! []
+  (let [current-gradient (get-color-gradient)]
+    (case current-gradient  
+      nil (set-color-gradient! 2)
+      6 (unset-color-gradient!)
+      (set-color-gradient! (inc current-gradient)))))
+  
+
+(defn sub-color-gradient-bg-styles [step]
+  (let [color (sub :ui/radix-color)
+        stops (sub :ui/radix-gradient)]
+    {:background-image (colors/linear-gradient color step stops)
+     :background-attachment :fixed 
+     :background-position "0 0"
+     :background-size "100% 100%"}))
+     ; :transform "translate3d(0,0,0) "}))
+
+(defn sub-color-gradient-text-styles [step]
+  (assoc (sub-color-gradient-bg-styles step)
+        :background-clip "text"
+        "-webkit-background-clip" "text"
+        :color :transparent))
+  ; (sub-color-gradient-bg-styles step))
+    
+    
+  
+

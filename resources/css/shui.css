@@ -1,0 +1,41 @@
+.shui__button {
+  @apply bg-gradient-to-br from-red-500 via-green-500 to-blue-500 py-0.5 px-2 rounded-lg text-sm font-medium relative;
+  /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */ 
+  /*             inset 0 -2px 0 0px rgba(0, 0, 0, 0.1); */
+  /* background-image: linear-gradient(white, white), */
+  /*                   linear-gradient(to bottom, green, gold); */
+  /* background-origin: border-box; */
+  /* background-clip: content-box, border-box; */
+}
+
+.shui__button:before {
+  @apply absolute inset-0 rounded-lg;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* background-image: linear-gradient(to bottom, white, transparent); */
+  /* background-clip: border-box, padding-box; */
+  /* padding: 1px; */
+  /* border: 1px solid transparent; */
+  /* border: 1px solid; */
+  /* border-image: linear-gradient(to bottom, black, transparent) 1; */ 
+}
+
+.shui__button:after {
+  @apply absolute inset-0 rounded-lg;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to top, rgba(0,0,0,0.2), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* @apply absolute inset-0 rounded-lg; */
+  /* content: ""; */
+  /* border: 1px solid; */
+  /* border-image: linear-gradient(to top, white, transparent) 1; */ 
+}

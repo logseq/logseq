@@ -1,6 +1,8 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
+            [logseq.shui.core :as shui]
+            [frontend.shui :refer [make-shui-context]]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
@@ -148,7 +150,7 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label action button-label href on-click desc -for]}]
+  [{:keys [left-label action button-label href on-click desc -for stretch]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
 
    ;; left column
@@ -158,12 +160,17 @@
 
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
-    {:style {:gap "0.5rem"}}
-    [:div (if action action (ui/button
-                              button-label
-                              :class    "text-sm p-1"
-                              :href     href
-                              :on-click on-click))]
+    {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+    [:div {:style (when stretch {:width "100%"})} 
+     (if action action (shui/button {:text button-label
+                                     :href href 
+                                     :on-click on-click}
+                                    (make-shui-context nil nil)))]
+     ; (if action action (ui/button
+     ;                      button-label
+     ;                      :class    "text-sm p-1"
+     ;                      :href     href
+     ;                      :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])

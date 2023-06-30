@@ -415,12 +415,8 @@
                           (when config-edit?
                             {:hintOptions {}})
                           user-options)
-        theme-mode (state/sub :ui/theme)
-        system-theme-mode (state/sub :ui/system-theme)
         editor (when textarea
-                 (from-textarea textarea (clj->js cm-options)))
-        element-key (str "editor-" id "-" radix-color "-" theme-mode "-" system-theme-mode "-" theme)]
-    (js/console.log "element-key: " element-key theme)
+                 (from-textarea textarea (clj->js cm-options)))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)
             element (.getWrapperElement editor)]

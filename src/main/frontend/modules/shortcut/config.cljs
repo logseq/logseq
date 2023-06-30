@@ -349,6 +349,11 @@
                                                 (editor-handler/escape-editing false)
                                                 (route-handler/go-to-search! :global))}
 
+   :go/cmdk                        {:binding "mod+j"
+                                    :fn      #(do 
+                                                (editor-handler/escape-editing false)
+                                                (route-handler/go-to-cmdk!))}
+
    :go/electron-find-in-page       {:binding "mod+f"
                                     :inactive (not (util/electron?))
                                     :fn      #(search-handler/open-find-in-page!)}
@@ -518,6 +523,15 @@
 
    :ui/toggle-cards                 {:binding "t c"
                                      :fn      ui-handler/toggle-cards!}
+
+   :ui/cycle-color-off              {:binding "c o" 
+                                     :fn      state/unset-color-accent!}
+
+   :ui/cycle-color                  {:binding "c c" 
+                                     :fn      state/cycle-color!}
+
+   :ui/cycle-gradient               {:binding "c g" 
+                                     :fn      state/cycle-gradient!}
 
    :git/commit                      {:binding "mod+g c"
                                      :inactive (not (util/electron?))
@@ -698,6 +712,7 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
+                          :go/cmdk
                           :go/electron-find-in-page
                           :go/electron-jump-to-the-next
                           :go/electron-jump-to-the-previous
@@ -734,6 +749,9 @@
                           :ui/toggle-help
                           :ui/toggle-theme
                           :ui/toggle-contents
+                          :ui/cycle-color-off
+                          :ui/cycle-color
+                          :ui/cycle-gradient
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
@@ -861,7 +879,10 @@
     :ui/toggle-left-sidebar
     :ui/toggle-right-sidebar
     :ui/toggle-settings
-    :ui/toggle-contents]
+    :ui/toggle-contents
+    :ui/cycle-color-off
+    :ui/cycle-color 
+    :ui/cycle-gradient]
 
    :shortcut.category/whiteboard
    [:editor/new-whiteboard

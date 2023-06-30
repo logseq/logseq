@@ -10,6 +10,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [dommy.core :as dom]
+            [frontend.colors :as colors]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
@@ -529,7 +530,7 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
-(rum/defcs page-inner <
+(rum/defcs page-inner < rum/reactive
   (rum/local false ::mouse-down?)
   "The inner div of page reference component
 
@@ -540,13 +541,15 @@
   (let [*mouse-down? (::mouse-down? state)
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (model/untitled-page? page-name)]
+        untitled? (model/untitled-page? page-name)
+        gradient-styles (state/sub-color-gradient-text-styles :09)]
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
                (str " page-property-key block-property")
                untitled? (str " opacity-50"))
+      :style gradient-styles
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
@@ -754,7 +757,11 @@
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
       [:span.page-reference
-       {:data-ref s}
+       {:data-ref s
+        :style {:background-image (colors/linear-gradient :grass "09" 5)
+                :background-clip "text"
+                "-webkit-background-clip" "text"
+                :color "transparent"}}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -3084,12 +3091,7 @@
           attr (when language
                  {:data-lang language})
           code (apply str lines)
-          theme-key (str (state/sub :ui/theme) "/" 
-                         (state/sub :ui/system-theme?) "/" 
-                         (state/sub :ui/radix-color) "/" 
-                         (state/sub :ui/custom-theme))
           [inside-portal? set-inside-portal?] (rum/use-state nil)]
-      (js/console.log "actual theme-key" theme-key)
       (cond
         html-export?
         (highlight/html-export attr code)
@@ -3110,7 +3112,7 @@
 
              :else
              [:<>
-              (lazy-editor/editor config (str (d/squuid)) attr code (assoc options :theme-key theme-key))
+              (lazy-editor/editor config (str (d/squuid)) attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
                   (sci/eval-result code block)))])])))))

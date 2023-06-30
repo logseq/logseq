@@ -40,8 +40,13 @@
 
       &.chosen,
       &.chosen p {
-        background-color: var(--ls-a-chosen-bg);
+        background-color: or(--logseq-og-cp-chosen, --lx-gray-03, --ls-a-chosen-bg);
         color: var(--ls-secondary-text-color);
+      }
+
+      .dark &.chosen,
+      .dark &.chosen p {
+        background-color: or(--logseq-og-cp-chosen, --lx-gray-02, --ls-a-chosen-bg);
       }
 
       &:hover p {

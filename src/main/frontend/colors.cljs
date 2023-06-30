@@ -1509,8 +1509,6 @@
         end (+ middle (/ (dec n-stops) 2))]
     (subvec (into color-list color-list) start end)))
 
-
-(mod -1 10)
 (defn linear-gradient [color-name color-stop gradient-level]
   (let [color-index (.indexOf color-list color-name) 
         step (fn [dist] 
@@ -1524,7 +1522,8 @@
       4 (str "linear-gradient(-45deg, " (step -2) " -16.66%, " (step -1) " 16.66%, " (step 0) " 50%, " (step 1) " 83.33%, " (step 2) " 116.66%)") 
       5 (str "linear-gradient(-45deg, " (step -2) " 0%, " (step -1) " 25%, " (step 0) " 50%, " (step 1) " 75%, " (step 2) " 100%)")
       6 (str "linear-gradient(-45deg, " (step -3) " -10%, " (step -2) " 10%, " (step -1) " 30%, " (step 0) " 50%, " (step 1) " 70%, " (step 2) " 90%, " (step 3) " 110%)")
-      7 (str "linear-gradient(-45deg, " (step -3) " 0%, " (step -2) " 16.66%, " (step -1) " 33.33%, " (step 0) " 50%, " (step 1) " 66.66%, " (step 2) " 83.33%, " (step 3) " 100%)"))))
+      7 (str "linear-gradient(-45deg, " (step -3) " 0%, " (step -2) " 16.66%, " (step -1) " 33.33%, " (step 0) " 50%, " (step 1) " 66.66%, " (step 2) " 83.33%, " (step 3) " 100%)")
+      (str "linear-gradient(90deg, " (step 0) ", " (step 0) ")"))))
 
 (defn get-color
   ; ([value])
@@ -1560,15 +1559,16 @@
                           "--ls-border-color: var(--rx-" (name gray) "-05); "
                           "--ls-secondary-border-color: var(--rx-" (name color) "-05); "
                           "--ls-page-checkbox-color: var(--rx-" (name gray) "-07); "
-                          "--ls-selection-background-color: var(--rx-" (name color) "-09); "
+                          "--ls-selection-background-color: var(--rx-" (name gray) "-04-alpha); "
+                          "--ls-block-highlight-color: var(--rx-" (name gray) "-04-alpha); "
                           "--ls-focus-ring-color: var(--rx-" (name color) "-09); "
                           "--ls-table-tr-even-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-page-properties-background-color: var(--rx-" (name gray) "-04); "
-                          "--ls-block-highlight-color: var(--rx-" (name gray) "-04); "
                           "--ls-cloze-text-color: var(--rx-" (name color) "-08); "
                           "--ls-wb-stroke-color-default: var(--rx-" (name color) "-07); " 
                           "--ls-wb-background-color-default: var(--rx-" (name color) "-04); "
-                          "--ls-wb-text-color-default: var(--rx-" (name gray) "-12); ")
+                          "--ls-wb-text-color-default: var(--rx-" (name gray) "-12); "
+                          "--ls-a-chosen-bg: var(--rx-" (name gray) "-01); ")
                           ; "--tl-selectStroke: var(--rx-" (name color) "-08); ")
         tl-translations (str "[class^=\"tl-\"] { --tl-selectStroke: var(--rx-" (name color) "-09); }")]
     (set! (.-id style-tag) "color-variables")

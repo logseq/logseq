@@ -787,7 +787,6 @@
                         :route-match    route-match
                         :default-home   default-home
                         :new-block-mode new-block-mode})
-
         (when (util/electron?)
           (find-in-page/search))
 
@@ -823,4 +822,4 @@
       (when
        (and (not config/mobile?)
             (not config/publishing?))
-        (help-button))])))
+       (help-button))])))

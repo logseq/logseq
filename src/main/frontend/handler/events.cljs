@@ -69,6 +69,7 @@
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.shui.core :refer [cmdk]]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -269,17 +270,17 @@
   (when
    (and (not (util/electron?))
         (not (mobile-util/native-platform?)))
-    (fn [close-fn]
-      [:div
-       [:p
-        "Grant native filesystem permission for directory: "
-        [:b (config/get-local-dir repo)]]
-       (ui/button
-        "Grant"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close-fn)))])))
+   (fn [close-fn]
+     [:div
+      [:p
+       "Grant native filesystem permission for directory: "
+       [:b (config/get-local-dir repo)]]
+      (ui/button
+       "Grant"
+       :class "ui__modal-enter"
+       :on-click (fn []
+                   (nfs/check-directory-permission! repo)
+                   (close-fn)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
@@ -383,7 +384,7 @@
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
   ;; Replace initial fs watcher
-  (fs-watcher/load-graph-files! repo)
+  (fs-watcher/load-graph-files! repo))
   ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
@@ -395,7 +396,7 @@
   ;;                   (not= filename-format :triple-lowbar))
   ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
   ;;    3000))
-  )
+  
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -409,6 +410,13 @@
                     {:fullscreen? false
                      :close-btn?  false
                      :label "ls-modal-search"}))
+
+(defmethod handle :go/cmdk [_]
+  (js/alert "handle cmdk")
+  (state/set-modal! cmdk 
+                    {:fullscreen? false 
+                     :close-btn?  false 
+                     :label "ls-modal-cmdk"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -990,5 +998,5 @@
   (def deprecated-repo (state/get-current-repo))
   (def new-repo (string/replace deprecated-repo deprecated-app-id current-app-id))
 
-  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id)
-  )
+  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id))
+  

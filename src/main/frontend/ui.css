@@ -294,7 +294,7 @@ html.is-mobile {
   &:hover:not([disabled]) {
     /* opacity: or(--lx-accent-01, 0.8); */
     opacity: 1;
-    background-color: or(--lx-accent-07);
+    background-color: or(--lx-accent-06, --color-indigo-700);
   }
 
   &.is-link {
