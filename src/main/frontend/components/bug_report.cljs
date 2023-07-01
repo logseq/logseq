@@ -57,8 +57,7 @@
 
     [:div.flex.flex-col
      (when (= step 0)
-       (list [:div.mx-auto (t :bug-report/inspector-page-desc-1)]
-             [:div.mx-auto (t :bug-report/inspector-page-desc-2)]
+       (list [:div.mx-auto (t :bug-report/inspector-page-desc)]
              ;; for mobile
              [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder (t :bug-report/inspector-page-placeholder)}]
              [:div.flex.justify-between.items-center.mt-2

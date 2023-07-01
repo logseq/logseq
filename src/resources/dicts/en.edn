@@ -84,8 +84,7 @@
  :bug-report/section-issues-desc "If there are no tools available for you to gather additional information, please report the bug directly."
  :bug-report/section-issues-btn-title "Submit a bug report"
  :bug-report/section-issues-btn-desc "Help Make Logseq Better!"
- :bug-report/inspector-page-desc-1 "Press Ctrl+V / ⌘+V to inspect your clipboard data"
- :bug-report/inspector-page-desc-2 "or click here to paste if you are using the mobile version"
+ :bug-report/inspector-page-desc (fn [] ["Press Ctrl+V / ⌘+V to inspect your clipboard data" [:br] "or click here to paste if you are using the mobile version"])
  :bug-report/inspector-page-placeholder "Long press here to paste if you are on mobile"
  :bug-report/inspector-page-tip "Something wrong? No problem, click to go back to the previous step."
  :bug-report/inspector-page-btn-back "Go back"

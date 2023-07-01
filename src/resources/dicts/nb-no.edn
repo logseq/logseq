@@ -644,8 +644,6 @@
  :bug-report/inspector-page-btn-copy "Kopier resultatet"
  :bug-report/inspector-page-btn-create-issue "Opprett et problem"
  :bug-report/inspector-page-copy-notif "Kopiert til utklippstavle!"
- :bug-report/inspector-page-desc-1 "Trykk Ctrl+V / ⌘+V for å inspisere data på utklippstavlen"
- :bug-report/inspector-page-desc-2 "eller trykk her for å lime inn om du bruker mobilversjonen"
  :bug-report/inspector-page-desc-clipboard "Her er data lest fra utklippstavlen."
  :bug-report/inspector-page-desc-copy "Dersom dette er ok å dele, trykk på kopier knappen."
  :bug-report/inspector-page-desc-create-issue "Nå kan du rapportere resultatet som er limt inn i utklippstavlen. Vennligst lim inn resultatet i 'Additional Context' seksjonen og fortell hvor du kopierte innholdet fra. Takk!"

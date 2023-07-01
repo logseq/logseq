@@ -65,8 +65,6 @@
  :bug-report/section-issues-desc "Ek bilgi toplamak için kullanabileceğiniz herhangi bir araç yoksa, lütfen hatayı doğrudan bildirin."
  :bug-report/section-issues-btn-title "Hata raporu gönderin"
  :bug-report/section-issues-btn-desc "Logseq'i Daha İyi Hale Getirmeye Yardımcı Olun!"
- :bug-report/inspector-page-desc-1 "Pano verilerinizi incelemek için Ctrl+V / ⌘+V tuşlarına basın"
- :bug-report/inspector-page-desc-2 "veya mobil sürümü kullanıyorsanız yapıştırmak için buraya dokunun"
  :bug-report/inspector-page-placeholder "Mobil cihazdaysanız yapıştırmak için buraya uzun basın"
  :bug-report/inspector-page-tip "Ters giden birşey mi var? Sorun değil, önceki adıma geri gitmek için düğmeye basın."
  :bug-report/inspector-page-btn-back "Geri git"
