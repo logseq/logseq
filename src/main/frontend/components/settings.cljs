@@ -113,7 +113,7 @@
               svg/external-link name " 🎉"]])
 
           "error"
-          [:p (t :settings-page/update-error-1)
+          [:p (t :settings-page/update-error)
            [:a.link
             {:on-click
              (fn [e]
