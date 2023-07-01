@@ -712,8 +712,6 @@
  :on-boarding/section-journals "Dagboknotater"
  :on-boarding/section-pages "SIDER"
  :on-boarding/section-phone "telefon"
- :on-boarding/section-tip-1 "Hver side er en fil lagret på din {1}."
- :on-boarding/section-tip-2 "Du kan velge å sykronisere det senere."
  :on-boarding/section-title "Slik lagrer Logseq arbeidet ditt"
  :on-boarding/tour-whiteboard-btn-back "Tilbake"
  :on-boarding/tour-whiteboard-btn-finish "Fullfør"

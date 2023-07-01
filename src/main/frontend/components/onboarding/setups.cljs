@@ -99,9 +99,7 @@
          [:small.opacity-60 (t :on-boarding/section-desc)]]]
 
        [:p.text-sm.pt-5.tracking-wide
-        [:span (str (t :on-boarding/section-tip-1 DEVICE))]
-        [:br]
-        [:span (t :on-boarding/section-tip-2)]]
+        [:span (str (t :on-boarding/section-tip DEVICE))]]
 
        [:ul
         (for [[title label icon]

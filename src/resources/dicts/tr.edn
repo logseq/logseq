@@ -44,8 +44,6 @@
  :on-boarding/section-btn-desc "Mevcut dizini açın veya yeni bir dizin oluşturun"
  :on-boarding/section-title "Logseq çalışmalarınızı nasıl kaydeder?"
  :on-boarding/section-desc "Seçtiğiniz dizinin içinde Logseq 4 tane klasör oluşturacaktır."
- :on-boarding/section-tip-1 "Her sayfa yalnızca {1} depolanan bir dosyadır."
- :on-boarding/section-tip-2 "Daha sonra eşitlemeyi seçebilirsiniz."
  :on-boarding/section-assets "Grafikler ve Belgeler"
  :on-boarding/section-computer "bilgisayarınızda"
  :on-boarding/section-journals "Günlük notlar"
