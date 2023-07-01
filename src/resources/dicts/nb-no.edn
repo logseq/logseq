@@ -749,8 +749,6 @@
  :settings-page/theme-light "lyst"
  :settings-page/theme-system "følg system"
  :settings-page/update-available "Fant ny versjon "
- :settings-page/update-error-1 "⚠️ Oops, noe gikk galt!"
- :settings-page/update-error-2 " Vennligst sjekk ut "
  :tips/all-done "Alt fullført!"
  :whiteboard/dashboard-card-created "Opprettet "
  :whiteboard/dashboard-card-edited "Redigert "

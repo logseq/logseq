@@ -314,8 +314,6 @@
  :settings-page/changelog "Yenilikler nelerdir?"
  :settings-page/app-updated "Uygulamanız güncel 🎉"
  :settings-page/update-available "Yeni sürüm bulundu: "
- :settings-page/update-error-1 "⚠️ Ne yazık ki bir sorun oluştu!"
- :settings-page/update-error-2 " Lütfen bu bağlantıyı denetleyin: "
  :yes "Evet"
  
  :submit "Onayla"

@@ -113,13 +113,13 @@
               svg/external-link name " 🎉"]])
 
           "error"
-          [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
+          [:p (t :settings-page/update-error-1)
            [:a.link
             {:on-click
              (fn [e]
                (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
                (util/stop e))}
-            svg/external-link " release channel"]])])]))
+            svg/external-link (t :settings-page/update-error-releases)]])])]))
 
 (rum/defc outdenting-hint
   []

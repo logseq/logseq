@@ -350,8 +350,8 @@
  :settings-page/changelog "What's new?"
  :settings-page/app-updated "Your app is up-to-date 🎉"
  :settings-page/update-available "Found new release "
- :settings-page/update-error-1 "⚠️ Oops, Something Went Wrong!"
- :settings-page/update-error-2 " Please check out the "
+ :settings-page/update-error (fn [] ["⚠️ Oops, Something Went Wrong!" [:br] " Please check out the "])
+ :settings-page/update-error-releases " release channel"
  :yes "Yes"
 
  :submit "Submit"
