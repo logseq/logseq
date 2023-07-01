@@ -295,8 +295,7 @@
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
  :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
  :settings-page/preferred-outdenting "Logical outdenting"
- :settings-page/preferred-outdenting-tip "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled "
- :settings-page/preferred-outdenting-tip-more "→ Learn more"
+ :settings-page/preferred-outdenting-tip (fn [] ["The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled " [:a.text-sm {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978" :target "_blank"} "→ Learn more"]])
  :settings-page/show-full-blocks "Show all lines of a block reference"
  :settings-page/auto-expand-block-refs "Expand block references automatically when zoom-in"
  :settings-page/auto-expand-block-refs-tip "This option controls whether to expand the block references automatically when zoom-in."

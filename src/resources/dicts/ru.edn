@@ -199,8 +199,7 @@
  :settings-page/disable-sentry                         "Отправлять данные использования и диагностики в Logseq"
  :settings-page/disable-sentry-desc                    "Logseq никогда не будет собирать вашу локальную базу данных графов или продавать ваши данные"
  :settings-page/preferred-outdenting                   "Логические отступы"
- :settings-page/preferred-outdenting-tip               "С левой стороны показаны отступы с настройкой по умолчанию, а справа - отступы с включённой настройкой. "
- :settings-page/preferred-outdenting-tip-more          "→ Узнать больше"
+ :settings-page/preferred-outdenting-tip               (fn [] ["С левой стороны показаны отступы с настройкой по умолчанию, а справа - отступы с включённой настройкой. " [:a.text-sm {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978" :target "_blank"} "→ Узнать больше"]])
  :settings-page/show-full-blocks                       "Показать все строки в ссылке на блок"
  :settings-page/auto-expand-block-refs                 "Автоматически раскрывать ссылки на блок при увеличении масштаба"
  :settings-page/auto-expand-block-refs-tip             "Этот параметр определяет, следует ли автоматически раскрывать ссылки на блоки при увеличении масштаба."

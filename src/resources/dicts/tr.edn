@@ -268,8 +268,6 @@
  :settings-page/disable-sentry "Kullanım verilerini ve tanılamayı Logseq'e gönderin"
  :settings-page/disable-sentry-desc "Logseq asla yerel graf veritabanınızı toplamayacak veya verilerinizi satmayacaktır."
  :settings-page/preferred-outdenting "Mantıksal girinti"
- :settings-page/preferred-outdenting-tip "Sol taraf varsayılan ayar ile olan girintiyi, sağ taraf ise mantıksal girinti etkinken olan girintiyi gösterir. "
- :settings-page/preferred-outdenting-tip-more "→ Daha fazla bilgi edinin"
  :settings-page/show-full-blocks "Blok referansındaki tüm satırları göster"
  :settings-page/auto-expand-block-refs "Yakınlaştırdığınızda blok referanslarını otomatik olarak genişletin"
  :settings-page/auto-expand-block-refs-tip "Bu seçenek, yakınlaştırma yapıldığında blok referanslarının otomatik olarak genişletilip genişletilmeyeceğini kontrol eder."

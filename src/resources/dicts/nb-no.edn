@@ -743,8 +743,6 @@
  :settings-page/git-desc-2 "For profesjonelle brukere støtter Logseq også "
  :settings-page/git-desc-3 " for versjonskontroll. Bruk Git på egen risiko, ettersom generelle Git-problemer ikke er støttet av Logseq teamet."
  :settings-page/git-tip "Dersom du har Logseq Sync aktivert kan du se en sides redigeringshistorikk direkte. Denne seksjonen er bare for de teknisk kunnskapsrike."
- :settings-page/preferred-outdenting-tip "Den venstre siden viser inntrykk med standardinnstillingen, og den høyre viser innrykk med logiske innrykk aktivert "
- :settings-page/preferred-outdenting-tip-more "→ Lær mer"
  :settings-page/revision "Revisjon: "
  :settings-page/sync-desc-1 "Klikk"
  :settings-page/sync-desc-2 "her"

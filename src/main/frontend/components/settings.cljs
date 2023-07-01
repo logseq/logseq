@@ -127,10 +127,7 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     (t :settings-page/preferred-outdenting-tip)
-     [:a.text-sm
-      {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
-      (t :settings-page/preferred-outdenting-tip-more)]]
+     (t :settings-page/preferred-outdenting-tip)]
     [:img {:src    "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
            :width  500
            :height 500}]]])
