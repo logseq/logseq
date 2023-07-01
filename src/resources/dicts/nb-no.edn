@@ -734,8 +734,6 @@
  :settings-page/checking "Sjekker ..."
  :settings-page/custom-date-format-notification "Du må re-indeksere grafen din for at endringene skal tre i kraft"
  :settings-page/git-desc-1 "For å se en sides redigeringshistorikk, klikk på de tre horisontale prikkene i høyre, øvre hjørne og velg \"Sjekk sidehistorikk\"."
- :settings-page/git-desc-2 "For profesjonelle brukere støtter Logseq også "
- :settings-page/git-desc-3 " for versjonskontroll. Bruk Git på egen risiko, ettersom generelle Git-problemer ikke er støttet av Logseq teamet."
  :settings-page/git-tip "Dersom du har Logseq Sync aktivert kan du se en sides redigeringshistorikk direkte. Denne seksjonen er bare for de teknisk kunnskapsrike."
  :settings-page/revision "Revisjon: "
  :settings-page/sync-desc-1 "Klikk"

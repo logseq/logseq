@@ -691,12 +691,7 @@
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-1)]
     [:br][:br]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-2)]
-    [:a {:href "https://git-scm.com/" :target "_blank"}
-     "Git"]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-3)]]
+    (t :settings-page/git-desc-2)]
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)

@@ -268,8 +268,7 @@
  :context-menu/template-exists-warning "Template already exists!"
  :settings-page/git-tip "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."
  :settings-page/git-desc-1 "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."
- :settings-page/git-desc-2 "For professional users, Logseq also supports using "
- :settings-page/git-desc-3 " for version control. Use Git at your own risk as general Git issues are not supported by the Logseq team."
+ :settings-page/git-desc-2 (fn [] [[:span.text-sm.opacity-50.my-4 "For professional users, Logseq also supports using "] [:a {:href "https://git-scm.com/" :target "_blank"} "Git"] [:span.text-sm.opacity-50.my-4 " for version control. Use Git at your own risk as general Git issues are not supported by the Logseq team."]])
  :settings-page/git-switcher-label "Enable Git auto commit"
  :settings-page/git-commit-delay "Git auto commit seconds"
  :settings-page/git-commit-warn "Invalid value! Must be a number between 1 and 600."
