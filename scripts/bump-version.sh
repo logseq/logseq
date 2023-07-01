@@ -34,7 +34,7 @@ V_PATCH=${BASE_LIST[2]}
 
 echo -e "${NOTICE_FLAG} Current version: ${WHITE}$BASE_VERSION"
 echo -e "${NOTICE_FLAG} Latest commit hash: ${WHITE}$LATEST_HASH"
-echo -e "${NOTICE_FLAG} Current versionCode(Android): ${WHITE}$VERSION_CODE"
+echo -e "${NOTICE_FLAG} Current versionCode(Android) / buildVersion(MacOS): ${WHITE}$VERSION_CODE"
 
 # V_MINOR=$((V_MINOR + 1))
 # V_PATCH=0
@@ -50,7 +50,7 @@ fi
 NEW_VERSION_CODE=$(($VERSION_CODE + 1))
 
 echo -e "${NOTICE_FLAG} Will set new version to be ${WHITE}$INPUT_STRING"
-echo -e "${NOTICE_FLAG} Will set new versionCode to be ${WHITE}$VERSION_CODE"
+echo -e "${NOTICE_FLAG} Will set new versionCode to be ${WHITE}$NEW_VERSION_CODE"
 
 NEW_VERSION=$INPUT_STRING
 
@@ -58,6 +58,7 @@ $SED -i 's/defonce version ".*"/defonce version "'${NEW_VERSION}'"/g' src/main/f
 $SED -i 's/"version": ".*"/"version": "'${NEW_VERSION}'"/g' resources/package.json
 $SED -i 's/versionName ".*"/versionName "'${NEW_VERSION}'"/g' android/app/build.gradle
 $SED -i 's/versionCode .*/versionCode '${NEW_VERSION_CODE}'/g' android/app/build.gradle
+$SED -i 's/buildVersion: .*/buildVersion: '${NEW_VERSION_CODE}',/g' resources/forge.config.js
 $SED -i 's/MARKETING_VERSION = .*;/MARKETING_VERSION = '${NEW_VERSION}';/g' ios/App/App.xcodeproj/project.pbxproj
 
 git --no-pager diff -U0
