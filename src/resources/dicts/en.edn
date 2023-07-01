@@ -32,8 +32,7 @@
  :on-boarding/quick-tour-left-sidebar-title "👀 Left Sidebar"
  :on-boarding/quick-tour-left-sidebar-desc "Open the left sidebar to explore important menu items in Logseq."
  :on-boarding/quick-tour-favorites-title "⭐️ Favorites"
- :on-boarding/quick-tour-favorites-desc-1 "Pin your favorite pages via the `... `menu on any page."
- :on-boarding/quick-tour-favorites-desc-2 "We’ve also added some template pages here to help you get started. You can remove these once you start writing your own notes."
+ :on-boarding/quick-tour-favorites-desc (fn [] [[:p "Pin your favorite pages via the `... `menu on any page."] [:p "We’ve also added some template pages here to help you get started. You can remove these once you start writing your own notes."]])
  :on-boarding/quick-tour-sync-initiate "🚀 Initiate synchronization of your current graph"
  :on-boarding/quick-tour-sync-initiate-p "Clicking here will start the process of uploading your local files to an encrypted remote graph."
  :on-boarding/quick-tour-sync-initiate-btn-cancel "Cancel"

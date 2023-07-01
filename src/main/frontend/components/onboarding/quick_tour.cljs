@@ -93,8 +93,7 @@
    ;; step 4
    {:id                "nav-favorites"
     :text              (h/render-html [:section [:h2 (t :on-boarding/quick-tour-favorites-title)]
-                                       [:p (t :on-boarding/quick-tour-favorites-desc-1)]
-                                       [:p (t :on-boarding/quick-tour-favorites-desc-2)]])
+                                       (t :on-boarding/quick-tour-favorites-desc)])
     :beforeShowPromise #(if-not (state/sub :ui/left-sidebar-open?)
                           (wait-target state/toggle-left-sidebar! 500)
                           (p/resolved true))

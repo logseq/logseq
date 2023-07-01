@@ -30,8 +30,6 @@
  :on-boarding/quick-tour-left-sidebar-title "👀 Sol Kenar Çubuğu"
  :on-boarding/quick-tour-left-sidebar-desc "Logseq uygulamasındaki önemli menü ögelerini keşfetmek için sol kenar çubuğunu açın."
  :on-boarding/quick-tour-favorites-title "⭐️ Sık Kullanılanlar"
- :on-boarding/quick-tour-favorites-desc-1 "En sevdiğiniz sayfaları herhangi bir sayfadaki `...` menüsü aracılığıyla sabitleyin."
- :on-boarding/quick-tour-favorites-desc-2 "Başlamanıza yardımcı olmak için buraya bazı şablon sayfaları da ekledik. Kendi notlarınızı yazmaya başladıktan sonra bunları kaldırabilirsiniz."
  :on-boarding/command-palette-quick-tour "Katılım için hızlı tur"
  :on-boarding/importing-main-title "Mevcut notları içeri aktarın"
  :on-boarding/importing-main-desc "Bunu daha sonra uygulamayı kullanırken de yapabilirsiniz."

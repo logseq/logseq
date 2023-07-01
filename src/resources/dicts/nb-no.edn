@@ -695,8 +695,6 @@
  :on-boarding/quick-tour-btn-finish "Avslutt"
  :on-boarding/quick-tour-btn-next "Neste"
  :on-boarding/quick-tour-btn-skip "Hopp over Rask Omvisning "
- :on-boarding/quick-tour-favorites-desc-1 "Fest dine favorittsider via `... `menyen på alle sider."
- :on-boarding/quick-tour-favorites-desc-2 "Vi har også lagt til noen malsider her for å hjelpe deg i gang. Du kan fjerne disse når du begynner å skrive dine egne notater."
  :on-boarding/quick-tour-favorites-title "⭐️ Favoritter"
  :on-boarding/quick-tour-help-desc "Du kan alltids klikke her for hjelp og annen informasjon om Logseq."
  :on-boarding/quick-tour-help-title "❓ Hjelp"
