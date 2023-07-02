@@ -333,9 +333,7 @@
  :settings-page/beta-features "Beta features"
  :settings-page/login-prompt "To access new features before anyone else you must be an Open Collective Sponsor or Backer of Logseq and therefore log in first."
  :settings-page/sync "Sync"
- :settings-page/sync-desc-1 "Click"
- :settings-page/sync-desc-2 "here"
- :settings-page/sync-desc-3 "for instructions on how to set up and use Sync."
+ :settings-page/sync-desc (fn [] ["Click" [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/" :target "_blank"} "here"] "for instructions on how to set up and use Sync."])
  :settings-page/sync-diff-merge "Enable smart merge when syncing"
  :settings-page/sync-diff-merge-desc "Merge local updates with remote files automatically when conflict happens, instead of overwriting the remote files"
  :settings-page/sync-diff-merge-warn "Smart merge ability is only activated on a client after first successful sync with the remote server on the graph in the new Logseq version. Enabling this on all devices to reach the best experience."
