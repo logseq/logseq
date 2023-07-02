@@ -305,7 +305,6 @@
  :settings-page/native-titlebar-desc "Windows ve Linux'ta yerel pencere başlık çubuğunu etkinleştirir."
  :settings-page/check-for-updates "Güncellemeleri kontrol et"
  :settings-page/checking "Kontrol ediliyor ..."
- :settings-page/revision "Revizyon: "
  :settings-page/changelog "Yenilikler nelerdir?"
  :settings-page/app-updated "Uygulamanız güncel 🎉"
  :settings-page/update-available "Yeni sürüm bulundu: "

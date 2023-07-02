@@ -244,7 +244,7 @@
  :settings-page/native-titlebar-desc                   "Включить встроенную строку заголовка окна в Windows и Linux."
  :settings-page/check-for-updates                      "Проверить наличие обновлений"
  :settings-page/checking                               "Проверка ..."
- :settings-page/revision                               "Редакция: "
+ :settings-page/revision                               "Редакция: {1}"
  :settings-page/changelog                              "Что нового?"
  :settings-page/app-updated                            "Приложение обновлено 🎉"
  :yes                                                  "Да"
