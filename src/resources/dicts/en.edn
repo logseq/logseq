@@ -342,7 +342,7 @@
  :settings-page/native-titlebar-desc "Enables the native window title bar on Windows and Linux."
  :settings-page/check-for-updates "Check for updates"
  :settings-page/checking "Checking ..."
- :settings-page/revision "Revision: "
+ :settings-page/revision "Revision: {1}"
  :settings-page/revision-notif "Current Revision: "
  :settings-page/changelog "What's new?"
  :settings-page/app-updated "Your app is up-to-date 🎉"

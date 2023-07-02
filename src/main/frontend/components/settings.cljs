@@ -80,7 +80,7 @@
                nil)]
 
        [:div.text-sm.cursor
-        {:title (str (t :settings-page/revision) config/revision)
+        {:title (str (t :settings-page/revision config/revision))
          :on-click (fn []
                      (notification/show! [:div (t :settings-page/revision-notif)
                                           [:a {:target "_blank"
