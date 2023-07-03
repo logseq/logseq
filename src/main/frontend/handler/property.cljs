@@ -95,41 +95,42 @@
         schema (get builtin-schema-types property-type)
         properties (:block/properties block)
         value (get properties property-uuid)]
-    (when-let [v* (try
-                    (convert-property-input-string property-type v)
-                    (catch :default e
-                      (notification/show! (str e) :error false)
-                      nil))]
-      (when-not (contains? (if (set? value) value #{value}) v*)
-        (if-let [msg (me/humanize (mu/explain-data schema v*))]
-          (notification/show! msg :error false)
-          (do
-            (when (nil? property) ;if property not exists yet
-              (db/transact! repo [(outliner-core/block-with-timestamps
-                                   {:block/schema {:type property-type}
-                                    :block/original-name k-name
-                                    :block/name (util/page-name-sanity-lc k-name)
-                                    :block/uuid property-uuid
-                                    :block/type "property"})]))
-            (let [refs (when (= property-type :default) (extract-page-refs-from-prop-str-value v*))
-                  refs' (when (seq refs)
-                          (concat (:block/refs (db/pull [:block/uuid (:block/uuid block)]))
-                                  refs))
-                  v' (if (= property-type :default)
-                       (if (seq refs) refs v*)
-                       v*)
-                  new-value (if multiple-values? (vec (distinct (conj value v'))) v')
-                  block-properties (assoc properties property-uuid new-value)
-                  block-properties-text-values
-                  (if (and (not multiple-values?) (= property-type :default))
-                    (assoc (:block/properties-text-values block) property-uuid v*)
-                    (dissoc (:block/properties-text-values block) property-uuid))]
-              ;; TODO: fix block/properties-order
-              (db/transact! repo
-                [{:block/uuid (:block/uuid block)
-                  :block/properties block-properties
-                  :block/properties-text-values block-properties-text-values
-                  :block/refs refs'}]))))))))
+    (when-not (and multiple-values? (string/blank? (str v)))
+      (when-let [v* (try
+                      (convert-property-input-string property-type v)
+                      (catch :default e
+                        (notification/show! (str e) :error false)
+                        nil))]
+        (when-not (contains? (if (set? value) value #{value}) v*)
+          (if-let [msg (me/humanize (mu/explain-data schema v*))]
+            (notification/show! msg :error false)
+            (do
+              (when (nil? property) ;if property not exists yet
+                (db/transact! repo [(outliner-core/block-with-timestamps
+                                     {:block/schema {:type property-type}
+                                      :block/original-name k-name
+                                      :block/name (util/page-name-sanity-lc k-name)
+                                      :block/uuid property-uuid
+                                      :block/type "property"})]))
+              (let [refs (when (= property-type :default) (extract-page-refs-from-prop-str-value v*))
+                    refs' (when (seq refs)
+                            (concat (:block/refs (db/pull [:block/uuid (:block/uuid block)]))
+                                    refs))
+                    v' (if (= property-type :default)
+                         (if (seq refs) refs v*)
+                         v*)
+                    new-value (if multiple-values? (vec (distinct (conj value v'))) v')
+                    block-properties (assoc properties property-uuid new-value)
+                    block-properties-text-values
+                    (if (and (not multiple-values?) (= property-type :default))
+                      (assoc (:block/properties-text-values block) property-uuid v*)
+                      (dissoc (:block/properties-text-values block) property-uuid))]
+                ;; TODO: fix block/properties-order
+                (db/transact! repo
+                  [{:block/uuid (:block/uuid block)
+                    :block/properties block-properties
+                    :block/properties-text-values block-properties-text-values
+                    :block/refs refs'}])))))))))
 
 (defn remove-property!
   [repo block k-uuid-or-builtin-k-name]
