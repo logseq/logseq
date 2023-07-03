@@ -171,6 +171,12 @@
        (map key)
        (first)))
 
+(defn should-convert-to-global-handler
+  [from-handler-id]
+  (if (contains? #{:shortcut.handler/pdf} from-handler-id)
+    :shortcut.handler/global-prevent-default
+    from-handler-id))
+
 (defn get-conflicts-by-keys
   ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default))
   ([ks handler-id]
@@ -179,7 +185,8 @@
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
          ks-bindings     (get-bindings-keys-map)
-         global? (contains? global-handlers handler-id)]
+         handler-id      (should-convert-to-global-handler handler-id)
+         global?         (contains? global-handlers handler-id)]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k (shortcut-utils/undecorate-binding k)]

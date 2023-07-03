@@ -2,6 +2,9 @@
   (:require [clojure.string :as str]
             [frontend.util :as util]))
 
+(defn mod-key [binding]
+  (str/replace binding #"(?i)mod"
+               (if util/mac? "meta" "ctrl")))
 
 (defn undecorate-binding
   [binding]
@@ -18,9 +21,10 @@
                   "←" "left"
                   "→" "right"}]
     (some-> (str binding)
-            (str/lower-case)
             (str/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
-            (str/replace #"\s+" " "))))
+            (str/replace #"\s+" " ")
+            (mod-key)
+            (str/lower-case))))
 
 (defn decorate-namespace [k]
   (let [n  (name k)

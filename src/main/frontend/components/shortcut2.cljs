@@ -52,11 +52,21 @@
    [:a.flex.items-center (ui/icon "keyboard")]
    [:a.flex.items-center (ui/icon "filter")]])
 
+(rum/defc shortcut-conflicts-display
+  [k conflicts-map]
+
+  [:div.py-2.text-red-500.text-xs
+   [:h4 (str k)]
+   [:pre (pr-str conflicts-map)]])
+
 (rum/defc customize-shortcut-dialog-inner
-  [k action-name current-binding]
+  [k action-name binding user-binding]
   (let [[keystroke set-keystroke!] (rum/use-state "")
-        keypressed? (not= "" keystroke)
-        [current-binding set-current-binding!] (rum/use-state (to-vector current-binding))]
+        [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
+        [key-conflicts set-key-conflicts!] (rum/use-state nil)
+
+        handler-id  (rum/use-memo #(dh/get-group k))
+        keypressed? (not= "" keystroke)]
 
     (rum/use-effect!
       (fn []
@@ -66,8 +76,8 @@
           (events/listen key-handler "key"
                          (fn [^js e]
                            (.preventDefault e)
-                           (js/console.log "====>>>" (shortcut/keyname e))
-                           (set-keystroke! #(str % (shortcut/keyname e)))))
+                           (set-key-conflicts! nil)
+                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; teardown
           #(do (shortcut/listen-all)
@@ -76,6 +86,7 @@
 
     [:div.cp__shortcut-page-x-record-dialog-inner
      [:div.sm:w-lsm
+      [:p [:code (str k) " " (str handler-id)]]
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
 
       [:div.shortcuts-keys-wrap
@@ -98,20 +109,32 @@
            [:a.flex.items-center.active:opacity-90
             {:on-click (fn []
                          ;; TODO: check conflicts
-                         (notification/show! (str keystroke))
-                         (set-current-binding! (conj current-binding keystroke)))}
+                         (prn "===>>>" keystroke)
+                         (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
+                           (if-not (seq conflicts-map)
+                             (do (notification/show! (str keystroke))
+                                 (set-current-binding! (conj current-binding keystroke)))
+
+                             ;; show conflicts
+                             (set-key-conflicts! conflicts-map))))}
             (ui/icon "check" {:size 14})]
            [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
-            {:on-click #(set-keystroke! "")}
+            {:on-click (fn []
+                         (set-keystroke! "")
+                         (set-key-conflicts! nil))}
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
            [:small.pr-1 "Press any key to add custom shortcut"] (ui/icon "keyboard" {:size 14})])]]]
 
+     ;; conflicts results
+     (when key-conflicts
+       (shortcut-conflicts-display k key-conflicts))
+
      [:div.cancel-save-buttons.text-right.mt-6.flex.justify-between.items-center
 
       [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
-       "Restore to system default"]
+       "Restore to system default" [:code (str binding)]]
 
       [:span
        (ui/button "Save" :on-click (fn [] (state/close-modal!)))
@@ -202,8 +225,7 @@
                 {:class    (util/classnames [{:disabled disabled?}])
                  :on-click (when-not disabled?
                              #(state/set-sub-modal!
-                                (fn [] (customize-shortcut-dialog-inner
-                                         id label (or user-binding binding)))
+                                (fn [] (customize-shortcut-dialog-inner id label binding user-binding))
                                 {:center? true}))}
                 (when user-binding
                   [:code.dark:bg-green-800.bg-green-300
