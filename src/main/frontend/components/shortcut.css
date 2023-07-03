@@ -66,15 +66,25 @@
     .shortcuts-keys-wrap {
       @apply flex items-center my-4 flex-wrap;
 
-      &.keypressed {
-        .shortcut-record-control {
-          @apply pt-0
-        }
-      }
-
       .shortcut-record-control {
         @apply flex space-x-1 items-center select-none
         rounded border-[2px] py-[2px] px-[2px];
+      }
+    }
+
+    &.keypressed {
+      .shortcut-record-control {
+        @apply pt-0
+      }
+    }
+
+    .reset-btn {
+      @apply ml-4 opacity-50 cursor-default;
+    }
+
+    &.dirty {
+      .reset-btn {
+        @apply opacity-100 cursor-pointer;
       }
     }
   }

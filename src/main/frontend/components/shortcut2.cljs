@@ -66,6 +66,7 @@
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
 
         handler-id  (rum/use-memo #(dh/get-group k))
+        dirty?      (not= (or user-binding binding) current-binding)
         keypressed? (not= "" keystroke)]
 
     (rum/use-effect!
@@ -85,13 +86,11 @@
       [])
 
     [:div.cp__shortcut-page-x-record-dialog-inner
+     {:class (util/classnames [{:keypressed keypressed? :dirty dirty?}])}
      [:div.sm:w-lsm
-      [:p [:code (str k) " " (str handler-id)]]
-      [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
+      [:p.mb-4 "Customize shortcuts for the " [:b action-name] " action."]
 
       [:div.shortcuts-keys-wrap
-       {:class (util/classnames [{:keypressed keypressed?}])}
-
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
         (for [x current-binding]
           [:code.tracking-wider
@@ -109,11 +108,11 @@
            [:a.flex.items-center.active:opacity-90
             {:on-click (fn []
                          ;; TODO: check conflicts
-                         (prn "===>>>" keystroke)
                          (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
                            (if-not (seq conflicts-map)
                              (do (notification/show! (str keystroke))
-                                 (set-current-binding! (conj current-binding keystroke)))
+                                 (set-current-binding! (conj current-binding keystroke))
+                                 (set-keystroke! ""))
 
                              ;; show conflicts
                              (set-key-conflicts! conflicts-map))))}
@@ -125,24 +124,25 @@
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
-           [:small.pr-1 "Press any key to add custom shortcut"] (ui/icon "keyboard" {:size 14})])]]]
+           [:small.pr-1 "Press any sequence of keys to set a shortcut"] (ui/icon "keyboard" {:size 14})])]]]
 
      ;; conflicts results
      (when key-conflicts
        (shortcut-conflicts-display k key-conflicts))
 
-     [:div.cancel-save-buttons.text-right.mt-6.flex.justify-between.items-center
-
+     [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
       [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
        "Restore to system default" [:code (str binding)]]
 
       [:span
-       (ui/button "Save" :on-click (fn [] (state/close-modal!)))
+       (ui/button "Save"
+                  :background (when dirty? "red")
+                  :disabled (not dirty?)
+                  :on-click (fn [] (state/close-modal!)))
 
-       [:a.ml-4
-        {:on-click (fn []
-                     ;(reset! *keypress (dh/binding-for-storage current-binding))
-                     (state/close-modal!))} "Cancel"]]]]))
+       [:a.reset-btn
+        {:on-click (fn [] (set-current-binding! (or user-binding binding)))}
+        "Reset"]]]]))
 
 (defn build-categories-map
   []
