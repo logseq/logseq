@@ -259,9 +259,6 @@
  :search/publishing "搜索"
  :search "搜索或者创建新页面"
  :page-search "在当前页面搜索"
-
- :textinput/placeholder "输入文本"
-
  :graph-search "搜索图谱"
  :graph "图谱"
  :graph/persist "打开新窗口前，Logseq正在同步内部状态，请等待片刻。"
