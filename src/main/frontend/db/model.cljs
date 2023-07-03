@@ -425,6 +425,7 @@ independent of format as format specific heading characters are stripped"
                           :marker (:block/marker e)
                           :priority (:block/priority e)
                           :properties (:block/properties e)
+                          :properties-values (:block/properties-text-values e)
                           :children children
                           :collapsed? (:block/collapsed? e)}]))}
        nil)

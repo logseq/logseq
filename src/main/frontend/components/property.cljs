@@ -243,14 +243,7 @@
         edit-fn (fn [editor-id id v]
                   (let [v (str v)
                         cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
-                    (state/set-editing! editor-id v property cursor-range)
-
-                    (js/setTimeout
-                     (fn []
-                       (state/set-editor-action-data! {:block property
-                                                       :pos 0})
-                       (state/set-editor-action! :property-value-search))
-                     50)))
+                    (state/set-editing! editor-id v property cursor-range)))
         multiple-values? (= :many (:cardinality schema))
         type (:type schema)
         editor-args {:block property
