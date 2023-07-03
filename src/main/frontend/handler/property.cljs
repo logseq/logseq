@@ -29,7 +29,9 @@
    :number  number?
    :date    inst?
    :boolean boolean?
-   :url     uri?
+   :url     [:fn
+             {:error/message "should be a URL"}
+             gp-util/url?]
    :object  uuid?})                     ; TODO: make sure block exists
 
 ;; schema -> type, cardinality, object's class
@@ -82,7 +84,7 @@
     (js/Date. v-str)
 
     :url
-    (goog.Uri. v-str)))
+    v-str))
 
 (defn add-property!
   [repo block k-name v]
@@ -102,8 +104,9 @@
                         (notification/show! (str e) :error false)
                         nil))]
         (when-not (contains? (if (set? value) value #{value}) v*)
-          (if-let [msg (me/humanize (mu/explain-data schema v*))]
-            (notification/show! msg :error false)
+          (if-let [msg (me/humanize (mu/explain-data schema v))]
+            (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
+              (notification/show! msg' :warning))
             (do
               ;; FIXME: what if the block already have a block/type, e.g. whiteboard?
               (when (and property (nil? (:block/type property)))
