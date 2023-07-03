@@ -54,12 +54,13 @@
              (let [type (keyword (string/lower-case v))]
                (swap! *property-schema assoc :type type)))))]
 
-      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-       [:label.cols-1 "Multiple values:"]
-       (let [many? (boolean (= :many (:cardinality @*property-schema)))]
-         (ui/checkbox {:checked many?
-                       :on-change (fn []
-                                    (swap! *property-schema assoc :cardinality (if many? :one :many)))}))]
+      (when-not (= (:type @*property-schema) :checkbox)
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+         [:label.cols-1 "Multiple values:"]
+         (let [many? (boolean (= :many (:cardinality @*property-schema)))]
+           (ui/checkbox {:checked many?
+                         :on-change (fn []
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
       [:div
        (ui/button
@@ -167,21 +168,21 @@
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
-      new-property?
-      [:div#edit-new-property
-       (property-key-input block *property-key *property-value)]
+     new-property?
+     [:div#edit-new-property
+      (property-key-input block *property-key *property-value)]
 
-      (seq properties)
-      [:a {:title "Add another property"
-           :on-click (fn []
-                       (property-handler/set-editing-new-property! edit-input-id)
-                       (reset! *property-key nil)
-                       (reset! *property-value nil))}
-       [:div.block {:style {:height      20
-                            :width       20}}
-        [:a.add-button-link.block {:title "Add another value"
-                                   :style {:margin-left -4}}
-         (ui/icon "circle-plus")]]])))
+     (seq properties)
+     [:a {:title "Add another property"
+          :on-click (fn []
+                      (property-handler/set-editing-new-property! edit-input-id)
+                      (reset! *property-key nil)
+                      (reset! *property-value nil))}
+      [:div.block {:style {:height      20
+                           :width       20}}
+       [:a.add-button-link.block {:title "Add another value"
+                                  :style {:margin-left -4}}
+        (ui/icon "circle-plus")]]])))
 
 (rum/defcs property-key < (rum/local false ::show-close?)
   [state block property]
@@ -201,6 +202,27 @@
           :on-click (fn [_e]
                       (property-handler/remove-property! repo block (:block/uuid property)))}
          (ui/icon "x")]])]))
+
+(rum/defc property-scalar-value
+  [block property value {:keys [editor-on-click inline-text]}]
+  (case (:type (:block/schema property))
+    :date
+    (ui/button
+      (or value "Empty")
+      :icon :calendar)
+
+    :checkbox
+    (ui/checkbox {:checked value
+                  :on-change (fn [_e]
+                               (let [repo (state/get-current-repo)]
+                                 (property-handler/add-property! repo block
+                                                                 (:block/name property)
+                                                                 (boolean (not value)))))})
+    ;; :object
+    ;; default and others
+    [:div (when editor-on-click {:on-click editor-on-click})
+     (when-not (string/blank? (str value))
+       (inline-text {} :markdown (str value)))]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item dom-id' editor-id' {:keys [edit-fn page-cp inline-text]}]
@@ -229,9 +251,9 @@
                                                     item))}
         svg/close])]))
 
-;; (add-property! block *property-key *property-value)
 (rum/defcs property-value < rum/reactive
-  [state block property {:keys [inline-text editor-box page-cp]}]
+  [state block property value
+   {:keys [inline-text editor-box page-cp]}]
   (let [k (:block/uuid property)
         v (get (:block/properties-text-values block)
                k
@@ -288,20 +310,15 @@
       (editor-box editor-args editor-id {})
 
       :else
-      [:div.flex.flex-1.property-value-content
-       {:id dom-id
-        :on-click (fn []
-                    (edit-fn editor-id nil v))}
-       (cond
-         (and (= type :date) (string/blank? v))
-         [:div "TBD (date icon)"]
+      [:div.flex.flex-1.items-center.property-value-content
+       {:id dom-id}
+       (property-scalar-value block property value
+                              {:editor-on-click (fn []
+                                                  (edit-fn editor-id nil v))
+                               :inline-text inline-text})])))
 
-         :else
-         (when-not (string/blank? (str v))
-           (inline-text {} :markdown (str v))))])))
-
-(rum/defc properties-area < rum/reactive
-  [block properties properties-text-values edit-input-id block-components-m]
+(rum/defcs properties-area < rum/reactive
+  [state block properties properties-text-values edit-input-id block-components-m]
   (let [repo (state/get-current-repo)
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))]
     (when (or (seq properties) new-property?)
@@ -315,7 +332,7 @@
                 [:div.property-key.col-span-1
                  (property-key block property)]
                 [:div.property-value.col-span-3
-                 (property-value block property block-components-m)]])
+                 (property-value block property v block-components-m)]])
              ;; TODO: built in properties should have UUID and corresponding schema
              ;; builtin
              [:div
