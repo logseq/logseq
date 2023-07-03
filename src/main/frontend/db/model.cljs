@@ -1160,7 +1160,7 @@ independent of format as format specific heading characters are stripped"
                 [(get m :template) e]))
          (into {}))))
 
-(defn get-all-properties
+(defn file-based-get-all-properties
   []
   (let [db (conn/get-db)
         properties (d/q
@@ -1172,11 +1172,20 @@ independent of format as format specific heading characters are stripped"
     (->> (map keys properties)
          (apply concat)
          distinct
-         (map (fn [k]
-                (if (uuid? k)
-                  (:block/original-name (d/entity db [:block/uuid k]))
-                  k)))
          sort)))
+
+(defn db-based-get-all-properties
+  []
+  (let [db (conn/get-db)
+        ids (->> (d/datoms db :aevt :block/schema)
+                 (map :e))]
+    (map #(:block/original-name (db-utils/entity %)) ids)))
+
+(defn get-all-properties
+  []
+  (if (react/db-graph?)
+    (db-based-get-all-properties)
+    (file-based-get-all-properties)))
 
 (defn- property-value-for-refs-and-text
   "Given a property value's refs and full text, determines the value to

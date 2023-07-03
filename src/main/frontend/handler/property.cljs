@@ -27,7 +27,9 @@
 (def builtin-schema-types
   {:default  string?                     ; default, might be mixed with refs, tags
    :number   number?
-   :date     inst?
+   :date     [:fn
+              {:error/message "should be a date"}
+              date-str?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
@@ -70,7 +72,8 @@
 
 (defn convert-property-input-string
   [schema-type v-str]
-  (if (string? v-str)
+  (if (boolean? v-str)
+    v-str
     (case schema-type
       :default
       v-str
@@ -85,34 +88,32 @@
       (uuid v-str)
 
       :date
-      (js/Date. v-str)
+      (js/Date. v-str)                  ; inst
 
       :url
-      v-str)
-    v-str))
+      v-str)))
 
 (defn add-property!
   [repo block k-name v]
-  (prn :debug " add-property! " {:k k-name
-                                 :v v})
-  (let [property      (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
-        property-uuid (or (:block/uuid property) (random-uuid))
-        {:keys [type cardinality]} (:block/schema property)
-        multiple-values? (= cardinality :many)
-        infer-schema (when-not type (infer-schema-from-input-string v))
-        property-type (or type infer-schema :default)
-        schema (get builtin-schema-types property-type)
-        properties (:block/properties block)
-        value (get properties property-uuid)]
-    (when-not (and multiple-values? (string/blank? (str v)))
-      (let [v* (try
-                 (convert-property-input-string property-type v)
-                 (catch :default e
-                   (notification/show! (str e) :error false)
-                   nil))]
-        (when (some? v*)
+  (when v
+    (let [property      (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+          property-uuid (or (:block/uuid property) (random-uuid))
+          {:keys [type cardinality]} (:block/schema property)
+          multiple-values? (= cardinality :many)
+          infer-schema (when-not type (infer-schema-from-input-string v))
+          property-type (or type infer-schema :default)
+          schema (get builtin-schema-types property-type)
+          properties (:block/properties block)
+          value (get properties property-uuid)]
+      (when-not (and multiple-values? (string/blank? (str v)))
+        (let [v* (try
+                   (convert-property-input-string property-type v)
+                   (catch :default e
+                     (notification/show! (str e) :error false)
+                     nil))]
+          (defonce debug-v v*)
           (when-not (contains? (if (set? value) value #{value}) v*)
-            (if-let [msg (me/humanize (mu/explain-data schema v))]
+            (if-let [msg (me/humanize (mu/explain-data schema v*))]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
               (do

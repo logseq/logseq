@@ -186,7 +186,10 @@
   (->> (db-model/get-all-properties)
        (remove (property-edit/hidden-properties))
        ;; Complete full keyword except the ':'
-       (map #(subs (str %) 1))))
+       (map (fn [property]
+              (if (keyword? property)
+                (subs (str property) 1)
+                property)))))
 
 (defn property-search
   ([q]

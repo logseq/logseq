@@ -371,8 +371,7 @@
       (recur))
     chan))
 
-(comment
-  (defn db-graph?
-   "Whether the current graph is db-only"
-   []
-   (= "db" (sub-key-value :db/type))))
+(defn db-graph?
+  "Whether the current graph is db-only"
+  []
+  (= "db" (sub-key-value :db/type)))
