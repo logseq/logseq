@@ -95,7 +95,7 @@
 
 (defn add-property!
   [repo block k-name v]
-  (when v
+  (when (some? v)
     (let [property      (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
           property-uuid (or (:block/uuid property) (random-uuid))
           {:keys [type cardinality]} (:block/schema property)
@@ -111,7 +111,6 @@
                    (catch :default e
                      (notification/show! (str e) :error false)
                      nil))]
-          (defonce debug-v v*)
           (when-not (contains? (if (set? value) value #{value}) v*)
             (if-let [msg (me/humanize (mu/explain-data schema v*))]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
