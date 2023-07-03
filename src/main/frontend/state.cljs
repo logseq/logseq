@@ -1872,8 +1872,7 @@ Similar to re-frame subscriptions"
                       (assoc
                        :editor/editing? {edit-input-id true}
                        :editor/set-timestamp-block nil
-                       :cursor-range cursor-range
-                       :ui/editing-property nil))))
+                       :cursor-range cursor-range))))
          (set-state! :editor/block block)
          (set-state! :editor/content content :path-in-sub-atom edit-input-id)
          (set-state! :editor/last-key-code nil)

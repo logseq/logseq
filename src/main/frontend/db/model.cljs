@@ -419,7 +419,9 @@ independent of format as format specific heading characters are stripped"
        {:query-fn (fn [_]
                     (let [e (db-utils/entity id)
                           children (map :db/id (sort-by-left (:block/_parent e) e))]
-                      [e {:content (:block/content e)
+                      [e {:original-name (:block/original-name e)
+                          :schema (:block/schema e)
+                          :content (:block/content e)
                           :marker (:block/marker e)
                           :priority (:block/priority e)
                           :properties (:block/properties e)
@@ -1421,6 +1423,7 @@ independent of format as format specific heading characters are stripped"
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
+                                (not (contains? #{"property"} (:block/type page)))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
                                           (not (:block/journal? page))))

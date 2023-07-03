@@ -237,24 +237,25 @@
                k
                (get (:block/properties block) k))
         dom-id (str "ls-property-" k)
-        editor-id (str "property-" (:db/id block) "-" k)
+        editor-id (str "ls-property-" (:db/id property) "-" k)
         editing? (state/sub [:editor/editing? editor-id])
         schema (:block/schema property)
         edit-fn (fn [editor-id id v]
                   (let [v (str v)
                         cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
-                    (state/set-editing! editor-id v block cursor-range)
+                    (state/set-editing! editor-id v property cursor-range)
 
                     (js/setTimeout
                      (fn []
-                       (state/set-editor-action-data! {:block block
-                                                       :property property
+                       (state/set-editor-action-data! {:block property
                                                        :pos 0})
-                       (state/set-editor-action! :property-value-search)
-                       (state/set-state! :ui/editing-property property))
+                       (state/set-editor-action! :property-value-search))
                      50)))
         multiple-values? (= :many (:cardinality schema))
-        type (:type schema)]
+        type (:type schema)
+        editor-args {:block property
+                     :parent-block block
+                     :format :markdown}]
     (cond
       multiple-values?
       (let [v' (if (coll? v) v (when v [v]))
@@ -268,8 +269,7 @@
                   editor-id' (str editor-id idx)
                   editing? (state/sub [:editor/editing? editor-id'])]
               (if editing?
-                (editor-box {:format :markdown
-                             :block block} editor-id' {})
+                (editor-box editor-args editor-id' {})
                 (multiple-value-item block property item dom-id' editor-id' {:page-cp page-cp
                                                                              :edit-fn edit-fn
                                                                              :inline-text inline-text}))))
@@ -289,12 +289,10 @@
                                             :style {:margin-left -4}}
                   (ui/icon "circle-plus")]]]]))]
          (when new-editing?
-           (editor-box {:format :markdown
-                        :block block} editor-id' {}))])
+           (editor-box editor-args editor-id' {}))])
 
       editing?
-      (editor-box {:format :markdown
-                   :block block} editor-id {})
+      (editor-box editor-args editor-id {})
 
       :else
       [:div.flex.flex-1.property-value-content
@@ -319,7 +317,7 @@
         [:div
          (for [[prop-uuid-or-built-in-prop v] properties]
            (if (uuid? prop-uuid-or-built-in-prop)
-             (when-let [property (db/pull [:block/uuid prop-uuid-or-built-in-prop])]
+             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
                [:div.grid.grid-cols-4.gap-1
                 [:div.property-key.col-span-1
                  (property-key block property)]

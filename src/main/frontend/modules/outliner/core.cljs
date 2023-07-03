@@ -13,6 +13,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property-edit :as property-edit]
+            [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
@@ -190,11 +191,12 @@
             (swap! txs-state into txs)))
 
         ;; Remove orphaned refs from block
-        (let [remove-self-page #(remove (fn [b]
-                                          (= (:db/id b) (:db/id (:block/page block-entity)))) %)
-              old-refs (remove-self-page (:block/refs block-entity))
-              new-refs (remove-self-page (:block/refs m))]
-          (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
+        (when-not (config/db-based-graph? (state/get-current-repo))
+          (let [remove-self-page #(remove (fn [b]
+                                            (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+                old-refs (remove-self-page (:block/refs block-entity))
+                new-refs (remove-self-page (:block/refs m))]
+            (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs))))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
 

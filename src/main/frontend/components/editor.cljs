@@ -646,21 +646,24 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id _config]
+  [state {:keys [format block parent-block]} id _config]
   (let [content (state/sub-edit-content id)
-        heading-class (get-editor-style-class block content format)]
+        heading-class (get-editor-style-class block content format)
+        opts (cond->
+                 {:id                id
+                  :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
+                  :default-value     (or content "")
+                  :minRows           (if (state/enable-grammarly?) 2 1)
+                  :on-click          (editor-handler/editor-on-click! id)
+                  :on-change         (editor-handler/editor-on-change! block id search-timeout)
+                  :on-paste          (paste-handler/editor-on-paste! id)
+                  :auto-focus        false
+                  :class             heading-class}
+               (some? parent-block)
+               (assoc :parentblockid (str (:block/uuid parent-block))))]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
-     (ui/ls-textarea
-      {:id                id
-       :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
-       :default-value     (or content "")
-       :minRows           (if (state/enable-grammarly?) 2 1)
-       :on-click          (editor-handler/editor-on-click! id)
-       :on-change         (editor-handler/editor-on-change! block id search-timeout)
-       :on-paste          (paste-handler/editor-on-paste! id)
-       :auto-focus        false
-       :class             heading-class})
+     (ui/ls-textarea opts)
 
      (mock-textarea content)
      (modals id format)
