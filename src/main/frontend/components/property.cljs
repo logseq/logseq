@@ -131,38 +131,40 @@
 (rum/defc property-scalar-value < rum/reactive
   [block property value {:keys [inline-text
                                 editor-id dom-id
-                                editor-box editor-args]}]
+                                editor-box editor-args
+                                new-item?]}]
   (let [multiple-values? (= :many (:cardinality (:block/schema property)))
         editing? (state/sub [:editor/editing? editor-id])]
-    (case (:type (:block/schema property))
-      :date
-      (date-picker block property value)
+    (when (or (not new-item?) editing?)
+      (case (:type (:block/schema property))
+       :date
+       (date-picker block property value)
 
-      :checkbox
-      (ui/checkbox {:checked value
-                    :on-change (fn [_e]
-                                 (let [repo (state/get-current-repo)]
-                                   (property-handler/add-property! repo block
-                                                                   (:block/name property)
-                                                                   (boolean (not value)))
-                                   (exit-edit-property nil nil)))})
+       :checkbox
+       (ui/checkbox {:checked value
+                     :on-change (fn [_e]
+                                  (let [repo (state/get-current-repo)]
+                                    (property-handler/add-property! repo block
+                                                                    (:block/name property)
+                                                                    (boolean (not value)))
+                                    (exit-edit-property nil nil)))})
 
-      ;; :others
-      (if editing?
-        [:div.flex.flex-1 (cond-> {}
-                              multiple-values?
-                              (assoc :class "property-value-content"))
-         (editor-box editor-args editor-id {})]
-        [:div.flex.flex-1
-         (cond->
-             {:id (or dom-id (random-uuid))
-              :style {:min-height 24}
-              :on-click (fn []
-                          (set-editing! property editor-id dom-id value))}
-           multiple-values?
-           (assoc :class "property-value-content"))
-         (when-not (string/blank? value)
-           (inline-text {} :markdown (str value)))]))))
+       ;; :others
+       (if editing?
+         [:div.flex.flex-1 (cond-> {}
+                             multiple-values?
+                             (assoc :class "property-value-content"))
+          (editor-box editor-args editor-id {})]
+         [:div.flex.flex-1
+          (cond->
+              {:id (or dom-id (random-uuid))
+               :style {:min-height 24}
+               :on-click (fn []
+                           (set-editing! property editor-id dom-id value))}
+            multiple-values?
+            (assoc :class "property-value-content"))
+          (when-not (string/blank? value)
+            (inline-text {} :markdown (str value)))])))))
 
 (rum/defc property-key-input
   [block *property-key *property-value *search?]
@@ -314,18 +316,22 @@
       multiple-values?
       (let [v' (if (coll? v) v (when v [v]))
             v' (if (seq v') v' [""])
-            editor-id' (str editor-id (count v'))]
+            v' (conj v' ::new-value-placeholder)            ; new one
+            editor-id' (str editor-id (count v'))
+            ]
         [:div.flex.flex-1.flex-col
          [:div.flex.flex-1.flex-col
           (for [[idx item] (medley/indexed v')]
             (let [dom-id' (str dom-id "-" idx)
                   editor-id' (str editor-id idx)]
-              (multiple-value-item block property item  {:dom-id dom-id'
-                                                         :editor-id editor-id'
-                                                         :editor-box editor-box
-                                                         :editor-args editor-args
-                                                         :page-cp page-cp
-                                                         :inline-text inline-text})))
+              (multiple-value-item block property item
+                                   {:dom-id dom-id'
+                                    :editor-id editor-id'
+                                    :editor-box editor-box
+                                    :editor-args editor-args
+                                    :page-cp page-cp
+                                    :inline-text inline-text
+                                    :new-item? (= item ::new-value-placeholder)})))
 
           (let [fv (first v')]
             (when (and fv
@@ -333,7 +339,7 @@
                            (and (not (string? fv)) (some? fv))))
               [:div.rounded-sm.ml-1
                {:on-click (fn []
-                            (set-editing! property (str editor-id (count v')) nil ""))}
+                            (set-editing! property (str editor-id (dec (count v'))) nil ""))}
                [:div.flex.flex-row
                 [:div.block {:style {:height      20
                                      :width       20}}

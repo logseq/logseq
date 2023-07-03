@@ -208,7 +208,7 @@
                 (outliner-core/save-block!
                  {:block/uuid (:block/uuid block)
                   :block/properties properties'}))))
-          (state/clear-editor-action!))))))
+          (state/clear-edit!))))))
 
 (defn set-editing-new-property!
   [value]
