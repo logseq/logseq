@@ -220,7 +220,8 @@
                                                                  (boolean (not value)))))})
     ;; :object
     ;; default and others
-    [:div (when editor-on-click {:on-click editor-on-click})
+    [:div.flex.flex-1
+     (when editor-on-click {:on-click editor-on-click})
      (when-not (string/blank? (str value))
        (inline-text {} :markdown (str value)))]))
 
@@ -313,8 +314,7 @@
       [:div.flex.flex-1.items-center.property-value-content
        {:id dom-id}
        (property-scalar-value block property value
-                              {:editor-on-click (fn []
-                                                  (edit-fn editor-id nil v))
+                              {:editor-on-click (fn [] (edit-fn editor-id nil v))
                                :inline-text inline-text})])))
 
 (rum/defcs properties-area < rum/reactive
