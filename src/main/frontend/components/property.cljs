@@ -24,7 +24,7 @@
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
                  (let [[repo property] (:rum/args state)]
-                   (reset! (::property-name state) (:block/name property))
+                   (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
   [state repo property]
@@ -172,12 +172,16 @@
        (property-key-input block *property-key *property-value)]
 
       (seq properties)
-      [:a {:title "Add another value"
+      [:a {:title "Add another property"
            :on-click (fn []
                        (property-handler/set-editing-new-property! edit-input-id)
                        (reset! *property-key nil)
                        (reset! *property-value nil))}
-       (ui/icon "circle-plus")])))
+       [:div.block {:style {:height      20
+                            :width       20}}
+        [:a.add-button-link.block {:title "Add another value"
+                                   :style {:margin-left -4}}
+         (ui/icon "circle-plus")]]])))
 
 (rum/defcs property-key < (rum/local false ::show-close?)
   [state block property]
@@ -187,8 +191,9 @@
      {:on-mouse-over (fn [_] (reset! *show-close? true))
       :on-mouse-out (fn [_] (reset! *show-close? false))}
      [:a.mr-2
-      {:on-click (fn [] (state/set-modal! #(property-config repo property)))}
-      (:block/name property)]
+      {:title (str "Configure property: " (:block/original-name property))
+       :on-click (fn [] (state/set-modal! #(property-config repo property)))}
+      (:block/original-name property)]
      (when @*show-close?
        [:div.absolute.top-0.right-0
         [:a.fade-link.fade-in.py-2.px-1
