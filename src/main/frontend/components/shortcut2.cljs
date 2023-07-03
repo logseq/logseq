@@ -6,11 +6,15 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.ui :as ui]
+            [goog.events :as events]
+            [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.modules.shortcut.config :as shortcut-config]))
+            [frontend.modules.shortcut.config :as shortcut-config])
+  (:import [goog.events KeyCodes KeyHandler KeyNames]
+           [goog.ui KeyboardShortcutHandler]))
 
 (def categories
   (vector :shortcut.category/basics
@@ -51,40 +55,70 @@
 (rum/defc customize-shortcut-dialog-inner
   [k action-name current-binding]
   (let [[keystroke set-keystroke!] (rum/use-state "")
-        keypressed?       (not= "" keystroke)
-        keyboard-shortcut (if-not keypressed? current-binding keystroke)]
+        keypressed? (not= "" keystroke)
+        [current-binding set-current-binding!] (rum/use-state (to-vector current-binding))]
 
     (rum/use-effect!
       (fn []
-        (shortcut/unlisten-all)
-        #(shortcut/listen-all))
+        (let [key-handler (KeyHandler. js/document)]
+          ;; setup
+          (shortcut/unlisten-all)
+          (events/listen key-handler "key"
+                         (fn [^js e]
+                           (.preventDefault e)
+                           (js/console.log "====>>>" (shortcut/keyname e))
+                           (set-keystroke! #(str % (shortcut/keyname e)))))
+
+          ;; teardown
+          #(do (shortcut/listen-all)
+               (.dispose key-handler))))
       [])
 
-    [:<>
+    [:div.cp__shortcut-page-x-record-dialog-inner
      [:div.sm:w-lsm
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
-      [:p.mb-4.mt-4
-       (ui/render-keyboard-shortcut (-> keyboard-shortcut
-                                        (string/trim)
-                                        (string/lower-case)
-                                        (string/split #" |\+")))
-       " "
-       (when keypressed?
-         [:a.text-sm
-          {:style    {:margin-left "12px"}
-           :on-click (fn []
-                       (dh/remove-shortcut k)
-                       (shortcut/refresh!)
-                       (set-keystroke! (constantly ""))     ;; Clear local state
-                       )}
-          "Reset"])]]
-     [:div.cancel-save-buttons.text-right.mt-4
-      (ui/button "Save" :on-click (fn []
-                                    (state/close-modal!)))
-      [:a.ml-4
-       {:on-click (fn []
-                    ;(reset! *keypress (dh/binding-for-storage current-binding))
-                    (state/close-modal!))} "Cancel"]]]))
+
+      [:div.shortcuts-keys-wrap
+       {:class (util/classnames [{:keypressed keypressed?}])}
+
+       [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
+        (for [x current-binding]
+          [:code.tracking-wider (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))])]
+
+       ;; add shortcut
+       [:div.shortcut-record-control
+
+        ;; keypressed state
+        (if keypressed?
+          [:<>
+           (when-not (string/blank? keystroke)
+             (ui/render-keyboard-shortcut keystroke))
+
+           [:a.flex.items-center.active:opacity-90
+            {:on-click (fn []
+                         ;; TODO: check conflicts
+                         (notification/show! (str keystroke))
+                         (set-current-binding! (conj current-binding keystroke)))}
+            (ui/icon "check" {:size 14})]
+           [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
+            {:on-click #(set-keystroke! "")}
+            (ui/icon "x" {:size 14})]]
+
+          [:code.flex.items-center
+           [:small.pr-1 "Press any key to add custom shortcut"] (ui/icon "keyboard" {:size 14})])]]]
+
+     [:div.cancel-save-buttons.text-right.mt-6.flex.justify-between.items-center
+
+      [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
+       "Restore to system default"]
+
+      [:span
+       (ui/button "Save" :on-click (fn [] (state/close-modal!)))
+
+       [:a.ml-4
+        {:on-click (fn []
+                     ;(reset! *keypress (dh/binding-for-storage current-binding))
+                     (state/close-modal!))} "Cancel"]]]]))
 
 (defn build-categories-map
   []
@@ -106,8 +140,7 @@
                                                binding-map q
                                                :extract-fn
                                                #(let [[id {:keys [cmd]}] %]
-                                                  (str id " " (or (:desc cmd)
-                                                                  (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
+                                                  (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
         result-list-map     (or matched-list-map categories-list-map)]
 
     (rum/use-effect!
@@ -151,13 +184,13 @@
                         label        (cond
                                        (string? (:desc cmd))
                                        [:<>
-                                        [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]
-                                        [:span.pl-1 (:desc cmd)]]
+                                        [:span.pl-1 (:desc cmd)]
+                                        [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
 
                                        (not plugin?)
                                        [:<>
-                                        [:code.text-xs (str id)]
-                                        [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]]
+                                        [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
+                                        [:small [:code.text-xs (str id)]]]
 
                                        :else (str id))
                         disabled?    (false? (first binding))]]
@@ -169,7 +202,7 @@
                  :on-click (when-not disabled?
                              #(state/set-sub-modal!
                                 (fn [] (customize-shortcut-dialog-inner
-                                         id label (str (or user-binding binding))))
+                                         id label (or user-binding binding)))
                                 {:center? true}))}
                 (when user-binding
                   [:code.dark:bg-green-800.bg-green-300
@@ -178,4 +211,5 @@
                 (when-not user-binding
                   (for [x binding]
                     [:code.tracking-wide
+                     {:key (str x)}
                      (dh/binding-for-display id x)]))]])])])]]))

@@ -56,4 +56,21 @@
       }
     }
   }
+
+  &-record-dialog-inner {
+    .shortcuts-keys-wrap {
+      @apply flex items-center my-4 flex-wrap;
+
+      &.keypressed {
+        .shortcut-record-control {
+          @apply pt-0
+        }
+      }
+
+      .shortcut-record-control {
+        @apply flex space-x-1 items-center select-none
+        rounded border-[2px] py-[2px] px-[2px];
+      }
+    }
+  }
 }

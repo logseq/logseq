@@ -240,7 +240,7 @@
       meta  (str "meta+")
       shift (str "shift+"))))
 
-(defn- keyname [e]
+(defn keyname [e]
   (let [name (get key-names (str (.-keyCode e)))]
     (case name
       nil nil
