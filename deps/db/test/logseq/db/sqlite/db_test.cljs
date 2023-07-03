@@ -31,7 +31,7 @@
                          :file/content "{:foo :bar}"}])
           _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))]
       (is (= {:content "{:foo :bar}"
-              :name nil
+              :name "logseq/config.edn"
               :type 3}
              (-> (sqlite-db/get-initial-data "test-db")
                  :init-data

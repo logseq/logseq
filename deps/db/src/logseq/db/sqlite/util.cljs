@@ -35,7 +35,7 @@
    :type (type-of-block b)
    :page_uuid (str (:page_uuid b))
    :page_journal_day (:block/journal-day b)
-   :name (:block/name b)
+   :name (or (:file/path b) (:block/name b))
    :content (or (:file/content b) (:block/content b))
    :datoms (:datoms b)
    :created_at (or (:block/created-at b) (time-ms))
