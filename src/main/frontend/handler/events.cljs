@@ -272,10 +272,10 @@
     (fn [close-fn]
       [:div
        [:p
-        "Grant native filesystem permission for directory: "
+        (t :settings-permission/grant-permission)
         [:b (config/get-local-dir repo)]]
        (ui/button
-        "Grant"
+        (t :settings-permission/start-granting)
         :class "ui__modal-enter"
         :on-click (fn []
                     (nfs/check-directory-permission! repo)
