@@ -10,7 +10,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [frontend.db :as db]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]
