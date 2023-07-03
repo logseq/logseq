@@ -105,6 +105,12 @@
           (if-let [msg (me/humanize (mu/explain-data schema v*))]
             (notification/show! msg :error false)
             (do
+              ;; FIXME: what if the block already have a block/type, e.g. whiteboard?
+              (when (and property (nil? (:block/type property)))
+                (db/transact! repo [(outliner-core/block-with-updated-at
+                                     {:block/schema {:type property-type}
+                                      :block/uuid property-uuid
+                                      :block/type "property"})]))
               (when (nil? property) ;if property not exists yet
                 (db/transact! repo [(outliner-core/block-with-timestamps
                                      {:block/schema {:type property-type}
