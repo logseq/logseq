@@ -188,6 +188,9 @@
     (fn [e]
       (util/stop e)
       (whiteboard-handler/create-new-whiteboard-and-redirect!))}
+   [:div
+    {:style {:display "none"}}
+    (t :whiteboard/create-or-search-graph)]
    (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
     (t :whiteboard/dashboard-card-new-whiteboard)]])
