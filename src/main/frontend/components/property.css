@@ -18,7 +18,7 @@
     }
 
     .editor-inner {
-        @apply px-1;
+        padding: 0;
     }
 }
 

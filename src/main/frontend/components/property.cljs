@@ -106,11 +106,8 @@
         text (if value'
                (str value')
                "Pick a date")]
-    (ui/button
-      text
-      :icon "calendar"
-      :intent "border-link"
-      :on-click (fn []
+    [:a
+     {:on-click (fn []
                   (state/set-modal!
                    #(ui/datepicker value' {:on-change (fn [_e date]
                                                         (let [repo (state/get-current-repo)]
@@ -118,32 +115,84 @@
                                                                                           (:block/name property)
                                                                                           date)
                                                           (exit-edit-property nil nil)
-                                                          (state/close-modal!)))}))))))
+                                                          (state/close-modal!)))})))}
+     [:span.inline-flex.items-center
+      (ui/icon "calendar")
+      [:span.ml-1 text]]]))
 
-(rum/defc property-scalar-value
-  [block property value {:keys [editor-on-click inline-text]}]
-  (let [property (when property
-                   (if (map? property)
-                     property
-                     (db/entity [:block/name (util/page-name-sanity-lc property)])))]
+(defn- set-editing!
+  [property editor-id dom-id v]
+  (let [v (str v)
+        cursor-range (if dom-id
+                       (some-> (gdom/getElement dom-id) util/caret-range)
+                       "")]
+    (state/set-editing! editor-id v property cursor-range)))
+
+(rum/defc property-scalar-value < rum/reactive
+  [block property value {:keys [inline-text
+                                editor-id dom-id
+                                editor-box editor-args]}]
+  (let [multiple-values? (= :many (:cardinality (:block/schema property)))
+        editing? (state/sub [:editor/editing? editor-id])]
     (case (:type (:block/schema property))
-     :date
-     (date-picker block property value)
+      :date
+      (date-picker block property value)
 
-     :checkbox
-     (ui/checkbox {:checked value
-                   :on-change (fn [_e]
-                                (let [repo (state/get-current-repo)]
-                                  (property-handler/add-property! repo block
-                                                                  (:block/name property)
-                                                                  (boolean (not value)))
-                                  (exit-edit-property nil nil)))})
-     ;; :object
-     ;; default and others
-     [:div.flex.flex-1
-      (when editor-on-click {:on-click editor-on-click})
-      (when-not (string/blank? (str value))
-        (inline-text {} :markdown (str value)))])))
+      :checkbox
+      (ui/checkbox {:checked value
+                    :on-change (fn [_e]
+                                 (let [repo (state/get-current-repo)]
+                                   (property-handler/add-property! repo block
+                                                                   (:block/name property)
+                                                                   (boolean (not value)))
+                                   (exit-edit-property nil nil)))})
+
+      ;; :others
+      (if editing?
+        [:div.flex.flex-1 (cond-> {}
+                              multiple-values?
+                              (assoc :class "property-value-content"))
+         (editor-box editor-args editor-id {})]
+        [:div.flex.flex-1
+         (cond->
+             {:id (or dom-id (random-uuid))
+              :style {:min-height 24}
+              :on-click (fn []
+                          (set-editing! property editor-id dom-id value))}
+           multiple-values?
+           (assoc :class "property-value-content"))
+         (when-not (string/blank? value)
+           (inline-text {} :markdown (str value)))]))))
+
+(rum/defc property-key-input
+  [block *property-key *property-value *search?]
+  [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
+   {:placeholder "Property key"
+    :value @*property-key
+    :auto-focus true
+    :on-change (fn [e]
+                 (reset! *property-key (util/evalue e))
+                 (reset! *search? true))
+    :on-key-down (fn [e]
+                   (case (util/ekey e)
+                     "Escape"
+                     (exit-edit-property *property-key *property-value)
+
+                     (list "Tab" "Enter")
+                     (let [k (util/evalue e)]
+                       (when (= (util/ekey e) "Tab")
+                         (util/stop e))
+                       (reset! *property-key k)
+                       (reset! *search? false)
+                       (when (and @*property-key
+                                  (nil? (db/entity [:block/name (util/page-name-sanity-lc @*property-key)])))
+                         ;; new property
+                         (add-property! block *property-key *property-value)
+                         (when-let [property (db/entity [:block/name (util/page-name-sanity-lc k)])]
+                           (let [editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property))]
+                             (set-editing! property editor-id "" "")))))
+
+                     nil))}])
 
 (rum/defcs property-input < rum/reactive
   (rum/local true ::search?)
@@ -155,44 +204,14 @@
                                (set))
         result (when-not (string/blank? @*property-key)
                  (->> (search/property-search @*property-key)
-                      (remove entity-properties)))]
+                      (remove entity-properties)))
+        property (when @*property-key
+                   (db/entity [:block/name (util/page-name-sanity-lc @*property-key)]))]
     [:div
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
-      [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
-       {:placeholder "Property key"
-        :value (rum/react *property-key)
-        :auto-focus true
-        :on-change (fn [e]
-                     (reset! *property-key (util/evalue e))
-                     (reset! *search? true))
-        :on-key-down (fn [e]
-                       (case (util/ekey e)
-                         "Escape"
-                         (exit-edit-property *property-key *property-value)
-
-                         (list "Tab" "Enter")
-                         (do
-                           (when (= (util/ekey e) "Tab")
-                             (util/stop e))
-                           (reset! *property-key (util/evalue e))
-                           (reset! *search? false)
-                           (.focus (js/document.getElementById "add-property-value")))
-
-                         nil))}]
-
-      (property-scalar-value entity @*property-key @*property-value {:editor-on-click (fn [e]
-                                                                                        (case (util/ekey e)
-                                                                                          "Enter"
-                                                                                          (do
-                                                                                            (add-property! entity *property-key *property-value)
-                                                                                            (reset! *search? false))
-
-                                                                                          nil))
-                                                                     :inline-text (:inline-text block-components-m)})
-      ;; [:input#add-property-value.form-input.simple-input.block.col-span-1.focus:outline-none
-      ;;  {:placeholder "Value"
-      ;;   :on-change #(reset! *property-value (util/evalue %))
-      ;;   :on-key-down }]
+      (property-key-input entity *property-key *property-value *search?)
+      (when property
+        (property-scalar-value entity property @*property-value block-components-m))
 
       [:a.close {:on-mouse-down #(exit-edit-property *property-key *property-value)}
        svg/close]]
@@ -202,8 +221,7 @@
         {:class "search-results"
          :on-chosen (fn [chosen]
                       (reset! *property-key chosen)
-                      (reset! *search? false)
-                      (.focus (js/document.getElementById "add-property-value")))
+                      (reset! *search? false))
          :item-render #(search-item-render @*property-key %)}))]))
 
 (rum/defcs new-property < rum/reactive
@@ -256,14 +274,15 @@
          (ui/icon "x")]])]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property item dom-id' editor-id' {:keys [edit-fn page-cp inline-text]}]
+  [state entity property item {:keys [dom-id editor-id
+                                      page-cp inline-text]
+                               :as opts}]
   (let [*show-close? (::show-close? state)
         object? (= :object (:type (:block/schema property)))
         block (when object? (db/pull [:block/uuid item]))]
     [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
                                 :on-mouse-out  #(reset! *show-close? false)}
-     (property-scalar-value entity property item {:editor-on-click edit-fn
-                                                  :inline-text inline-text})
+     (property-scalar-value entity property item opts)
      (when @*show-close?
        [:a.close.fade-in
         {:title "Delete this value"
@@ -284,12 +303,8 @@
                (get (:block/properties block) k))
         dom-id (str "ls-property-" k)
         editor-id (str "ls-property-" (:db/id property) "-" k)
-        editing? (state/sub [:editor/editing? editor-id])
+
         schema (:block/schema property)
-        edit-fn (fn [editor-id id v]
-                  (let [v (str v)
-                        cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
-                    (state/set-editing! editor-id v property cursor-range)))
         multiple-values? (= :many (:cardinality schema))
         type (:type schema)
         editor-args {:block property
@@ -299,46 +314,41 @@
       multiple-values?
       (let [v' (if (coll? v) v (when v [v]))
             v' (if (seq v') v' [""])
-            editor-id' (str editor-id (count v'))
-            new-editing? (state/sub [:editor/editing? editor-id'])]
-        [:div.flex.flex-1.flex-col.pl-1
+            editor-id' (str editor-id (count v'))]
+        [:div.flex.flex-1.flex-col
          [:div.flex.flex-1.flex-col
           (for [[idx item] (medley/indexed v')]
             (let [dom-id' (str dom-id "-" idx)
-                  editor-id' (str editor-id idx)
-                  editing? (state/sub [:editor/editing? editor-id'])]
-              (if editing?
-                (editor-box editor-args editor-id' {})
-                (multiple-value-item block property item dom-id' editor-id' {:page-cp page-cp
-                                                                             :edit-fn edit-fn
-                                                                             :inline-text inline-text}))))
+                  editor-id' (str editor-id idx)]
+              (multiple-value-item block property item  {:dom-id dom-id'
+                                                         :editor-id editor-id'
+                                                         :editor-box editor-box
+                                                         :editor-args editor-args
+                                                         :page-cp page-cp
+                                                         :inline-text inline-text})))
 
           (let [fv (first v')]
-            (when (and (not new-editing?)
-                       fv
+            (when (and fv
                        (or (and (string? fv) (not (string/blank? fv)))
                            (and (not (string? fv)) (some? fv))))
               [:div.rounded-sm.ml-1
                {:on-click (fn []
-                            (edit-fn (str editor-id (count v')) nil ""))}
+                            (set-editing! property (str editor-id (count v')) nil ""))}
                [:div.flex.flex-row
                 [:div.block {:style {:height      20
                                      :width       20}}
                  [:a.add-button-link.block {:title "Add another value"
-                                            :style {:margin-left -8}}
-                  (ui/icon "circle-plus")]]]]))]
-         (when new-editing?
-           (editor-box editor-args editor-id' {}))])
-
-      editing?
-      (editor-box editor-args editor-id {})
+                                            :style {:margin-left -4}}
+                  (ui/icon "circle-plus")]]]]))]])
 
       :else
       [:div.flex.flex-1.items-center.property-value-content
-       {:id dom-id}
        (property-scalar-value block property value
-                              {:editor-on-click (fn [] (edit-fn editor-id nil v))
-                               :inline-text inline-text})])))
+                              {:editor-box editor-box
+                               :editor-args editor-args
+                               :inline-text inline-text
+                               :editor-id editor-id
+                               :dom-id dom-id})])))
 
 (rum/defcs properties-area < rum/reactive
   [state block properties properties-text-values edit-input-id block-components-m]
@@ -351,7 +361,7 @@
          (for [[prop-uuid-or-built-in-prop v] properties]
            (if (uuid? prop-uuid-or-built-in-prop)
              (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
-               [:div.grid.grid-cols-4.gap-1.items-center
+               [:div.grid.grid-cols-4.gap-1
                 [:div.property-key.col-span-1
                  (property-key block property)]
                 [:div.property-value.col-span-3
