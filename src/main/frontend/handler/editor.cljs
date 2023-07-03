@@ -305,9 +305,10 @@
        (save-block-inner! block value opts)
 
        :else
-       (let [content-changed? (not= (string/trim content) (string/trim value))]
-         (when (and content-changed? page)
-           (save-block-inner! block value opts)))))))
+       (when content
+         (let [content-changed? (not= (string/trim content) (string/trim value))]
+           (when (and content-changed? page)
+             (save-block-inner! block value opts))))))))
 
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
