@@ -69,8 +69,7 @@ const common = {
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2'
-      ])
-        .pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+      ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
     )(...params)
   },
 
