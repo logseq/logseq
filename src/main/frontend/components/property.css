@@ -1,0 +1,34 @@
+.property-value-content {
+    @apply px-1 rounded-sm;
+    cursor: text;
+    min-height: 24px;
+}
+
+.property-value-content:hover {
+    background: var(--ls-secondary-background-color);
+}
+
+.ls-properties-area {
+    .add-button-link {
+        opacity: 0.5;
+    }
+
+    tr:nth-child(even), tr:nth-child(odd) {
+        background: none;
+    }
+
+    .editor-inner {
+        @apply px-1;
+    }
+}
+
+input.simple-input {
+    @apply px-1;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid;
+}
+
+input.simple-input:focus {
+    box-shadow: none;
+}

@@ -5,6 +5,7 @@
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
+            [frontend.components.search.highlight :as highlight]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -157,7 +158,7 @@
                                  (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                                  [:div.flex.space-x-1
                                   [:div (when-not (db/page-exists? page-name) (t :new-page))]
-                                  (search/highlight-exact-query page-name q)]]
+                                  (highlight/highlight-exact-query page-name q)]]
                                 :open?           chosen?
                                 :manual?         true
                                 :fixed-position? true

@@ -2269,7 +2269,8 @@
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
-  (let [content (property/remove-built-in-properties format content)
+  (let [repo (state/get-current-repo)
+        content (property/remove-built-in-properties format content)
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
@@ -2335,15 +2336,17 @@
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-      (when-let [invalid-properties (:block/invalid-properties block)]
-        (invalid-properties-cp invalid-properties))
+      (when-not (config/db-based-graph? repo)
+        (when-let [invalid-properties (:block/invalid-properties block)]
+         (invalid-properties-cp invalid-properties)))
 
       (when (and (seq properties)
                  (let [hidden? (property-edit/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config))
-                 (not= block-type :whiteboard-shape))
+                 (not= block-type :whiteboard-shape)
+                 (not (config/db-based-graph? repo)))
         (properties-cp config block))
 
       (block-content-inner config block body plugin-slotted? collapsed? block-ref-with-title?)
@@ -2843,19 +2846,20 @@
       (if whiteboard-block?
         (block-reference {} (str uuid) nil)
         ;; Not embed self
-        (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
-              hide-block-refs-count? (and (:embed? config)
-                                          (= (:block/uuid block) (:embed-id config)))]
-          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?)))
+        [:div.flex.flex-col.w-full
+         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
+               hide-block-refs-count? (and (:embed? config)
+                                           (= (:block/uuid block) (:embed-id config)))]
+           (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))
+         (when (config/db-based-graph? repo)
+           (property-component/properties-area block
+                                               (:block/properties block)
+                                               (:block/properties-text-values block)
+                                               edit-input-id {:inline-text inline-text
+                                                              :editor-box (get config :editor-box)}))])
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
-
-     (when (config/db-based-graph? repo)
-       (property-component/properties-area block
-                                           (:block/properties block)
-                                           (:block/properties-text-values block)
-                                           edit-input-id))
 
      (when-not (:hide-children? config)
        (let [children (db/sort-by-left (:block/_parent block) block)]

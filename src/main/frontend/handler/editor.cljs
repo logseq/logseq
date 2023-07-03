@@ -27,6 +27,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.file-based.editor :as file-editor-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -1161,10 +1162,17 @@
 
 (defn save-block-aux!
   [block value opts]
-  (let [value (string/trim value)]
-    ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-    ;; maybe we shouldn't save the block/file in "will-unmount" event?
-    (save-block-if-changed! block value opts)))
+  (let [entity (db/entity [:block/uuid (:block/uuid block)])
+        editing-property (:ui/editing-property @state/state)]
+    (when (:db/id entity)
+      (let [value (string/trim value)]
+        (if editing-property
+          (property-handler/add-property! (state/get-current-repo) entity
+                                          (:block/name editing-property)
+                                          value)
+          ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+          ;; maybe we shouldn't save the block/file in "will-unmount" event?
+          (save-block-if-changed! block value opts))))))
 
 (defn save-block!
   ([repo block-or-uuid content]
