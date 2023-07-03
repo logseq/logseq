@@ -118,12 +118,13 @@
     (let [all-pages (query repo db "select * from blocks where type = 2") ; 2 = page block
           ;; 1 = normal block
           all-block-ids (query repo db "select uuid, page_uuid from blocks where type = 1")
-          recent-journal (some-> (query repo db "select uuid from blocks where type = 2 order by page_journal_day desc limit 1")
-                                 first
-                                 bean/->clj
-                                 :uuid)
-          latest-journal-blocks (when recent-journal
-                                  (query repo db (str "select * from blocks where type = 1 and page_uuid = '" recent-journal "'")))
+          ;; Load enough data so that journals view is functional
+          ;; 3 is arbitrary and assumes about 10 blocks per page
+          recent-journals (->> (query repo db "select uuid from blocks where type = 2 order by page_journal_day desc limit 3")
+                               bean/->clj
+                               (map :uuid))
+          latest-journal-blocks (when (seq recent-journals)
+                                  (query repo db (str "select * from blocks where type = 1 and page_uuid IN " (clj-list->sql recent-journals))))
           init-data (query repo db "select * from blocks where type in (3, 4, 5, 6)")]
       {:all-pages all-pages
        :all-blocks all-block-ids
