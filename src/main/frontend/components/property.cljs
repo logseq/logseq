@@ -101,8 +101,12 @@
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value]
   (let [*search? (::search? state)
+        entity-properties (->> (keys (:block/properties entity))
+                               (map #(:block/original-name (db/entity [:block/uuid %])))
+                               (set))
         result (when-not (string/blank? @*property-key)
-                 (search/property-search @*property-key))]
+                 (->> (search/property-search @*property-key)
+                      (remove entity-properties)))]
     [:div
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
       [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
@@ -117,15 +121,17 @@
                          "Escape"
                          (exit-edit-property *property-key *property-value)
 
-                         "Enter"
+                         (list "Tab" "Enter")
                          (do
+                           (util/stop e)
                            (reset! *search? false)
                            (.focus (js/document.getElementById "add-property-value")))
 
                          nil))}]
 
-      [:input#add-property-value.block-properties
-       {:on-change #(reset! *property-value (util/evalue %))
+      [:input#add-property-value.form-input.simple-input.block.col-span-1.focus:outline-none
+       {:placeholder "Value"
+        :on-change #(reset! *property-value (util/evalue %))
         :on-key-down (fn [e]
                        (case (util/ekey e)
                          "Enter"

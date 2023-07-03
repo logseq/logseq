@@ -1171,7 +1171,7 @@ independent of format as format specific heading characters are stripped"
          distinct
          (map (fn [k]
                 (if (uuid? k)
-                  (keyword (:block/name (d/entity db [:block/uuid k])))
+                  (:block/original-name (d/entity db [:block/uuid k]))
                   k)))
          sort)))
 

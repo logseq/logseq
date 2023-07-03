@@ -163,10 +163,12 @@
       ;; cardinality changed from :one to :many
       (fix-cardinality-many-values! property-uuid))
     (let [tx-data (cond-> {:block/uuid property-uuid}
-                   property-name (assoc :block/name property-name)
-                   property-schema (assoc :block/schema property-schema)
-                   true outliner-core/block-with-updated-at)]
-     (db/transact! repo [tx-data]))))
+                    property-name (merge
+                                   {:block/original-name property-name
+                                    :block/name (gp-util/page-name-sanity-lc property-name)})
+                    property-schema (assoc :block/schema property-schema)
+                    true outliner-core/block-with-updated-at)]
+      (db/transact! repo [tx-data]))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
