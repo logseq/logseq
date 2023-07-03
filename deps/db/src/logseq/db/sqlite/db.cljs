@@ -43,11 +43,11 @@
 (defn create-blocks-table!
   [db db-name]
   (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
-                        uuid TEXT PRIMARY KEY,
-                        type INTEGER,
+                        uuid TEXT PRIMARY KEY NOT NULL,
+                        type INTEGER NOT NULL,
                         page_uuid TEXT,
                         page_journal_day INTEGER,
-                        name TEXT,
+                        name TEXT UNIQUE,
                         content TEXT,
                         datoms TEXT,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
