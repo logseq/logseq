@@ -46,8 +46,13 @@
           active:opacity-80;
         }
 
+        .label-wrap {
+          @apply flex flex-1;
+        }
+
         .action-wrap {
-          @apply flex space-x-2 items-center select-none active:opacity-70;
+          @apply flex space-x-2 items-center flex-nowrap
+          select-none active:opacity-70;
 
           &.disabled {
             @apply opacity-60 cursor-default;

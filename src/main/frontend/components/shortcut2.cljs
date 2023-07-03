@@ -83,7 +83,8 @@
 
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
         (for [x current-binding]
-          [:code.tracking-wider (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))])]
+          [:code.tracking-wider
+           (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))])]
 
        ;; add shortcut
        [:div.shortcut-record-control
@@ -173,7 +174,7 @@
            [:<>
             ;; category row
             (when-not in-query?
-              [:li.bg-blue-600.text-center.text-md.th
+              [:li.bg-green-600.text-center.text-md.th.text-white
                {:key (str c)}
                (t c)])
 
@@ -196,7 +197,7 @@
                         disabled?    (false? (first binding))]]
               [:li.flex.items-center.justify-between.text-sm
                {:key (str id)}
-               [:span label]
+               [:span.label-wrap label]
                [:a.action-wrap
                 {:class    (util/classnames [{:disabled disabled?}])
                  :on-click (when-not disabled?

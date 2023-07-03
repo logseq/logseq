@@ -13,10 +13,13 @@
                   "'" "single-quote"
                   "(" "shift+9"
                   ")" "shift+0"
-                  "~" "shift+`"}]
+                  "~" "shift+`"
+                  "⇧" "shift"
+                  "←" "left"
+                  "→" "right"}]
     (some-> (str binding)
             (str/lower-case)
-            (str/replace #"[;=-\[\]'\(\)\~]" #(get keynames %))
+            (str/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
             (str/replace #"\s+" " "))))
 
 (defn decorate-namespace [k]
@@ -27,6 +30,7 @@
 (defn decorate-binding [binding]
   (-> (if (string? binding) binding (str/join "+" binding))
       (str/replace "mod" (if util/mac? "⌘" "ctrl"))
+      (str/replace "meta" (if util/mac? "⌘" "⊞ win"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
       (str/replace "left" "←")
