@@ -125,6 +125,7 @@ necessary db filtering"
             [:script {:src "static/js/interact.min.js"}]
             [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
+            [:script {:src "static/js/code-editor.js"}]
             [:script {:src "static/js/custom.js"}]])))))
 
 (defn build-html
