@@ -359,16 +359,17 @@
       (when (seq properties)
         [:div
          (for [[prop-uuid-or-built-in-prop v] properties]
-           (if (uuid? prop-uuid-or-built-in-prop)
-             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
-               [:div.grid.grid-cols-4.gap-1
-                [:div.property-key.col-span-1
-                 (property-key block property)]
-                [:div.property-value.col-span-3
-                 (property-value block property v block-components-m)]])
-             ;; TODO: built in properties should have UUID and corresponding schema
-             ;; builtin
-             [:div
-              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-              [:span v]]))])
+           (let [v (get properties-text-values prop-uuid-or-built-in-prop v)]
+             (if (uuid? prop-uuid-or-built-in-prop)
+               (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
+                 [:div.grid.grid-cols-4.gap-1
+                  [:div.property-key.col-span-1
+                   (property-key block property)]
+                  [:div.property-value.col-span-3
+                   (property-value block property v block-components-m)]])
+               ;; TODO: built in properties should have UUID and corresponding schema
+               ;; builtin
+               [:div
+                [:a.mr-2 (str prop-uuid-or-built-in-prop)]
+                [:span v]])))])
        (new-property repo block edit-input-id properties new-property? block-components-m)])))
