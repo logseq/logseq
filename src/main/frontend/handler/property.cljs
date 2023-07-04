@@ -24,6 +24,24 @@
   (when-let [d (js/Date. value)]
     (not= (str d) "Invalid Date")))
 
+(defn- logseq-page?
+  [id]
+  (and (uuid? id)
+       (when-let [e (db/entity [:block/uuid id])]
+         (nil? (:block/page e)))))
+
+(defn- logseq-block?
+  [id]
+  (and (uuid? id)
+       (when-let [e (db/entity [:block/uuid id])]
+         (some? (:block/page e)))))
+
+(defn- logseq-object?
+  [id]
+  (and (uuid? id)
+       (when-let [e (db/entity [:block/uuid id])]
+         (seq (:block/class e)))))
+
 (def builtin-schema-types
   {:default  string?                     ; default, might be mixed with refs, tags
    :number   number?
@@ -34,7 +52,15 @@
    :url      [:fn
               {:error/message "should be a URL"}
               gp-util/url?]
-   :object   uuid?})                     ; TODO: make sure block exists
+   :page     [:fn
+              {:error/message "should be a page"}
+              logseq-page?]
+   :block    [:fn
+              {:error/message "should be a block"}
+              logseq-page?]
+   :object    [:fn
+               {:error/message "should be an object"}
+               logseq-object?]})
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -83,6 +109,12 @@
 
       :boolean
       (edn/read-string (string/lower-case v-str))
+
+      :page
+      (uuid v-str)
+
+      :block
+      (uuid v-str)
 
       :object
       (uuid v-str)
