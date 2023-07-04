@@ -205,7 +205,7 @@
   [state block *property-key *property-value *search?]
   (let [*key-down-triggered? (::key-down-triggered? state)]
     [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
-     {:placeholder "Property key"
+     {:placeholder "Add a property"
       :tabindex "0"
       :value @*property-key
       :auto-focus true
@@ -319,10 +319,10 @@
          (ui/icon "x")]])]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property item {:keys [dom-id editor-id
-                                      page-cp inline-text
-                                      new-item?]
-                               :as opts}]
+  [state entity property items item {:keys [dom-id editor-id
+                                            page-cp inline-text
+                                            new-item?]
+                                     :as opts}]
   (let [*show-close? (::show-close? state)
         object? (= :object (:type (:block/schema property)))
         block (when object? (db/pull [:block/uuid item]))
@@ -331,7 +331,8 @@
                                 :on-mouse-out  #(reset! *show-close? false)}
      (property-scalar-value entity property item opts)
      (when (and (or (not new-item?) editing?)
-                @*show-close?)
+                @*show-close?
+                (seq items))
        [:a.close.fade-in
         {:title "Delete this value"
          :on-mouse-down
@@ -359,9 +360,9 @@
                      :format :markdown}]
     (cond
       multiple-values?
-      (let [v' (if (coll? v) v (when v [v]))
-            v' (if (seq v') v' [""])
-            v' (conj v' ::new-value-placeholder)            ; new one
+      (let [items (if (coll? v) v (when v [v]))
+            v' (if (seq items) items [""])
+            v' (conj v' ::new-value-placeholder) ; new one
             editor-id' (str editor-id (count v'))]
         [:div.flex.flex-1.flex-col
          [:div.flex.flex-1.flex-col
@@ -369,7 +370,7 @@
             (let [dom-id' (str dom-id "-" idx)
                   editor-id' (str editor-id idx)]
               (rum/with-key
-                (multiple-value-item block property item
+                (multiple-value-item block property items item
                                     {:dom-id dom-id'
                                      :editor-id editor-id'
                                      :editor-box editor-box
