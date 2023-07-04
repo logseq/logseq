@@ -7,6 +7,7 @@
             [frontend.search :as search]
             [frontend.ui :as ui]
             [goog.events :as events]
+            [promesa.core :as p]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -66,10 +67,10 @@
    [:pre (pr-str conflicts-map)]])
 
 (rum/defc customize-shortcut-dialog-inner
-  [k action-name binding user-binding]
+  [k action-name binding user-binding {:keys [saved-cb]}]
   (let [[keystroke set-keystroke!] (rum/use-state "")
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
-        [keys-conflicts set-keys-conflicts!] (rum/use-state nil)
+        [key-conflicts set-key-conflicts!] (rum/use-state nil)
 
         handler-id (rum/use-memo #(dh/get-group k))
         dirty? (not= (or user-binding binding) current-binding)
@@ -83,7 +84,7 @@
           (events/listen key-handler "key"
                          (fn [^js e]
                            (.preventDefault e)
-                           (set-keys-conflicts! nil)
+                           (set-key-conflicts! nil)
                            (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; teardown
@@ -94,6 +95,7 @@
     [:div.cp__shortcut-page-x-record-dialog-inner
      {:class (util/classnames [{:keypressed keypressed? :dirty dirty?}])}
      [:div.sm:w-lsm
+      [:h1 [:code (str handler-id)]]
       [:p.mb-4 "Customize shortcuts for the " [:b action-name] " action."]
 
       [:div.shortcuts-keys-wrap
@@ -113,39 +115,51 @@
 
            [:a.flex.items-center.active:opacity-90
             {:on-click (fn []
-                         ;; TODO: check conflicts
                          (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
                            (if-not (seq conflicts-map)
-                             (do (notification/show! (str keystroke))
-                                 (set-current-binding! (conj current-binding keystroke))
+                             (do (set-current-binding! (conj current-binding keystroke))
                                  (set-keystroke! ""))
 
                              ;; show conflicts
-                             (set-keys-conflicts! [conflicts-map]))))}
+                             (set-key-conflicts! conflicts-map))))}
             (ui/icon "check" {:size 14})]
            [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
             {:on-click (fn []
                          (set-keystroke! "")
-                         (set-keys-conflicts! nil))}
+                         (set-key-conflicts! nil))}
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
            [:small.pr-1 "Press any sequence of keys to set a shortcut"] (ui/icon "keyboard" {:size 14})])]]]
 
      ;; conflicts results
-     (when (seq keys-conflicts)
-       (for [key-conflicts keys-conflicts]
-         (shortcut-conflicts-display k key-conflicts)))
+     (when (seq key-conflicts)
+       (shortcut-conflicts-display k key-conflicts))
 
      [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
-      [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
-       "Restore to system default" [:code (str binding)]]
+      ;; restore default
+      (when binding
+        [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
+         {:on-click #(set-current-binding! binding)}
+         "Restore to system default"
+         [:code (str binding)]])
 
       [:span
-       (ui/button "Save"
-                  :background (when dirty? "red")
-                  :disabled (not dirty?)
-                  :on-click (fn [] (state/close-modal!)))
+       (ui/button
+         "Save"
+         :background (when dirty? "red")
+         :disabled (not dirty?)
+         :on-click (fn []
+                     ;; TODO: check conflicts
+                     (let [binding' (if (nil? current-binding) [] current-binding)
+                           conflicts (dh/get-conflicts-by-keys binding' handler-id #{k})]
+                       (if (seq conflicts)
+                         (set-key-conflicts! conflicts)
+                         (let [binding' (if (= binding binding') nil binding')]
+                           (shortcut/persist-user-shortcut! k binding')
+                           (notification/show! "Saved!" :success)
+                           (state/close-modal!)
+                           (saved-cb))))))
 
        [:a.reset-btn
         {:on-click (fn [] (set-current-binding! (or user-binding binding)))}
@@ -172,7 +186,8 @@
                                             :extract-fn
                                             #(let [[id {:keys [cmd]}] %]
                                                (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
-        result-list-map (or matched-list-map categories-list-map)]
+        result-list-map (or matched-list-map categories-list-map)
+        refresh-list! #(refresh! (inc refresh-v))]
 
     (rum/use-effect!
       (fn []
@@ -188,7 +203,7 @@
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
 
-      (pane-controls q set-q! #(refresh! (inc refresh-v)))]
+      (pane-controls q set-q! refresh-list!)]
 
      (when-not (string/blank? q)
        [:h3.flex.justify-center.font-bold "Query: " q])
@@ -225,7 +240,9 @@
 
                                 :else (str id))
                         disabled? (or (false? user-binding)
-                                      (false? (first binding)))]]
+                                      (false? (first binding)))
+                        unset? (and (not disabled?)
+                                    (= user-binding []))]]
               [:li.flex.items-center.justify-between.text-sm
                {:key (str id)}
                [:span.label-wrap label]
@@ -234,15 +251,20 @@
                 {:class    (util/classnames [{:disabled disabled?}])
                  :on-click (when-not disabled?
                              #(state/set-sub-modal!
-                                (fn [] (customize-shortcut-dialog-inner id label binding user-binding))
+                                (fn [] (customize-shortcut-dialog-inner
+                                         id label binding user-binding
+                                         {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
                                 {:center? true}))}
 
                 (when (or user-binding (false? user-binding))
                   [:code.dark:bg-green-800.bg-green-300
-                   (str "Custom: " (if disabled? "Disabled"
-                                                 (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding))))])
+                   (if unset?
+                     "Unset"
+                     (str "Custom: "
+                          (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))])
 
-                (when (not disabled?)
+                (when (and (not disabled?)
+                           (not unset?))
                   (for [x binding]
                     [:code.tracking-wide
                      {:key (str x)}

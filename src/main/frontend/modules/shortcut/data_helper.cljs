@@ -186,8 +186,9 @@
     #{from-handler-id}))
 
 (defn get-conflicts-by-keys
-  ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default))
-  ([ks handler-id]
+  ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default #{}))
+  ([ks handler-id] (get-conflicts-by-keys ks handler-id #{}))
+  ([ks handler-id excludes-ids]
    (let [global-handlers #{:shortcut.handler/editor-global
                            :shortcut.handler/global-non-editing-only
                            :shortcut.handler/global-prevent-default
@@ -202,12 +203,15 @@
                          k (bean/->clj k)]
                      (when-let [{:keys [key refs]} (get ks-bindings k)]
                        [k [key (reduce-kv (fn [r id handler-id']
-                                            (if (or (= handler-id handler-id')
-                                                    (and (set? handler-id) (contains? handler-id handler-id'))
-                                                    (and global? (contains? global-handlers handler-id')))
-                                              (assoc r id handler-id') r)
+                                            (if (and
+                                                  (not (contains? excludes-ids id))
+                                                  (or (= handler-id handler-id')
+                                                      (and (set? handler-id) (contains? handler-id handler-id'))
+                                                      (and global? (contains? global-handlers handler-id'))))
+                                              (assoc r id handler-id')
+                                              r)
                                             ) {} refs)]])))))
-          (remove #(empty? (second %1)))
+          (remove #(empty? (second (second %1))))
           (into {})))))
 
 (defn potential-conflict? [shortcut-id]
