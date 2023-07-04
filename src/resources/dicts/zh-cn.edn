@@ -450,7 +450,6 @@
  :whiteboard/references "引用"
  :whiteboard/link-to-any-page-or-block "链接到任意页面或块"
  :whiteboard/start-typing-to-search "键入任意内容搜索..."
- :whiteboard/create-or-search-graph "创建或搜索你的图谱..."
  :whiteboard/new-block-no-colon "创建新块"
  :whiteboard/new-block "新块:"
  :whiteboard/new-page "新页面:"
