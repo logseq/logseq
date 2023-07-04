@@ -2,8 +2,9 @@
   "Misc low-level utility text fns that are useful across features or don't have
   a good ns to be in yet"
   (:require [clojure.string :as string]
-            [goog.string :as gstring]
+            [frontend.config :as config]
             [frontend.util :as util]
+            [goog.string :as gstring]
             [logseq.common.path :as path]))
 
 (defonce between-re #"\(between ([^\)]+)\)")
@@ -140,10 +141,11 @@
           [b-cut m-cut nil]))
       [value nil nil])))
 
-;; FIXME: distinguish from get-repo-name
 (defn get-graph-name-from-path
-  [path]
-  (let [path (if (path/is-file-url? path)
+  "Get `Dir/GraphName` style name for from repo-url"
+  [repo-url]
+  (let [path (config/get-local-dir repo-url)
+        path (if (path/is-file-url? path)
                (path/url-to-path path)
                path)
         parts (->> (string/split path #"/")
