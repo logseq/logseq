@@ -57,7 +57,7 @@
               logseq-page?]
    :block    [:fn
               {:error/message "should be a block"}
-              logseq-page?]
+              logseq-block?]
    :object    [:fn
                {:error/message "should be an object"}
                logseq-object?]})
@@ -111,13 +111,13 @@
       (edn/read-string (string/lower-case v-str))
 
       :page
-      (uuid v-str)
+      (if (uuid? v-str) v-str (uuid v-str))
 
       :block
-      (uuid v-str)
+      (if (uuid? v-str) v-str (uuid v-str))
 
       :object
-      (uuid v-str)
+      (if (uuid? v-str) v-str (uuid v-str))
 
       :date
       (js/Date. v-str)                  ; inst

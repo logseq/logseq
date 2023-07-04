@@ -861,7 +861,7 @@
 (rum/defc block-reference < rum/reactive
   db-mixins/query
   [config id label]
-  (if-let [block-id (parse-uuid id)]
+  (if-let [block-id (if (uuid? id) id (parse-uuid id))]
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])]
       (if (state/sub-block-unloaded? repo (str block-id))
@@ -2856,6 +2856,8 @@
                                                (:block/properties block)
                                                (:block/properties-text-values block)
                                                edit-input-id {:inline-text inline-text
+                                                              :page-cp page-cp
+                                                              :block-cp block-reference
                                                               :editor-box (get config :editor-box)}))])
 
       (when @*show-right-menu?
