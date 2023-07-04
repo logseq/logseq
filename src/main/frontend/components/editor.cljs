@@ -646,7 +646,7 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block parent-block]} id _config]
+  [state {:keys [format block parent-block]} id config]
   (let [content (state/sub-edit-content id)
         heading-class (get-editor-style-class block content format)
         opts (cond->
@@ -660,7 +660,10 @@
                   :auto-focus        false
                   :class             heading-class}
                (some? parent-block)
-               (assoc :parentblockid (str (:block/uuid parent-block))))]
+               (assoc :parentblockid (str (:block/uuid parent-block)))
+
+               true
+               (merge (:editor-opts config)))]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea opts)

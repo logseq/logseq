@@ -94,7 +94,7 @@
       v-str)))
 
 (defn add-property!
-  [repo block k-name v]
+  [repo block k-name v & {:keys [old-value]}]
   (let [property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         v (if property v (or v ""))]
     (when (some? v)
@@ -139,7 +139,19 @@
                         v' (if (= property-type :default)
                              (if (seq refs) refs v*)
                              v*)
-                        new-value (if multiple-values? (vec (distinct (conj value v'))) v')
+                        new-value (cond
+                                    (and multiple-values? old-value
+                                         (not= old-value :frontend.components.property/new-value-placeholder))
+                                    (let [v (mapv (fn [x] (if (= x old-value) v' x)) value)]
+                                      (if (contains? (set v) v')
+                                        v
+                                        (conj v v')))
+
+                                    multiple-values?
+                                    (vec (distinct (conj value v')))
+
+                                    :else
+                                    v')
                         block-properties (assoc properties property-uuid new-value)
                         block-properties-text-values
                         (if (and (not multiple-values?) (= property-type :default))

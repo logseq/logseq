@@ -90,7 +90,8 @@
   [*property-key *property-value]
   (when *property-key (reset! *property-key nil))
   (when *property-value (reset! *property-value nil))
-  (property-handler/set-editing-new-property! nil))
+  (property-handler/set-editing-new-property! nil)
+  (state/clear-edit!))
 
 (defn- add-property!
   [block *property-key *property-value]
@@ -134,7 +135,8 @@
                                 editor-box editor-args
                                 new-item?]}]
   (let [multiple-values? (= :many (:cardinality (:block/schema property)))
-        editing? (state/sub [:editor/editing? editor-id])]
+        editing? (state/sub [:editor/editing? editor-id])
+        repo (state/get-current-repo)]
     (when (or (not new-item?) editing?)
       (case (:type (:block/schema property))
        :date
@@ -143,18 +145,39 @@
        :checkbox
        (ui/checkbox {:checked value
                      :on-change (fn [_e]
-                                  (let [repo (state/get-current-repo)]
-                                    (property-handler/add-property! repo block
-                                                                    (:block/name property)
-                                                                    (boolean (not value)))
-                                    (exit-edit-property nil nil)))})
+                                  (property-handler/add-property! repo block
+                                                                  (:block/original-name property)
+                                                                  (boolean (not value)))
+                                  (exit-edit-property nil nil))})
 
        ;; :others
        (if editing?
          [:div.flex.flex-1 (cond-> {}
                              multiple-values?
                              (assoc :class "property-value-content"))
-          (editor-box editor-args editor-id {})]
+          (let [config (if multiple-values?
+                         {:editor-opts
+                          {:on-key-down
+                           (fn [e]
+                             (let [enter? (= (util/ekey e) "Enter")]
+                               (when (contains? #{"Enter" "Escape"} (util/ekey e))
+                                 (util/stop e)
+                                 (property-handler/add-property! repo block
+                                                                 (:block/original-name property)
+                                                                 (state/get-edit-content)
+                                                                 :old-value value)
+                                 (exit-edit-property nil nil)
+
+                                 (when enter?
+                                   (let [values-count (-> (:block/properties (db/entity (:db/id block)))
+                                                          (get (:block/uuid property))
+                                                          (count))
+                                         editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property) values-count)]
+                                     (set-editing! property editor-id nil ""))))))}}
+                         {})]
+            (editor-box editor-args editor-id (cond-> config
+                                                multiple-values?
+                                                (assoc :property-value value))))]
          [:div.flex.flex-1
           (cond->
               {:id (or dom-id (random-uuid))
@@ -277,15 +300,18 @@
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [dom-id editor-id
-                                      page-cp inline-text]
+                                      page-cp inline-text
+                                      new-item?]
                                :as opts}]
   (let [*show-close? (::show-close? state)
         object? (= :object (:type (:block/schema property)))
-        block (when object? (db/pull [:block/uuid item]))]
+        block (when object? (db/pull [:block/uuid item]))
+        editing? (state/sub [:editor/editing? editor-id])]
     [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
                                 :on-mouse-out  #(reset! *show-close? false)}
      (property-scalar-value entity property item opts)
-     (when @*show-close?
+     (when (and (or (not new-item?) editing?)
+                @*show-close?)
        [:a.close.fade-in
         {:title "Delete this value"
          :on-mouse-down
@@ -305,7 +331,6 @@
                (get (:block/properties block) k))
         dom-id (str "ls-property-" k)
         editor-id (str "ls-property-" (:db/id property) "-" k)
-
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         type (:type schema)
@@ -317,21 +342,22 @@
       (let [v' (if (coll? v) v (when v [v]))
             v' (if (seq v') v' [""])
             v' (conj v' ::new-value-placeholder)            ; new one
-            editor-id' (str editor-id (count v'))
-            ]
+            editor-id' (str editor-id (count v'))]
         [:div.flex.flex-1.flex-col
          [:div.flex.flex-1.flex-col
           (for [[idx item] (medley/indexed v')]
             (let [dom-id' (str dom-id "-" idx)
                   editor-id' (str editor-id idx)]
-              (multiple-value-item block property item
-                                   {:dom-id dom-id'
-                                    :editor-id editor-id'
-                                    :editor-box editor-box
-                                    :editor-args editor-args
-                                    :page-cp page-cp
-                                    :inline-text inline-text
-                                    :new-item? (= item ::new-value-placeholder)})))
+              (rum/with-key
+                (multiple-value-item block property item
+                                    {:dom-id dom-id'
+                                     :editor-id editor-id'
+                                     :editor-box editor-box
+                                     :editor-args editor-args
+                                     :page-cp page-cp
+                                     :inline-text inline-text
+                                     :new-item? (= item ::new-value-placeholder)})
+                dom-id')))
 
           (let [fv (first v')]
             (when (and fv
