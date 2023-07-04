@@ -880,6 +880,9 @@
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
     (ui-handler/re-render-root!)))
 
+(defmethod handle :ui/re-render-root [[_]]
+  (ui-handler/re-render-root!))
+
 (rum/defcs file-id-conflict-item <
   (rum/local false ::resolved?)
   [state repo file data]

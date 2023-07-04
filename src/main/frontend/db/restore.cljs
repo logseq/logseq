@@ -90,6 +90,9 @@
     (doseq [block data]
       (let [uuid (gobj/get block "uuid")
             eid (get uuid->db-id-map uuid)
+            _ (when (nil? eid)
+                (prn "Error: block without eid ")
+                (js/console.dir block))
             _ (assert eid (str "Can't find eid " eid ", block: " block))
             avs (->> (gobj/get block "datoms")
                      (transit/read t-reader))]
@@ -110,7 +113,8 @@
 
       (p/let [_ (p/delay 150)]          ; More time for UI refresh
         (state/set-state! [repo :restore/unloaded-blocks] nil)
-        (state/set-state! [repo :restore/unloaded-pages] nil)))))
+        (state/set-state! [repo :restore/unloaded-pages] nil)
+        (state/pub-event! [:ui/re-render-root])))))
 
 (defn- uuid-string?
   [s]
