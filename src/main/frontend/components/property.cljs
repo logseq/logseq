@@ -189,35 +189,40 @@
           (when-not (string/blank? value)
             (inline-text {} :markdown (str value)))])))))
 
-(rum/defc property-key-input
-  [block *property-key *property-value *search?]
-  [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
-   {:placeholder "Property key"
-    :value @*property-key
-    :auto-focus true
-    :on-change (fn [e]
-                 (reset! *property-key (util/evalue e))
-                 (reset! *search? true))
-    :on-key-down (fn [e]
-                   (case (util/ekey e)
-                     "Escape"
-                     (exit-edit-property *property-key *property-value)
+(rum/defcs property-key-input <
+  (rum/local false ::key-down-triggered?)
+  [state block *property-key *property-value *search?]
+  (let [*key-down-triggered? (::key-down-triggered? state)]
+    [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
+     {:placeholder "Property key"
+      :value @*property-key
+      :auto-focus true
+      :on-change (fn [e]
+                   (reset! *property-key (util/evalue e))
+                   (reset! *search? true))
+      :on-key-down (fn [_e]
+                     (reset! *key-down-triggered? true))
+      :on-key-up (fn [e]
+                   (when @*key-down-triggered?
+                     (case (util/ekey e)
+                       "Escape"
+                       (exit-edit-property *property-key *property-value)
 
-                     (list "Tab" "Enter")
-                     (let [k (util/evalue e)]
-                       (when (= (util/ekey e) "Tab")
-                         (util/stop e))
-                       (reset! *property-key k)
-                       (reset! *search? false)
-                       (when (and @*property-key
-                                  (nil? (db/entity [:block/name (util/page-name-sanity-lc @*property-key)])))
+                       (list "Tab" "Enter")
+                       (let [k (util/evalue e)]
+                         (when (= (util/ekey e) "Tab")
+                           (util/stop e))
+                         (reset! *property-key k)
+                         (reset! *property-value "")
+                         (reset! *search? false)
                          ;; new property
                          (add-property! block *property-key *property-value)
                          (when-let [property (db/entity [:block/name (util/page-name-sanity-lc k)])]
                            (let [editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property))]
-                             (set-editing! property editor-id "" "")))))
+                             (set-editing! property editor-id "" ""))))
 
-                     nil))}])
+                       nil)
+                     (reset! *key-down-triggered? false)))}]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local true ::search?)
