@@ -5,6 +5,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
+            [frontend.components.property :as property]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
@@ -15,6 +16,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -355,6 +357,23 @@
            (ui/menu-link options title nil)
            title))])))
 
+(rum/defc property-custom-context-menu-content
+  [block property]
+  (let [repo (state/get-current-repo)]
+    [:.menu-links-wrapper
+    (ui/menu-link
+     {:key "Configure this property"
+      :on-click (fn []
+                  (state/set-modal! #(property/property-config repo property)))}
+     (t :context-menu/configure-property)
+     nil)
+    (ui/menu-link
+     {:key "Delete this property"
+      :on-click (fn []
+                  (property-handler/remove-property! repo block (:block/uuid property)))}
+     (t :context-menu/delete-property)
+     nil)]))
+
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
@@ -368,9 +387,19 @@
                       (let [target (gobj/get e "target")
                             block-el (.closest target ".bullet-container[blockid]")
                             block-id (some-> block-el (.getAttribute "blockid"))
+                            property-id (some-> target (.getAttribute "propertyid"))
+                            property-block-id (some-> target (.getAttribute "blockid"))
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         (cond
+                          (and property-id property-block-id)
+                          (let [block (db/entity [:block/uuid (uuid property-block-id)])
+                                property (db/entity [:block/uuid (uuid property-id)])]
+                            (when (and block property)
+                              (common-handler/show-custom-context-menu!
+                               e
+                               (property-custom-context-menu-content block property))))
+
                           page
                           (do
                             (common-handler/show-custom-context-menu!

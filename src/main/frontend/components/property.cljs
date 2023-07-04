@@ -299,24 +299,16 @@
        [:a.add-button-link.block {:style {:margin-left -4}}
         (ui/icon "circle-plus")]]])))
 
-(rum/defcs property-key < (rum/local false ::show-close?)
+(rum/defcs property-key
   [state block property]
-  (let [repo (state/get-current-repo)
-        *show-close? (::show-close? state)]
+  (let [repo (state/get-current-repo)]
     [:div.relative
-     {:on-mouse-over (fn [_] (reset! *show-close? true))
-      :on-mouse-out (fn [_] (reset! *show-close? false))}
-     [:a.mr-2
-      {:title (str "Configure property: " (:block/original-name property))
+     [:a.property-key
+      {:propertyid (:block/uuid property)
+       :blockid (:block/uuid block)
+       :title (str "Configure property: " (:block/original-name property))
        :on-click (fn [] (state/set-modal! #(property-config repo property)))}
-      (:block/original-name property)]
-     (when @*show-close?
-       [:div.absolute.top-0.right-0
-        [:a.fade-link.fade-in.py-2.px-1
-         {:title "Remove this property"
-          :on-click (fn [_e]
-                      (property-handler/remove-property! repo block (:block/uuid property)))}
-         (ui/icon "x")]])]))
+      (:block/original-name property)]]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property items item {:keys [dom-id editor-id
