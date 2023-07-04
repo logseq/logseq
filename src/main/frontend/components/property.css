@@ -2,6 +2,23 @@
     @apply px-1 rounded-sm;
     cursor: text;
     min-height: 24px;
+    .cp__select-main {
+        width: fit-content;
+        margin: 0;
+    }
+
+    .cp__select .input-wrap {
+        height: auto;
+        min-width: 14em;
+    }
+
+    .cp__select .input-wrap input {
+        border: none;
+    }
+
+    .cp__select-input {
+        padding: 0.5em 1em;
+    }
 }
 
 .property-value-content:hover {

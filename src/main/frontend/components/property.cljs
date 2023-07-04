@@ -402,34 +402,33 @@
             v' (if (seq items) items [""])
             v' (conj v' ::new-value-placeholder) ; new one
             editor-id' (str editor-id (count v'))]
-        [:div.flex.flex-1.flex-col
-         [:div.flex.flex-1.flex-col
-          (for [[idx item] (medley/indexed v')]
-            (let [dom-id' (str dom-id "-" idx)
-                  editor-id' (str editor-id idx)]
-              (rum/with-key
-                (multiple-value-item block property items item
-                                     (merge
-                                      opts
-                                      {:dom-id dom-id'
-                                       :editor-id editor-id'
-                                       :editor-args editor-args
-                                       :new-item? (= item ::new-value-placeholder)}))
-                dom-id')))
+        [:div.grid.gap-1
+         (for [[idx item] (medley/indexed v')]
+           (let [dom-id' (str dom-id "-" idx)
+                 editor-id' (str editor-id idx)]
+             (rum/with-key
+               (multiple-value-item block property items item
+                                    (merge
+                                     opts
+                                     {:dom-id dom-id'
+                                      :editor-id editor-id'
+                                      :editor-args editor-args
+                                      :new-item? (= item ::new-value-placeholder)}))
+               dom-id')))
 
-          (let [fv (first v')]
-            (when (and fv
-                       (or (and (string? fv) (not (string/blank? fv)))
-                           (and (not (string? fv)) (some? fv))))
-              [:div.rounded-sm.ml-1
-               {:on-click (fn []
-                            (set-editing! property (str editor-id (dec (count v'))) nil ""))}
-               [:div.flex.flex-row
-                [:div.block {:style {:height      20
-                                     :width       20}}
-                 [:a.add-button-link.block {:title "Add another value"
-                                            :style {:margin-left -4}}
-                  (ui/icon "circle-plus")]]]]))]])
+         (let [fv (first v')]
+           (when (and fv
+                      (or (and (string? fv) (not (string/blank? fv)))
+                          (and (not (string? fv)) (some? fv))))
+             [:div.rounded-sm.ml-1
+              {:on-click (fn []
+                           (set-editing! property (str editor-id (dec (count v'))) nil ""))}
+              [:div.flex.flex-row
+               [:div.block {:style {:height      20
+                                    :width       20}}
+                [:a.add-button-link.block {:title "Add another value"
+                                           :style {:margin-left -4}}
+                 (ui/icon "circle-plus")]]]]))])
 
       :else
       [:div.flex.flex-1.items-center.property-value-content
@@ -447,7 +446,7 @@
     (when (or (seq properties) new-property?)
       [:div.ls-properties-area
       (when (seq properties)
-        [:div
+        [:div.grid.gap-1
          (for [[prop-uuid-or-built-in-prop v] properties]
            (let [v (get properties-text-values prop-uuid-or-built-in-prop v)]
              (if (uuid? prop-uuid-or-built-in-prop)
