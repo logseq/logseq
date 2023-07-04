@@ -69,7 +69,7 @@
   [k action-name binding user-binding]
   (let [[keystroke set-keystroke!] (rum/use-state "")
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
-        [key-conflicts set-key-conflicts!] (rum/use-state nil)
+        [keys-conflicts set-keys-conflicts!] (rum/use-state nil)
 
         handler-id (rum/use-memo #(dh/get-group k))
         dirty? (not= (or user-binding binding) current-binding)
@@ -83,7 +83,7 @@
           (events/listen key-handler "key"
                          (fn [^js e]
                            (.preventDefault e)
-                           (set-key-conflicts! nil)
+                           (set-keys-conflicts! nil)
                            (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; teardown
@@ -121,20 +121,21 @@
                                  (set-keystroke! ""))
 
                              ;; show conflicts
-                             (set-key-conflicts! conflicts-map))))}
+                             (set-keys-conflicts! [conflicts-map]))))}
             (ui/icon "check" {:size 14})]
            [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
             {:on-click (fn []
                          (set-keystroke! "")
-                         (set-key-conflicts! nil))}
+                         (set-keys-conflicts! nil))}
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
            [:small.pr-1 "Press any sequence of keys to set a shortcut"] (ui/icon "keyboard" {:size 14})])]]]
 
      ;; conflicts results
-     (when key-conflicts
-       (shortcut-conflicts-display k key-conflicts))
+     (when (seq keys-conflicts)
+       (for [key-conflicts keys-conflicts]
+         (shortcut-conflicts-display k key-conflicts)))
 
      [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
       [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100

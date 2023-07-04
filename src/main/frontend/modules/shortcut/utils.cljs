@@ -1,6 +1,14 @@
 (ns frontend.modules.shortcut.utils
   (:require [clojure.string :as str]
-            [frontend.util :as util]))
+            [frontend.util :as util])
+  (:import [goog.ui KeyboardShortcutHandler]))
+
+(defn safe-parse-string-binding
+  [binding]
+  (try
+    (KeyboardShortcutHandler/parseStringShortcut binding)
+    (catch js/Error e
+      (js/console.warn "[shortcuts] parse key error: " e) binding)))
 
 (defn mod-key [binding]
   (str/replace binding #"(?i)mod"
@@ -28,7 +36,7 @@
           (str/lower-case)))))
 
 (defn decorate-namespace [k]
-  (let [n  (name k)
+  (let [n (name k)
         ns (namespace k)]
     (keyword (str "command." ns) n)))
 

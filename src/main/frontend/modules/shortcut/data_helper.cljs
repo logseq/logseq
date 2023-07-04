@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.set :refer [rename-keys]]
+            [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.file :as file]
@@ -34,7 +35,13 @@
         (fn [r id {:keys [binding]}]
           (if-let [ks (get user-shortcuts id binding)]
             (let [ks (if (sequential? ks) ks [ks])]
-              (reduce (fn [a k] (assoc-in a [(shortcut-utils/undecorate-binding k) id] handler-id)) r ks))
+              (reduce (fn [a k]
+                        (let [k (shortcut-utils/undecorate-binding k)
+                              k' (shortcut-utils/safe-parse-string-binding k)
+                              k' (bean/->clj k')]
+                          (-> a
+                              (assoc-in [k' :key] k)
+                              (assoc-in [k' :refs id] handler-id)))) r ks))
             r)) r vs))
     {} config))
 
@@ -191,13 +198,15 @@
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k (shortcut-utils/undecorate-binding k)]
-                   (when-let [s (get ks-bindings k)]
-                     [k (reduce-kv (fn [r id handler-id']
-                                     (if (or (= handler-id handler-id')
-                                             (and (set? handler-id) (contains? handler-id handler-id'))
-                                             (and global? (contains? global-handlers handler-id')))
-                                       (assoc r id handler-id') r)
-                                     ) {} s)]))))
+                   (let [k (shortcut-utils/safe-parse-string-binding k)
+                         k (bean/->clj k)]
+                     (when-let [{:keys [key refs]} (get ks-bindings k)]
+                       [k [key (reduce-kv (fn [r id handler-id']
+                                            (if (or (= handler-id handler-id')
+                                                    (and (set? handler-id) (contains? handler-id handler-id'))
+                                                    (and global? (contains? global-handlers handler-id')))
+                                              (assoc r id handler-id') r)
+                                            ) {} refs)]])))))
           (remove #(empty? (second %1)))
           (into {})))))
 
