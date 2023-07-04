@@ -32,13 +32,18 @@
   (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
 
-(rum/defc search-control
+(rum/defc pane-controls
   [q set-q! refresh-fn]
 
-  [:div.cp__shortcut-page-x-search-control
-   [:a.flex.items-center
+  [:div.cp__shortcut-page-x-pane-controls
+   [:a.flex.items-center.icon-link
+    {:on-click #()}
+    (ui/icon "fold")]
+
+   [:a.flex.items-center.icon-link
     {:on-click refresh-fn}
     (ui/icon "refresh")]
+
    [:span.pr-1
     [:input.form-input.is-small
      {:placeholder "Search"
@@ -49,8 +54,9 @@
                       (set-q! ""))
       :on-change   #(let [v (util/evalue %)]
                       (set-q! v))}]]
-   [:a.flex.items-center (ui/icon "keyboard")]
-   [:a.flex.items-center (ui/icon "filter")]])
+
+   [:a.flex.items-center.icon-link (ui/icon "keyboard")]
+   [:a.flex.items-center.icon-link (ui/icon "filter")]])
 
 (rum/defc shortcut-conflicts-display
   [k conflicts-map]
@@ -65,8 +71,8 @@
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
 
-        handler-id  (rum/use-memo #(dh/get-group k))
-        dirty?      (not= (or user-binding binding) current-binding)
+        handler-id (rum/use-memo #(dh/get-group k))
+        dirty? (not= (or user-binding binding) current-binding)
         keypressed? (not= "" keystroke)]
 
     (rum/use-effect!
@@ -156,16 +162,16 @@
         [refresh-v, refresh!] (rum/use-state 1)
         [q set-q!] (rum/use-state nil)
 
-        in-query?           (not (string/blank? (util/trim-safe q)))
-        matched-list-map    (when in-query?
-                              (->> categories-list-map
-                                   (map (fn [[c binding-map]]
-                                          [c (search/fuzzy-search
-                                               binding-map q
-                                               :extract-fn
-                                               #(let [[id {:keys [cmd]}] %]
-                                                  (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
-        result-list-map     (or matched-list-map categories-list-map)]
+        in-query? (not (string/blank? (util/trim-safe q)))
+        matched-list-map (when in-query?
+                           (->> categories-list-map
+                                (map (fn [[c binding-map]]
+                                       [c (search/fuzzy-search
+                                            binding-map q
+                                            :extract-fn
+                                            #(let [[id {:keys [cmd]}] %]
+                                               (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
+        result-list-map (or matched-list-map categories-list-map)]
 
     (rum/use-effect!
       (fn []
@@ -181,7 +187,7 @@
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
 
-      (search-control q set-q! #(refresh! (inc refresh-v)))]
+      (pane-controls q set-q! #(refresh! (inc refresh-v)))]
 
      (when-not (string/blank? q)
        [:h3.flex.justify-center.font-bold "Query: " q])
@@ -203,35 +209,39 @@
 
             ;; binding row
             (for [[id {:keys [cmd binding user-binding]}] binding-map
-                  :let [binding      (to-vector binding)
-                        user-binding (to-vector user-binding)
-                        label        (cond
-                                       (string? (:desc cmd))
-                                       [:<>
-                                        [:span.pl-1 (:desc cmd)]
-                                        [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
+                  :let [binding (to-vector binding)
+                        user-binding (and user-binding (to-vector user-binding))
+                        label (cond
+                                (string? (:desc cmd))
+                                [:<>
+                                 [:span.pl-1 (:desc cmd)]
+                                 [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
 
-                                       (not plugin?)
-                                       [:<>
-                                        [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
-                                        [:small [:code.text-xs (str id)]]]
+                                (not plugin?)
+                                [:<>
+                                 [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
+                                 [:small [:code.text-xs (str id)]]]
 
-                                       :else (str id))
-                        disabled?    (false? (first binding))]]
+                                :else (str id))
+                        disabled? (or (false? user-binding)
+                                      (false? (first binding)))]]
               [:li.flex.items-center.justify-between.text-sm
                {:key (str id)}
                [:span.label-wrap label]
+
                [:a.action-wrap
                 {:class    (util/classnames [{:disabled disabled?}])
                  :on-click (when-not disabled?
                              #(state/set-sub-modal!
                                 (fn [] (customize-shortcut-dialog-inner id label binding user-binding))
                                 {:center? true}))}
-                (when user-binding
-                  [:code.dark:bg-green-800.bg-green-300
-                   (str "Custom: " (bean/->js (map #(some-> % (shortcut-utils/decorate-binding)) user-binding)))])
 
-                (when-not user-binding
+                (when (or user-binding (false? user-binding))
+                  [:code.dark:bg-green-800.bg-green-300
+                   (str "Custom: " (if disabled? "Disabled"
+                                                 (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding))))])
+
+                (when (not disabled?)
                   (for [x binding]
                     [:code.tracking-wide
                      {:key (str x)}

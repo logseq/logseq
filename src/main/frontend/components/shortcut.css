@@ -30,11 +30,15 @@
 .cp__shortcut-page-x {
   @apply relative;
 
-  &-search-control {
+  &-pane-controls {
     @apply flex space-x-3 absolute top-3 right-1 items-center;
 
     input.form-input {
       @apply py-1;
+    }
+
+    a.icon-link {
+      @apply opacity-80 hover:opacity-100 active:opacity-40 select-none;
     }
   }
 

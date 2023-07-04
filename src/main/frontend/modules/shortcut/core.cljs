@@ -281,3 +281,17 @@
      (js/setTimeout #(refresh!) 500)
 
      (dissoc state ::key-record-handler))})
+
+(defn persist-user-shortcut!
+  [id binding]
+  (when-let [user-shortcuts (and id (:shortcuts (state/get-config)))]
+    (config-handler/set-config!
+      :shortcuts
+      (cond-> user-shortcuts
+              (nil? binding)
+              (dissoc id)
+
+              (or (string? binding)
+                  (vector? binding)
+                  (boolean? binding))
+              (assoc id binding)))))
