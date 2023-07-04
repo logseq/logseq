@@ -94,11 +94,12 @@
   (state/clear-edit!))
 
 (defn- add-property!
-  [block *property-key *property-value]
+  [block *property-key *property-value exit-edit?]
   (let [repo (state/get-current-repo)]
     (when @*property-key
       (property-handler/add-property! repo block @*property-key @*property-value))
-    (exit-edit-property *property-key *property-value)))
+    (when exit-edit?
+      (exit-edit-property *property-key *property-value))))
 
 (rum/defc date-picker
   [block property value]
@@ -106,17 +107,22 @@
                  (tc/to-local-date value))
         text (if value'
                (str value')
-               "Pick a date")]
+               "Pick a date")
+        open-modal! (fn []
+                      (state/set-modal!
+                       #(ui/datepicker value' {:on-change (fn [_e date]
+                                                            (let [repo (state/get-current-repo)]
+                                                              (property-handler/add-property! repo block
+                                                                                              (:block/name property)
+                                                                                              date)
+                                                              (exit-edit-property nil nil)
+                                                              (state/close-modal!)))})))]
     [:a
-     {:on-click (fn []
-                  (state/set-modal!
-                   #(ui/datepicker value' {:on-change (fn [_e date]
-                                                        (let [repo (state/get-current-repo)]
-                                                          (property-handler/add-property! repo block
-                                                                                          (:block/name property)
-                                                                                          date)
-                                                          (exit-edit-property nil nil)
-                                                          (state/close-modal!)))})))}
+     {:tabIndex "0"
+      :on-click open-modal!
+      :on-key-down (fn [e]
+                     (when (= (util/ekey e) "Enter")
+                       (open-modal!)))}
      [:span.inline-flex.items-center
       (ui/icon "calendar")
       [:span.ml-1 text]]]))
@@ -143,12 +149,17 @@
        (date-picker block property value)
 
        :checkbox
-       (ui/checkbox {:checked value
-                     :on-change (fn [_e]
-                                  (property-handler/add-property! repo block
-                                                                  (:block/original-name property)
-                                                                  (boolean (not value)))
-                                  (exit-edit-property nil nil))})
+       (let [add-property! (fn []
+                             (property-handler/add-property! repo block
+                                                             (:block/original-name property)
+                                                             (boolean (not value)))
+                             (exit-edit-property nil nil))]
+         (ui/checkbox {:tabIndex "0"
+                       :checked value
+                       :on-change (fn [_e] (add-property!))
+                       :on-key-down (fn [e]
+                                      (when (= (util/ekey e) "Enter")
+                                        (add-property!)))}))
 
        ;; :others
        (if editing?
@@ -195,6 +206,7 @@
   (let [*key-down-triggered? (::key-down-triggered? state)]
     [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
      {:placeholder "Property key"
+      :tabindex "0"
       :value @*property-key
       :auto-focus true
       :on-change (fn [e]
@@ -213,13 +225,16 @@
                          (when (= (util/ekey e) "Tab")
                            (util/stop e))
                          (reset! *property-key k)
-                         (reset! *property-value "")
                          (reset! *search? false)
                          ;; new property
-                         (add-property! block *property-key *property-value)
-                         (when-let [property (db/entity [:block/name (util/page-name-sanity-lc k)])]
-                           (let [editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property))]
-                             (set-editing! property editor-id "" ""))))
+                         (let [property (db/entity [:block/name (util/page-name-sanity-lc k)])
+                               value (when-not (contains? #{:date :checkbox} (:type (:block/schema property)))
+                                       "")]
+                           (reset! *property-value value)
+                           (add-property! block *property-key *property-value (some? value))
+                           (when property
+                             (let [editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property))]
+                               (set-editing! property editor-id "" "")))))
 
                        nil)
                      (reset! *key-down-triggered? false)))}]))
