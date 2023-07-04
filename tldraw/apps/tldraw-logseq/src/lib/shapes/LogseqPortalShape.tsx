@@ -354,9 +354,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     } = this
 
     const app = useApp<Shape>()
-    const {
-      handlers: { t },
-    } = React.useContext(LogseqContext)
     const { renderers, handlers } = React.useContext(LogseqContext)
 
     this.persist = () => app.persist()
@@ -494,7 +491,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   window.logseq?.api?.edit_block?.(uuid)
                 })
               }}
-              placeholder={t('whiteboard/create-or-search-graph')}
+              placeholder="Create or search your graph..."
             />
           ) : (
             <div
