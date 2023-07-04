@@ -537,16 +537,12 @@
   [graph]
   (ipc/ipc "graphReady" graph))
 
-;; New DB implementation
-(defn new-db!
-  [graph]
-  ;; TODO: check whether graph exists first
-  (p/let [full-graph-name (str config/db-version-prefix graph)
-          _ (start-repo-db-if-not-exists! full-graph-name)
+(defn- create-db [full-graph-name]
+  (p/let [_ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (ipc/ipc :db-new full-graph-name)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
-              {:skip-persist? true})
+                          {:skip-persist? true})
           initial-data [{:block/uuid (db/new-block-id)
                          :file/path (str "logseq/" "config.edn")
                          :file/content config/config-default-content}
@@ -563,3 +559,14 @@
           _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
     (js/setTimeout ui-handler/re-render-root! 100)
     (prn "New db created: " full-graph-name)))
+
+(defn new-db!
+  "Handler for creating a new database graph"
+  [graph]
+  (let [full-graph-name (str config/db-version-prefix graph)
+        graph-already-exists? (some #(= (:url %) full-graph-name) (state/get-repos))]
+    (if graph-already-exists?
+      (state/pub-event! [:notification/show
+                         {:content (str "The graph '" graph "' already exists. Please try again with another name.")
+                          :status :error}])
+      (create-db full-graph-name))))
