@@ -151,7 +151,9 @@
 
                                 :else
                                 v')
-                    new-value (vec (remove string/blank? new-value))
+                    new-value (if (coll? new-value)
+                                (vec (remove string/blank? new-value))
+                                new-value)
                     block-properties (assoc properties property-uuid new-value)
                     block-properties-text-values
                     (if (and (not multiple-values?) (= property-type :default))
