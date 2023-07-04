@@ -538,9 +538,9 @@
   (ipc/ipc "graphReady" graph))
 
 (defn- create-db [full-graph-name]
-  (p/let [_ (start-repo-db-if-not-exists! full-graph-name)
+  (p/let [_ (ipc/ipc :db-new full-graph-name)
+          _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
-          _ (ipc/ipc :db-new full-graph-name)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
                           {:skip-persist? true})
           initial-data [{:block/uuid (db/new-block-id)

@@ -21,19 +21,17 @@
 (defn open-db!
   [db-name]
   (let [graphs-dir (get-graphs-dir)]
-    (fs/ensureDirSync (node-path/join graphs-dir (sqlite-db/sanitize-db-name db-name)))
     (try (sqlite-db/open-db! graphs-dir db-name)
          (catch :default e
            (logger/error (str e ": " db-name))
            ;; (fs/unlinkSync db-full-path)
            ))))
 
-(defn upsert-blocks!
-  [repo blocks]
-  (or (sqlite-db/upsert-blocks! repo blocks)
-      ;; FIXME: When would an upsert not have a database connection?
-      (do (open-db! repo)
-          (sqlite-db/upsert-blocks! repo blocks))))
+(defn new-db!
+  [db-name]
+  (let [graph-dir (node-path/join (get-graphs-dir) (sqlite-db/sanitize-db-name db-name))]
+    (fs/ensureDirSync graph-dir)
+    (open-db! db-name)))
 
 (defn unlink-graph!
   [repo]

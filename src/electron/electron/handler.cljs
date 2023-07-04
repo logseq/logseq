@@ -364,8 +364,9 @@
 
 ;; DB related IPCs start
 
+;; Needs to be called first for a new graph
 (defmethod handle :db-new [_window [_ repo]]
-  (db/open-db! repo))
+  (db/new-db! repo))
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
   (let [data (reader/read-string data-str)
@@ -374,8 +375,9 @@
       (sqlite-db/delete-blocks! repo deleted-block-uuids))
     (when (seq blocks)
       (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
-        (db/upsert-blocks! repo (bean/->js blocks'))))))
+        (sqlite-db/upsert-blocks! repo (bean/->js blocks'))))))
 
+;; Needs to be called first for an existing graph
 (defmethod handle :get-initial-data [_window [_ repo _opts]]
   (db/open-db! repo)
   (sqlite-db/get-initial-data repo))

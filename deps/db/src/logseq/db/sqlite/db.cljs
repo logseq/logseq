@@ -81,7 +81,7 @@
                 (string/join ", ")) ")"))
 
 (defn upsert-blocks!
-  "Creates or updates given js blocks. Returns true if transaction is successful"
+  "Creates or updates given js blocks"
   [repo blocks]
   (when-let [db (get-db repo)]
     (let [insert (prepare db "INSERT INTO blocks (uuid, type, page_uuid, page_journal_day, name, content,datoms, created_at, updated_at) VALUES (@uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at) ON CONFLICT (uuid) DO UPDATE SET (type, page_uuid, page_journal_day, name, content, datoms, created_at, updated_at) = (@type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at)"
@@ -90,8 +90,7 @@
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks)
-      true)))
+      (insert-many blocks))))
 
 (defn delete-blocks!
   [repo uuids]
