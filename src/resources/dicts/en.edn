@@ -437,6 +437,7 @@
  :whiteboard/search-only-pages "Search only pages"
  :whiteboard/cache-outdated "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."
  :whiteboard/shape-quick-links "Shape Quick Links"
+ :whiteboard/edit-pdf "Edit PDF"
  :whiteboard/dashboard-card-new-whiteboard "New whiteboard"
  :whiteboard/dashboard-card-created "Created "
  :whiteboard/dashboard-card-edited "Edited "
