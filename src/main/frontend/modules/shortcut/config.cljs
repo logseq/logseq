@@ -409,6 +409,11 @@
    :graph/add                      {:fn (fn [] (route-handler/redirect! {:to :repo-add}))
                                     :binding false}
 
+   :graph/db-add                   {:fn #(state/pub-event! [:graph/new-db-graph])
+                                    ;; TODO: Remove this once feature is released
+                                    :inactive (not config/dev?)
+                                    :binding false}
+
    :graph/save                     {:fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
@@ -659,6 +664,7 @@
                           :graph/open
                           :graph/remove
                           :graph/add
+                          :graph/db-add
                           :graph/save
                           :graph/re-index
                           :editor/cycle-todo

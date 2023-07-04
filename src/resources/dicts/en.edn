@@ -746,6 +746,7 @@
   :graph/open                     "Select graph to open"
   :graph/remove                   "Remove a graph"
   :graph/add                      "Add a graph"
+  :graph/db-add                   "Add a DB graph"
   :graph/save                     "Save current graph to disk"
   :graph/re-index                 "Re-index current graph"
   :command/run                    "Run git command"
