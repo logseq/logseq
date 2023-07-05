@@ -327,6 +327,13 @@ export interface IPluginSearchServiceHooks {
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
+export interface IPluginTextEncoderServiceHooks {
+  name: string
+  options?: Record<string, any>
+
+  textEncode: (text: string) => Promise<string>
+}
+
 /**
  * App level APIs
  */
@@ -342,6 +349,7 @@ export interface IAppProxy {
 
   // services
   registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void
+  registerTextEncoderService<T extends IPluginTextEncoderServiceHooks>(s: T): void
 
   // commands
   registerCommand: (

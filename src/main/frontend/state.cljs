@@ -55,6 +55,8 @@
      :search/graph-filters                  []
      :search/engines                        {}
 
+     :ai/text-encoders                      {}
+
      ;; modals
      :modal/dropdowns                       {}
      :modal/id                              nil
@@ -1542,7 +1544,11 @@ Similar to re-frame subscriptions"
 
          ;; search engines state for results
          (when (= type :search)
-           (set-state! [:search/engines (str pid name)] service)))))))
+           (set-state! [:search/engines (str pid name)] service))
+         
+         ;; text encoders for calling
+         (when (= type :text-encoder)
+           (set-state! [:ai/text-encoders (str pid name)] service)))))))
 
 (defn uninstall-plugin-service
   [pid type-or-all]
@@ -1575,10 +1581,23 @@ Similar to re-frame subscriptions"
                                 (f %) %)))))
 
 (defn reset-plugin-search-engines
+  "Clears all search engine results.
+   Search engine results are stored in the :result of state under :search/engines.
+   Then subscribed by the search modal to display results."
   []
   (when-let [engines (get-all-plugin-search-engines)]
     (set-state! :search/engines
                 (update-vals engines #(assoc % :result nil)))))
+
+(defn get-all-plugin-text-encoders
+  []
+  (:ai/text-encoders @state))
+
+(defn reset-plugin-text-encoder
+  []
+  (when-let [encoders (get-all-plugin-text-encoders)]
+    (set-state! :ai/text-encoders
+                (update-vals encoders #(assoc % :result nil)))))
 
 (defn install-plugin-hook
   ([pid hook] (install-plugin-hook pid hook true))

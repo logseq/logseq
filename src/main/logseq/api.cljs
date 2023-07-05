@@ -19,6 +19,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
+            [frontend.ai.text-encoder :as text-encoder]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.property :as editor-property]
@@ -394,6 +395,18 @@
 (defn ^:export unregister_search_services
   [pid]
   (plugin-handler/unregister-plugin-search-services pid))
+
+(defn ^:export register_text_encoder
+  [pid name ^js opts]
+  (plugin-handler/register-plugin-text-encoder pid name (bean/->clj opts)))
+
+(defn ^:export unregister_text_encoders
+  [pid]
+  (plugin-handler/unregister-plugin-text-encoders pid))
+
+(defn ^:export text_encode
+  [text encoder-name]
+  (text-encoder/text-encode text encoder-name))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]

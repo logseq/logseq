@@ -6,6 +6,7 @@
             [cljs-bean.core :as bean]))
 
 (defn call-service!
+  "Handling communication with search service plugin"
   ([service event payload] (call-service! service event payload false))
   ([service event payload reply?]
    (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]

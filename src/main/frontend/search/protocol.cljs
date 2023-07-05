@@ -1,4 +1,6 @@
-(ns ^:no-doc frontend.search.protocol)
+(ns frontend.search.protocol
+  "Search engine protocols. Interface for unifying different search result sources
+   Like: app built-in search, search engine provided by plugins, etc.")
 
 (defprotocol Engine
   (query [this q option]) 
