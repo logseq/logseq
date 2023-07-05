@@ -279,7 +279,7 @@ class LSPluginCaller extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`handshake Timeout`))
+        reject(new Error(`handshake Timeout (Missing wait for ready?)`))
         pt.destroy()
       }, 4 * 1000) // 4 secs
 
