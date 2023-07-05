@@ -271,8 +271,9 @@
         (not (mobile-util/native-platform?)))
     (fn [close-fn]
       [:div
+       ;; TODO: fn translation with args
        [:p
-        (t :settings-permission/grant-permission)
+        "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button
         (t :settings-permission/start-granting)

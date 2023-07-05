@@ -246,7 +246,6 @@
  :settings-page/custom-global-configuration "自定义全局配置"
  :settings-page/edit-global-config-edn "编辑全局 config.edn"
  :settings-page/sync "同步"
- :settings-permission/grant-permission "授权访问本地目录: "
  :settings-permission/start-granting "开始授权"
  :yes "是"
  :submit "提交"
