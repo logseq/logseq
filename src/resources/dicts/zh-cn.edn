@@ -462,7 +462,7 @@
  :whiteboard/dashboard-card-created "创建于 "
  :whiteboard/dashboard-card-edited "编辑于 "
  :whiteboard/toggle-grid "切换网格"
- :whiteboard/snap-to-grid "对齐网格"
+ :whiteboard/snap-to-grid "对齐到网格"
 
  :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
  :updater/quit-and-install "现在安装"
