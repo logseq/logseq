@@ -338,10 +338,11 @@
                                                          (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when (and config/dev? (state/sub [:ui/developer-mode?])) [:div.text-sm
-                           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                                       (state/sidebar-add-block! repo "history" :history))}
-                            (t :right-side-bar/history)]])]]
+        (when (and config/dev? (state/sub [:ui/developer-mode?]))
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "history" :history))}
+            (t :right-side-bar/history)]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2.pb-2.mx-2
        (if @*anim-finished?
