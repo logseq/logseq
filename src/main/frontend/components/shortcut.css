@@ -83,6 +83,22 @@
         @apply flex space-x-1 items-center select-none
         rounded border-[2px] py-[2px] px-[2px];
       }
+
+      .keyboard-shortcut {
+        > code {
+          @apply relative select-none tracking-wider;
+
+          a.x {
+            @apply hidden absolute right-[-8px] top-[-6px] h-[16px] w-[16px]
+            rounded-full bg-red-500 text-white leading-none items-center
+            justify-center cursor-pointer opacity-80 hover:opacity-100 active:opacity-50;
+          }
+
+          &:hover a.x {
+            @apply flex;
+          }
+        }
+      }
     }
 
     &.keypressed {

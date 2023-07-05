@@ -106,18 +106,19 @@
     [:div.cp__shortcut-page-x-record-dialog-inner
      {:class (util/classnames [{:keypressed keypressed? :dirty dirty?}])}
      [:div.sm:w-lsm
-      [:h1 [:code (str handler-id)]]
       [:p.mb-4 "Customize shortcuts for the " [:b action-name] " action."]
 
       [:div.shortcuts-keys-wrap
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
         (for [x current-binding]
           [:code.tracking-wider
-           (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))])]
+           (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))
+           [:a.x {:on-click (fn [] (set-current-binding!
+                                     (->> current-binding (remove #(= x %)) (into []))))}
+            (ui/icon "x" {:size 12})]])]
 
        ;; add shortcut
        [:div.shortcut-record-control
-
         ;; keypressed state
         (if keypressed?
           [:<>
@@ -161,7 +162,7 @@
          :background (when dirty? "red")
          :disabled (not dirty?)
          :on-click (fn []
-                     ;; TODO: check conflicts
+                     ;; TODO: check conflicts for the single same leader key
                      (let [binding' (if (nil? current-binding) [] current-binding)
                            conflicts (dh/get-conflicts-by-keys binding' handler-id #{k})]
                        (if (seq conflicts)
