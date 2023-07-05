@@ -352,7 +352,8 @@
                         (state/delete-repo! repo)
                         (when graph-exists? (ipc/ipc "graphUnlinked" repo))
                         (when (= current-repo url)
-                          (state/set-current-repo! (:url (first (state/get-repos)))))))]
+                          (when-let [graph (:url (first (state/get-repos)))]
+                            (state/pub-event! [:graph/switch graph {}])))))]
     (when (or (config/local-file-based-graph? url)
               db-based?
               (config/demo-graph? url))
