@@ -422,7 +422,7 @@
  :whiteboard/zoom-in "放大"
  :whiteboard/zoom-out "缩小"
  :whiteboard/select "选择"
- :whiteboard/pan "移动"
+ :whiteboard/pan "平移"
  :whiteboard/add-block-or-page "新增块或页面"
  :whiteboard/draw "笔刷"
  :whiteboard/highlight "高亮"
