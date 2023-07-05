@@ -67,7 +67,7 @@
   (reduce
    (fn [content ref]
      (if (:block/name ref)
-       (string/replace content (str config/page-ref-special-chars (:block/uuid ref)) (:block/name ref))
+       (string/replace content (str config/page-ref-special-chars (:block/uuid ref)) (:block/original-name ref))
        content))
    content
    refs))
