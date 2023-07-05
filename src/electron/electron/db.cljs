@@ -38,7 +38,11 @@
   (let [db-name (sqlite-db/sanitize-db-name repo)
         path (node-path/join (get-graphs-dir) db-name)
         unlinked (node-path/join (get-graphs-dir) "Unlinked graphs")
-        new-path (node-path/join unlinked db-name)]
+        new-path (node-path/join unlinked db-name)
+        new-path-exists? (fs/existsSync new-path)
+        new-path' (if new-path-exists?
+                    (node-path/join unlinked (str db-name "-" (random-uuid)))
+                    new-path)]
     (when (fs/existsSync path)
       (fs/ensureDirSync unlinked)
-      (fs/moveSync path new-path))))
+      (fs/moveSync path new-path'))))
