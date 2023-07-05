@@ -531,14 +531,13 @@ html[data-theme='dark'] {
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
-  background-color: var(--ls-secondary-background-color, #d8e1e8);
   position: relative;
   user-select: none;
 
   .resizer {
     @apply absolute top-0 bottom-0;
     touch-action: none;
-    left: 0;
+    left: 2px;
     width: 4px;
     user-select: none;
     cursor: col-resize !important;
@@ -592,7 +591,6 @@ html[data-theme='dark'] {
     top: 0;
     left: 0;
     right: 0;
-    background-color: var(--ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;
@@ -622,14 +620,35 @@ html[data-theme='dark'] {
   }
 
   .sidebar-item {
-    @apply p-4;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 140px;
+
+    &.collapsed {
+      flex: 0;
+      overflow: initial;
+      min-height: initial;
+    }
+
+    .initial {
+      flex: 1;
+    }
 
     .close {
       transform: scale(0.8);
-      transition: transform 0.1s;
+      transition: transform 0.1s, opacity 0.1s;
+      visibility: hidden;
+      opacity: 0;
 
       &:hover {
         transform: scale(1);
+      }
+    }
+
+    &:hover {
+      .close {
+        visibility: visible;
+        opacity: 1;
       }
     }
   }
