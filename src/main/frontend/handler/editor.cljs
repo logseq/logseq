@@ -975,7 +975,8 @@
   (loop [ids ids
          result []]
     (if (seq ids)
-      (let [blocks (db/get-block-and-children repo (first ids))
+      (let [db-id (:db/id (db/entity [:block/uuid (first ids)]))
+            blocks (tree/get-sorted-block-and-children repo db-id)
             result (vec (concat result blocks))]
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
@@ -990,20 +991,7 @@
           block (db/entity [:block/uuid (first ids)])]
       (when block
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
-              copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
-              selected-blocks (dom/sel ".ls-block.selected")
-              selected-block-ids (->> selected-blocks
-                                      (reduce
-                                       (fn [selected-block-ids selected-block]
-                                         (let [selected-block-id (dom/attr selected-block "blockid")]
-                                           (if (some #(= selected-block-id %) selected-block-ids)
-                                             selected-block-ids
-                                             (reduce #(conj %1 (dom/attr %2 "blockid"))
-                                                     (conj selected-block-ids selected-block-id)
-                                                     (seq (dom/by-class selected-block "ls-block"))))))
-                                       [])
-                                      (map uuid))
-              copied-blocks (sort-by #(.indexOf selected-block-ids (:block/uuid %)) copied-blocks)]
+              copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
         (state/set-block-op-type! :copy)
         (notification/show! "Copied!" :success)))))
