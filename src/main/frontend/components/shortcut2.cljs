@@ -34,12 +34,12 @@
     (if (sequential? v) (vec v) [v])))
 
 (rum/defc pane-controls
-  [q set-q! refresh-fn]
+  [q set-q! refresh-fn toggle-categories-fn]
 
   (let [*search-ref (rum/use-ref nil)]
     [:div.cp__shortcut-page-x-pane-controls
      [:a.flex.items-center.icon-link
-      {:on-click #()}
+      {:on-click toggle-categories-fn}
       (ui/icon "fold")]
 
      [:a.flex.items-center.icon-link
@@ -184,22 +184,31 @@
 
 (rum/defc shortcut-page-x
   []
-  (let [categories-list-map (build-categories-map)
-        [ready?, set-ready!] (rum/use-state false)
+  (let [[ready?, set-ready!] (rum/use-state false)
         [refresh-v, refresh!] (rum/use-state 1)
         [q set-q!] (rum/use-state nil)
 
+        categories-list-map (build-categories-map)
+        all-categories (into #{} (map first categories-list-map))
         in-query? (not (string/blank? (util/trim-safe q)))
-        matched-list-map (when in-query?
-                           (->> categories-list-map
-                                (map (fn [[c binding-map]]
-                                       [c (search/fuzzy-search
-                                            binding-map q
-                                            :extract-fn
-                                            #(let [[id {:keys [cmd]}] %]
-                                               (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
+
+        [folded-categories set-folded-categories!] (rum/use-state #{})
+
+        matched-list-map
+        (when in-query?
+          (->> categories-list-map
+               (map (fn [[c binding-map]]
+                      [c (search/fuzzy-search
+                           binding-map q
+                           :extract-fn
+                           #(let [[id {:keys [cmd]}] %]
+                              (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
+
         result-list-map (or matched-list-map categories-list-map)
-        refresh-list! #(refresh! (inc refresh-v))]
+        refresh-list! #(refresh! (inc refresh-v))
+        toggle-categories! #(if (= folded-categories all-categories)
+                              (set-folded-categories! #{})
+                              (set-folded-categories! all-categories))]
 
     (rum/use-effect!
       (fn []
@@ -215,7 +224,7 @@
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
 
-      (pane-controls q set-q! refresh-list!)]
+      (pane-controls q set-q! refresh-list! toggle-categories!)]
 
      (when-not (string/blank? q)
        [:h3.flex.justify-center.font-bold "Query: " q])
@@ -227,57 +236,63 @@
       (when ready?
         [:ul.list-none.m-0.py-3
          (for [[c binding-map] result-list-map
-               :let [plugin? (= c :shortcut.category/plugins)]]
+               :let [plugin? (= c :shortcut.category/plugins)
+                     folded? (contains? folded-categories c)]]
            [:<>
             ;; category row
             (when-not in-query?
-              [:li.bg-green-600.text-center.text-md.th.text-white
-               {:key (str c)}
-               (t c)])
+              [:li.bg-green-600.flex.justify-between.th.text-white.px-3.items-center.py-1
+               {:key      (str c)
+                :on-click #(let [f (if folded? disj conj)]
+                             (set-folded-categories! (f folded-categories c)))}
+               [:strong (t c)]
+               [:i.flex.items-center
+                (ui/icon (if folded? "chevron-left" "chevron-down"))]])
 
             ;; binding row
-            (for [[id {:keys [cmd binding user-binding]}] binding-map
-                  :let [binding (to-vector binding)
-                        user-binding (and user-binding (to-vector user-binding))
-                        label (cond
-                                (string? (:desc cmd))
-                                [:<>
-                                 [:span.pl-1 (:desc cmd)]
-                                 [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
+            (when (or in-query? (not folded?))
+              (for [[id {:keys [cmd binding user-binding]}] binding-map
+                    :let [binding (to-vector binding)
+                          user-binding (and user-binding (to-vector user-binding))
+                          label (cond
+                                  (string? (:desc cmd))
+                                  [:<>
+                                   [:span.pl-1 (:desc cmd)]
+                                   [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
 
-                                (not plugin?)
-                                [:<>
-                                 [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
-                                 [:small [:code.text-xs (str id)]]]
+                                  (not plugin?)
+                                  [:<>
+                                   [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
+                                   [:small [:code.text-xs (str id)]]]
 
-                                :else (str id))
-                        disabled? (or (false? user-binding)
-                                      (false? (first binding)))
-                        unset? (and (not disabled?)
-                                    (= user-binding []))]]
-              [:li.flex.items-center.justify-between.text-sm
-               {:key (str id)}
-               [:span.label-wrap label]
+                                  :else (str id))
+                          disabled? (or (false? user-binding)
+                                        (false? (first binding)))
+                          unset? (and (not disabled?)
+                                      (= user-binding []))]]
+                [:li.flex.items-center.justify-between.text-sm
+                 {:key (str id)}
+                 [:span.label-wrap label]
 
-               [:a.action-wrap
-                {:class    (util/classnames [{:disabled disabled?}])
-                 :on-click (when-not disabled?
-                             #(state/set-sub-modal!
-                                (fn [] (customize-shortcut-dialog-inner
-                                         id label binding user-binding
-                                         {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
-                                {:center? true}))}
+                 [:a.action-wrap
+                  {:class    (util/classnames [{:disabled disabled?}])
+                   :on-click (when-not disabled?
+                               #(state/set-sub-modal!
+                                  (fn [] (customize-shortcut-dialog-inner
+                                           id label binding user-binding
+                                           {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
+                                  {:center? true}))}
 
-                (when (or user-binding (false? user-binding))
-                  [:code.dark:bg-green-800.bg-green-300
-                   (if unset?
-                     "Unset"
-                     (str "Custom: "
-                          (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))])
+                  (when (or user-binding (false? user-binding))
+                    [:code.dark:bg-green-800.bg-green-300
+                     (if unset?
+                       "Unset"
+                       (str "Custom: "
+                            (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))])
 
-                (when (and (not disabled?)
-                           (not unset?))
-                  (for [x binding]
-                    [:code.tracking-wide
-                     {:key (str x)}
-                     (dh/binding-for-display id x)]))]])])])]]))
+                  (when (and (not disabled?)
+                             (not unset?))
+                    (for [x binding]
+                      [:code.tracking-wide
+                       {:key (str x)}
+                       (dh/binding-for-display id x)]))]]))])])]]))

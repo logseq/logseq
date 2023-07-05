@@ -54,9 +54,11 @@
   > article {
     > ul {
       li {
+        @apply text-[16px];
+
         &.th {
-          @apply rounded my-2 sticky top-[-1rem] cursor-pointer select-none
-          active:opacity-80;
+          @apply rounded my-2 sticky top-[-1rem] cursor-pointer
+          select-none active:opacity-80;
         }
 
         .label-wrap {
