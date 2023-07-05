@@ -2858,7 +2858,8 @@
                                                edit-input-id {:inline-text inline-text
                                                               :page-cp page-cp
                                                               :block-cp block-reference
-                                                              :editor-box (get config :editor-box)}))])
+                                                              :editor-box (get config :editor-box)
+                                                              :selected? selected?}))])
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
