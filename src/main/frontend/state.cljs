@@ -1087,6 +1087,7 @@ Similar to re-frame subscriptions"
                                        (->> (remove #(= (second %) db-id) blocks)
                                             (cons [repo db-id block-type])
                                             (distinct))))
+      (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
