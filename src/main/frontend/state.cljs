@@ -1589,16 +1589,6 @@ Similar to re-frame subscriptions"
     (set-state! :search/engines
                 (update-vals engines #(assoc % :result nil)))))
 
-(defn get-all-plugin-text-encoders
-  []
-  (:ai/text-encoders @state))
-
-(defn reset-plugin-text-encoder
-  []
-  (when-let [encoders (get-all-plugin-text-encoders)]
-    (set-state! :ai/text-encoders
-                (update-vals encoders #(assoc % :result nil)))))
-
 (defn install-plugin-hook
   ([pid hook] (install-plugin-hook pid hook true))
   ([pid hook opts]

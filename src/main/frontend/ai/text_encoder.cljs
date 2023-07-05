@@ -5,11 +5,11 @@
             [frontend.handler.plugin :as plugin-handler]
             [cljs-bean.core :as bean]))
 
-(defn- call-text-encoder-service!
+(defn- call-service!
   "Handling communication with text encoder plugin
   When reply? is true, it will listen to the `service:<event>:<name>:reply `event
   and return a promise of the result"
-  ([service event payload] (call-text-encoder-service! service event payload false))
+  ([service event payload] (call-service! service event payload false))
   ([service event payload reply?]
    (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]
      (let [{:keys [name]} service
@@ -25,7 +25,7 @@
 
 (defn- text-encode'
   [text service]
-  (call-text-encoder-service! service "textEncoder:textEncode" {:text text} true))
+  (call-service! service "textEncoder:textEncode" {:text text} true))
 
 (defn text-encode
   "Return a promise of the encoded text"

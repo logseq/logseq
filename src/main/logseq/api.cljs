@@ -396,17 +396,20 @@
   [pid]
   (plugin-handler/unregister-plugin-search-services pid))
 
-(defn ^:export register_text_encoder
+(defn ^:export register_text_encoder_service
   [pid name ^js opts]
+  (prn "register_text_encoder_service") ;; TODO Junyi
   (plugin-handler/register-plugin-text-encoder pid name (bean/->clj opts)))
 
-(defn ^:export unregister_text_encoders
+(defn ^:export unregister_text_encoder_services
   [pid]
   (plugin-handler/unregister-plugin-text-encoders pid))
 
 (defn ^:export text_encode
   [text encoder-name]
-  (text-encoder/text-encode text encoder-name))
+  (if encoder-name
+    (text-encoder/text-encode text encoder-name) 
+    (text-encoder/text-encode text)))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
