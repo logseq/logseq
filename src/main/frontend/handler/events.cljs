@@ -272,10 +272,10 @@
     (fn [close-fn]
       [:div
        [:p
-        "Grant native filesystem permission for directory: "
+        (t :settings-permission/grant-permission)
         [:b (config/get-local-dir repo)]]
        (ui/button
-        "Grant"
+        (t :settings-permission/start-granting)
         :class "ui__modal-enter"
         :on-click (fn []
                     (nfs/check-directory-permission! repo)
@@ -293,7 +293,7 @@
   [block shown-properties all-properties _close-fn]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
-     [:div.font-bold "Properties settings for this query:"]
+     [:div.font-bold (t :query/config-property-settings)]
      (for [property all-properties]
        (let [property-value (get query-properties property)
              shown? (if (nil? property-value)

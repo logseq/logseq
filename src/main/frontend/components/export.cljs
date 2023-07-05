@@ -176,7 +176,7 @@
 
      (if (= :png tp)
        [:div.flex.items-center
-        [:div "Transparent background"]
+        [:div (t :export-transparent-background)]
         (ui/checkbox {:class "mr-2 ml-4"
                       :on-change (fn [e]
                                    (reset! *content nil)
@@ -276,14 +276,14 @@
 
      (when @*content
        [:div.mt-4
-        (ui/button (if @*copied? "Copied to clipboard!" "Copy to clipboard")
+        (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
                    :class "mr-4"
                    :on-click (fn []
                                (if (= tp :png)
                                  (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
                                  (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                                (reset! *copied? true)))
-        (ui/button "Save to file"
+        (ui/button (t :export-save-to-file)
                    :on-click #(let [file-name (if (string? root-block-uuids-or-page-name)
                                                 (-> (db/get-page root-block-uuids-or-page-name)
                                                     (util/get-page-original-name))
