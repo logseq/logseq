@@ -98,7 +98,7 @@
 
 (defn convert-property-input-string
   [schema-type v-str]
-  (if (boolean? v-str)
+  (if (and (not (string? v-str)) (not (object? v-str)))
     v-str
     (case schema-type
       :default
@@ -111,13 +111,13 @@
       (edn/read-string (string/lower-case v-str))
 
       :page
-      (if (uuid? v-str) v-str (uuid v-str))
+      (uuid v-str)
 
       :block
-      (if (uuid? v-str) v-str (uuid v-str))
+      (uuid v-str)
 
       :object
-      (if (uuid? v-str) v-str (uuid v-str))
+      (uuid v-str)
 
       :date
       (js/Date. v-str)                  ; inst

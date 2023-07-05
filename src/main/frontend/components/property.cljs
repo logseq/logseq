@@ -166,12 +166,34 @@
                                                   (exit-edit-property)
                                                   nil))}})))
 
+(defn- select
+  [block property]
+  (let [repo (state/get-current-repo)
+        items (->> (model/get-block-property-values (:block/uuid property))
+                   (map (fn [[_id value]] {:value value}))
+                   (distinct))
+        add-property-f #(add-property! block (:block/original-name property) % true)]
+    (select/select {:items items
+                    :on-chosen (fn [chosen] (add-property-f (:value chosen)))
+                    :input-opts (fn [not-matched?]
+                                  {:on-key-down (fn [e]
+                                                 (case (util/ekey e)
+                                                   "Enter"
+                                                   (when not-matched?
+                                                     (add-property-f (util/evalue e)))
+
+                                                   "Escape"
+                                                   (exit-edit-property)
+
+                                                   nil))})})))
+
 (rum/defc property-scalar-value < rum/reactive
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id
                                 editor-box editor-args
                                 new-item?]}]
   (let [multiple-values? (= :many (:cardinality (:block/schema property)))
+        editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
         editing? (state/sub [:editor/editing? editor-id])
         repo (state/get-current-repo)
         type (:type (:block/schema property))]
@@ -189,13 +211,13 @@
                        :on-key-down (fn [e]
                                       (when (= (util/ekey e) "Enter")
                                         (add-property!)))}))
-
        ;; :others
        (if editing?
-         [:div.flex.flex-1 (cond-> {}
-                             multiple-values?
-                             (assoc :class "property-value-content"))
+         [:div.flex.flex-1 {:class "property-value-content"}
           (case type
+            (list :number :url)
+            (select block property)
+
             :page
             (select-page block property)
 
@@ -219,7 +241,7 @@
                                     (let [values-count (-> (:block/properties (db/entity (:db/id block)))
                                                            (get (:block/uuid property))
                                                            (count))
-                                          editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property) values-count)]
+                                          editor-id (str "ls-property-" (:db/id block) "-" (:db/id property) "-" values-count)]
                                       (set-editing! property editor-id nil ""))))))}}
                           {})]
              (editor-box editor-args editor-id (cond-> config
@@ -275,12 +297,12 @@
                          (reset! *search? false)
                          ;; new property
                          (let [property (db/entity [:block/name (util/page-name-sanity-lc k)])
-                               value (when-not (contains? #{:date :checkbox} (:type (:block/schema property)))
+                               value (when-not (contains? #{:date :checkbox :number :url} (:type (:block/schema property)))
                                        "")]
                            (reset! *property-value value)
                            (add-property! block @*property-key @*property-value (some? value))
                            (when property
-                             (let [editor-id (str "ls-property-" (:db/id property) "-" (:block/uuid property))]
+                             (let [editor-id (str "ls-property-" (:db/id block) "-" (:db/id property))]
                                (set-editing! property editor-id "" "")))))
 
                        nil)
@@ -289,7 +311,7 @@
 (rum/defcs property-input < rum/reactive
   (rum/local true ::search?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value block-components-m]
+  [state entity *property-key *property-value opts]
   (let [*search? (::search? state)
         entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
@@ -303,7 +325,7 @@
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
       (property-key-input entity *property-key *property-value *search?)
       (when property
-        (property-scalar-value entity property @*property-value block-components-m))
+        (property-scalar-value entity property @*property-value opts))
 
       [:a.close {:on-mouse-down exit-edit-property}
        svg/close]]
@@ -327,13 +349,13 @@
                  (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
-  [state repo block edit-input-id properties new-property? block-components-m]
+  [state repo block edit-input-id properties new-property? opts]
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
      new-property?
      [:div#edit-new-property
-      (property-input block *property-key *property-value block-components-m)]
+      (property-input block *property-key *property-value opts)]
 
      (seq properties)
      [:a {:title "Add another property"
@@ -389,7 +411,7 @@
                k
                (get (:block/properties block) k))
         dom-id (str "ls-property-" k)
-        editor-id (str "ls-property-" (:db/id property) "-" k)
+        editor-id (str "ls-property-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         type (:type schema)
