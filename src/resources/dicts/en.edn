@@ -63,7 +63,7 @@
  :on-boarding/section-title "How Logseq saves your work"
  :on-boarding/section-desc "Inside the directory you choose, Logseq will create 4 folders."
 
- :on-boarding/section-tip (fn [] [["Each page is a file stored only on your {1}."] [:br] "You may choose to sync it later."])
+ :on-boarding/section-tip (fn [] [["Each page is a file stored only on your {1}."] [:br "You may choose to sync it later."]])
  
  :on-boarding/section-assets "Graphics & Documents"
  :on-boarding/section-computer "computer"
