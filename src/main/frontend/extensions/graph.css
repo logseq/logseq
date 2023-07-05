@@ -13,6 +13,6 @@
     height: 500px;
 }
 
-#main-content-container.graph {
+#main-content-container .graph {
     height: calc(100vh - 100px) !important;
 }
