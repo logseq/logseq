@@ -275,7 +275,8 @@
                 (page-cp {} page))
 
               :block
-              (block-cp {} value nil)
+              [:div.property-block-container.w-full
+               (block-cp [(db/entity [:block/uuid value])] {:editor-box editor-box})]
 
               (inline-text {} :markdown (str value))))])))))
 

@@ -39,6 +39,14 @@
     .cp__select-input {
         padding: 0.5em 1em;
     }
+
+    .ls-block, .editor-wrapper {
+        margin: 0;
+    }
+
+    .property-block-container {
+        margin-left: -1.5em;
+    }
 }
 
 input.simple-input {

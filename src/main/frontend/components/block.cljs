@@ -2857,7 +2857,7 @@
                                                (:block/properties-text-values block)
                                                edit-input-id {:inline-text inline-text
                                                               :page-cp page-cp
-                                                              :block-cp block-reference
+                                                              :block-cp blocks-container
                                                               :editor-box (get config :editor-box)
                                                               :selected? selected?}))])
 
