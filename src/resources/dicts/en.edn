@@ -357,8 +357,6 @@
  :settings-page/update-available "Found new release "
  :settings-page/update-error (fn [] ["⚠️ Oops, Something Went Wrong!" [:br] " Please check out the "])
  :settings-page/update-error-releases " release channel"
- :settings-page/update-error-1 "⚠️ Oops, Something Went Wrong!"
- :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
 
  :yes "Yes"

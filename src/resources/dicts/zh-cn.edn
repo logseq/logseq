@@ -26,8 +26,6 @@
  :bug-report/section-issues-desc "如果没有可用的工具供您收集额外的信息，请直接报告错误。"
  :bug-report/section-issues-btn-title "提交错误报告"
  :bug-report/section-issues-btn-desc "帮助改进 Logseq!"
- :bug-report/inspector-page-desc-1 "按下 Ctrl+V / ⌘+V 键来检查您的剪贴板数据"
- :bug-report/inspector-page-desc-2 "如果您正在使用移动版本，请点击此处粘贴"
  :bug-report/inspector-page-placeholder "如果您在手机上，请长按此处进行粘贴"
  :bug-report/inspector-page-tip "出了点问题？没关系，点击返回到上一步。"
  :bug-report/inspector-page-btn-back "返回"
