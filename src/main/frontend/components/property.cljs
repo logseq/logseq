@@ -3,6 +3,7 @@
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
@@ -147,19 +148,20 @@
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
                                    (add-property! block (:block/original-name property) id true)))
                     :input-opts (fn [not-matched?]
-                                  {:on-key-down (fn [e]
-                                                  (case (util/ekey e)
-                                                    "Enter"
-                                                    (when not-matched?
-                                                      (let [page (string/trim (util/evalue e))]
-                                                        (when-not (string/blank? page)
-                                                          (page-handler/create! page {:redirect? false
-                                                                                      :create-first-block? false})
-                                                          (let [id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                                            (add-property! block (:block/original-name property) id true)))))
-                                                    "Escape"
-                                                    (exit-edit-property)
-                                                    nil))})})))
+                                  {:on-key-down
+                                   (fn [e]
+                                     (case (util/ekey e)
+                                       "Enter"
+                                       (when not-matched?
+                                         (let [page (string/trim (util/evalue e))]
+                                           (when-not (string/blank? page)
+                                             (page-handler/create! page {:redirect? false
+                                                                         :create-first-block? false})
+                                             (let [id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
+                                               (add-property! block (:block/original-name property) id true)))))
+                                       "Escape"
+                                       (exit-edit-property)
+                                       nil))})})))
 
 (defn- select-block
   [block property]
@@ -170,11 +172,31 @@
                     :on-chosen (fn [chosen]
                                  (let [id (:block/uuid chosen)]
                                    (add-property! block (:block/original-name property) id true)))
-                    :input-opts {:on-key-down (fn [e]
-                                                (case (util/ekey e)
-                                                  "Escape"
-                                                  (exit-edit-property)
-                                                  nil))}})))
+                    :input-opts (fn [not-matched?]
+                                  {:on-key-down
+                                   (fn [e]
+                                     (case (util/ekey e)
+                                       "Enter"
+                                       (when not-matched?
+                                         (let [content (string/trim (util/evalue e))]
+                                           (when-not (string/blank? content)
+                                             (let [property-page config/property-page]
+                                               (when-not (db/entity [:block/name property-page])
+                                                 (let [id (db/new-block-id)]
+                                                   (db/transact! [{:block/uuid id
+                                                                  :block/name property-page
+                                                                  :block/original-name property-page
+                                                                  :block/type "page"
+                                                                  :block/created-at (util/time-ms)
+                                                                  :block/updated-at (util/time-ms)}])))
+                                               (let [new-block (editor-handler/api-insert-new-block! content
+                                                                                                     {:page property-page
+                                                                                                      :replace-empty-target? false})]
+                                                 (when-let [id (:block/uuid new-block)]
+                                                   (add-property! block (:block/original-name property) id true)))))))
+                                       "Escape"
+                                       (exit-edit-property)
+                                       nil))})})))
 
 (defn- select
   [block property]
@@ -275,8 +297,12 @@
                 (page-cp {} page))
 
               :block
-              [:div.property-block-container.w-full
-               (block-cp [(db/entity [:block/uuid value])] {:editor-box editor-box})]
+              (if-let [block (db/entity [:block/uuid value])]
+                [:div.property-block-container.w-full
+                 (block-cp [block] {:editor-box editor-box})]
+                (if multiple-values?
+                  (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                  (property-handler/remove-property! repo block (:block/uuid property))))
 
               (inline-text {} :markdown (str value))))])))))
 
