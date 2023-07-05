@@ -186,19 +186,21 @@
   [repo idx db-id block-type]
   (let [item (build-sidebar-item repo idx db-id block-type)]
     (when item
-      (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4.shadow-md
+      (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+        [:div.flex.sidebar-item.content.color-level.shadow-md {:class (when collapsed? "collapsed")}
          (let [[title component] item]
-           [:div.flex.flex-col
-            [:div.flex.flex-row.justify-between
+           [:div.flex.flex-col.w-full
+            [:button.flex.flex-row.justify-between.p-4
+             {:on-click (fn [e]
+                          (.preventDefault e)
+                          (state/sidebar-block-toggle-collapse! db-id))}
              [:div.flex.flex-row.justify-center
-              [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
-               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
-               (ui/rotating-arrow collapse?)]
+              [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
+               (ui/rotating-arrow collapsed?)]
               [:div.ml-1.font-medium
                title]]
              (close #(state/sidebar-remove-block! idx))]
-            [:div {:class (if collapse? "hidden" "initial")}
+            [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
              component]])]))))
 
 (defn- get-page
@@ -336,12 +338,12 @@
                                                          (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when config/dev? [:div.text-sm
+        (when (and config/dev? (state/sub [:ui/developer-mode?])) [:div.text-sm
                            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                                        (state/sidebar-add-block! repo "history" :history))}
                             (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2
+      [:.sidebar-item-list.flex-1.flex.flex-col.gap-2.pb-2.mx-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
