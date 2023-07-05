@@ -466,7 +466,7 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly random-uuid)))
-        uuids (if replace-empty-target?
+        uuids (if (and (not keep-uuid?) replace-empty-target?)
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
@@ -505,7 +505,7 @@
                                        :block/parent parent
                                        :block/left left})
                          ;; We'll keep the original `:db/id` if it's a move operation,
-                         ;; e.g. drag and drop shouldn't change the ids.
+                         ;; e.g. internal cut or drag and drop shouldn't change the ids.
                          (not move?)
                          (dissoc :db/id)))))
                  blocks)))
@@ -526,13 +526,12 @@
       `sibling?`: as siblings (true) or children (false).
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
-                    need to be changed, but there's no need for drag & drop.
+                    need to be changed, but there's no need for internal cut or drag & drop.
       `outliner-op`: what's the current outliner operation.
-      `cut-paste?`: whether it's pasted from cut blocks
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target? cut-paste?] :as opts}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (get-target-block target-block)
@@ -586,10 +585,7 @@
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                         [{:block/uuid (tree/-get-id next)
                           :block/left (:db/id left)}]))
-            cut-target-tx (when (and cut-paste? replace-empty-target?)
-                            [{:db/id (:db/id target-block')
-                              :block/uuid (:block/uuid (first blocks'))}])
-            full-tx (util/concat-without-nil uuids-tx tx next-tx cut-target-tx)]
+            full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
           (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
         {:tx-data full-tx

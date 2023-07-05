@@ -801,6 +801,10 @@
 
 (declare save-block!)
 
+(defn- block-has-no-ref?
+  [eid]
+  (empty? (:block/_refs (db/entity eid))))
+
 (defn delete-block!
   ([repo]
    (delete-block! repo true))
@@ -971,7 +975,8 @@
   (loop [ids ids
          result []]
     (if (seq ids)
-      (let [blocks (db/get-block-and-children repo (first ids))
+      (let [db-id (:db/id (db/entity [:block/uuid (first ids)]))
+            blocks (tree/get-sorted-block-and-children repo db-id)
             result (vec (concat result blocks))]
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
@@ -988,6 +993,7 @@
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
               copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html) copied-blocks))
+        (state/set-block-op-type! :copy)
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1056,6 +1062,7 @@
 (defn cut-selection-blocks
   [copy?]
   (when copy? (copy-selection-blocks true))
+  (state/set-block-op-type! :cut)
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -1204,6 +1211,7 @@
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html sorted-blocks)
+      (state/set-block-op-type! :cut)
       (delete-block-aux! block true))))
 
 (defn highlight-selection-area!
@@ -1967,16 +1975,18 @@
         (cond->> new-content
              (not keep-uuid?) (property/remove-property format "id")
              true             (property/remove-property format "custom_id"))]
-    (merge (dissoc block
-                   :block/pre-block?
-                   :block/meta)
+    (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            {:block/page {:db/id (:db/id page)}
             :block/format format
             :block/properties (apply dissoc (:block/properties block)
-                                (concat
-                                  (when (not keep-uuid?) [:id])
-                                  [:custom_id :custom-id]
-                                  exclude-properties))
+                                     (concat
+                                      (when-not keep-uuid? [:id])
+                                      [:custom_id :custom-id]
+                                      exclude-properties))
+            :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                                                 (concat
+                                                  (when-not keep-uuid? [:id])
+                                                  exclude-properties))
             :block/content new-content})))
 
 (defn- edit-last-block-after-inserted!
@@ -2002,8 +2012,7 @@
                   target-block
                   sibling?
                   keep-uuid?
-                  cut-paste?
-                  revert-cut-tx]
+                  revert-cut-txs]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
@@ -2018,16 +2027,16 @@
         empty-target? (string/blank? (:block/content target-block))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
-        replace-empty-target? (if (and paste-nested-blocks? empty-target? target-block-has-children?)
-                                false
-                                true)
-        target-block' (if replace-empty-target? target-block
-                          (db/pull (:db/id (:block/left target-block))))
+        replace-empty-target? (and empty-target?
+                                   (or (not target-block-has-children?)
+                                       (and target-block-has-children? (= (count blocks) 1)))
+                                   (block-has-no-ref? (:db/id target-block)))
+        target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
+                        (db/pull (:db/id (:block/left target-block)))
+                        target-block)
         sibling? (cond
                    (and paste-nested-blocks? empty-target?)
-                   (if (= (:block/parent target-block') (:block/parent target-block))
-                     true
-                     false)
+                   (= (:block/parent target-block') (:block/parent target-block))
 
                    (some? sibling?)
                    sibling?
@@ -2045,17 +2054,17 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks
-       :additional-tx revert-cut-tx}
+       :additional-tx revert-cut-txs}
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
-                                                                          :cut-paste? cut-paste?
                                                                           :outliner-op :paste
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
+          (state/set-block-op-type! nil)
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
