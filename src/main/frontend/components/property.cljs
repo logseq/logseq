@@ -299,7 +299,8 @@
               :block
               (if-let [block (db/entity [:block/uuid value])]
                 [:div.property-block-container.w-full
-                 (block-cp [block] {:editor-box editor-box})]
+                 (block-cp [block] {:id (str value)
+                                    :editor-box editor-box})]
                 (if multiple-values?
                   (property-handler/delete-property-value! repo block (:block/uuid property) value)
                   (property-handler/remove-property! repo block (:block/uuid property))))
