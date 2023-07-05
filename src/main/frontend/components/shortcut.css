@@ -33,6 +33,15 @@
   &-pane-controls {
     @apply flex space-x-3 absolute top-3 right-1 items-center;
 
+    .search-input-wrap {
+      @apply pr-1 relative;
+
+      a.x {
+        @apply flex items-center absolute right-1 top-0 py-[8px] px-1 opacity-60
+        hover:opacity-90;
+      }
+    }
+
     input.form-input {
       @apply py-1;
     }

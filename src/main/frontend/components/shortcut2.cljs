@@ -36,28 +36,39 @@
 (rum/defc pane-controls
   [q set-q! refresh-fn]
 
-  [:div.cp__shortcut-page-x-pane-controls
-   [:a.flex.items-center.icon-link
-    {:on-click #()}
-    (ui/icon "fold")]
+  (let [*search-ref (rum/use-ref nil)]
+    [:div.cp__shortcut-page-x-pane-controls
+     [:a.flex.items-center.icon-link
+      {:on-click #()}
+      (ui/icon "fold")]
 
-   [:a.flex.items-center.icon-link
-    {:on-click refresh-fn}
-    (ui/icon "refresh")]
+     [:a.flex.items-center.icon-link
+      {:on-click refresh-fn}
+      (ui/icon "refresh")]
 
-   [:span.pr-1
-    [:input.form-input.is-small
-     {:placeholder "Search"
-      :value       (or q "")
-      :auto-focus  true
-      :on-key-down #(when (= 27 (.-keyCode %))
-                      (util/stop %)
-                      (set-q! ""))
-      :on-change   #(let [v (util/evalue %)]
-                      (set-q! v))}]]
+     [:span.search-input-wrap
+      [:input.form-input.is-small
+       {:placeholder "Search"
+        :ref         *search-ref
+        :value       (or q "")
+        :auto-focus  true
+        :on-key-down #(when (= 27 (.-keyCode %))
+                        (util/stop %)
+                        (if (string/blank? q)
+                          (some-> (rum/deref *search-ref) (.blur))
+                          (set-q! "")))
+        :on-change   #(let [v (util/evalue %)]
+                        (set-q! v))}]
 
-   [:a.flex.items-center.icon-link (ui/icon "keyboard")]
-   [:a.flex.items-center.icon-link (ui/icon "filter")]])
+      (when-not (string/blank? q)
+        [:a.x
+         {:on-click (fn []
+                      (set-q! "")
+                      (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
+         (ui/icon "x" {:size 14})])]
+
+     [:a.flex.items-center.icon-link (ui/icon "keyboard")]
+     [:a.flex.items-center.icon-link (ui/icon "filter")]]))
 
 (rum/defc shortcut-conflicts-display
   [k conflicts-map]
