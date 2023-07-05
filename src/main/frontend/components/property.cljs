@@ -3,6 +3,7 @@
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
@@ -145,11 +146,20 @@
                                  (let [page (:value chosen)
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
                                    (add-property! block (:block/original-name property) id true)))
-                    :input-opts {:on-key-down (fn [e]
-                                                (case (util/ekey e)
-                                                  "Escape"
-                                                  (exit-edit-property)
-                                                  nil))}})))
+                    :input-opts (fn [not-matched?]
+                                  {:on-key-down (fn [e]
+                                                  (case (util/ekey e)
+                                                    "Enter"
+                                                    (when not-matched?
+                                                      (let [page (string/trim (util/evalue e))]
+                                                        (when-not (string/blank? page)
+                                                          (page-handler/create! page {:redirect? false
+                                                                                      :create-first-block? false})
+                                                          (let [id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
+                                                            (add-property! block (:block/original-name property) id true)))))
+                                                    "Escape"
+                                                    (exit-edit-property)
+                                                    nil))})})))
 
 (defn- select-block
   [block property]
