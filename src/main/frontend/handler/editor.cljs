@@ -991,7 +991,7 @@
       (when block
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
               copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
-              selected-blocks (dom/sel ".ls-block.selected.noselect")
+              selected-blocks (dom/sel ".ls-block.selected")
               selected-block-ids (->> selected-blocks
                                       (reduce
                                        (fn [selected-block-ids selected-block]
