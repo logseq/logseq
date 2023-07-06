@@ -24,9 +24,13 @@ html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
 }
 
-.cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
+.cp__header a, .cp__header button {
     opacity: 1;
     color: var(--ls-header-button-background);
+}
+
+.cp__right-sidebar-topbar button {
+  opacity: 1;
 }
 
 html[data-theme=dark] {

@@ -182,17 +182,40 @@
       (assoc :class class))
     svg/close]))
 
+(defonce *drag-to
+  (atom nil))
+
+(defonce *drag-from
+  (atom nil))
+
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type]
-  (let [item (build-sidebar-item repo idx db-id block-type)]
+  (let [item (build-sidebar-item repo idx db-id block-type)
+        drag-to (rum/react *drag-to)
+        drag-from (rum/react *drag-from)]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.flex.sidebar-item.content.color-level.shadow-md {:class (when collapsed? "collapsed")}
+        [:div.flex.sidebar-item.content.color-level.shadow-md.rounded 
+         {:class [(str "item-type-" (name block-type))
+                  (when collapsed? "collapsed") 
+                  (when (and (= idx drag-to) (not= drag-to drag-from)) "drag-over")]
+          :on-drag-over #(reset! *drag-to idx)}
          (let [[title component] item]
            [:div.flex.flex-col.w-full
-            [:button.flex.flex-row.justify-between.p-4
-             {:on-click (fn [e]
-                          (.preventDefault e)
+            [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
+             {:draggable true
+              :on-drag-leave #(reset! *drag-to nil)
+              :on-drag-over #(reset! *drag-to idx)
+              :on-drag-start (fn [event]
+                               (.setData (gobj/get event "dataTransfer")
+                                         "block-dom-id"
+                                         db-id)
+                               (reset! *drag-from idx))
+              :on-drag-end (fn [_event]
+                             (reset! *drag-to nil)
+                             (reset! *drag-from nil))
+              :on-click (fn [event]
+                          (.preventDefault event)
                           (state/sidebar-block-toggle-collapse! db-id))}
              [:div.flex.flex-row.justify-center
               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
