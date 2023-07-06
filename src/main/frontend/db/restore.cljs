@@ -1,7 +1,6 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -14,6 +13,7 @@
             [goog.object :as gobj]
             [logseq.db.default :as default-db]
             [logseq.db.schema :as db-schema]
+            [logseq.db.sqlite.restore :as sqlite-restore]
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
@@ -117,81 +117,27 @@
         (state/set-state! :graph/loading? false)
         (state/pub-event! [:ui/re-render-root])))))
 
-(defn- uuid-string?
-  [s]
-  (and (string? s)
-       (= (count s) 36)
-       (string/includes? s "-")))
-
 (defn- restore-graph-from-sqlite!
   "Load initial data from SQLite"
   [repo]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
           data (ipc/ipc :get-initial-data repo)
-          {:keys [all-pages all-blocks journal-blocks init-data]} (bean/->clj data)
-          uuid->db-id-tmap (transient (hash-map))
-          *next-db-id (atom 100001)
-          assign-id-to-uuid-fn (fn [uuid-str]
-                                 (let [id @*next-db-id]
-                                   (conj! uuid->db-id-tmap [uuid-str id])
-                                   (swap! *next-db-id inc)
-                                   id))
-          pages (mapv (fn [page]
-                        (let [eid (assign-id-to-uuid-fn (:uuid page))]
-                          (->> page
-                               :datoms
-                               (transit/read t-reader)
-                               (mapv (partial apply vector eid)))))
-                      all-pages)
-          all-blocks' (doall
-                       (keep (fn [b]
-                               (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                 (when (and (uuid-string? (:uuid b))
-                                            (uuid-string? (:page_uuid b)))
-                                   [[eid :block/uuid (:uuid b)]
-                                    [eid :block/page [:block/uuid (:page_uuid b)]]])))
-                             all-blocks))
-          init-data' (doall
-                      (keep (fn [b]
-                              (let [eid (assign-id-to-uuid-fn (:uuid b))]
-                                (if (and (uuid-string? (:uuid b))
-                                         (not (contains?  #{3 6} (:type b)))) ; deleted blocks still refed
-                                  [[eid :block/uuid (:uuid b)]]
-                                  (->> b
-                                       :datoms
-                                       (transit/read t-reader)
-                                       (mapv (partial apply vector eid))))))
-                            init-data))
-          uuid->db-id-map (persistent! uuid->db-id-tmap)
-          journal-blocks' (mapv
-                           (fn [b]
-                             (let [eid (get uuid->db-id-map (:uuid b))]
-                               (->> b
-                                    :datoms
-                                    (transit/read t-reader)
-                                    (mapv (partial apply vector eid)))))
-                           journal-blocks)
-          pages-eav-coll (apply concat pages)
-          blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
-                                (apply concat))
-          all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
-          datoms (map
-                   (partial eav->datom uuid->db-id-map)
-                   all-eav-coll)
+          {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
+          (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
+                                                     (fn profiled-d-conn [& args]
+                                                       (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))})
           db-name (db-conn/datascript-db repo)
-          db-conn (util/profile :restore-graph-from-sqlite!-init-db
-                                (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph))
-          _ (swap! db-conn/conns assoc db-name db-conn)
+          _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
     (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
-             " Datoms in total: " (count datoms))
+             " Datoms in total: " datoms-count)
 
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
-    (d/transact! db-conn [(react/kv :db/type "db")
-                          {:schema/version db-schema/version}]
+    (d/transact! conn [(react/kv :db/type "db")
+                       {:schema/version db-schema/version}]
                  {:skip-persist? true})
 
     (js/setTimeout
