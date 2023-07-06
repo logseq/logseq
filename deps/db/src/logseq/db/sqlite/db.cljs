@@ -50,8 +50,8 @@
                         name TEXT UNIQUE,
                         content TEXT,
                         datoms TEXT,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
                         )"
                       db-name)]
     (.run ^object stmt)
