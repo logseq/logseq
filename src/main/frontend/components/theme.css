@@ -17,17 +17,14 @@ html {
 
   ::-webkit-scrollbar {
     background-color: var(--ls-scrollbar-background-color);
+    width: var(--ls-scrollbar-width);
+    height: 8px;
   }
 
   ::-webkit-scrollbar-thumb:active {
     background-color: var(--ls-scrollbar-thumb-hover-color);
   }
-
-  ::-webkit-scrollbar {
-    width: var(--ls-scrollbar-width);
-    height: 8px;
-  }
-
+  
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
