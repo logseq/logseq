@@ -61,12 +61,12 @@
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
-    [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
+    [[:.flex.items-center {:class (when ref? "ml-8")}
+      (ui/icon "block" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
-                         :sidebar-key sidebar-key} repo block-id {})]
-     [:div.ml-2
-      (block-cp repo idx block)]]))
+                         :sidebar-key sidebar-key} repo block-id {:indent? false})]
+     (block-cp repo idx block)]))
 
 (rum/defc history-action-info
   [[k v]]
@@ -116,18 +116,18 @@
   [repo idx db-id block-type]
   (case (keyword block-type)
     :contents
-    [(t :right-side-bar/contents)
+    [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
      (contents)]
 
     :help
-    [(t :right-side-bar/help) (onboarding/help)]
+    [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
 
     :page-graph
-    [(t :right-side-bar/page-graph)
+    [[:.flex.items-center (ui/icon "chart-bubble" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
      (page/page-graph)]
 
     :history
-    [(t :right-side-bar/history)
+    [[:.flex.items-center (ui/icon "history" {:class "text-md mr-2"}) (t :right-side-bar/history)]
      (history)]
 
     :block-ref
@@ -144,20 +144,15 @@
         (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
 
     :page
-    (when-let [page-name (if (integer? db-id)
-                           (:block/name (db/entity db-id))
-                           db-id)]
-      [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
-                                   (rfe/href :whiteboard {:name page-name})
-                                   (rfe/href :page {:name page-name}))
-                       :draggable true
-                       :on-drag-start (fn [event] (editor-handler/block->data-transfer! page-name event))
-                       :on-click (fn [e]
-                                   (when (gobj/get e "shiftKey")
-                                     (.preventDefault e)))}
+    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
+          page (db/entity repo lookup)
+          page-name (:block/name page)]
+      [[:.flex.items-center.page-title
+        (if-let [icon (get-in page [:block/properties :icon])]
+          [:.text-md.mr-2 icon]
+          (ui/icon "page" {:class "text-md mr-2"}))
         (db-model/get-page-original-name page-name)]
-       [:div.ml-2
-        (page-cp repo page-name)]])
+       (page-cp repo page-name)])
 
     :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
@@ -195,11 +190,10 @@
         drag-from (rum/react *drag-from)]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.flex.sidebar-item.content.color-level.shadow-md.rounded 
+        [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
          {:class [(str "item-type-" (name block-type))
-                  (when collapsed? "collapsed") 
-                  (when (and (= idx drag-to) (not= drag-to drag-from)) "drag-over")]
-          :on-drag-over #(reset! *drag-to idx)}
+                  (when collapsed? "collapsed")
+                  (when (and (= idx drag-to) (not= drag-to drag-from)) "drag-over")]}
          (let [[title component] item]
            [:div.flex.flex-col.w-full
             [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
@@ -207,9 +201,10 @@
               :on-drag-leave #(reset! *drag-to nil)
               :on-drag-over #(reset! *drag-to idx)
               :on-drag-start (fn [event]
-                               (.setData (gobj/get event "dataTransfer")
-                                         "block-dom-id"
-                                         db-id)
+                               (when-let [page-name (if (integer? db-id)
+                                                      (:block/name (db/entity db-id))
+                                                      db-id)]
+                                 (editor-handler/block->data-transfer! page-name event))
                                (reset! *drag-from idx))
               :on-drag-end (fn [_event]
                              (reset! *drag-to nil)
