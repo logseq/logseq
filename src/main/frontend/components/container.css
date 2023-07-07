@@ -632,6 +632,8 @@ html[data-theme='dark'] {
       .breadcrumb {
         margin-top: 0;
         margin-bottom: 0;
+        text-overflow: ellipsis;
+        overflow: hidden;
       }
     }
 
