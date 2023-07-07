@@ -108,9 +108,15 @@
         original-name (db/get-file-page (or path rel-path))
         in-db? (when-not (path/absolute? path)
                  (boolean (db/get-file (or path rel-path))))
-        file-fpath (if in-db?
-                     (path/path-join repo-dir path)
-                     path)
+        file-path (cond
+                    (config/db-based-graph? (state/get-current-repo))
+                    path
+
+                    in-db?
+                    (path/path-join repo-dir path)
+
+                    :else
+                    path)
         random-id (str (d/squuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
@@ -148,7 +154,7 @@
        (let [content' (string/trim content)
              mode (util/get-file-ext path)]
          (lazy-editor/editor {:file?     true
-                              :file-path file-fpath}
+                              :file-path file-path}
                              (str "file-edit-" random-id)
                              {:data-lang mode}
                              content'
