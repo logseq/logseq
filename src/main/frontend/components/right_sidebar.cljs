@@ -150,7 +150,7 @@
       [[:.flex.items-center.page-title
         (if-let [icon (get-in page [:block/properties :icon])]
           [:.text-md.mr-2 icon]
-          (ui/icon "page" {:class "text-md mr-2"}))
+          (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
         (db-model/get-page-original-name page-name)]
        (page-cp repo page-name)])
 
