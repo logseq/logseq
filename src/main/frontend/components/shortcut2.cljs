@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.ui :as ui]
+            [frontend.rum :as r]
             [goog.events :as events]
             [promesa.core :as p]
             [frontend.handler.notification :as notification]
@@ -201,7 +202,8 @@
 
 (rum/defc shortcut-page-x
   []
-  (let [[ready?, set-ready!] (rum/use-state false)
+  (let [_ (r/use-atom shortcut-config/*category)
+        [ready?, set-ready!] (rum/use-state false)
         [refresh-v, refresh!] (rum/use-state 1)
         [filters, set-filters!] (rum/use-state #{})
         [q set-q!] (rum/use-state nil)

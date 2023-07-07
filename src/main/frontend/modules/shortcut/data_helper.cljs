@@ -54,15 +54,15 @@
 
 (defn get-bindings
   []
-  (m-flatten-bindings-by-id @shortcut-config/config (state/shortcuts) true))
+  (m-flatten-bindings-by-id @shortcut-config/*config (state/shortcuts) true))
 
 (defn get-bindings-keys-map
   []
-  (m-flatten-bindings-by-key @shortcut-config/config (state/shortcuts)))
+  (m-flatten-bindings-by-key @shortcut-config/*config (state/shortcuts)))
 
 (defn get-bindings-ids-map
   []
-  (m-flatten-bindings-by-id @shortcut-config/config (state/shortcuts) false))
+  (m-flatten-bindings-by-id @shortcut-config/*config (state/shortcuts) false))
 
 (defn get-shortcut-desc
   [binding-map]
@@ -106,14 +106,14 @@
         plugin? (= name :shortcut.category/plugins)]
     (->> (if plugin?
            (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
-           (shortcut-config/category name))
+           (shortcut-config/get-category-shortcuts name))
          (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
 
 (defn shortcut-map
   ([handler-id]
    (shortcut-map handler-id nil))
   ([handler-id state]
-   (let [raw (get @shortcut-config/config handler-id)
+   (let [raw (get @shortcut-config/*config handler-id)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))
@@ -183,7 +183,7 @@
   "Given shortcut key, return handler group
   eg: :editor/new-line -> :shortcut.handler/block-editing-only"
   [k]
-  (->> @shortcut-config/config
+  (->> @shortcut-config/*config
        (filter (fn [[_ v]] (contains? v k)))
        (map key)
        (first)))
@@ -249,7 +249,7 @@
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
-        data (->> (vals @shortcut-config/config)
+        data (->> (vals @shortcut-config/*config)
                   (into {})
                   id)]
     (assoc
@@ -258,7 +258,7 @@
       (binding-for-display id binding))))
 
 (defn shortcuts->commands [handler-id]
-  (let [m (get @shortcut-config/config handler-id)]
+  (let [m (get @shortcut-config/*config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)
