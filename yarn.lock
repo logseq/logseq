@@ -7091,11 +7091,6 @@ svgo@^2.7.0:
     picocolors "^1.0.0"
     stable "^0.1.8"
 
-swiped-events@^1.1.7:
-  version "1.1.7"
-  resolved "https://registry.npmjs.org/swiped-events/-/swiped-events-1.1.7.tgz#d2d12087e7cee659f40d94828485bf2242424364"
-  integrity sha512-bxEy7djwuLykZpPfoE4IFsbna/ngACEpyPqw9tBOaPQtAshsRK7H5CxoCgSXr0QRQ+7rd2TT3bSKLL3R6xJFwg==
-
 table@^6.6.0:
   version "6.8.0"
   resolved "https://registry.yarnpkg.com/table/-/table-6.8.0.tgz#87e28f14fa4321c3377ba286f07b79b281a3b3ca"

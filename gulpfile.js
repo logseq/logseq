@@ -56,7 +56,6 @@ const common = {
       () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
-        'node_modules/swiped-events/dist/swiped-events.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
