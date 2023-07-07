@@ -282,6 +282,7 @@
       :ui/find-in-page                       nil
       :graph/importing                       nil
       :graph/importing-state                 {}
+      :graph/loading?                        nil
 
       :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
       :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)

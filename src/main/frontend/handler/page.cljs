@@ -880,6 +880,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (and (state/enable-journals? repo)
+               (not (:graph/loading? @state/state))
                (not (state/loading-files? repo))
                (not (state/whiteboard-route?)))
       (state/set-today! (date/today))

@@ -114,6 +114,7 @@
       (p/let [_ (p/delay 150)]          ; More time for UI refresh
         (state/set-state! [repo :restore/unloaded-blocks] nil)
         (state/set-state! [repo :restore/unloaded-pages] nil)
+        (state/set-state! :graph/loading? false)
         (state/pub-event! [:ui/re-render-root])))))
 
 (defn- uuid-string?
@@ -125,6 +126,7 @@
 (defn- restore-graph-from-sqlite!
   "Load initial data from SQLite"
   [repo]
+  (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
           data (ipc/ipc :get-initial-data repo)
           {:keys [all-pages all-blocks journal-blocks init-data]} (bean/->clj data)
