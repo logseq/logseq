@@ -239,7 +239,7 @@
                     (swap! *title-value gp-util/unquote-string)
                     (gobj/set (rum/deref input-ref) "value" @*title-value))
                   (cond
-                    (= old-name @*title-value)
+                    (or (= old-name @*title-value) (and whiteboard-page? (string/blank? @*title-value)))
                     (reset! *edit? false)
 
                     (string/blank? @*title-value)

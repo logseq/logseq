@@ -74,11 +74,24 @@ error if it detects an invalid query.
 
 ### Translations
 
-Our translations can be configured incorrectly. We can catch some of these
-mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
+We use [tongue](https://github.com/tonsky/tongue), a simple and effective
+library, for translations. We have a couple bb tasks for working with
+translations under `lang:` e.g. `bb lang:list`. See [the translator
+guide](./contributing-to-translations.md) for usage.
 
-Punctuation and delimiting characters (e.g. `:`, `:`, `?`) should be part of the translatable string.
-Those characters and their position may vary depending on the language.
+One useful task for reviewers (us) and contributors alike, is `bb
+lang:validate-translations` which catches [common
+mistakes](./contributing-to-translations.md#fix-mistakes)). When reviewing
+translations here are some things to keep in mind:
+
+* Punctuation and delimiting characters (e.g. `:`, `:`, `?`) should be part of
+  the translatable string. Those characters and their position may vary depending on the language.
+* Translations usually return strings but they can return hiccup vectors with a
+  fn translation. Hiccup vectors are needed when word order matters for a
+  translation and formatting is involved. See [this 3 word Turkish
+  example](https://github.com/logseq/logseq/commit/1d932f07c4a0aad44606da6df03a432fe8421480#r118971415).
+* Translations can have arguments for interpolating strings. When they do, be
+  sure translators are using them correctly.
 
 ### Spell Checker
 
