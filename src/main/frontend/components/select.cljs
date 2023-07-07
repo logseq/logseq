@@ -10,7 +10,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [frontend.db :as db]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]
@@ -116,12 +115,7 @@
                            (or (config/demo-graph? url)
                                (= url (state/get-current-repo)))))
                  (map (fn [{:keys [url]}]
-                        {:value (text-util/get-graph-name-from-path
-                                 ;; TODO: Use helper when a common one is refactored
-                                 ;; from components.repo
-                                 (if (config/local-db? url)
-                                   (config/get-local-dir url)
-                                   (db/get-repo-path url)))
+                        {:value (text-util/get-graph-name-from-path url)
                          :id (config/get-repo-dir url)
                          :graph url}))))
     :prompt-key :select.graph/prompt
@@ -139,12 +133,7 @@
                      (remove (fn [{:keys [url]}]
                                (config/demo-graph? url)))
                      (map (fn [{:keys [url] :as original-graph}]
-                            {:value (text-util/get-graph-name-from-path
-                                     ;; TODO: Use helper when a common one is refactored
-                                     ;; from components.repo
-                                     (if (config/local-db? url)
-                                       (config/get-local-dir url)
-                                       (db/get-repo-path url)))
+                            {:value (text-util/get-graph-name-from-path url)
                              :id (config/get-repo-dir url)
                              :graph url
                              :original-graph original-graph}))))
