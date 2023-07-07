@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.set :refer [rename-keys]]
             [cljs-bean.core :as bean]
+            [frontend.context.i18n :refer [t]]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.file :as file]
@@ -62,6 +63,14 @@
 (defn get-bindings-ids-map
   []
   (m-flatten-bindings-by-id @shortcut-config/config (state/shortcuts) false))
+
+(defn get-shortcut-desc
+  [binding-map]
+  (let [{:keys [id desc cmd]} binding-map
+        desc (or desc (:desc cmd) (some-> id (shortcut-utils/decorate-namespace) (t)))]
+    (if (or (nil? desc)
+            (and (string? desc) (str/starts-with? desc "{Missing")))
+      (str id) desc)))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"

@@ -220,8 +220,8 @@
                       [c (search/fuzzy-search
                            binding-map q
                            :extract-fn
-                           #(let [[id {:keys [cmd]}] %]
-                              (str (name id) " " (or (:desc cmd) (-> id (shortcut-utils/decorate-namespace) (t))))))]))))
+                           #(let [[id m] %]
+                              (str (name id) " " (dh/get-shortcut-desc (assoc m :id id)))))]))))
 
         result-list-map (or matched-list-map categories-list-map)
         refresh-list! #(refresh! (inc refresh-v))
@@ -272,21 +272,12 @@
 
             ;; binding row
             (when (or in-query? (not folded?))
-              (for [[id {:keys [cmd binding user-binding]}] binding-map
+              (for [[id {:keys [binding user-binding] :as m}] binding-map
                     :let [binding (to-vector binding)
                           user-binding (and user-binding (to-vector user-binding))
-                          label (cond
-                                  (string? (:desc cmd))
-                                  [:<>
-                                   [:span.pl-1 (:desc cmd)]
-                                   [:small [:code.text-xs (some-> (namespace id) (string/replace "plugin." ""))]]]
-
-                                  (not plugin?)
-                                  [:<>
-                                   [:span.pl-1 (-> id (shortcut-utils/decorate-namespace) (t))]
-                                   [:small [:code.text-xs (str id)]]]
-
-                                  :else (str id))
+                          label [:<>
+                                 [:span.pl-1 (dh/get-shortcut-desc (assoc m :id id))]
+                                 [:small [:code.text-xs (some-> (str id) (string/replace "plugin." ""))]]]
                           custom? (not (nil? user-binding))
                           disabled? (or (false? user-binding)
                                         (false? (first binding)))
