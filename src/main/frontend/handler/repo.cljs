@@ -570,4 +570,6 @@
       (state/pub-event! [:notification/show
                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                           :status :error}])
-      (create-db full-graph-name))))
+      (do
+        (route-handler/redirect-to-home!)
+        (create-db full-graph-name)))))
