@@ -1,8 +1,10 @@
 (ns logseq.db.sqlite.restore
+  "Fns to restore a sqlite database to a datascript one"
   (:require [cognitect.transit :as transit]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.core :as d]
+            [goog.object :as gobj]
             [logseq.db.schema :as db-schema]))
 
 (def ^:private t-reader (transit/reader :json))
@@ -25,6 +27,29 @@
              :else
              v)]
     (d/datom e a v')))
+
+(defn restore-other-data
+  "Given an existing datascript connection and additional sqlite data, returns a
+  new datascript db with the two combined"
+  [conn data uuid->db-id-map & [{:keys [init-db-fn] :or {init-db-fn d/init-db}}]]
+  (let [datoms (transient (set (d/datoms @conn :eavt)))]
+    (doseq [block data]
+      (let [uuid (gobj/get block "uuid")
+            eid (get uuid->db-id-map uuid)
+            _ (when (nil? eid)
+                (prn "Error: block without eid ")
+                (js/console.dir block))
+            _ (assert eid (str "Can't find eid " eid ", block: " block))
+            avs (->> (gobj/get block "datoms")
+                     (transit/read t-reader))]
+        (doseq [[a v] avs]
+          (when (not= :block/uuid a)
+            (let [datom (eav->datom uuid->db-id-map [eid a v])]
+              (conj! datoms datom))))))
+
+    (let [all-datoms (persistent! datoms)
+          new-db (init-db-fn all-datoms db-schema/schema-for-db-based-graph)]
+      new-db)))
 
 (defn restore-initial-data
   "Given initial sqlite data, returns a datascript connection and other data

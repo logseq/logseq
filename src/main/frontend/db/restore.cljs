@@ -16,10 +16,7 @@
             [logseq.db.sqlite.restore :as sqlite-restore]
             [promesa.core :as p]
             [frontend.util :as util]
-            [cljs-time.core :as t]
-            [cognitect.transit :as transit]))
-
-(def ^:private t-reader (transit/reader :json))
+            [cljs-time.core :as t]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -59,19 +56,6 @@
                 (db-conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
-(defn- eav->datom
-  [uuid->db-id-map [e a v]]
-  (let [v' (cond
-             (and (= :block/uuid a) (string? v))
-             (uuid v)
-
-             (and (coll? v) (= :block/uuid (first v)) (string? (second v)))
-             (get uuid->db-id-map (second v) v)
-
-             :else
-             v)]
-    (d/datom e a v')))
-
 (defn- set-unloaded-block-ids!
   [repo data]
   (util/profile
@@ -85,37 +69,22 @@
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
         conn (db-conn/get-db repo false)
-        datoms (transient (set (d/datoms @conn :eavt)))]
+        profiled-init-db (fn profiled-init-db [all-datoms schema]
+                           (util/profile
+                            (str "DB init! " (count all-datoms) " datoms")
+                            (d/init-db all-datoms schema)))
+        new-db (sqlite-restore/restore-other-data conn data uuid->db-id-map {:init-db-fn profiled-init-db})]
+    
+    (reset! conn new-db)
+    
+    (let [end (util/time-ms)]
+      (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
 
-    (doseq [block data]
-      (let [uuid (gobj/get block "uuid")
-            eid (get uuid->db-id-map uuid)
-            _ (when (nil? eid)
-                (prn "Error: block without eid ")
-                (js/console.dir block))
-            _ (assert eid (str "Can't find eid " eid ", block: " block))
-            avs (->> (gobj/get block "datoms")
-                     (transit/read t-reader))]
-        (doseq [[a v] avs]
-          (when (not= :block/uuid a)
-            (let [datom (eav->datom uuid->db-id-map [eid a v])]
-              (conj! datoms datom))))))
-
-    (let [all-datoms (persistent! datoms)
-          new-db (util/profile
-                  (str "DB init! " (count all-datoms) " datoms")
-                  (d/init-db all-datoms db-schema/schema-for-db-based-graph))]
-
-      (reset! conn new-db)
-
-      (let [end (util/time-ms)]
-        (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
-
-      (p/let [_ (p/delay 150)]          ; More time for UI refresh
-        (state/set-state! [repo :restore/unloaded-blocks] nil)
-        (state/set-state! [repo :restore/unloaded-pages] nil)
-        (state/set-state! :graph/loading? false)
-        (state/pub-event! [:ui/re-render-root])))))
+    (p/let [_ (p/delay 150)]          ; More time for UI refresh
+      (state/set-state! [repo :restore/unloaded-blocks] nil)
+      (state/set-state! [repo :restore/unloaded-pages] nil)
+      (state/set-state! :graph/loading? false)
+      (state/pub-event! [:ui/re-render-root]))))
 
 (defn- restore-graph-from-sqlite!
   "Load initial data from SQLite"
