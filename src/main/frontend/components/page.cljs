@@ -1174,7 +1174,8 @@
                {}
                edit-input-id
                {:selected? false
-                :page-configure? true}))]]
+                :page-configure? true
+                :class-schema? true}))]]
 
           [:div
            [:h2.text-lg.font-medium.mb-2 "Properties:"]

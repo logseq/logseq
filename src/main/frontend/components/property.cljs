@@ -41,13 +41,13 @@
 
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-       [:label.cols-1 "Name:"]
+       [:label "Name:"]
        [:input.form-input
         {:on-change #(reset! *property-name (util/evalue %))
          :value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
-       [:label.cols-1 "Schema type:"]
+       [:label "Schema type:"]
        (let [schema-types (->> (keys property-handler/builtin-schema-types)
                                (map (comp string/capitalize name))
                                (map (fn [type]
@@ -62,11 +62,19 @@
 
       (when-not (= (:type @*property-schema) :checkbox)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label.cols-1 "Multiple values:"]
+         [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
+
+      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+       [:label "Description:"]
+       [:div.col-span-3
+        (ui/ls-textarea
+         {:on-change (fn [e]
+                       (swap! *property-schema assoc :description (util/evalue e)))
+          :value (:description @*property-schema)})]]
 
       [:div
        (ui/button
@@ -364,7 +372,7 @@
     [:div
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
       (property-key-input entity *property-key *property-value *search?)
-      (when property
+      (when (and property (not (:class-schema? opts)))
         (property-scalar-value entity property @*property-value opts))
 
       [:a.close {:on-mouse-down exit-edit-property}
@@ -522,8 +530,11 @@
                   [:div.grid.grid-cols-4.gap-1
                    [:div.property-key.col-span-1
                     (property-key block property)]
-                   [:div.property-value.col-span-3
-                    (property-value block property v opts)]])
+                   (if (:class-schema? opts)
+                     [:div.property-description.col-span-3.font-light
+                      (get-in property [:block/schema :description])]
+                     [:div.property-value.col-span-3
+                      (property-value block property v opts)])])
                 ;; TODO: built in properties should have UUID and corresponding schema
                 ;; builtin
                 [:div
