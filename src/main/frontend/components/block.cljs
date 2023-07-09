@@ -2078,6 +2078,19 @@
       :else
       nil)))
 
+(rum/defc db-properties-cp
+  [config block properties properties-text-values edit-input-id opts]
+  (property-component/properties-area block
+                                      properties
+                                      properties-text-values
+                                      edit-input-id
+                                      (merge
+                                       {:inline-text inline-text
+                                        :page-cp page-cp
+                                        :block-cp blocks-container
+                                        :editor-box (get config :editor-box)}
+                                       opts)))
+
 (rum/defc invalid-properties-cp
   [invalid-properties]
   (when (seq invalid-properties)
@@ -2852,14 +2865,12 @@
                                            (= (:block/uuid block) (:embed-id config)))]
            (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))
          (when (config/db-based-graph? repo)
-           (property-component/properties-area block
-                                               (:block/properties block)
-                                               (:block/properties-text-values block)
-                                               edit-input-id {:inline-text inline-text
-                                                              :page-cp page-cp
-                                                              :block-cp blocks-container
-                                                              :editor-box (get config :editor-box)
-                                                              :selected? selected?}))])
+           (db-properties-cp config
+                             block
+                             (:block/properties block)
+                             (:block/properties-text-values block)
+                             edit-input-id
+                             {:selected? selected?}))])
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]

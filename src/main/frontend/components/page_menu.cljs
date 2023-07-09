@@ -80,7 +80,13 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>
-         [(when-not config/publishing?
+         [(when (and (not config/publishing?)
+                     (config/db-based-graph? repo))
+            {:title (t :page/configure)
+             :options {:on-click
+                       (fn []
+                         (state/pub-event! [:page/configure page]))}})
+          (when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))

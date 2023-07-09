@@ -16,6 +16,7 @@
    ;; "whiteboard" for whiteboards
    ;; "macros" for macro
    ;; "property" for property blocks
+   ;; "class" for structured page
    :block/type {:db/index true}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
@@ -61,6 +62,10 @@
    :block/properties-order {}
    ;; map, key -> original property value's content
    :block/properties-text-values {}
+   ;; which classes this object belongs to
+   :block/classes {:db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/many}
+
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
@@ -80,6 +85,7 @@
    ;; page additional attributes
    ;; page's name, lowercase
    :block/name {:db/unique :db.unique/identity}
+
    ;; page's original name
    :block/original-name {:db/unique :db.unique/identity}
    ;; whether page's is a journal

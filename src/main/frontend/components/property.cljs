@@ -33,7 +33,7 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property]
+  [state repo property ]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)]
     [:div.property-configure
@@ -82,8 +82,7 @@
         [:div {:style {:max-width 900}}
          [:hr]
          [:p "Debug data:"]
-         [:code
-          (str property)]])]]))
+         [:pre (util/pp-str property)]])]]))
 
 (rum/defc search-item-render
   [search-q content]
@@ -97,9 +96,12 @@
 
 (defn- add-property!
   [block property-key property-value exit-edit?]
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        class? (= (:block/type block) "class")]
     (when property-key
-      (property-handler/add-property! repo block property-key property-value))
+      (if class?
+        (property-handler/class-add-property! repo block property-key)
+        (property-handler/add-property! repo block property-key property-value)))
     (when exit-edit?
       (exit-edit-property))))
 
@@ -395,7 +397,8 @@
      [:div#edit-new-property
       (property-input block *property-key *property-value opts)]
 
-     (seq properties)
+     (or (seq properties)
+         (:page-configure? opts))
      [:a {:title "Add another property"
           :on-click (fn []
                       (property-handler/set-editing-new-property! edit-input-id)
@@ -414,7 +417,8 @@
       {:propertyid (:block/uuid property)
        :blockid (:block/uuid block)
        :title (str "Configure property: " (:block/original-name property))
-       :on-click (fn [] (state/set-modal! #(property-config repo property)))}
+       :on-click (fn []
+                   (state/set-sub-modal! #(property-config repo property)))}
       (:block/original-name property)]]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
@@ -503,7 +507,9 @@
   [state block properties properties-text-values edit-input-id opts]
   (let [repo (state/get-current-repo)
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))]
-    (when (or (seq properties) new-property?)
+    (when-not (and (empty? properties)
+                   (not new-property?)
+                   (not (:page-configure? opts)))
       [:div.ls-properties-area
        (when (:selected? opts)
          {:class "select-none"})

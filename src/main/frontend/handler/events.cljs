@@ -25,6 +25,7 @@
             [frontend.components.user.login :as login]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.repo :as repo]
+            [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -976,6 +977,10 @@
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
+
+(defmethod handle :page/configure [[_ page]]
+  (when-let [repo (state/get-current-repo)]
+    (state/set-modal! #(page/configure repo page))))
 
 (defn run!
   []

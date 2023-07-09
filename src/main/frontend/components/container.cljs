@@ -651,7 +651,8 @@
      [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
      [:div#custom-context-menu
       {:ref ref
-       :style {:left (str (first position) "px")
+       :style {:z-index 999
+               :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
 
 (rum/defc custom-context-menu < rum/reactive

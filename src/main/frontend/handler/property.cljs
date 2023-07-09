@@ -125,13 +125,26 @@
       :url
       v-str)))
 
+(defn- upsert-property!
+  [repo property k-name property-uuid property-type]
+  (when (and property (nil? (:block/type property)))
+    (db/transact! repo [(outliner-core/block-with-updated-at
+                         {:block/schema {:type property-type}
+                          :block/uuid property-uuid
+                          :block/type "property"})]))
+  (when (nil? property) ;if property not exists yet
+    (db/transact! repo [(outliner-core/block-with-timestamps
+                         {:block/schema {:type property-type}
+                          :block/original-name k-name
+                          :block/name (util/page-name-sanity-lc k-name)
+                          :block/uuid property-uuid
+                          :block/type "property"})])))
+
 (defn add-property!
   [repo block k-name v & {:keys [old-value]}]
   (let [property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         v (if property v (or v ""))]
     (when (some? v)
-      (prn :debug " add-property! " {:k k-name
-                                     :v v})
       (let [property-uuid (or (:block/uuid property) (random-uuid))
             {:keys [type cardinality]} (:block/schema property)
             multiple-values? (= cardinality :many)
@@ -150,19 +163,7 @@
             (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
               (notification/show! msg' :warning))
             (do
-              ;; FIXME: what if the block already have a block/type, e.g. whiteboard?
-              (when (and property (nil? (:block/type property)))
-                (db/transact! repo [(outliner-core/block-with-updated-at
-                                     {:block/schema {:type property-type}
-                                      :block/uuid property-uuid
-                                      :block/type "property"})]))
-              (when (nil? property) ;if property not exists yet
-                (db/transact! repo [(outliner-core/block-with-timestamps
-                                     {:block/schema {:type property-type}
-                                      :block/original-name k-name
-                                      :block/name (util/page-name-sanity-lc k-name)
-                                      :block/uuid property-uuid
-                                      :block/type "property"})]))
+              (upsert-property! repo property k-name property-uuid property-type)
               (let [refs (when (= property-type :default) (extract-page-refs-from-prop-str-value v*))
                     refs' (when (seq refs)
                             (concat (:block/refs (db/pull [:block/uuid (:block/uuid block)]))
@@ -264,3 +265,27 @@
   []
   (set-editing-new-property! (state/get-edit-input-id))
   (state/clear-edit!))
+
+(defn class-add-property!
+  [repo class k-name]
+  (when (= "class" (:block/type class))
+    (let [property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+          property-uuid (or (:block/uuid property) (random-uuid))
+          property-type (get-in property [:block/schema :type] :default)
+          {:keys [properties] :as class-schema} (:block/schema class)
+          _ (upsert-property! repo property k-name property-uuid property-type)
+          new-properties (vec (distinct (conj properties property-uuid)))
+          class-new-schema (assoc class-schema :properties new-properties)]
+      (db/transact! [{:db/id (:db/id class)
+                      :block/schema class-new-schema}]))))
+
+(defn class-remove-property!
+  [repo class k-uuid]
+  (when (= "class" (:block/type class))
+    (when-let [property (db/pull repo '[*] [:block/uuid k-uuid])]
+      (let [property-uuid (:block/uuid property)
+            {:keys [properties] :as class-schema} (:block/schema class)
+            new-properties (vec (distinct (remove #{property-uuid} properties)))
+            class-new-schema (assoc class-schema :properties new-properties)]
+        (db/transact! [{:db/id (:db/id class)
+                       :block/schema class-new-schema}])))))

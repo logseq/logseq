@@ -14,7 +14,7 @@
             result (vec result)
             ;; backward compatibility (release <= 0.5.4)
             result (if (seq result) result (idb/get-nfs-dbs))]
-      result)
+      (distinct result))
     (idb/get-nfs-dbs)))
 
 (defn get-serialized-graph

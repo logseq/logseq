@@ -420,6 +420,7 @@ independent of format as format specific heading characters are stripped"
                     (let [e (db-utils/entity id)
                           children (map :db/id (sort-by-left (:block/_parent e) e))]
                       [e {:original-name (:block/original-name e)
+                          :type (:block/type e)
                           :schema (:block/schema e)
                           :content (:block/content e)
                           :marker (:block/marker e)

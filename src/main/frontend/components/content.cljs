@@ -370,7 +370,11 @@
     (ui/menu-link
      {:key "Delete this property"
       :on-click (fn []
-                  (property-handler/remove-property! repo block (:block/uuid property)))}
+                  (let [class? (= "class" (:block/type block))
+                        f (if class?
+                            property-handler/class-remove-property!
+                            property-handler/remove-property!)]
+                    (f repo block (:block/uuid property))))}
      (t :context-menu/delete-property)
      nil)]))
 

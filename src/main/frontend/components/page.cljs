@@ -9,6 +9,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
+            [frontend.components.property :as property]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -1134,3 +1135,62 @@
                      :total total-items
                      :per-page per-page-num
                      :on-change #(to-page %))]])]))
+
+(rum/defcs configure < rum/reactive
+  [state repo page]
+  (let [page-id (:db/id page)
+        page (when page-id (db/sub-block page-id))
+        type (:block/type page)
+        class? (= "class" type)
+        property? (= "property" type)
+        journal? (:block/journal? page)
+        {:keys [properties] :as _schema} (:block/schema page)]
+    (when page
+      [:div.page-configure
+       [:h1.title "Configure page"]
+
+       [:div.grid.gap-4.p-1
+        (when-not journal?
+          [:div.grid.grid-cols-2.gap-2.leading-8.items-center
+           [:label.cols-1 "Is this page a structured page?"]
+           (ui/checkbox {:checked class?
+                         :on-change (fn []
+                                      (db/transact! [{:db/id page-id
+                                                      :block/type (if class? ; class->normal page
+                                                                    "page"
+                                                                    "class")}]))})])
+
+        (case type
+          "class"
+          [:div.structured-schema
+           ;; properties
+           [:h2.text-lg.font-medium.mb-2 "Properties:"]
+           [:div.grid.gap-1
+            (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
+              (component-block/db-properties-cp
+               {:editor-box editor/box}
+               page
+               (map (fn [k] [k nil]) properties)
+               {}
+               edit-input-id
+               {:selected? false
+                :page-configure? true}))]]
+
+          [:div
+           [:h2.text-lg.font-medium.mb-2 "Properties:"]
+           (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+             [:div
+              (component-block/db-properties-cp
+               {:editor-box editor/box}
+               page
+               (:block/properties page)
+               (:block/properties-text-values page)
+               edit-input-id
+               {:selected? false
+                :page-configure? true})])])]
+
+       (when config/dev?
+         [:div {:style {:max-width 900}}
+          [:hr]
+          [:p "Debug data:"]
+          [:pre (util/pp-str page)]])])))
