@@ -93,7 +93,7 @@ Options available:
                                         :filename-format :legacy}
                                        extract-options
                                        {:db @conn})
-               {:keys [pages blocks ast]
+               {:keys [pages blocks ast refs]
                 :or   {pages []
                        blocks []
                        ast []}}
@@ -116,7 +116,7 @@ Options available:
                pages (extract/with-ref-pages pages blocks)
                pages-index (map #(select-keys % [:block/name]) pages)]
            ;; does order matter?
-           {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
+           {:tx (concat file-content refs pages-index delete-blocks pages block-ids blocks)
             :ast ast})
          tx (concat tx [(cond-> {:file/path file
                                  :file/content content}

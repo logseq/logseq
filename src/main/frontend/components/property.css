@@ -9,6 +9,12 @@
 }
 
 .ls-properties-area {
+    @apply grid gap-1;
+
+    .property-pair {
+        @apply grid grid-cols-4 gap-1
+    }
+
     .add-button-link {
         opacity: 0.5;
     }
@@ -46,6 +52,25 @@
 
     .property-block-container {
         margin-left: -1.5em;
+    }
+
+    .property-key a {
+        @apply whitespace-nowrap;
+        color: var(--ls-primary-text-color);
+    }
+
+    .property-key a:hover {
+        color: var(--ls-link-text-hover-color);
+    }
+}
+
+.block-main-container .ls-properties-area {
+    margin-top: 0.5em;
+
+    gap: 0;
+
+    .property-pair {
+        gap: 0;
     }
 }
 

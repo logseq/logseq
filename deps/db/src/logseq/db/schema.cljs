@@ -39,7 +39,7 @@
    :block/path-refs {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
 
-   ;; for pages
+   ;; Structured classes
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
 
@@ -62,10 +62,6 @@
    :block/properties-order {}
    ;; map, key -> original property value's content
    :block/properties-text-values {}
-   ;; which classes this object belongs to
-   :block/classes {:db/valueType :db.type/ref
-                   :db/cardinality :db.cardinality/many}
-
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}

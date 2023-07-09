@@ -1490,6 +1490,16 @@ independent of format as format specific heading characters are stripped"
               {:id (str uuid)
                :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))
 
+(defn get-all-classes
+  [repo]
+  (d/q
+    '[:find [?name ...]
+      :where
+      [?page :block/type ?t]
+      [(= ?t "class")]
+      [?page :block/original-name ?name]]
+    (conn/get-db repo)))
+
 (comment
   ;; For debugging
   (defn get-all-blocks

@@ -71,8 +71,11 @@
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)
                      argument (string/join ", " arguments)]
-                   (when (= name "embed")
-                     (text/page-ref-un-brackets! argument)))
+                   (if (= name "embed")
+                     (text/page-ref-un-brackets! argument)
+                     {:type "macro"
+                      :name name
+                      :arguments arguments}))
 
                (and (vector? block)
                     (= "Tag" (first block)))
@@ -81,7 +84,9 @@
 
                :else
                nil)]
-    (when page (or (block-ref/get-block-ref-id page) page))))
+    (when page (or (when (string? page)
+                     (block-ref/get-block-ref-id page))
+                   page))))
 
 (defn get-block-reference
   [block]
@@ -321,12 +326,13 @@
     :else
     nil))
 
-(defn- with-page-refs
+(defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
-        *refs (atom refs)]
+        *refs (atom refs)
+        *structured-tags (atom #{})]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -338,25 +344,40 @@
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
              (when (gp-util/tag-valid? tag)
-               (swap! *refs conj tag))))
+               (swap! *refs conj tag)
+               (swap! *structured-tags conj tag))))
          form))
      (concat title body))
     (swap! *refs #(remove string/blank? %))
-    (let [children-pages (->> @*refs
-                              (mapcat (fn [p]
-                                        (let [p (if (map? p)
-                                                  (:block/original-name p)
-                                                  p)]
-                                          (when (string? p)
-                                            (let [p (or (text/get-nested-page-name p) p)]
-                                              (when (text/namespace-page? p)
-                                                (gp-util/split-namespace-pages p)))))))
-                              (remove string/blank?)
-                              (distinct))
-          refs' (->> (distinct (concat @*refs children-pages))
-                     (remove nil?)
-                     (map (fn [ref] (page-name->map ref with-id? db true date-formatter))))]
-      (assoc block :refs refs'))))
+    (let [ref->map-fn (fn [*col tag?]
+                        (let [col (remove string/blank? @*col)
+                              children-pages (->> (mapcat (fn [p]
+                                                            (let [p (if (map? p)
+                                                                      (:block/original-name p)
+                                                                      p)]
+                                                              (when (string? p)
+                                                                (let [p (or (text/get-nested-page-name p) p)]
+                                                                  (when (text/namespace-page? p)
+                                                                    (gp-util/split-namespace-pages p))))))
+                                                          col)
+                                                  (remove string/blank?)
+                                                  (distinct))
+                              col (->> (distinct (concat col children-pages))
+                                       (remove nil?))]
+                          (map
+                           (fn [item]
+                             (let [macro? (and (map? item)
+                                               (= "macro" (:type item)))
+                                   item-name (if macro? (str "macro." (:name item) " " (string/join " " (:arguments item))) item)
+                                   ref-page (cond-> (page-name->map item-name with-id? db true date-formatter)
+                                              macro?
+                                              (assoc :block/type "macro"
+                                                     :block/properties {:logseq.macro-name (:name item)
+                                                                        :logseq.macro-arguments (:arguments item)}))]
+                               ref-page)) col)))]
+      (assoc block
+             :refs (ref->map-fn *refs false)
+             :tags (ref->map-fn *structured-tags true)))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
@@ -381,14 +402,6 @@
            (block-keywordize (gp-util/remove-nils-non-nested block))
            block))
        blocks))
-
-(defn- block-tags->pages
-  [{:keys [tags] :as block}]
-  (if (seq tags)
-    (assoc block :tags (map (fn [tag]
-                              (let [tag (text/page-ref-un-brackets! tag)]
-                                [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
-    block))
 
 (defn get-block-content
   [utf8-content block format meta block-pattern]
@@ -426,9 +439,8 @@
 (defn- with-page-block-refs
   [block with-id? db date-formatter]
   (some-> block
-          (with-page-refs with-id? db date-formatter)
+          (with-page-refs-and-tags with-id? db date-formatter)
           with-block-refs
-          block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
 
 (defn- with-path-refs

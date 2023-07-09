@@ -570,7 +570,7 @@
 (rum/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
-              [:strong.pr-1
+              [:span.pr-1
                (case type
                  "system" "System Default"
                  "direct" "Direct"

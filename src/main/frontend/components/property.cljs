@@ -233,10 +233,10 @@
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id
                                 editor-box editor-args
-                                new-item?]}]
+                                new-item? editing?]}]
   (let [multiple-values? (= :many (:cardinality (:block/schema property)))
         editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
-        editing? (state/sub [:editor/editing? editor-id])
+        editing? (or editing? (state/sub [:editor/editing? editor-id]))
         repo (state/get-current-repo)
         type (:type (:block/schema property))]
     (when (or (not new-item?) editing?)
@@ -373,7 +373,7 @@
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
       (property-key-input entity *property-key *property-value *search?)
       (when (and property (not (:class-schema? opts)))
-        (property-scalar-value entity property @*property-value opts))
+        (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
 
       [:a.close {:on-mouse-down exit-edit-property}
        svg/close]]
@@ -414,20 +414,19 @@
                       (reset! *property-value nil))}
       [:div.block {:style {:height      20
                            :width       20}}
-       [:a.add-button-link.block {:style {:margin-left -4}}
+       [:a.add-button-link.block.mt-1 {:style {:margin-left -4}}
         (ui/icon "circle-plus")]]])))
 
 (rum/defcs property-key
   [state block property]
   (let [repo (state/get-current-repo)]
-    [:div.relative
-     [:a.property-key
-      {:propertyid (:block/uuid property)
-       :blockid (:block/uuid block)
-       :title (str "Configure property: " (:block/original-name property))
-       :on-click (fn []
-                   (state/set-sub-modal! #(property-config repo property)))}
-      (:block/original-name property)]]))
+    [:a
+     {:propertyid (:block/uuid property)
+      :blockid (:block/uuid block)
+      :title (str "Configure property: " (:block/original-name property))
+      :on-click (fn []
+                  (state/set-sub-modal! #(property-config repo property)))}
+     (:block/original-name property)]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property items item {:keys [dom-id editor-id
@@ -440,7 +439,7 @@
         editing? (state/sub [:editor/editing? editor-id])]
     [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
                                 :on-mouse-out  #(reset! *show-close? false)}
-     (property-scalar-value entity property item opts)
+     (property-scalar-value entity property item (assoc opts :editing? editing?))
      (when (and (or (not new-item?) editing?)
                 @*show-close?
                 (seq items))
@@ -514,7 +513,16 @@
 (rum/defcs properties-area < rum/reactive
   [state block properties properties-text-values edit-input-id opts]
   (let [repo (state/get-current-repo)
-        new-property? (= edit-input-id (state/sub :ui/new-property-input-id))]
+        new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
+        class-properties (->> (:block/tags block)
+                              (mapcat (fn [tag]
+                                        (when (= "class" (:block/type tag))
+                                          (let [e (db/entity (:db/id tag))]
+                                            (:properties (:block/schema e)) ))))
+                              (map (fn [id]
+                                     [id nil])))
+        properties (->> (concat (seq properties) class-properties)
+                        (util/distinct-by first))]
     (when-not (and (empty? properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
@@ -522,22 +530,21 @@
        (when (:selected? opts)
          {:class "select-none"})
        (when (seq properties)
-         [:div.grid.gap-1
-          (for [[prop-uuid-or-built-in-prop v] properties]
-            (let [v (get properties-text-values prop-uuid-or-built-in-prop v)]
-              (if (uuid? prop-uuid-or-built-in-prop)
-                (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
-                  [:div.grid.grid-cols-4.gap-1
-                   [:div.property-key.col-span-1
-                    (property-key block property)]
-                   (if (:class-schema? opts)
-                     [:div.property-description.col-span-3.font-light
-                      (get-in property [:block/schema :description])]
-                     [:div.property-value.col-span-3
-                      (property-value block property v opts)])])
-                ;; TODO: built in properties should have UUID and corresponding schema
-                ;; builtin
-                [:div
-                 [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-                 [:span v]])))])
+         (for [[prop-uuid-or-built-in-prop v] properties]
+           (let [v (get properties-text-values prop-uuid-or-built-in-prop v)]
+             (if (uuid? prop-uuid-or-built-in-prop)
+               (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
+                 [:div.property-pair
+                  [:div.property-key.col-span-1
+                   (property-key block property)]
+                  (if (:class-schema? opts)
+                    [:div.property-description.col-span-3.font-light
+                     (get-in property [:block/schema :description])]
+                    [:div.property-value.col-span-3
+                     (property-value block property v opts)])])
+               ;; TODO: built in properties should have UUID and corresponding schema
+               ;; builtin
+               [:div
+                [:a.mr-2 (str prop-uuid-or-built-in-prop)]
+                [:span v]]))))
        (new-property repo block edit-input-id properties new-property? opts)])))
