@@ -1130,7 +1130,13 @@ Similar to re-frame subscriptions"
 (defn sidebar-block-collapse-rest!
   [db-id]
   (let [items (disj (set (map second (:sidebar/blocks @state))) db-id)]
-    (for [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
+    (doseq [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
+
+(defn sidebar-block-set-collapsed-all!
+  [collapsed?]
+  (let [items (map second (:sidebar/blocks @state))]
+    (doseq [item items]
+      (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
 (defn get-edit-block
   []
