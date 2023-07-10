@@ -120,7 +120,7 @@
   :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
  {:body "b" :uuid nil :level 2}
  {:body "c" :uuid nil :level 3}]
-  
+
   "alias:: ⭐️\nicon:: ⭐️"
 [{:body "alias:: ⭐️\nicon:: ⭐️", :level 1, :uuid nil}]))
 
@@ -191,7 +191,7 @@
       :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1 :meta {:raw-body "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58"}}
      {:body "b" :uuid nil :level 2 :meta {:raw-body "\t- b"}}
      {:body "c" :uuid nil :level 3 :meta {:raw-body "\t\t- c"}}]
-    
+
     "alias:: ⭐️\nicon:: ⭐️"
     [{:body "alias:: ⭐️\nicon:: ⭐️", :meta {:raw-body "alias:: ⭐️\nicon:: ⭐️"}, :level 1, :uuid nil}]))
 
@@ -470,4 +470,18 @@
           "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n  aaa:: 111\n- b"
           "- c"
           :markdown)
-         "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n  aaa:: 111\n- c")))
+         "- a\n  id:: 648ab5e6-5e03-4c61-95d4-dd904a0a007f\n  aaa:: 111\n- c"))
+
+  (is (= (fs-diff/three-way-merge
+          "- a\n- b\n- c"
+          "- a\n- b\n- c\n- d"
+          "- a\n\t- b\n- c"
+          :markdown)
+         "- a\n\t- b\n- c\n- d"))
+
+  (is (= (fs-diff/three-way-merge
+          "- a\n- b\n- c"
+          "- a\n\t- b\n- c"
+          "- a\n- b\n- c\n- d"
+          :markdown)
+         "- a\n- b\n- c\n- d")))
