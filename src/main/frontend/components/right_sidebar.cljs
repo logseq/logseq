@@ -19,7 +19,6 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [goog.object :as gobj]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
