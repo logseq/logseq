@@ -1101,6 +1101,12 @@ Similar to re-frame subscriptions"
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
 
+(defn sidebar-remove-rest!
+  [db-id]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (remove #(not= (second %) db-id) blocks)))
+  (set-state! [:ui/sidebar-collapsed-blocks db-id] false))
+
 (defn sidebar-replace-block!
   [old-sidebar-key new-sidebar-key]
   (update-state! :sidebar/blocks (fn [blocks]
@@ -1120,6 +1126,11 @@ Similar to re-frame subscriptions"
   [db-id]
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
+
+(defn sidebar-block-collapse-rest!
+  [db-id]
+  (let [items (disj (set (map second (:sidebar/blocks @state))) db-id)]
+    (for [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
 
 (defn get-edit-block
   []
