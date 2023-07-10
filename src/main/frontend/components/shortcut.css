@@ -51,6 +51,26 @@
 
       color: var(--ls-secondary-text-color);
     }
+
+    .keyboard-filter {
+      .dropdown-wrapper {
+        @apply shadow-lg w-[18rem];
+      }
+
+      .keyboard-filter-record {
+        > h2 {
+          @apply flex items-center justify-between px-1.5 py-1;
+
+          background-color: var(--ls-secondary-background-color);
+
+          > strong {
+            @apply text-[12px] opacity-80;
+
+            font-weight: 400;
+          }
+        }
+      }
+    }
   }
 
   > article {

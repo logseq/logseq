@@ -34,6 +34,42 @@
   (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
 
+(rum/defc keyboard-filter-record-inner
+  [close-fn]
+
+  (let [[keystroke set-keystroke!] (rum/use-state "")
+        keypressed? (not= "" keystroke)]
+
+    (rum/use-effect!
+      (fn []
+        (let [key-handler (KeyHandler. js/document)]
+          ;; setup
+          (shortcut/unlisten-all)
+          (events/listen key-handler "key"
+                         (fn [^js e]
+                           (.preventDefault e)
+                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
+
+          ;; teardown
+          #(do (shortcut/listen-all)
+               (.dispose key-handler))))
+      [])
+
+    [:div.keyboard-filter-record
+     [:h2
+      [:strong "Keyboard filter"]
+      [:span.flex.space-x-2
+       (when keypressed?
+         [:a.flex.items-center
+          {:on-click #(set-keystroke! "")} (ui/icon "zoom-reset" {:size 12})])
+       [:a.flex.items-center
+        {:on-click close-fn} (ui/icon "x" {:size 12})]]]
+     [:div.wrap.p-2
+      (if-not keypressed?
+        [:small "Press any sequence of keys to filter shortcuts"]
+        (when-not (string/blank? keystroke)
+          (ui/render-keyboard-shortcut keystroke)))]]))
+
 (rum/defc pane-controls
   [q set-q! filters set-filters! refresh-fn toggle-categories-fn]
   (let [*search-ref (rum/use-ref nil)]
@@ -67,8 +103,16 @@
                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
          (ui/icon "x" {:size 14})])]
 
-     [:a.flex.items-center.icon-link (ui/icon "keyboard")]
+     ;; keyboard filter
+     (ui/dropdown
+       (fn [{:keys [toggle-fn]}]
+         [:a.flex.items-center.icon-link {:on-click toggle-fn} (ui/icon "keyboard")])
+       (fn [{:keys [close-fn]}]
+         (keyboard-filter-record-inner close-fn))
+       {:outside?      false
+        :trigger-class "keyboard-filter"})
 
+     ;; other filter
      (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
          [:a.flex.items-center.icon-link.relative
