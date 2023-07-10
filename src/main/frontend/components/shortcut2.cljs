@@ -35,10 +35,9 @@
     (if (sequential? v) (vec v) [v])))
 
 (rum/defc keyboard-filter-record-inner
-  [close-fn]
+  [keystroke set-keystroke! close-fn]
 
-  (let [[keystroke set-keystroke!] (rum/use-state "")
-        keypressed? (not= "" keystroke)]
+  (let [keypressed? (not= "" keystroke)]
 
     (rum/use-effect!
       (fn []
@@ -51,8 +50,9 @@
                            (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; teardown
-          #(do (shortcut/listen-all)
-               (.dispose key-handler))))
+          #(do
+             (shortcut/listen-all)
+             (.dispose key-handler))))
       [])
 
     [:div.keyboard-filter-record
@@ -63,7 +63,7 @@
          [:a.flex.items-center
           {:on-click #(set-keystroke! "")} (ui/icon "zoom-reset" {:size 12})])
        [:a.flex.items-center
-        {:on-click close-fn} (ui/icon "x" {:size 12})]]]
+        {:on-click #(do (close-fn) (set-keystroke! ""))} (ui/icon "x" {:size 12})]]]
      [:div.wrap.p-2
       (if-not keypressed?
         [:small "Press any sequence of keys to filter shortcuts"]
@@ -71,7 +71,7 @@
           (ui/render-keyboard-shortcut keystroke)))]]))
 
 (rum/defc pane-controls
-  [q set-q! filters set-filters! refresh-fn toggle-categories-fn]
+  [q set-q! filters set-filters! keystroke set-keystroke! refresh-fn toggle-categories-fn]
   (let [*search-ref (rum/use-ref nil)]
     [:div.cp__shortcut-page-x-pane-controls
      [:a.flex.items-center.icon-link
@@ -106,10 +106,14 @@
      ;; keyboard filter
      (ui/dropdown
        (fn [{:keys [toggle-fn]}]
-         [:a.flex.items-center.icon-link {:on-click toggle-fn} (ui/icon "keyboard")])
+         [:a.flex.items-center.icon-link
+          {:on-click toggle-fn} (ui/icon "keyboard")
+
+          (when-not (string/blank? keystroke)
+            (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
        (fn [{:keys [close-fn]}]
-         (keyboard-filter-record-inner close-fn))
-       {:outside?      false
+         (keyboard-filter-record-inner keystroke set-keystroke! close-fn))
+       {:outside?      true
         :trigger-class "keyboard-filter"})
 
      ;; other filter
@@ -250,17 +254,19 @@
         [ready?, set-ready!] (rum/use-state false)
         [refresh-v, refresh!] (rum/use-state 1)
         [filters, set-filters!] (rum/use-state #{})
+        [keystroke, set-keystroke!] (rum/use-state "")
         [q set-q!] (rum/use-state nil)
 
         categories-list-map (build-categories-map)
         all-categories (into #{} (map first categories-list-map))
         in-filters? (boolean (seq filters))
         in-query? (not (string/blank? (util/trim-safe q)))
+        in-keystroke? (not (string/blank? keystroke))
 
         [folded-categories set-folded-categories!] (rum/use-state #{})
 
         matched-list-map
-        (when in-query?
+        (when (and in-query? (not in-keystroke?))
           (->> categories-list-map
                (map (fn [[c binding-map]]
                       [c (search/fuzzy-search
@@ -289,11 +295,8 @@
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
 
-      (pane-controls q set-q! filters set-filters! refresh-list! toggle-categories!)]
-
-     (when (or (not (string/blank? q))
-               (seq filters))
-       [:h3.flex.justify-center.font-bold "Query: " q (pr-str filters)])
+      (pane-controls q set-q! filters set-filters! keystroke set-keystroke!
+                     refresh-list! toggle-categories!)]
 
      [:article
       (when-not ready?
@@ -307,7 +310,8 @@
            [:<>
             ;; category row
             (when (and (not in-query?)
-                       (not in-filters?))
+                       (not in-filters?)
+                       (not in-keystroke?))
               [:li.bg-green-600.flex.justify-between.th.text-white.px-3.items-center.py-1
                {:key      (str c)
                 :on-click #(let [f (if folded? disj conj)]
@@ -334,29 +338,42 @@
                           (when (contains? filters :Custom) custom?)
                           (when (contains? filters :Disabled) disabled?)
                           (when (contains? filters :Unset) unset?))
-                  [:li.flex.items-center.justify-between.text-sm
-                   {:key (str id)}
-                   [:span.label-wrap label]
 
-                   [:a.action-wrap
-                    {:class    (util/classnames [{:disabled disabled?}])
-                     :on-click (when-not disabled?
-                                 #(state/set-sub-modal!
-                                    (fn [] (customize-shortcut-dialog-inner
-                                             id label binding user-binding
-                                             {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
-                                    {:center? true}))}
+                  ;; keystrokes filter
+                  (when (or (not in-keystroke?)
+                            (and (not disabled?)
+                                 (not unset?)
+                                 (let [binding' (or user-binding binding)
+                                       keystroke' (some-> (shortcut-utils/safe-parse-string-binding keystroke) (bean/->clj))]
+                                   (when (sequential? binding')
+                                     (some #(when-let [s (some-> % (dh/mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+                                              (or (= s keystroke')
+                                                  (and (sequential? s) (sequential? keystroke')
+                                                       (apply = (map first [s keystroke']))))) binding')))))
 
-                    (cond
-                      (or user-binding (false? user-binding))
-                      [:code.dark:bg-green-800.bg-green-300
-                       (if unset?
-                         "Unset"
-                         (str "Custom: "
-                              (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))]
+                    [:li.flex.items-center.justify-between.text-sm
+                     {:key (str id)}
+                     [:span.label-wrap label]
 
-                      (not unset?)
-                      (for [x binding]
-                        [:code.tracking-wide
-                         {:key (str x)}
-                         (dh/binding-for-display id x)]))]])))])])]]))
+                     [:a.action-wrap
+                      {:class    (util/classnames [{:disabled disabled?}])
+                       :on-click (when-not disabled?
+                                   #(state/set-sub-modal!
+                                      (fn [] (customize-shortcut-dialog-inner
+                                               id label binding user-binding
+                                               {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
+                                      {:center? true}))}
+
+                      (cond
+                        (or user-binding (false? user-binding))
+                        [:code.dark:bg-green-800.bg-green-300
+                         (if unset?
+                           "Unset"
+                           (str "Custom: "
+                                (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))]
+
+                        (not unset?)
+                        (for [x binding]
+                          [:code.tracking-wide
+                           {:key (str x)}
+                           (dh/binding-for-display id x)]))]]))))])])]]))
