@@ -21,7 +21,8 @@
             [frontend.modules.editor.undo-redo :as undo-redo]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.common :as common-handler]))
 
 (rum/defc toggle
   []
@@ -165,22 +166,29 @@
 
     ["" [:span]]))
 
-(defn close
-  ([on-close]
-   (close nil on-close))
-  ([class on-close]
-   [:a.close.flex.items-center
-    (cond-> {:on-click on-close
-             :style {:margin-right -4}}
-      class
-      (assoc :class class))
-    svg/close]))
-
 (defonce *drag-to
   (atom nil))
 
 (defonce *drag-from
   (atom nil))
+
+(rum/defc context-menu-content
+  [db-id idx collapsed?]
+  [:.menu-links-wrapper
+   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
+   (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil)
+   (ui/menu-link {:on-click (fn []
+                              (state/clear-sidebar-blocks!)
+                              (state/hide-right-sidebar!))} "Close all" nil)
+   [:hr.menu-separator]
+   (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (if collapsed? "Expand" "Collapse") nil)
+   (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil)
+   (when (integer? db-id) [:hr.menu-separator])
+   (when (integer? db-id)
+     (let [name (:block/name (db/entity db-id))]
+       (ui/menu-link {:href (if (db-model/whiteboard-page? name)
+                              (rfe/href :whiteboard {:name name})
+                              (rfe/href :page {:name name}))} "Open as page" nil)))])
 
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type]
@@ -193,30 +201,43 @@
          {:class [(str "item-type-" (name block-type))
                   (when collapsed? "collapsed")
                   (when (and (= idx drag-to) (not= drag-to drag-from)) "drag-over")]}
-         (let [[title component] item]
+         (let [[title component] item
+               page-name (if (integer? db-id)
+                           (:block/name (db/entity db-id))
+                           db-id)]
            [:div.flex.flex-col.w-full
             [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
              {:draggable true
               :on-drag-leave #(reset! *drag-to nil)
               :on-drag-over #(reset! *drag-to idx)
               :on-drag-start (fn [event]
-                               (when-let [page-name (if (integer? db-id)
-                                                      (:block/name (db/entity db-id))
-                                                      db-id)]
-                                 (editor-handler/block->data-transfer! page-name event))
+                               (editor-handler/block->data-transfer! page-name event)
                                (reset! *drag-from idx))
               :on-drag-end (fn [_event]
                              (reset! *drag-to nil)
                              (reset! *drag-from nil))
               :on-click (fn [event]
                           (.preventDefault event)
-                          (state/sidebar-block-toggle-collapse! db-id))}
+                          (js/console.log event.which)
+                          (state/sidebar-block-toggle-collapse! db-id))
+              :on-mouse-up (fn [event]
+                             (when (= (.-which (.-nativeEvent event)) 2)
+                               (state/sidebar-remove-block! idx)))
+              :on-context-menu (fn [e]
+                                 (util/stop e)
+                                 (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed?)))}
              [:div.flex.flex-row.overflow-hidden
               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                (ui/rotating-arrow collapsed?)]
               [:div.ml-1.font-medium.overflow-hidden
                title]]
-             (close #(state/sidebar-remove-block! idx))]
+             [:.item-actions.flex
+              (ui/dropdown (fn [{:keys [toggle-fn]}]
+                             [:button.button {:on-click (fn [e]
+                                                          (util/stop e)
+                                                          (toggle-fn))} (ui/icon "dots")])
+                           #(context-menu-content db-id idx collapsed?))
+              [:button.button.close {:on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
             [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
              component]])]))))
 

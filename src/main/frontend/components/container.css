@@ -644,7 +644,7 @@ html[data-theme='dark'] {
     &.item-type-block .sidebar-item-header {
       background: linear-gradient(0deg, var(--ls-secondary-background-color), var(--ls-tertiary-background-color));
     }
-    
+
     &.collapsed {
       flex: 0;
       overflow: initial;
@@ -655,35 +655,31 @@ html[data-theme='dark'] {
       }
     }
 
-    /*
     &:not(:hover) {
       ::-webkit-scrollbar-thumb,
       ::-webkit-scrollbar,
       ::-webkit-scrollbar-thumb:active {
         background-color: transparent;
-      } 
+      }
     }
-    */
 
     .initial {
       flex: 1;
     }
 
-    .close {
-      transform: scale(0.8);
-      transition: transform 0.1s, opacity 0.1s;
-      visibility: hidden;
+    .item-actions {
+      @apply h-full invisible;
       opacity: 0;
 
-      &:hover {
-        transform: scale(1);
+      .button {
+        @apply p-0 pl-2 flex items-center h-full;
       }
     }
-    
+
     .is-mobile &,
     &:hover {
-      .close {
-        visibility: visible;
+      .item-actions {
+        @apply visible;
         opacity: 1;
       }
     }
