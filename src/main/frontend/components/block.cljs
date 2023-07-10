@@ -2060,10 +2060,8 @@
       nil)))
 
 (rum/defc db-properties-cp
-  [config block properties properties-text-values edit-input-id opts]
+  [config block edit-input-id opts]
   (property-component/properties-area block
-                                      properties
-                                      properties-text-values
                                       edit-input-id
                                       (merge
                                        {:inline-text inline-text
@@ -2848,8 +2846,6 @@
          (when (config/db-based-graph? repo)
            (db-properties-cp config
                              block
-                             (:block/properties block)
-                             (:block/properties-text-values block)
                              edit-input-id
                              {:selected? selected?}))])
 

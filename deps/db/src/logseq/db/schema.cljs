@@ -39,9 +39,13 @@
    :block/path-refs {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
 
-   ;; Structured classes
+   ;; tags are structured classes
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
+
+   ;; an instance created by this block
+   :block/instance {:db/valueType :db.type/ref
+                    :db/index true}
 
    ;; for pages
    :block/alias {:db/valueType :db.type/ref

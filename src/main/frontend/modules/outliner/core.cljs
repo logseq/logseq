@@ -125,6 +125,22 @@
           new-refs (remove-self-page (:block/refs m))]
       (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs))))
 
+
+(defn- assoc-instance-when-save
+  [txs-state block-entity m]
+  (let [tags (seq (:block/tags m))]
+    (when (and (config/db-based-graph? (state/get-current-repo))
+               (:block/page block-entity)
+               tags)
+      (when-let [instance-id (first (remove (set (map :block/uuid tags))
+                                            (map :block/uuid (:block/refs m))))]
+        (swap! txs-state (fn [txs]
+                           (concat txs
+                                   [{:block/uuid instance-id
+                                     :block/tags (:block/tags m)}
+                                    {:db/id (:db/id block-entity)
+                                     :block/instance [:block/uuid instance-id]}])))))))
+
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
 
@@ -207,6 +223,8 @@
           (swap! txs-state (fn [txs]
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj (dissoc m :db/other-tx)))
+
+      (assoc-instance-when-save txs-state block-entity m)
 
       this))
 

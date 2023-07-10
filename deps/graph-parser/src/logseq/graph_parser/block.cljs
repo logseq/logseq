@@ -370,6 +370,10 @@
                                                (= "macro" (:type item)))
                                    item-name (if macro? (str "macro." (:name item) " " (string/join " " (:arguments item))) item)
                                    ref-page (cond-> (page-name->map item-name with-id? db true date-formatter)
+                                              tag?
+                                              (assoc :block/type "class")
+
+                                              ;; FIXME: property key should be UUID for db graphs
                                               macro?
                                               (assoc :block/type "macro"
                                                      :block/properties {:logseq.macro-name (:name item)

@@ -40,6 +40,7 @@
     :block/_refs
     :block/path-refs
     :block/tags
+    :block/instance
     :block/content
     :block/marker
     :block/priority

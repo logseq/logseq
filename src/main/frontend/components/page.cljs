@@ -461,8 +461,6 @@
                (component-block/db-properties-cp
                 {:editor-box editor/box}
                 page
-                (:block/properties page)
-                (:block/properties-text-values page)
                 edit-input-id
                 {:selected? false})))
 
@@ -1153,8 +1151,7 @@
         type (:block/type page)
         class? (= "class" type)
         property? (= "property" type)
-        journal? (:block/journal? page)
-        {:keys [properties] :as _schema} (:block/schema page)]
+        journal? (:block/journal? page)]
     (when page
       [:div.page-configure
        [:h1.title "Configure page"]
@@ -1180,8 +1177,6 @@
               (component-block/db-properties-cp
                {:editor-box editor/box}
                page
-               (map (fn [k] [k nil]) properties)
-               {}
                edit-input-id
                {:selected? false
                 :page-configure? true
@@ -1194,8 +1189,6 @@
               (component-block/db-properties-cp
                {:editor-box editor/box}
                page
-               (:block/properties page)
-               (:block/properties-text-values page)
                edit-input-id
                {:selected? false
                 :page-configure? true})])])]

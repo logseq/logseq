@@ -518,9 +518,30 @@
                                 :editor-id editor-id
                                 :dom-id dom-id}))])))
 
+(defn- resolve-instance-page-if-exists
+  "Properties will be updated for the instance page instead of the refed block.
+  For example, the block below has a reference to the page \"How to solve it\",
+  we'd like the properties of the class \"book\" (e.g. Authors, Published year)
+  to be assigned for the page `How to solve it` instead of the referenced block.
+
+  Block:
+  - [[How to solve it]] #book
+  "
+  [block]
+  (if-let [instance (:block/instance block)]
+    (db/sub-block (:db/id instance))
+    (db/sub-block (:db/id block))))
+
 (rum/defcs properties-area < rum/reactive
-  [state block properties properties-text-values edit-input-id opts]
+  [state target-block edit-input-id opts]
   (let [repo (state/get-current-repo)
+        block (resolve-instance-page-if-exists target-block)
+        properties (if (and (:class-schema? opts) (:block/schema block))
+                     (let [properties (:properties (:block/schema block))]
+                       (map (fn [k] [k nil]) properties))
+                     (:block/properties block))
+        properties-text-values (if (:class-schema? opts) {}
+                                   (:block/properties-text-values block))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]

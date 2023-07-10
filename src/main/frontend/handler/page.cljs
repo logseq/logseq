@@ -635,6 +635,7 @@
                               :push        false
                               :path-params {:name to-page-name}})))
 
+;; FIXME:
 (defn db-based-rename!
   ([old-name new-name]
    (db-based-rename! old-name new-name true))
@@ -695,7 +696,6 @@
 (defn rename!
   ([old-name new-name] (rename! old-name new-name true))
   ([old-name new-name redirect?]
-   (prn "db based? " (config/db-based-graph? (state/get-current-repo)))
    (let [f (if (config/db-based-graph? (state/get-current-repo))
              db-based-rename!
              file-based-rename!)]
