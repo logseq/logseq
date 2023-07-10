@@ -6,7 +6,8 @@ import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
-export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type WithOptional<T, K extends keyof T> = Omit<T, K> &
+  Partial<Pick<T, K>>
 
 export type PluginLocalIdentity = string
 
@@ -298,7 +299,12 @@ export type ExternalCommandType =
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
 export type SearchIndiceInitStatus = boolean
-export type SearchBlockItem = { id: EntityID, uuid: BlockIdentity, content: string, page: EntityID }
+export type SearchBlockItem = {
+  id: EntityID
+  uuid: BlockIdentity
+  content: string
+  page: EntityID
+}
 export type SearchPageItem = string
 export type SearchFileItem = string
 
@@ -310,21 +316,23 @@ export interface IPluginSearchServiceHooks {
     graph: string,
     key: string,
     opts: Partial<{ limit: number }>
-  ) =>
-    Promise<{
-      graph: string,
-      key: string,
-      blocks?: Array<Partial<SearchBlockItem>>,
-      pages?: Array<SearchPageItem>,
-      files?: Array<SearchFileItem>
-    }>
+  ) => Promise<{
+    graph: string
+    key: string
+    blocks?: Array<Partial<SearchBlockItem>>
+    pages?: Array<SearchPageItem>
+    files?: Array<SearchFileItem>
+  }>
 
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: {
-    added: Array<SearchBlockItem>,
-    removed: Array<EntityID>
-  }) => Promise<void>
+  onBlocksChanged: (
+    graph: string,
+    changes: {
+      added: Array<SearchBlockItem>
+      removed: Array<EntityID>
+    }
+  ) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
@@ -373,8 +381,14 @@ export interface IAppProxy {
    * @param action
    */
   registerCommandShortcut: (
-    keybinding: SimpleCommandKeybinding,
-    action: SimpleCommandCallback
+    keybinding: SimpleCommandKeybinding | string,
+    action: SimpleCommandCallback,
+    opts?: Partial<{
+      key: string
+      label: string
+      desc: string
+      extras: Record<string, any>
+    }>
   ) => void
 
   /**
@@ -393,10 +407,7 @@ export interface IAppProxy {
    * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
    * @param args
    */
-  invokeExternalPlugin: (
-    type: string,
-    ...args: Array<any>
-  ) => Promise<unknown>
+  invokeExternalPlugin: (type: string, ...args: Array<any>) => Promise<unknown>
 
   /**
    * @added 0.0.13
@@ -453,7 +464,11 @@ export interface IAppProxy {
   // templates
   getTemplate: (name: string) => Promise<BlockEntity | null>
   existTemplate: (name: string) => Promise<Boolean>
-  createTemplate: (target: BlockUUID, name: string, opts?: { overwrite: boolean }) => Promise<any>
+  createTemplate: (
+    target: BlockUUID,
+    name: string,
+    opts?: { overwrite: boolean }
+  ) => Promise<any>
   removeTemplate: (name: string) => Promise<any>
   insertTemplate: (target: BlockUUID, name: string) => Promise<any>
 
@@ -496,7 +511,9 @@ export interface IAppProxy {
   onCurrentGraphChanged: IUserHook
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
+  onThemeChanged: IUserHook<
+    Partial<{ name: string; mode: string; pid: string; url: string }>
+  >
   onTodayJournalCreated: IUserHook<{ title: string }>
 
   /**
@@ -504,7 +521,10 @@ export interface IAppProxy {
    *
    * @added 0.0.13
    */
-  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, Omit<BlockEntity, 'children' | 'page'>>
+  onBlockRendererSlotted: IUserConditionSlotHook<
+    BlockUUID,
+    Omit<BlockEntity, 'children' | 'page'>
+  >
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
@@ -691,7 +711,7 @@ export interface IEditorProxy extends Record<string, any> {
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
-    opts?: Partial<{ before: boolean; sibling: boolean, keepUUID: boolean }>
+    opts?: Partial<{ before: boolean; sibling: boolean; keepUUID: boolean }>
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
@@ -897,14 +917,16 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts?: string | string[]): Promise<Array<{
-    path: string
-    size: number
-    accessTime: number
-    modifiedTime: number
-    changeTime: number
-    birthTime: number
-  }>>
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<
+    Array<{
+      path: string
+      size: number
+      accessTime: number
+      modifiedTime: number
+      changeTime: number
+      birthTime: number
+    }>
+  >
 
   /**
    * @example https://github.com/logseq/logseq/pull/6488

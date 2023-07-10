@@ -48,6 +48,8 @@
 
     a.icon-link {
       @apply opacity-80 hover:opacity-100 active:opacity-40 select-none;
+
+      color: var(--ls-secondary-text-color);
     }
   }
 

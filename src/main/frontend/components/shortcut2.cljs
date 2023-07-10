@@ -76,7 +76,7 @@
           (ui/icon "filter")
 
           (when (seq filters)
-            (ui/point "bg-red-600.absolute" 4 {:style {:right 1 :top 1}}))])
+            (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
 
        (for [t [:All :Disabled :Unset :Custom]
              :let [all? (= t :All)
