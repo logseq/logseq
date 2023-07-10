@@ -181,8 +181,12 @@
                               (state/clear-sidebar-blocks!)
                               (state/hide-right-sidebar!))} "Close all" nil)
    [:hr.menu-separator]
-   (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (if collapsed? "Expand" "Collapse") nil)
+   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Collapse" nil))
    (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil)
+   (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil)
+   [:hr.menu-separator]
+   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Expand" nil))
+  (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)} "Expand all" nil)
    (when (integer? db-id) [:hr.menu-separator])
    (when (integer? db-id)
      (let [name (:block/name (db/entity db-id))]
@@ -218,7 +222,6 @@
                              (reset! *drag-from nil))
               :on-click (fn [event]
                           (.preventDefault event)
-                          (js/console.log event.which)
                           (state/sidebar-block-toggle-collapse! db-id))
               :on-mouse-up (fn [event]
                              (when (= (.-which (.-nativeEvent event)) 2)
