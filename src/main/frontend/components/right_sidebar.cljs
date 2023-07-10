@@ -212,10 +212,10 @@
               :on-click (fn [event]
                           (.preventDefault event)
                           (state/sidebar-block-toggle-collapse! db-id))}
-             [:div.flex.flex-row.justify-center
+             [:div.flex.flex-row.overflow-hidden
               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                (ui/rotating-arrow collapsed?)]
-              [:div.ml-1.font-medium
+              [:div.ml-1.font-medium.overflow-hidden
                title]]
              (close #(state/sidebar-remove-block! idx))]
             [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
