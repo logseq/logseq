@@ -122,7 +122,7 @@
     [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
 
     :page-graph
-    [[:.flex.items-center (ui/icon "chart-bubble" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
+    [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
      (page/page-graph)]
 
     :history
