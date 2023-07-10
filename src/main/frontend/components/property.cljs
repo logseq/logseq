@@ -35,7 +35,8 @@
                    state))}
   [state repo property ]
   (let [*property-name (::property-name state)
-        *property-schema (::property-schema state)]
+        *property-schema (::property-schema state)
+        type (:type @*property-schema)]
     [:div.property-configure
      [:h1.title "Configure property"]
 
@@ -54,7 +55,7 @@
                                       {:label type
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
-                                                    (:type @*property-schema))})))]
+                                                    type)})))]
          (ui/select schema-types
            (fn [_e v]
              (let [type (keyword (string/lower-case v))]
@@ -65,6 +66,7 @@
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
+                         :disabled (if (= type :default) "disabled")
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
@@ -271,7 +273,8 @@
                            {:on-key-down
                             (fn [e]
                               (let [enter? (= (util/ekey e) "Enter")]
-                                (when (contains? #{"Enter" "Escape"} (util/ekey e))
+                                (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
+                                           (not (state/get-editor-action)))
                                   (util/stop e)
                                   (property-handler/add-property! repo block
                                                                   (:block/original-name property)
@@ -300,22 +303,27 @@
                               (set-editing! property editor-id dom-id value))))}
             multiple-values?
             (assoc :class "property-value-content"))
-          (when-not (string/blank? value)
-            (case type
-              :page
-              (when-let [page (db/entity [:block/uuid value])]
-                (page-cp {} page))
+          (let [type (if (and (= type :default) (uuid? value))
+                       (if-let [e (db/entity [:block/uuid value])]
+                         (if (:block/name e) :page :block)
+                         type)
+                       type)]
+            (when-not (string/blank? value)
+             (case type
+               :page
+               (when-let [page (db/entity [:block/uuid value])]
+                 (page-cp {} page))
 
-              :block
-              (if-let [block (db/entity [:block/uuid value])]
-                [:div.property-block-container.w-full
-                 (block-cp [block] {:id (str value)
-                                    :editor-box editor-box})]
-                (if multiple-values?
-                  (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                  (property-handler/remove-property! repo block (:block/uuid property))))
+               :block
+               (if-let [block (db/entity [:block/uuid value])]
+                 [:div.property-block-container.w-full
+                  (block-cp [block] {:id (str value)
+                                     :editor-box editor-box})]
+                 (if multiple-values?
+                   (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                   (property-handler/remove-property! repo block (:block/uuid property))))
 
-              (inline-text {} :markdown (str value))))])))))
+               (inline-text {} :markdown (str value)))))])))))
 
 (rum/defcs property-key-input <
   (rum/local false ::key-down-triggered?)

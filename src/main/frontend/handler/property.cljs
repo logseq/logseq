@@ -164,23 +164,28 @@
               (notification/show! msg' :warning))
             (do
               (upsert-property! repo property k-name property-uuid property-type)
-              (let [refs (when (= property-type :default) (extract-page-refs-from-prop-str-value v*))
+              (let [refs (when (= property-type :default)
+                           (extract-page-refs-from-prop-str-value v*))
                     refs' (when (seq refs)
                             (concat (:block/refs (db/pull [:block/uuid (:block/uuid block)]))
                                     refs))
                     v' (if (= property-type :default)
-                         (if (seq refs) refs v*)
+                         (if (seq refs)
+                           (distinct (map :block/uuid refs)) v*)
                          v*)
                     new-value (cond
                                 (and multiple-values? old-value
                                      (not= old-value :frontend.components.property/new-value-placeholder))
-                                (let [v (mapv (fn [x] (if (= x old-value) v' x)) value)]
-                                  (if (contains? (set v) v')
-                                    v
-                                    (conj v v')))
+                                (if (coll? v')
+                                  (vec (distinct (concat value v')))
+                                  (let [v (mapv (fn [x] (if (= x old-value) v' x)) value)]
+                                   (if (contains? (set v) v')
+                                     v
+                                     (conj v v'))))
 
                                 multiple-values?
-                                (vec (distinct (conj value v')))
+                                (let [f (if (coll? v') concat conj)]
+                                  (vec (distinct (f value v'))))
 
                                 :else
                                 v')
@@ -189,7 +194,7 @@
                                 new-value)
                     block-properties (assoc properties property-uuid new-value)
                     block-properties-text-values
-                    (if (and (not multiple-values?) (= property-type :default))
+                    (if (= property-type :default)
                       (assoc (:block/properties-text-values block) property-uuid v*)
                       (dissoc (:block/properties-text-values block) property-uuid))]
                 ;; TODO: fix block/properties-order

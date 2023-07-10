@@ -1108,7 +1108,7 @@
 (rum/defc lazy-visible-inner
   [visible? content-fn ref fade-in?]
   (let [[set-ref rect] (r/use-bounding-client-rect)
-        placeholder-height (or (when rect (.-height rect)) 88)]
+        placeholder-height (or (when rect (.-height rect)) 24)]
     [:div.lazy-visibility {:ref ref}
      [:div {:ref set-ref}
       (if visible?
