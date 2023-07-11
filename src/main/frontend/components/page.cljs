@@ -456,7 +456,11 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (when (and (not block?) (not whiteboard?) (seq (:block/properties page)))
+           (when (and
+                  (config/db-based-graph? repo)
+                  (not block?)
+                  (not whiteboard?)
+                  (seq (:block/properties page)))
              (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
                (component-block/db-properties-cp
                 {:editor-box editor/box}
