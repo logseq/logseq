@@ -618,7 +618,23 @@ html[data-theme='dark'] {
     margin-left: 12px;
   }
 
+  .sidebar-drop-area {
+    @apply relative;
+    height: 8px;
+
+    &.drag-over {
+      &::after {
+        @apply absolute block w-full;
+        top: 2px;
+        height: 4px;
+        content: " ";
+        background-color: var(--ls-active-primary-color);
+      }
+    }
+  }
+
   .sidebar-item {
+    @apply relative;
     overflow: hidden;
     flex: 1 1;
     min-height: 100px;
@@ -637,8 +653,12 @@ html[data-theme='dark'] {
       }
     }
 
-    &.drag-over {
-      border-color: var(--ls-active-primary-color);
+    .sidebar-item-drop-overlay-wrapper {
+      @apply flex flex-col absolute h-full w-full;
+    }
+
+    .sidebar-item-drop-overlay {
+      flex: 1 1 50%;
     }
 
     &.item-type-block .sidebar-item-header {

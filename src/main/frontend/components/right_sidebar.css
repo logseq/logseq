@@ -16,7 +16,8 @@ html[data-theme=light] {
 }
 
 .sidebar-item-list {
-  height: calc(100vh - 48px);
+  margin-top: -8px;
+  height: calc(100vh - 40px);
 }
 
 
