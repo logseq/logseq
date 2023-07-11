@@ -222,11 +222,12 @@
 
      [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
       ;; restore default
-      (when binding
+      (when (sequential? binding)
         [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
          {:on-click #(set-current-binding! binding)}
          "Restore to system default"
-         [:code (str binding)]])
+         (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
+           [:code.ml-1 it])])
 
       [:span
        (ui/button
