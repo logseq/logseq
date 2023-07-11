@@ -6,7 +6,7 @@
 #   https://github.com/actions/stale
 ---
 name: 'Stale Issues Policy'
-on:  # yamllint disable-line rule:truthy
+on:
   schedule:
     - cron: '0 0 * * *'  # Run at 00:00 UTC every day
   workflow_dispatch:
@@ -29,8 +29,7 @@ jobs:
           operations-per-run: 100  # max num of ops per run
           stale-issue-label: ':status/automatic-stale'
           close-issue-label: ':status/automatic-closing'
-          # trunk-ignore(yamllint/line-length)
-          exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement, type/can-be-reproduced, priority-A'
+          exempt-issue-labels: 'hold, WIP, :type/enhancement, can-be-reproduced, priority-A, :type/bug, :type/feature-request'
           remove-stale-when-updated: true
           stale-issue-message: |
             Hi There! 👋
