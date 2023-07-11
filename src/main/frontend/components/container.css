@@ -643,7 +643,6 @@ html[data-theme='dark'] {
 
     .sidebar-item-header {
       white-space: nowrap;
-      overflow: hidden;
 
       .breadcrumb {
         margin-top: 0;
