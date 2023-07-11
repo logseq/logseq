@@ -10,6 +10,7 @@
 (deftest test-shortcut-conflicts-detection
   (testing "get conflicts with shortcut id"
     (do ";; TODO"))
+
   (testing "get conflicts with binding keys"
     (is (= (count (dh/get-conflicts-by-keys "mod+c")) 1))
 
@@ -27,7 +28,20 @@
         "get the conflicts from the only leader key")
 
     (is (nil? (seq (dh/get-conflicts-by-keys ["g"] :shortcut.handler/cards)))
-        "specific handler with the global conflicting key")))
+        "specific handler with the global conflicting key"))
+
+  (testing "parse conflicts from the string binding list"
+    (is (= (dh/parse-conflicts-from-binding ["g" "g t"] "g")
+           ["g" "g t"]))
+
+    (is (= (dh/parse-conflicts-from-binding ["g" "g t" "t r"] "g t")
+           ["g" "g t"]))
+
+    (is (= (dh/parse-conflicts-from-binding ["g" "g t" "t r"] "g x")
+           ["g"]))
+
+    (is (= (dh/parse-conflicts-from-binding ["meta+x" "meta+x t" "t r"] "meta+x x")
+           ["meta+x"]))))
 
 (comment
   (cljs.test/run-tests))

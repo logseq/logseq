@@ -17,6 +17,8 @@
             [frontend.handler.config :as config-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 
+(declare get-group)
+
 ;; function vals->bindings is too time-consuming. Here we cache the results.
 (defn- flatten-bindings-by-id
   [config user-shortcuts binding-only?]
@@ -25,7 +27,8 @@
        (map (fn [[id {:keys [binding] :as opts}]]
               {id (if binding-only?
                     (get user-shortcuts id binding)
-                    (assoc opts :user-binding (get user-shortcuts id)))}))
+                    (assoc opts :user-binding (get user-shortcuts id)
+                                :handler-id (get-group id)))}))
        (into {})))
 
 (defn- flatten-bindings-by-key
@@ -73,8 +76,9 @@
       (str id) desc)))
 
 (defn- mod-key [shortcut]
-  (str/replace shortcut #"(?i)mod"
-               (if util/mac? "meta" "ctrl")))
+  (when (string? shortcut)
+    (str/replace shortcut #"(?i)mod"
+                 (if util/mac? "meta" "ctrl"))))
 
 (defn shortcut-binding
   "override by user custom binding"
@@ -233,6 +237,20 @@
                      ))))
           (remove #(empty? (vals (second %1))))
           (into {})))))
+
+(defn parse-conflicts-from-binding
+  [from-binding target]
+  (when-let [from-binding (and (string? target)
+                               (sequential? from-binding)
+                               (seq from-binding))]
+    (when-let [target (some-> target (mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+      (->> from-binding
+           (filterv
+             #(when-let [from (some-> % (mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+                (or (= from target)
+                    (and (or (= (count from) 1)
+                             (= (count target) 1))
+                         (= (first target) (first from))))))))))
 
 (defn potential-conflict? [shortcut-id]
   (if-not (shortcut-binding shortcut-id)

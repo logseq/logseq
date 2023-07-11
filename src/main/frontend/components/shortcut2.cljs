@@ -57,7 +57,7 @@
 
     [:div.keyboard-filter-record
      [:h2
-      [:strong "Keyboard filter"]
+      [:strong "Keystroke filter"]
       [:span.flex.space-x-2
        (when keypressed?
          [:a.flex.items-center
@@ -193,13 +193,19 @@
 
            [:a.flex.items-center.active:opacity-90
             {:on-click (fn []
-                         (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
-                           (if-not (seq conflicts-map)
-                             (do (set-current-binding! (conj current-binding keystroke))
-                                 (set-keystroke! ""))
+                         ;; parse current binding conflicts
+                         (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
+                           (notification/show!
+                             (str "Shortcut conflicts from existing binding: "
+                                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %))))) :error)
+                           ;; get conflicts from the existed binding maps
+                           (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
+                             (if-not (seq conflicts-map)
+                               (do (set-current-binding! (conj current-binding keystroke))
+                                   (set-keystroke! ""))
 
-                             ;; show conflicts
-                             (set-key-conflicts! conflicts-map))))}
+                               ;; show conflicts
+                               (set-key-conflicts! conflicts-map)))))}
             (ui/icon "check" {:size 14})]
            [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
             {:on-click (fn []
@@ -322,12 +328,12 @@
 
             ;; binding row
             (when (or in-query? (not folded?))
-              (for [[id {:keys [binding user-binding] :as m}] binding-map
+              (for [[id {:keys [binding user-binding handler-id] :as m}] binding-map
                     :let [binding (to-vector binding)
                           user-binding (and user-binding (to-vector user-binding))
-                          label [:<>
+                          label [:div {:title (some-> (str id) (string/replace "plugin." ""))}
                                  [:span.pl-1 (dh/get-shortcut-desc (assoc m :id id))]
-                                 [:small [:code.text-xs (some-> (str id) (string/replace "plugin." ""))]]]
+                                 [:small [:code.text-xs (str handler-id)]]]
                           custom? (not (nil? user-binding))
                           disabled? (or (false? user-binding)
                                         (false? (first binding)))

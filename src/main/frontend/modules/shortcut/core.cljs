@@ -42,6 +42,14 @@
        first
        :handler))
 
+(defn- get-installed-ids-by-handler-id
+  [handler-id]
+  (some->> @*installed-handlers
+           (filter #(= (:group (second %)) handler-id))
+           (map first)
+           (remove nil?)
+           (vec)))
+
 (defn register-shortcut!
   "Register a shortcut, notice the id need to be a namespaced keyword to avoid
   conflicts.
@@ -58,7 +66,7 @@
                           (let [handler-id (keyword handler-id)]
                             (get-handler-by-id handler-id))
 
-                          ;; handler
+                          ;; as Handler instance
                           handler-id)]
 
        (when shortcut-map
@@ -101,11 +109,15 @@
                       state]
                :or   {set-global-keys? true
                       prevent-default? false}}]
-  (when-let [install-id (get-handler-by-id handler-id)]
-    (uninstall-shortcut-handler! install-id true))
+
+  ;; force uninstall existed handler
+  (some->>
+    (get-installed-ids-by-handler-id handler-id)
+    (map #(uninstall-shortcut-handler! % true))
+    (doall))
 
   (let [shortcut-map (dh/shortcut-map handler-id state)
-        handler      (new KeyboardShortcutHandler js/window)]
+        handler (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
     (when set-global-keys?
       (.setGlobalKeys handler global-keys))
@@ -123,10 +135,10 @@
                 ;; trigger fn
                 (when dispatch-fn (dispatch-fn e))))
           install-id (random-uuid)
-          data       {install-id
-                      {:group      handler-id
-                       :dispatch-fn f
-                       :handler    handler}}]
+          data {install-id
+                {:group       handler-id
+                 :dispatch-fn f
+                 :handler     handler}}]
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
@@ -136,11 +148,12 @@
       install-id)))
 
 (defn- install-shortcuts!
-  []
-  (->> [:shortcut.handler/misc
-        :shortcut.handler/editor-global
-        :shortcut.handler/global-non-editing-only
-        :shortcut.handler/global-prevent-default]
+  [handler-ids]
+  (->> (or (seq handler-ids)
+           [:shortcut.handler/misc
+            :shortcut.handler/editor-global
+            :shortcut.handler/global-non-editing-only
+            :shortcut.handler/global-prevent-default])
        (map #(install-shortcut-handler! % {}))
        doall))
 
@@ -220,9 +233,11 @@
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
     (state/set-state! :ui/shortcut-handler-refreshing? true)
 
-    (doseq [id (keys @*installed-handlers)]
-      (uninstall-shortcut-handler! id))
-    (install-shortcuts!)
+    (let [ids (keys @*installed-handlers)
+          _handler-ids (set (map :group (vals @*installed-handlers)))]
+      (doseq [id ids] (uninstall-shortcut-handler! id))
+      ;; TODO: should re-install existed handlers
+      (install-shortcuts! nil))
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
@@ -278,6 +293,7 @@
      (when-let [^js handler (::key-record-handler state)]
        (.dispose handler))
 
+     ;; force re-install shortcut handlers
      (js/setTimeout #(refresh!) 500)
 
      (dissoc state ::key-record-handler))})
