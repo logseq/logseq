@@ -2478,6 +2478,7 @@
                 local-all-files-meta    (<! local-all-files-meta-c)
                 {diff-remote-files :result elapsed-time :time}
                 (util/with-time (diff-file-metadata-sets remote-all-files-meta local-all-files-meta))
+                 _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
                 recent-10-days-range    ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                                         (sort-by
