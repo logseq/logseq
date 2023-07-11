@@ -2697,7 +2697,7 @@
 
         :else
         (delete-and-update 
-          input current-pos (util/safe-inc-current-pos-from-end (.-value input) current-pos))))))
+          input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
 (defn keydown-backspace-handler
   [cut? e]
