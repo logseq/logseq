@@ -203,24 +203,35 @@
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
          ks-bindings (get-bindings-keys-map)
-         handler-id (should-be-included-to-global-handler handler-id)
-         global? (seq (set/intersection global-handlers handler-id))]
+         handler-ids (should-be-included-to-global-handler handler-id)
+         global? (seq (set/intersection global-handlers handler-ids))]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k (shortcut-utils/undecorate-binding k)]
                    (let [k (shortcut-utils/safe-parse-string-binding k)
                          k (bean/->clj k)]
-                     (when-let [{:keys [key refs]} (get ks-bindings k)]
-                       [k [key (reduce-kv (fn [r id handler-id']
-                                            (if (and
-                                                  (not (contains? excludes-ids id))
-                                                  (or (= handler-id handler-id')
-                                                      (and (set? handler-id) (contains? handler-id handler-id'))
-                                                      (and global? (contains? global-handlers handler-id'))))
-                                              (assoc r id handler-id')
-                                              r)
-                                            ) {} refs)]])))))
-          (remove #(empty? (second (second %1))))
+
+                     [k (->> ks-bindings
+                             (filterv (fn [[k' _]]
+                                        (when (sequential? k)
+                                          (or (= k k')
+                                              (and (> (count k') (count k))
+                                                   (= (first k) (first k')))))))
+                             (mapv (fn [[k o]]
+                                     (when-let [{:keys [key refs]} o]
+                                       [k [key (reduce-kv (fn [r id handler-id']
+                                                            (if (and
+                                                                  (not (contains? excludes-ids id))
+                                                                  (or (= handler-ids handler-id')
+                                                                      (and (set? handler-ids) (contains? handler-ids handler-id'))
+                                                                      (and global? (contains? global-handlers handler-id'))))
+                                                              (assoc r id handler-id')
+                                                              r)
+                                                            ) {} refs)]])))
+                             (remove #(empty? (second (second %1))))
+                             (into {}))]
+                     ))))
+          (remove #(empty? (vals (second %1))))
           (into {})))))
 
 (defn potential-conflict? [shortcut-id]
