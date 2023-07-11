@@ -5,7 +5,6 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -173,20 +172,20 @@
   (atom nil))
 
 (rum/defc context-menu-content
-  [db-id idx collapsed?]
+  [db-id idx collapsed? block-count]
   [:.menu-links-wrapper
    (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
-   (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil)
-   (ui/menu-link {:on-click (fn []
-                              (state/clear-sidebar-blocks!)
-                              (state/hide-right-sidebar!))} "Close all" nil)
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil))
+   (when (> block-count 1) (ui/menu-link {:on-click (fn []
+                                                      (state/clear-sidebar-blocks!)
+                                                      (state/hide-right-sidebar!))} "Close all" nil))
    [:hr.menu-separator]
    (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Collapse" nil))
-   (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil)
-   (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil)
-   [:hr.menu-separator]
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil))
+   (when (or collapsed? (> block-count 1)) [:hr.menu-separator])
    (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Expand" nil))
-  (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)} "Expand all" nil)
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)} "Expand all" nil))
    (when (integer? db-id) [:hr.menu-separator])
    (when (integer? db-id)
      (let [name (:block/name (db/entity db-id))]
@@ -194,55 +193,70 @@
                               (rfe/href :whiteboard {:name name})
                               (rfe/href :page {:name name}))} "Open as page" nil)))])
 
+(rum/defc drop-area
+  [idx drag-to]
+  [:.sidebar-drop-area {:id (str "drop-area-" idx)
+                        :on-drag-over #(when (not= drag-to idx) (reset! *drag-to idx))
+                        :class (when (= idx drag-to) "drag-over")}])
+
 (rum/defc sidebar-item < rum/reactive
-  [repo idx db-id block-type]
+  [repo idx db-id block-type block-count]
   (let [item (build-sidebar-item repo idx db-id block-type)
         drag-to (rum/react *drag-to)
         drag-from (rum/react *drag-from)]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
-         {:class [(str "item-type-" (name block-type))
-                  (when collapsed? "collapsed")
-                  (when (and (= idx drag-to) (not= drag-to drag-from)) "drag-over")]}
-         (let [[title component] item
-               page-name (if (integer? db-id)
-                           (:block/name (db/entity db-id))
-                           db-id)]
-           [:div.flex.flex-col.w-full
-            [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
-             {:draggable true
-              :on-drag-leave #(reset! *drag-to nil)
-              :on-drag-over #(reset! *drag-to idx)
-              :on-drag-start (fn [event]
-                               (editor-handler/block->data-transfer! page-name event)
-                               (reset! *drag-from idx))
-              :on-drag-end (fn [_event]
-                             (reset! *drag-to nil)
-                             (reset! *drag-from nil))
-              :on-click (fn [event]
-                          (.preventDefault event)
-                          (state/sidebar-block-toggle-collapse! db-id))
-              :on-mouse-up (fn [event]
-                             (when (= (.-which (.-nativeEvent event)) 2)
-                               (state/sidebar-remove-block! idx)))
-              :on-context-menu (fn [e]
-                                 (util/stop e)
-                                 (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed?)))}
-             [:div.flex.flex-row.overflow-hidden
-              [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
-               (ui/rotating-arrow collapsed?)]
-              [:div.ml-1.font-medium.overflow-hidden
-               title]]
-             [:.item-actions.flex
-              (ui/dropdown (fn [{:keys [toggle-fn]}]
-                             [:button.button {:on-click (fn [e]
-                                                          (util/stop e)
-                                                          (toggle-fn))} (ui/icon "dots")])
-                           #(context-menu-content db-id idx collapsed?))
-              [:button.button.close {:on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
-            [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
-             component]])]))))
+        [:<>
+         (when (zero? idx) (drop-area (dec idx) drag-to))
+         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
+          {:class [(str "item-type-" (name block-type))
+                   (when collapsed? "collapsed")]}
+          (let [[title component] item
+                page-name (if (integer? db-id)
+                            (:block/name (db/entity db-id))
+                            db-id)]
+            [:div.flex.flex-col.w-full.relative
+             [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
+              {:draggable true
+               :on-drag-start (fn [event]
+                                (editor-handler/block->data-transfer! page-name event)
+                                (reset! *drag-from idx))
+               :on-drag-end (fn [_event]
+                              (state/sidebar-move-block! idx drag-to)
+                              (reset! *drag-to nil)
+                              (reset! *drag-from nil))
+               :on-click (fn [event]
+                           (.preventDefault event)
+                           (state/sidebar-block-toggle-collapse! db-id))
+               :on-mouse-up (fn [event]
+                              (when (= (.-which (.-nativeEvent event)) 2)
+                                (state/sidebar-remove-block! idx)))
+               :on-context-menu (fn [e]
+                                  (util/stop e)
+                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count)))}
+              [:div.flex.flex-row.overflow-hidden
+               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
+                (ui/rotating-arrow collapsed?)]
+               [:div.ml-1.font-medium.overflow-hidden
+                title]]
+              [:.item-actions.flex
+               (ui/dropdown (fn [{:keys [toggle-fn]}]
+                              [:button.button {:on-click (fn [e]
+                                                           (util/stop e)
+                                                           (toggle-fn))} (ui/icon "dots")])
+                            #(context-menu-content db-id idx collapsed? block-count))
+               [:button.button.close {:on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
+             [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
+              component]
+             (when drag-from
+               [:.sidebar-item-drop-overlay-wrapper
+                [:.sidebar-item-drop-overlay.top
+                 {:on-drag-over #(when (not= drag-to (dec idx))
+                                   (reset! *drag-to (dec idx)))}]
+                [:.sidebar-item-drop-overlay.bottom
+                 {:on-drag-over #(when (not= drag-to idx)
+                                   (reset! *drag-to idx))}]])])]
+         (drop-area idx drag-to)]))))
 
 (defn- get-page
   [match]
@@ -354,7 +368,8 @@
                  (js/setTimeout (fn [] (reset! (get state ::anim-finished?) true)) 300)
                  state)}
   [state repo t blocks]
-  (let [*anim-finished? (get state ::anim-finished?)]
+  (let [*anim-finished? (get state ::anim-finished?)
+        block-count (count blocks)]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -362,21 +377,21 @@
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "contents" :contents))}
+                                                                     (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                         (when-let [page (get-current-page)]
-                                                           (state/sidebar-add-block!
-                                                            repo
-                                                            page
-                                                            :page-graph)))}
+                                                                     (when-let [page (get-current-page)]
+                                                                       (state/sidebar-add-block!
+                                                                        repo
+                                                                        page
+                                                                        :page-graph)))}
           (t :right-side-bar/page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "help" :help))}
+                                                                     (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
         (when (and config/dev? (state/sub [:ui/developer-mode?]))
@@ -385,11 +400,12 @@
                                                                        (state/sidebar-add-block! repo "history" :history))}
             (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2.pb-2.mx-2
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.mx-2
+       {:on-drag-leave #(reset! *drag-to nil)}
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
-             (sidebar-item repo idx db-id block-type)
+             (sidebar-item repo idx db-id block-type block-count)
              (str "sidebar-block-" idx)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))

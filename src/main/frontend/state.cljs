@@ -1092,6 +1092,17 @@ Similar to re-frame subscriptions"
       (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
 
+(defn sidebar-move-block!
+  [idx move-to]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (let [move-to (if (> idx move-to) (inc move-to) move-to)]
+                                     (if (and move-to (not= move-to idx))
+                                       (let [item (nth blocks idx)
+                                             blocks (keep-indexed #(when (not= %1 idx) %2) blocks)
+                                             [l r] (split-at move-to blocks)]
+                                         (concat l [item] r))
+                                       blocks)))))
+
 (defn sidebar-remove-block!
   [idx]
   (update-state! :sidebar/blocks (fn [blocks]
