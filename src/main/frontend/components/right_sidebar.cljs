@@ -173,13 +173,14 @@
 
 (rum/defc context-menu-content
   [db-id idx collapsed? block-count]
-  [:.menu-links-wrapper
+  [:.menu-links-wrapper.text-left
+   {:on-click (fn [e] (util/stop e))}
    (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil))
    (when (> block-count 1) (ui/menu-link {:on-click (fn []
                                                       (state/clear-sidebar-blocks!)
                                                       (state/hide-right-sidebar!))} "Close all" nil))
-   [:hr.menu-separator]
+   (when (or (not collapsed?) (> block-count 1))[:hr.menu-separator])
    (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Collapse" nil))
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil))
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil))
@@ -195,8 +196,7 @@
 
 (rum/defc drop-area
   [idx drag-to]
-  [:.sidebar-drop-area {:id (str "drop-area-" idx)
-                        :on-drag-over #(when (not= drag-to idx) (reset! *drag-to idx))
+  [:.sidebar-drop-area {:on-drag-over #(when (not= drag-to idx) (reset! *drag-to idx))
                         :class (when (= idx drag-to) "drag-over")}])
 
 (rum/defc sidebar-item < rum/reactive
@@ -226,7 +226,7 @@
                               (reset! *drag-to nil)
                               (reset! *drag-from nil))
                :on-click (fn [event]
-                           (.preventDefault event)
+                           (util/stop event)
                            (state/sidebar-block-toggle-collapse! db-id))
                :on-mouse-up (fn [event]
                               (when (= (.-which (.-nativeEvent event)) 2)
