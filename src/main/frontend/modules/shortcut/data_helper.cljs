@@ -199,16 +199,16 @@
     #{from-handler-id}))
 
 (defn get-conflicts-by-keys
-  ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default #{}))
-  ([ks handler-id] (get-conflicts-by-keys ks handler-id #{}))
-  ([ks handler-id excludes-ids]
+  ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default {:group-global? true}))
+  ([ks handler-id] (get-conflicts-by-keys ks handler-id {:group-global? true}))
+  ([ks handler-id {:keys [exclude-ids group-global?]}]
    (let [global-handlers #{:shortcut.handler/editor-global
                            :shortcut.handler/global-non-editing-only
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
          ks-bindings (get-bindings-keys-map)
          handler-ids (should-be-included-to-global-handler handler-id)
-         global? (seq (set/intersection global-handlers handler-ids))]
+         global? (when group-global? (seq (set/intersection global-handlers handler-ids)))]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k (shortcut-utils/undecorate-binding k)]
@@ -225,8 +225,8 @@
                                      (when-let [{:keys [key refs]} o]
                                        [k [key (reduce-kv (fn [r id handler-id']
                                                             (if (and
-                                                                  (not (contains? excludes-ids id))
-                                                                  (or (= handler-ids handler-id')
+                                                                  (not (contains? exclude-ids id))
+                                                                  (or (= handler-ids #{handler-id'})
                                                                       (and (set? handler-ids) (contains? handler-ids handler-id'))
                                                                       (and global? (contains? global-handlers handler-id'))))
                                                               (assoc r id handler-id')

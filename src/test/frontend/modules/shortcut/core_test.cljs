@@ -15,7 +15,7 @@
     (is (= (count (dh/get-conflicts-by-keys "mod+c")) 1))
 
     (is (contains?
-          (-> (dh/get-conflicts-by-keys "mod+c" :shortcut.handler/editor-global #{:editor/copy})
+          (-> (dh/get-conflicts-by-keys "mod+c" :shortcut.handler/editor-global {:exclude-ids #{:editor/copy} :group-global? true})
               (first) (second) (second) (second) (second))
           :misc/copy))
 
