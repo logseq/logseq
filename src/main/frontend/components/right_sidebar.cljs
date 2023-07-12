@@ -172,15 +172,17 @@
   (atom nil))
 
 (rum/defc context-menu-content
-  [db-id idx collapsed? block-count]
+  [db-id idx collapsed? block-count toggle-fn]
   [:.menu-links-wrapper.text-left
-   {:on-click (fn [e] (util/stop e))}
+   {:on-click (fn [e]
+                (.stopPropagation e)
+                (toggle-fn))}
    (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil))
    (when (> block-count 1) (ui/menu-link {:on-click (fn []
                                                       (state/clear-sidebar-blocks!)
                                                       (state/hide-right-sidebar!))} "Close all" nil))
-   (when (or (not collapsed?) (> block-count 1))[:hr.menu-separator])
+   (when (or (not collapsed?) (> block-count 1)) [:hr.menu-separator])
    (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Collapse" nil))
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil))
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil))
@@ -197,6 +199,7 @@
 (rum/defc drop-area
   [idx drag-to]
   [:.sidebar-drop-area {:on-drag-enter #(when (not= drag-to idx) (reset! *drag-to idx))
+                        :on-drag-over util/stop
                         :class (when (= idx drag-to) "drag-over")}])
 
 (rum/defc sidebar-item < rum/reactive
@@ -219,7 +222,7 @@
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
                                 (reset! *drag-from idx))
                :on-drag-end (fn [_event]
-                              (when drag-to  (state/sidebar-move-block! idx drag-to))
+                              (when drag-to (state/sidebar-move-block! idx drag-to))
                               (reset! *drag-to nil)
                               (reset! *drag-from nil))
                :on-click (fn [event]
@@ -230,7 +233,7 @@
                                 (state/sidebar-remove-block! idx)))
                :on-context-menu (fn [e]
                                   (util/stop e)
-                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count)))}
+                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count #())))}
               [:div.flex.flex-row.overflow-hidden
                [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                 (ui/rotating-arrow collapsed?)]
@@ -238,15 +241,17 @@
                 title]]
               [:.item-actions.flex
                (ui/dropdown (fn [{:keys [toggle-fn]}]
-                              [:button.button {:on-click (fn [e]
-                                                           (util/stop e)
-                                                           (toggle-fn))} (ui/icon "dots")])
-                            #(context-menu-content db-id idx collapsed? block-count))
+                                         [:button.button {:on-click (fn [e]
+                                                                      (util/stop e)
+                                                                      (toggle-fn))} (ui/icon "dots")])
+                                        (fn [{:keys [close-fn]}]
+                                          (context-menu-content db-id idx collapsed? block-count close-fn)))
                [:button.button.close {:on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
              [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
               component]
              (when drag-from
                [:.sidebar-item-drop-overlay-wrapper
+                {:on-drag-over util/stop}
                 [:.sidebar-item-drop-overlay.top
                  {:on-drag-enter #(reset! *drag-to (dec idx))}]
                 [:.sidebar-item-drop-overlay.bottom
