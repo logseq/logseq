@@ -13,7 +13,7 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 24.3.1 -f",
+    "rebuild:all": "electron-rebuild -v 24.6.2 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -52,12 +52,12 @@
     "@electron-forge/maker-squirrel": "^6.0.4",
     "@electron-forge/maker-zip": "^6.0.4",
     "@electron/rebuild": "3.2.10",
-    "electron": "24.3.1",
+    "electron": "24.6.2",
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
   },
   "resolutions": {
-    "**/electron": "24.3.1",
+    "**/electron": "24.6.2",
     "**/node-gyp": "9.0.0"
   }
 }
