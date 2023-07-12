@@ -18,17 +18,20 @@
   (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
-(def categories
-  (vector :shortcut.category/basics
-          :shortcut.category/navigating
-          :shortcut.category/block-editing
-          :shortcut.category/block-command-editing
-          :shortcut.category/block-selection
-          :shortcut.category/formatting
-          :shortcut.category/toggle
-          :shortcut.category/whiteboard
-          :shortcut.category/plugins
-          :shortcut.category/others))
+(defonce categories
+         (vector :shortcut.category/basics
+                 :shortcut.category/navigating
+                 :shortcut.category/block-editing
+                 :shortcut.category/block-command-editing
+                 :shortcut.category/block-selection
+                 :shortcut.category/formatting
+                 :shortcut.category/toggle
+                 :shortcut.category/whiteboard
+                 :shortcut.category/plugins
+                 :shortcut.category/others))
+
+(defonce *refresh-sentry (atom 0))
+(defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
 
 (defn- to-vector [v]
   (when-not (nil? v)
@@ -71,7 +74,7 @@
           (ui/render-keyboard-shortcut keystroke)))]]))
 
 (rum/defc pane-controls
-  [q set-q! filters set-filters! keystroke set-keystroke! refresh-fn toggle-categories-fn]
+  [q set-q! filters set-filters! keystroke set-keystroke! toggle-categories-fn]
   (let [*search-ref (rum/use-ref nil)]
     [:div.cp__shortcut-page-x-pane-controls
      [:a.flex.items-center.icon-link
@@ -79,7 +82,7 @@
       (ui/icon "fold")]
 
      [:a.flex.items-center.icon-link
-      {:on-click refresh-fn}
+      {:on-click refresh-shortcuts-list!}
       (ui/icon "refresh")]
 
      [:span.search-input-wrap
@@ -139,9 +142,30 @@
 (rum/defc shortcut-conflicts-display
   [k conflicts-map]
 
-  [:div.py-2.text-red-500.text-xs
-   [:h4 (str k)]
-   [:pre (pr-str conflicts-map)]])
+  [:div.border.p-1
+   (for [[g ks] conflicts-map]
+     [:<>
+      [:h4 (pr-str g)]
+      [:ul
+       (for [v (vals ks)]
+         [:li
+          [:a {:on-click #()} (pr-str v)]])]])])
+
+
+(rum/defcs customize-shortcut-dialog-observer
+  < rum/reactive
+    {:init       (fn [state]
+                   (assoc state ::before-modal-id 1))
+     :did-update (fn [state]
+                   (assoc state ::before-modal-id (state/sub [:modal/id])))}
+  [state]
+  (let [_modal-id (state/sub :modal/id)
+        modal-show? (state/sub :modal/show)
+        before-modal-id (::before-modal-id state)]
+    (when (and (not modal-show?)
+               (= before-modal-id :customize-shortcut))
+      (prn "Event: the customize shortcut dialog closed? ;; TODO"))
+    [:<>]))
 
 (rum/defc customize-shortcut-dialog-inner
   [k action-name binding user-binding {:keys [saved-cb]}]
@@ -237,7 +261,7 @@
          :on-click (fn []
                      ;; TODO: check conflicts for the single same leader key
                      (let [binding' (if (nil? current-binding) [] current-binding)
-                           conflicts (dh/get-conflicts-by-keys binding' handler-id #{k})]
+                           conflicts (dh/get-conflicts-by-keys binding' handler-id {:exclude-ids #{k}})]
                        (if (seq conflicts)
                          (set-key-conflicts! conflicts)
                          (let [binding' (if (= binding binding') nil binding')]
@@ -255,11 +279,32 @@
   (->> categories
        (map #(vector % (into (sorted-map) (dh/binding-by-category %))))))
 
+(rum/defc shortcut-desc-label
+  [id binding-map]
+  (when (and id binding-map)
+    [:span {:title (some-> (str id) (string/replace "plugin." ""))}
+     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
+     [:small [:code.text-xs (str (:handler-id binding-map))]]]))
+
+(defn- open-customize-shortcut-dialog!
+  [id]
+  (when-let [{:keys [binding user-binding] :as m} (some->> id (get (dh/get-bindings-ids-map)))]
+    (let [binding (to-vector binding)
+          user-binding (and user-binding (to-vector user-binding))
+          label (shortcut-desc-label id m)
+          args [id label binding user-binding
+                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))}]]
+      (state/set-sub-modal!
+        (fn [] (apply customize-shortcut-dialog-inner args))
+        {:center? true
+         :id      :customize-shortcut
+         :payload args}))))
+
 (rum/defc shortcut-page-x
   []
   (let [_ (r/use-atom shortcut-config/*category)
+        _ (r/use-atom *refresh-sentry)
         [ready?, set-ready!] (rum/use-state false)
-        [refresh-v, refresh!] (rum/use-state 1)
         [filters, set-filters!] (rum/use-state #{})
         [keystroke, set-keystroke!] (rum/use-state "")
         [q set-q!] (rum/use-state nil)
@@ -283,7 +328,6 @@
                               (str (name id) " " (dh/get-shortcut-desc (assoc m :id id)))))]))))
 
         result-list-map (or matched-list-map categories-list-map)
-        refresh-list! #(refresh! (inc refresh-v))
         toggle-categories! #(if (= folded-categories all-categories)
                               (set-folded-categories! #{})
                               (set-folded-categories! all-categories))]
@@ -302,8 +346,9 @@
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
 
-      (pane-controls q set-q! filters set-filters! keystroke set-keystroke!
-                     refresh-list! toggle-categories!)]
+      (pane-controls q set-q! filters set-filters! keystroke set-keystroke! toggle-categories!)]
+
+     (customize-shortcut-dialog-observer)
 
      [:article
       (when-not ready?
@@ -329,12 +374,10 @@
 
             ;; binding row
             (when (or in-query? (not folded?))
-              (for [[id {:keys [binding user-binding handler-id] :as m}] binding-map
+              (for [[id {:keys [binding user-binding] :as m}] binding-map
                     :let [binding (to-vector binding)
                           user-binding (and user-binding (to-vector user-binding))
-                          label [:div {:title (some-> (str id) (string/replace "plugin." ""))}
-                                 [:span.pl-1 (dh/get-shortcut-desc (assoc m :id id))]
-                                 [:small [:code.text-xs (str handler-id)]]]
+                          label (shortcut-desc-label id m)
                           custom? (not (nil? user-binding))
                           disabled? (or (false? user-binding)
                                         (false? (first binding)))
@@ -365,11 +408,7 @@
                      [:a.action-wrap
                       {:class    (util/classnames [{:disabled disabled?}])
                        :on-click (when-not disabled?
-                                   #(state/set-sub-modal!
-                                      (fn [] (customize-shortcut-dialog-inner
-                                               id label binding user-binding
-                                               {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-list!)))}))
-                                      {:center? true}))}
+                                   #(open-customize-shortcut-dialog! id))}
 
                       (cond
                         (or user-binding (false? user-binding))

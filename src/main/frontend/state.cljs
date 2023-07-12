@@ -61,6 +61,7 @@
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
+     :modal/payload                         nil
      :modal/fullscreen?                     false
      :modal/close-btn?                      nil
      :modal/close-backdrop?                 true
@@ -1312,7 +1313,7 @@ Similar to re-frame subscriptions"
   ([panel-content]
    (set-sub-modal! panel-content
                    {:close-btn? true}))
-  ([panel-content {:keys [id label close-btn? close-backdrop? show? center?] :as opts}]
+  ([panel-content {:keys [id label payload close-btn? close-backdrop? show? center?] :as opts}]
    (if (not (modal-opened?))
      (set-modal! panel-content opts)
      (let [modals (:modal/subsets @state)
@@ -1322,6 +1323,7 @@ Similar to re-frame subscriptions"
                    #(not (nil? %1))
                    {:modal/id            id
                     :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                    :modal/payload       payload
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
                     :modal/close-btn?    close-btn?
@@ -1351,7 +1353,7 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
+  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?]}]
    (let [opened? (modal-opened?)]
      (when opened?
        (close-modal!))
@@ -1366,6 +1368,7 @@ Similar to re-frame subscriptions"
               :modal/label (or label (if center? "ls-modal-align-center" ""))
               :modal/show? (boolean modal-panel-content)
               :modal/panel-content modal-panel-content
+              :modal/payload payload
               :modal/fullscreen? fullscreen?
               :modal/close-btn? close-btn?
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
@@ -1379,6 +1382,7 @@ Similar to re-frame subscriptions"
       (swap! state assoc
              :modal/id nil
              :modal/label ""
+             :modal/payload nil
              :modal/show? false
              :modal/fullscreen? false
              :modal/panel-content nil
