@@ -196,7 +196,7 @@
 
 (rum/defc drop-area
   [idx drag-to]
-  [:.sidebar-drop-area {:on-drag-over #(when (not= drag-to idx) (reset! *drag-to idx))
+  [:.sidebar-drop-area {:on-drag-enter #(when (not= drag-to idx) (reset! *drag-to idx))
                         :class (when (= idx drag-to) "drag-over")}])
 
 (rum/defc sidebar-item < rum/reactive
@@ -211,18 +211,15 @@
          [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
-          (let [[title component] item
-                page-name (if (integer? db-id)
-                            (:block/name (db/entity db-id))
-                            db-id)]
+          (let [[title component] item]
             [:div.flex.flex-col.w-full.relative
              [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
               {:draggable true
                :on-drag-start (fn [event]
-                                (editor-handler/block->data-transfer! page-name event)
+                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
                                 (reset! *drag-from idx))
                :on-drag-end (fn [_event]
-                              (state/sidebar-move-block! idx drag-to)
+                              (when drag-to  (state/sidebar-move-block! idx drag-to))
                               (reset! *drag-to nil)
                               (reset! *drag-from nil))
                :on-click (fn [event]
@@ -251,11 +248,9 @@
              (when drag-from
                [:.sidebar-item-drop-overlay-wrapper
                 [:.sidebar-item-drop-overlay.top
-                 {:on-drag-over #(when (not= drag-to (dec idx))
-                                   (reset! *drag-to (dec idx)))}]
+                 {:on-drag-enter #(reset! *drag-to (dec idx))}]
                 [:.sidebar-item-drop-overlay.bottom
-                 {:on-drag-over #(when (not= drag-to idx)
-                                   (reset! *drag-to idx))}]])])]
+                 {:on-drag-enter #(reset! *drag-to idx)}]])])]
          (drop-area idx drag-to)]))))
 
 (defn- get-page
@@ -401,7 +396,6 @@
             (t :right-side-bar/history)]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.mx-2
-       {:on-drag-leave #(reset! *drag-to nil)}
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
@@ -413,9 +407,6 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub-right-sidebar-blocks)
-        blocks (if (empty? blocks)
-                 [[(state/get-current-repo) "contents" :contents nil]]
-                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]
