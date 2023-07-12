@@ -2696,7 +2696,8 @@
             (delete-concat current-block)))
 
         :else
-        (delete-and-update input current-pos (inc current-pos))))))
+        (delete-and-update 
+          input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
 (defn keydown-backspace-handler
   [cut? e]
