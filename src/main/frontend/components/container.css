@@ -635,7 +635,6 @@ html[data-theme='dark'] {
 
   .sidebar-item {
     @apply relative;
-    overflow: hidden;
     flex: 1 1;
     min-height: 100px;
     border: 1px solid transparent;
@@ -687,19 +686,23 @@ html[data-theme='dark'] {
     }
 
     .item-actions {
-      @apply h-full invisible;
-      opacity: 0;
+      @apply h-full;
 
       .button {
-        @apply p-0 pl-2 flex items-center h-full;
+        @apply invisible p-0 ml-2 flex items-center h-full;
+
+        &:focus {
+          @apply visible;
+        }
       }
     }
 
     .is-mobile &,
     &:hover {
       .item-actions {
-        @apply visible;
-        opacity: 1;
+        .button {
+          @apply visible;
+        }
       }
     }
   }
