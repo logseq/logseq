@@ -161,7 +161,8 @@
         (slide/slide page-name)]])
 
     :shortcut-settings
-    [(t :help/shortcuts) (shortcut-settings)]
+    [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
+     (shortcut-settings)]
 
     ["" [:span]]))
 
