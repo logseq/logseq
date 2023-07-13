@@ -196,7 +196,7 @@
 
 (rum/defc drop-indicator
   [idx drag-to]
-  [:.sidebar-drop-indicator {:on-drag-enter #(when (not= drag-to idx) (reset! *drag-to idx))
+  [:.sidebar-drop-indicator {:on-drag-enter #(when drag-to (reset! *drag-to idx))
                              :on-drag-over util/stop
                              :class (when (= idx drag-to) "drag-over")}])
 
