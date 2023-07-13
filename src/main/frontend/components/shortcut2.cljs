@@ -268,7 +268,7 @@
                            (notification/show!
                              (str "Shortcut conflicts from existing binding: "
                                   (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
-                             :error true :shortcut-conflicts/warning 5000 nil)
+                             :error true :shortcut-conflicts/warning 5000)
                            ;; get conflicts from the existed binding maps
                            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
                              (if-not (seq conflicts-map)
