@@ -194,11 +194,20 @@
                               (rfe/href :whiteboard {:name name})
                               (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page) nil)))])
 
-(rum/defc drop-area
+(rum/defc drop-indicator
   [idx drag-to]
-  [:.sidebar-drop-area {:on-drag-enter #(when (not= drag-to idx) (reset! *drag-to idx))
-                        :on-drag-over util/stop
-                        :class (when (= idx drag-to) "drag-over")}])
+  [:.sidebar-drop-indicator {:on-drag-enter #(when (not= drag-to idx) (reset! *drag-to idx))
+                             :on-drag-over util/stop
+                             :class (when (= idx drag-to) "drag-over")}])
+
+(rum/defc drop-area
+  [idx]
+  [:.sidebar-item-drop-area
+   {:on-drag-over util/stop}
+   [:.sidebar-item-drop-area-overlay.top
+    {:on-drag-enter #(reset! *drag-to (dec idx))}]
+   [:.sidebar-item-drop-area-overlay.bottom
+    {:on-drag-enter #(reset! *drag-to idx)}]])
 
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type block-count]
@@ -208,7 +217,7 @@
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
-         (when (zero? idx) (drop-area (dec idx) drag-to))
+         (when (zero? idx) (drop-indicator (dec idx) drag-to))
          [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
@@ -255,14 +264,8 @@
                                           :aria-labelledby (str "sidebar-panel-header-" idx)
                                           :class (if collapsed? "hidden" "initial")}
               component]
-             (when drag-from
-               [:.sidebar-item-drop-overlay-wrapper
-                {:on-drag-over util/stop}
-                [:.sidebar-item-drop-overlay.top
-                 {:on-drag-enter #(reset! *drag-to (dec idx))}]
-                [:.sidebar-item-drop-overlay.bottom
-                 {:on-drag-enter #(reset! *drag-to idx)}]])])]
-         (drop-area idx drag-to)]))))
+             (when drag-from (drop-area idx))])]
+         (drop-indicator idx drag-to)]))))
 
 (defn- get-page
   [match]
