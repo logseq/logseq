@@ -689,10 +689,10 @@ html[data-theme='dark'] {
       @apply h-full;
 
       .button {
-        @apply invisible p-0 ml-2 flex items-center;
+        @apply hidden p-0 ml-2 flex items-center;
 
         &:focus {
-          @apply visible;
+          @apply flex;
         }
       }
     }
@@ -701,7 +701,7 @@ html[data-theme='dark'] {
     &:hover {
       .item-actions {
         .button {
-          @apply visible;
+          @apply flex;
         }
       }
     }
