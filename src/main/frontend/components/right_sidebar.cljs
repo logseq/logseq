@@ -174,9 +174,7 @@
 (rum/defc context-menu-content
   [db-id idx collapsed? block-count toggle-fn]
   [:.menu-links-wrapper.text-left
-   {:on-click (fn [e]
-                (.stopPropagation e)
-                (toggle-fn))}
+   {:on-click toggle-fn}
    (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil))
    (when (> block-count 1) (ui/menu-link {:on-click (fn []
@@ -216,7 +214,7 @@
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
             [:div.flex.flex-col.w-full.relative
-             [:button.flex.flex-row.justify-between.p-2.sidebar-item-header.color-level
+             [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level
               {:draggable true
                :on-drag-start (fn [event]
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
@@ -225,16 +223,16 @@
                               (when drag-to (state/sidebar-move-block! idx drag-to))
                               (reset! *drag-to nil)
                               (reset! *drag-from nil))
-               :on-click (fn [event]
-                           (util/stop event)
-                           (state/sidebar-block-toggle-collapse! db-id))
                :on-mouse-up (fn [event]
                               (when (= (.-which (.-nativeEvent event)) 2)
                                 (state/sidebar-remove-block! idx)))
                :on-context-menu (fn [e]
                                   (util/stop e)
                                   (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count #())))}
-              [:div.flex.flex-row.overflow-hidden
+              [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
+               {:on-click (fn [event]
+                            (util/stop event)
+                            (state/sidebar-block-toggle-collapse! db-id))}
                [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                 (ui/rotating-arrow collapsed?)]
                [:div.ml-1.font-medium.overflow-hidden
