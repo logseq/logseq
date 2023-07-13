@@ -150,7 +150,7 @@
         (if-let [icon (get-in page [:block/properties :icon])]
           [:.text-md.mr-2 icon]
           (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
-        (db-model/get-page-original-name page-name)]
+        [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
        (page-cp repo page-name)])
 
     :page-slide-view
