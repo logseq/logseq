@@ -230,7 +230,7 @@
                                   (util/stop e)
                                   (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count #())))}
               [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
-               {:area-expanded (not collapsed?)
+               {:aria-expanded (str (not collapsed?))
                 :id (str "sidebar-panel-header-" idx)
                 :aria-controls (str "sidebar-panel-content-" idx)
                 :on-click (fn [event]
