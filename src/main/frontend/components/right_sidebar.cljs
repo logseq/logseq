@@ -209,11 +209,17 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
+
+(rum/defc inner-component <
+  {:should-update (fn [_prev-state state] (last (:rum/args state)))}
+  [component _should-update?]
+  component)
+
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type block-count]
-  (let [item (build-sidebar-item repo idx db-id block-type)
+  (let [drag-from (rum/react *drag-from)
         drag-to (rum/react *drag-to)
-        drag-from (rum/react *drag-from)]
+        item (build-sidebar-item repo idx db-id block-type)]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
@@ -251,19 +257,19 @@
                 title]]
               [:.item-actions.flex.items-center
                (ui/dropdown (fn [{:keys [toggle-fn]}]
-                                         [:button.button {:title (t :right-side-bar/pane-more)
-                                                          :on-click (fn [e]
-                                                                      (util/stop e)
-                                                                      (toggle-fn))} (ui/icon "dots")])
-                                        (fn [{:keys [close-fn]}]
-                                          (context-menu-content db-id idx collapsed? block-count close-fn)))
-               [:button.button.close {:title (t :right-side-bar/pane-close) 
+                              [:button.button {:title (t :right-side-bar/pane-more)
+                                               :on-click (fn [e]
+                                                           (util/stop e)
+                                                           (toggle-fn))} (ui/icon "dots")])
+                            (fn [{:keys [close-fn]}]
+                              (context-menu-content db-id idx collapsed? block-count close-fn)))
+               [:button.button.close {:title (t :right-side-bar/pane-close)
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
              [:div.scrollbar-spacing.p-4 {:role "region"
                                           :id (str "sidebar-panel-content-" idx)
                                           :aria-labelledby (str "sidebar-panel-header-" idx)
                                           :class (if collapsed? "hidden" "initial")}
-              component]
+              (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))
 
@@ -349,8 +355,8 @@
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
-                                    ((add-resizing-class)
-                                     (set-width! ratio)))))))
+                                    (do (add-resizing-class)
+                                        (set-width! ratio)))))))
              (.on "keyup" remove-resizing-class)))
        #())
      [])
@@ -414,7 +420,7 @@
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
              (sidebar-item repo idx db-id block-type block-count)
-             (str "sidebar-block-" idx)))
+             (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 
