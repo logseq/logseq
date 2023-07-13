@@ -622,12 +622,16 @@ html[data-theme='dark'] {
     @apply relative;
     height: 8px;
 
+    &::after {
+      @apply absolute block w-full rounded;
+      top: 2px;
+      height: 4px;
+      content: " ";
+      transition: background-color 200ms;
+    }
+
     &.drag-over {
       &::after {
-        @apply absolute block w-full;
-        top: 2px;
-        height: 4px;
-        content: " ";
         background-color: var(--ls-active-primary-color);
       }
     }
