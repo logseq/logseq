@@ -175,24 +175,24 @@
   [db-id idx collapsed? block-count toggle-fn]
   [:.menu-links-wrapper.text-left
    {:on-click toggle-fn}
-   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} "Close" nil)
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} "Close others" nil))
+   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close) nil)
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-clese-others) nil))
    (when (> block-count 1) (ui/menu-link {:on-click (fn []
                                                       (state/clear-sidebar-blocks!)
-                                                      (state/hide-right-sidebar!))} "Close all" nil))
+                                                      (state/hide-right-sidebar!))} (t :right-side-bar/pane-clese-all) nil))
    (when (or (not collapsed?) (> block-count 1)) [:hr.menu-separator])
-   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Collapse" nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} "Collapse others" nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} "Collapse all" nil))
+   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all) nil))
    (when (or collapsed? (> block-count 1)) [:hr.menu-separator])
-   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} "Expand" nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)} "Expand all" nil))
+   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)}  (t :right-side-bar/pane-expand-all) nil))
    (when (integer? db-id) [:hr.menu-separator])
    (when (integer? db-id)
      (let [name (:block/name (db/entity db-id))]
        (ui/menu-link {:href (if (db-model/whiteboard-page? name)
                               (rfe/href :whiteboard {:name name})
-                              (rfe/href :page {:name name}))} "Open as page" nil)))])
+                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page) nil)))])
 
 (rum/defc drop-area
   [idx drag-to]
@@ -242,13 +242,13 @@
                 title]]
               [:.item-actions.flex.items-center
                (ui/dropdown (fn [{:keys [toggle-fn]}]
-                                         [:button.button {:title "More"
+                                         [:button.button {:title (t :right-side-bar/pane-more)
                                                           :on-click (fn [e]
                                                                       (util/stop e)
                                                                       (toggle-fn))} (ui/icon "dots")])
                                         (fn [{:keys [close-fn]}]
                                           (context-menu-content db-id idx collapsed? block-count close-fn)))
-               [:button.button.close {:title "Close" 
+               [:button.button.close {:title (t :right-side-bar/pane-close) 
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
              [:div.scrollbar-spacing.p-4 {:role "region"
                                           :id (str "sidebar-panel-content-" idx)
