@@ -689,7 +689,7 @@ html[data-theme='dark'] {
       @apply h-full;
 
       .button {
-        @apply invisible p-0 ml-2 flex items-center h-full;
+        @apply invisible p-0 ml-2 flex items-center;
 
         &:focus {
           @apply visible;

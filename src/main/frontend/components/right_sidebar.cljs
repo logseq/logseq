@@ -230,22 +230,30 @@
                                   (util/stop e)
                                   (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count #())))}
               [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
-               {:on-click (fn [event]
+               {:area-expanded (not collapsed?)
+                :id (str "sidebar-panel-header-" idx)
+                :aria-controls (str "sidebar-panel-content-" idx)
+                :on-click (fn [event]
                             (util/stop event)
                             (state/sidebar-block-toggle-collapse! db-id))}
                [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                 (ui/rotating-arrow collapsed?)]
                [:div.ml-1.font-medium.overflow-hidden
                 title]]
-              [:.item-actions.flex
+              [:.item-actions.flex.items-center
                (ui/dropdown (fn [{:keys [toggle-fn]}]
-                                         [:button.button {:on-click (fn [e]
+                                         [:button.button {:title "More"
+                                                          :on-click (fn [e]
                                                                       (util/stop e)
                                                                       (toggle-fn))} (ui/icon "dots")])
                                         (fn [{:keys [close-fn]}]
                                           (context-menu-content db-id idx collapsed? block-count close-fn)))
-               [:button.button.close {:on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
-             [:div.scrollbar-spacing.p-4 {:class (if collapsed? "hidden" "initial")}
+               [:button.button.close {:title "Close" 
+                                      :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
+             [:div.scrollbar-spacing.p-4 {:role "region"
+                                          :id (str "sidebar-panel-content-" idx)
+                                          :aria-labelledby (str "sidebar-panel-header-" idx)
+                                          :class (if collapsed? "hidden" "initial")}
               component]
              (when drag-from
                [:.sidebar-item-drop-overlay-wrapper
