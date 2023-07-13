@@ -694,20 +694,6 @@ svg.tip {
   color: var(--ls-active-primary-color);
 }
 
-/* endregion */
-
-/* region FIXME: CodeMirror override (?) */
-.CodeMirror pre.CodeMirror-line,
-.CodeMirror-scroll,
-.CodeMirror-sizer,
-.CodeMirror-gutter,
-.CodeMirror-gutters,
-.CodeMirror-linenumber {
-  font-size: 14px;
-}
-
-/* endregion */
-
 hr {
   margin: 2rem 0;
   border-color: var(--ls-border-color, #ccc);
