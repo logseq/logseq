@@ -153,7 +153,7 @@
 .cp__shortcut-conflicts-list {
   &-wrap {
     > section {
-      @apply bg-gray-3 border-[2px] mb-3;
+      @apply bg-gray-3 border-[2px] mb-3 dark:bg-transparent;
 
       > ul {
         @apply px-2 pb-2 m-0 list-none;

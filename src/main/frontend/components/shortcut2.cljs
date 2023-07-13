@@ -197,15 +197,38 @@
 
         handler-id (rum/use-memo #(dh/get-group k))
         dirty? (not= (or user-binding binding) current-binding)
-        keypressed? (not= "" keystroke)]
+        keypressed? (not= "" keystroke)
+
+        save-keystroke-fn!
+        (fn []
+          ;; parse current binding conflicts
+          (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
+            (notification/show!
+              (str "Shortcut conflicts from existing binding: "
+                   (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
+              :error true :shortcut-conflicts/warning 5000)
+
+            ;; get conflicts from the existed bindings map
+            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
+              (if-not (seq conflicts-map)
+                (do (set-current-binding! (conj current-binding keystroke))
+                    (set-keystroke! "")
+                    (set-key-conflicts! nil))
+
+                ;; show conflicts
+                (set-key-conflicts! conflicts-map)))))]
 
     (rum/use-effect!
       (fn []
         (let [mid (state/sub :modal/id)
-              mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))]
+              mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))
+              el (rum/deref *ref-el)]
           (when (or (and (not mid') (= mid modal-id))
                     (= mid' modal-id))
-            (some-> (rum/deref *ref-el) (.focus)))))
+            (some-> el (.focus))
+            (js/setTimeout
+              #(some-> (.querySelector el ".shortcut-record-control a.submit")
+                       (.click)) 200))))
       [modal-life])
 
     (rum/use-effect!
@@ -261,24 +284,10 @@
            (when-not (string/blank? keystroke)
              (ui/render-keyboard-shortcut keystroke))
 
-           [:a.flex.items-center.active:opacity-90
-            {:on-click (fn []
-                         ;; parse current binding conflicts
-                         (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
-                           (notification/show!
-                             (str "Shortcut conflicts from existing binding: "
-                                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
-                             :error true :shortcut-conflicts/warning 5000)
-                           ;; get conflicts from the existed binding maps
-                           (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
-                             (if-not (seq conflicts-map)
-                               (do (set-current-binding! (conj current-binding keystroke))
-                                   (set-keystroke! ""))
-
-                               ;; show conflicts
-                               (set-key-conflicts! conflicts-map)))))}
+           [:a.flex.items-center.active:opacity-90.submit
+            {:on-click save-keystroke-fn!}
             (ui/icon "check" {:size 14})]
-           [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90
+           [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90.cancel
             {:on-click (fn []
                          (set-keystroke! "")
                          (set-key-conflicts! nil))}
