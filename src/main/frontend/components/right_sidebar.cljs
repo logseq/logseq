@@ -172,7 +172,7 @@
   (atom nil))
 
 (rum/defc context-menu-content
-  [db-id idx collapsed? block-count toggle-fn]
+  [db-id idx type collapsed? block-count toggle-fn]
   [:.menu-links-wrapper.text-left
    {:on-click toggle-fn}
    (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close) nil)
@@ -187,8 +187,8 @@
    (when (or collapsed? (> block-count 1)) [:hr.menu-separator])
    (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand) nil))
    (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)}  (t :right-side-bar/pane-expand-all) nil))
-   (when (integer? db-id) [:hr.menu-separator])
-   (when (integer? db-id)
+   (when (= type :page) [:hr.menu-separator])
+   (when (= type :page)
      (let [name (:block/name (db/entity db-id))]
        (ui/menu-link {:href (if (db-model/whiteboard-page? name)
                               (rfe/href :whiteboard {:name name})
@@ -243,7 +243,7 @@
                                 (state/sidebar-remove-block! idx)))
                :on-context-menu (fn [e]
                                   (util/stop e)
-                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx collapsed? block-count #())))}
+                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx block-type collapsed? block-count #())))}
               [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
                {:aria-expanded (str (not collapsed?))
                 :id (str "sidebar-panel-header-" idx)
@@ -262,7 +262,7 @@
                                                            (util/stop e)
                                                            (toggle-fn))} (ui/icon "dots")])
                             (fn [{:keys [close-fn]}]
-                              (context-menu-content db-id idx collapsed? block-count close-fn)))
+                              (context-menu-content db-id idx block-type collapsed? block-count close-fn)))
                [:button.button.close {:title (t :right-side-bar/pane-close)
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
              [:div.scrollbar-spacing.p-4 {:role "region"
