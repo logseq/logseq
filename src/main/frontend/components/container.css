@@ -618,7 +618,7 @@ html[data-theme='dark'] {
     margin-left: 12px;
   }
 
-  .sidebar-drop-area {
+  .sidebar-drop-indicator {
     @apply relative;
     height: 8px;
 
@@ -651,11 +651,11 @@ html[data-theme='dark'] {
       }
     }
 
-    .sidebar-item-drop-overlay-wrapper {
+    .sidebar-item-drop-area {
       @apply flex flex-col absolute h-full w-full;
     }
 
-    .sidebar-item-drop-overlay {
+    .sidebar-item-drop-area-overlay {
       flex: 1 1 50%;
     }
 
