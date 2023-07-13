@@ -32,10 +32,13 @@
 
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
+(defonce *global-listener-sentry (atom false))
 
 (defn- to-vector [v]
   (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
+
+(declare customize-shortcut-dialog-inner)
 
 (rum/defc keyboard-filter-record-inner
   [keystroke set-keystroke! close-fn]
@@ -139,18 +142,47 @@
 
        nil)]))
 
+(rum/defc shortcut-desc-label
+  [id binding-map]
+  (when (and id binding-map)
+    [:span {:title (some-> (str id) (string/replace "plugin." ""))}
+     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
+     [:small [:code.text-xs (str (:handler-id binding-map))]]]))
+
+(defn- open-customize-shortcut-dialog!
+  [id]
+  (when-let [{:keys [binding user-binding] :as m} (some->> id (get (dh/get-bindings-ids-map)))]
+    (let [binding (to-vector binding)
+          user-binding (and user-binding (to-vector user-binding))
+          label (shortcut-desc-label id m)
+          args [id label binding user-binding
+                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))}]]
+      (state/set-sub-modal!
+        (fn [] (apply customize-shortcut-dialog-inner args))
+        {:center? true
+         :id      :customize-shortcut
+         :payload args}))))
+
 (rum/defc shortcut-conflicts-display
-  [k conflicts-map]
+  [_k conflicts-map]
 
-  [:div.border.p-1
+  [:div.cp__shortcut-conflicts-list-wrap
    (for [[g ks] conflicts-map]
-     [:<>
-      [:h4 (pr-str g)]
+     [:section.relative
+      [:h2 (ui/icon "alert-triangle" {:size 15})
+       [:span "Keymap conflicts for"]
+       [:code (shortcut-utils/decorate-binding g)]]
       [:ul
-       (for [v (vals ks)]
-         [:li
-          [:a {:on-click #()} (pr-str v)]])]])])
-
+       (for [v (vals ks)
+             :let [k (first v)
+                   vs (second v)]]
+         (for [[id' handler-id] vs]
+           [:li
+            [:a.select-none.hover:underline
+             {:on-click #(open-customize-shortcut-dialog! id')}
+             [:code.inline-block.mr-1.text-xs
+              (shortcut-utils/decorate-binding k)]
+             [:small (str id')] [:small (str handler-id)]]]))]])])
 
 (rum/defcs customize-shortcut-dialog-observer
   < rum/reactive
@@ -169,7 +201,8 @@
 
 (rum/defc customize-shortcut-dialog-inner
   [k action-name binding user-binding {:keys [saved-cb]}]
-  (let [[keystroke set-keystroke!] (rum/use-state "")
+  (let [*ref-el (rum/use-ref nil)
+        [keystroke set-keystroke!] (rum/use-state "")
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
 
@@ -179,22 +212,36 @@
 
     (rum/use-effect!
       (fn []
-        (let [key-handler (KeyHandler. js/document)]
+        (let [^js el (rum/deref *ref-el)
+              key-handler (KeyHandler. el)
+
+              teardown-global!
+              (when-not @*global-listener-sentry
+                (shortcut/unlisten-all)
+                (reset! *global-listener-sentry true)
+                (fn []
+                  (shortcut/listen-all)
+                  (reset! *global-listener-sentry false)))]
+
           ;; setup
-          (shortcut/unlisten-all)
           (events/listen key-handler "key"
                          (fn [^js e]
                            (.preventDefault e)
                            (set-key-conflicts! nil)
                            (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
+          ;; active
+          (.focus el)
+
           ;; teardown
-          #(do (shortcut/listen-all)
+          #(do (some-> teardown-global! (apply nil))
                (.dispose key-handler))))
       [])
 
     [:div.cp__shortcut-page-x-record-dialog-inner
-     {:class (util/classnames [{:keypressed keypressed? :dirty dirty?}])}
+     {:class     (util/classnames [{:keypressed keypressed? :dirty dirty?}])
+      :tab-index -1
+      :ref       *ref-el}
      [:div.sm:w-lsm
       [:p.mb-4 "Customize shortcuts for the " [:b action-name] " action."]
 
@@ -278,27 +325,6 @@
   []
   (->> categories
        (map #(vector % (into (sorted-map) (dh/binding-by-category %))))))
-
-(rum/defc shortcut-desc-label
-  [id binding-map]
-  (when (and id binding-map)
-    [:span {:title (some-> (str id) (string/replace "plugin." ""))}
-     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
-     [:small [:code.text-xs (str (:handler-id binding-map))]]]))
-
-(defn- open-customize-shortcut-dialog!
-  [id]
-  (when-let [{:keys [binding user-binding] :as m} (some->> id (get (dh/get-bindings-ids-map)))]
-    (let [binding (to-vector binding)
-          user-binding (and user-binding (to-vector user-binding))
-          label (shortcut-desc-label id m)
-          args [id label binding user-binding
-                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))}]]
-      (state/set-sub-modal!
-        (fn [] (apply customize-shortcut-dialog-inner args))
-        {:center? true
-         :id      :customize-shortcut
-         :payload args}))))
 
 (rum/defc shortcut-page-x
   []

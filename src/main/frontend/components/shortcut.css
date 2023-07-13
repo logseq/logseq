@@ -100,6 +100,13 @@
   }
 
   &-record-dialog-inner {
+    @apply p-10 m-[-30px];
+
+    &:active, &:focus, &:focus-within {
+      outline: auto;
+      outline-color: burlywood;
+    }
+
     .shortcuts-keys-wrap {
       @apply flex items-center my-4 flex-wrap;
 
@@ -138,6 +145,22 @@
     &.dirty {
       .reset-btn {
         @apply opacity-100 cursor-pointer;
+      }
+    }
+  }
+}
+
+.cp__shortcut-conflicts-list {
+  &-wrap {
+    > section {
+      @apply bg-gray-3 border-[2px] mb-3;
+
+      > ul {
+        @apply px-2 pb-2 m-0 list-none;
+      }
+
+      > h2 {
+        @apply flex items-center p-2 text-red-9 text-sm space-x-1 font-extrabold;
       }
     }
   }
