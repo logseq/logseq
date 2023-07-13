@@ -31,7 +31,7 @@
                                                           :status status
                                                           :close-cb close-cb}))
 
-     (when (and clear? (not= status :error))
+     (when (or clear? (not= status :error))
        (js/setTimeout #(clear! uid) (or timeout 1500)))
 
      uid)))

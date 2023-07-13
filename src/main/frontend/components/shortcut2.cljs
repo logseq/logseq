@@ -32,7 +32,8 @@
 
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
-(defonce *global-listener-sentry (atom false))
+(defonce *global-listener-setup? (atom false))
+(defonce *customize-modal-life-sentry (atom 0))
 
 (defn- to-vector [v]
   (when-not (nil? v)
@@ -154,13 +155,15 @@
   (when-let [{:keys [binding user-binding] :as m} (some->> id (get (dh/get-bindings-ids-map)))]
     (let [binding (to-vector binding)
           user-binding (and user-binding (to-vector user-binding))
+          modal-id (str :customize-shortcut id)
           label (shortcut-desc-label id m)
           args [id label binding user-binding
-                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))}]]
+                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))
+                 :modal-id modal-id}]]
       (state/set-sub-modal!
         (fn [] (apply customize-shortcut-dialog-inner args))
         {:center? true
-         :id      :customize-shortcut
+         :id      modal-id
          :payload args}))))
 
 (rum/defc shortcut-conflicts-display
@@ -184,24 +187,10 @@
               (shortcut-utils/decorate-binding k)]
              [:small (str id')] [:small (str handler-id)]]]))]])])
 
-(rum/defcs customize-shortcut-dialog-observer
-  < rum/reactive
-    {:init       (fn [state]
-                   (assoc state ::before-modal-id 1))
-     :did-update (fn [state]
-                   (assoc state ::before-modal-id (state/sub [:modal/id])))}
-  [state]
-  (let [_modal-id (state/sub :modal/id)
-        modal-show? (state/sub :modal/show)
-        before-modal-id (::before-modal-id state)]
-    (when (and (not modal-show?)
-               (= before-modal-id :customize-shortcut))
-      (prn "Event: the customize shortcut dialog closed? ;; TODO"))
-    [:<>]))
-
 (rum/defc customize-shortcut-dialog-inner
-  [k action-name binding user-binding {:keys [saved-cb]}]
+  [k action-name binding user-binding {:keys [saved-cb modal-id]}]
   (let [*ref-el (rum/use-ref nil)
+        [modal-life _] (r/use-atom *customize-modal-life-sentry)
         [keystroke set-keystroke!] (rum/use-state "")
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
@@ -212,16 +201,25 @@
 
     (rum/use-effect!
       (fn []
+        (let [mid (state/sub :modal/id)
+              mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))]
+          (when (or (and (not mid') (= mid modal-id))
+                    (= mid' modal-id))
+            (some-> (rum/deref *ref-el) (.focus)))))
+      [modal-life])
+
+    (rum/use-effect!
+      (fn []
         (let [^js el (rum/deref *ref-el)
               key-handler (KeyHandler. el)
 
               teardown-global!
-              (when-not @*global-listener-sentry
+              (when-not @*global-listener-setup?
                 (shortcut/unlisten-all)
-                (reset! *global-listener-sentry true)
+                (reset! *global-listener-setup? true)
                 (fn []
                   (shortcut/listen-all)
-                  (reset! *global-listener-sentry false)))]
+                  (reset! *global-listener-setup? false)))]
 
           ;; setup
           (events/listen key-handler "key"
@@ -235,7 +233,8 @@
 
           ;; teardown
           #(do (some-> teardown-global! (apply nil))
-               (.dispose key-handler))))
+               (.dispose key-handler)
+               (swap! *customize-modal-life-sentry inc))))
       [])
 
     [:div.cp__shortcut-page-x-record-dialog-inner
@@ -268,7 +267,8 @@
                          (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
                            (notification/show!
                              (str "Shortcut conflicts from existing binding: "
-                                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %))))) :error)
+                                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
+                             :error true :shortcut-conflicts/warning 5000 nil)
                            ;; get conflicts from the existed binding maps
                            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
                              (if-not (seq conflicts-map)
@@ -373,8 +373,6 @@
               " ..."))]
 
       (pane-controls q set-q! filters set-filters! keystroke set-keystroke! toggle-categories!)]
-
-     (customize-shortcut-dialog-observer)
 
      [:article
       (when-not ready?
