@@ -542,6 +542,7 @@
   (p/let [_ (ipc/ipc :db-new full-graph-name)
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
+          _ (route-handler/redirect-to-home!)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
                           {:skip-persist? true})
           initial-data [{:block/uuid (db/new-block-id)
@@ -570,6 +571,4 @@
       (state/pub-event! [:notification/show
                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                           :status :error}])
-      (do
-        (route-handler/redirect-to-home!)
-        (create-db full-graph-name)))))
+      (create-db full-graph-name))))
