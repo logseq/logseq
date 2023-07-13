@@ -761,8 +761,6 @@
      :editor/down
      :editor/left
      :editor/right
-     :editor/zoom-in
-     :editor/zoom-out
      :editor/collapse-block-children
      :editor/expand-block-children
      :editor/toggle-open-blocks
