@@ -11,7 +11,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.util :as util]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -38,6 +39,22 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+
+(def ^:private gp-mldoc-config (gp-mldoc/default-config :markdown))
+
+(defn extract-refs-from-text
+  [text]
+  (when (string? text)
+    (let [ast-refs (gp-mldoc/get-references text gp-mldoc-config)
+          page-refs (map #(gp-block/get-page-reference % :markdown) ast-refs)
+          block-refs (map #(gp-block/get-block-reference %) ast-refs)
+          refs' (->> (concat page-refs block-refs)
+                     (remove string/blank?)
+                     distinct)]
+      (-> (map #(if (util/uuid-string? %)
+                  {:block/uuid (uuid %)}
+                  (page-name->map % true)) refs')
+          set))))
 
 (defn- normalize-as-percentage
   [block]

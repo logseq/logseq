@@ -15,7 +15,8 @@
             [frontend.util.property-edit :as property-edit]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [frontend.format.block :as block]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -141,6 +142,33 @@
                                     {:db/id (:db/id block-entity)
                                      :block/instance [:block/uuid instance-id]}])))))))
 
+(defn rebuild-block-refs
+  [block new-properties & {:keys [skip-content-parsing?]}]
+  (let [property-key-refs (keys new-properties)
+        property-value-refs (->> (vals new-properties)
+                                 (mapcat (fn [v]
+                                           (cond
+                                             (and (coll? v) (uuid? (first v)))
+                                             v
+                                             (uuid? v)
+                                             [v]
+                                             :else
+                                             nil))))
+        property-refs (->> (concat property-key-refs property-value-refs)
+                           (map (fn [id] {:block/uuid id})))
+        content-refs (when-not skip-content-parsing?
+                       (some-> (:block/content block) block/extract-refs-from-text))]
+    (concat property-refs content-refs)))
+
+(defn- rebuild-refs
+  [txs-state block m]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (let [refs (->> (rebuild-block-refs block (:block/properties block)
+                                        :skip-content-parsing? true)
+                    (concat (:block/refs m)))]
+      (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
+                                               :block/refs refs}]))))))
+
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
 
@@ -225,6 +253,8 @@
         (swap! txs-state conj (dissoc m :db/other-tx)))
 
       (assoc-instance-when-save txs-state block-entity m)
+
+      (rebuild-refs txs-state block-entity m)
 
       this))
 

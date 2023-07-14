@@ -68,20 +68,6 @@
 (def builtin-schema->type
   (set/map-invert builtin-schema-types))
 
-(def ^:private gp-mldoc-config (gp-mldoc/default-config :markdown))
-
-(defn extract-page-refs-from-prop-str-value
-  [str-v]
-  (let [ast-refs (gp-mldoc/get-references str-v gp-mldoc-config)
-        refs (map #(gp-block/get-page-reference % #{}) ast-refs)
-        refs' (->> refs
-                   (remove string/blank?)
-                   distinct)]
-    (-> (map #(if (util/uuid-string? %)
-             {:block/uuid (uuid %)}
-             (block/page-name->map % true)) refs')
-        set)))
-
 (defn- infer-schema-from-input-string
   [v-str]
   (try
@@ -164,11 +150,12 @@
               (notification/show! msg' :warning))
             (do
               (upsert-property! repo property k-name property-uuid property-type)
-              (let [refs (when (= property-type :default)
-                           (extract-page-refs-from-prop-str-value v*))
-                    refs' (when (seq refs)
-                            (concat (:block/refs (db/pull [:block/uuid (:block/uuid block)]))
-                                    refs))
+              (let [refs (cond
+                           (= property-type :default)
+                           (block/extract-refs-from-text v*)
+
+                           (uuid? v*)
+                           [:block/uuid v*])
                     v' (if (= property-type :default)
                          (if (seq refs)
                            (distinct (map :block/uuid refs)) v*)
@@ -196,24 +183,30 @@
                     block-properties-text-values
                     (if (= property-type :default)
                       (assoc (:block/properties-text-values block) property-uuid v*)
-                      (dissoc (:block/properties-text-values block) property-uuid))]
+                      (dissoc (:block/properties-text-values block) property-uuid))
+                    refs (outliner-core/rebuild-block-refs block block-properties)]
                 ;; TODO: fix block/properties-order
                 (db/transact! repo
-                  [{:block/uuid (:block/uuid block)
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:block/uuid (:block/uuid block)
                     :block/properties block-properties
                     :block/properties-text-values block-properties-text-values
-                    :block/refs refs'}])))))))))
+                    :block/refs refs}])))))))))
 
 (defn remove-property!
-  [repo block k-uuid-or-builtin-k-name]
-  {:pre (string? k-uuid-or-builtin-k-name)}
+  [repo block property-uuid]
+  {:pre (string? property-uuid)}
   (let [origin-properties (:block/properties block)]
-    (assert (contains? (set (keys origin-properties)) k-uuid-or-builtin-k-name))
-    (db/transact!
-      repo
-      [{:block/uuid (:block/uuid block)
-        :block/properties (dissoc origin-properties k-uuid-or-builtin-k-name)
-        :block/properties-text-values (dissoc (:block/properties-text-values block) k-uuid-or-builtin-k-name)}])))
+    (when (contains? (set (keys origin-properties)) property-uuid)
+      (let [properties' (dissoc origin-properties property-uuid)
+            refs (outliner-core/rebuild-block-refs block properties')]
+        (db/transact!
+         repo
+          [[:db/retract (:db/id block) :block/refs]
+           {:block/uuid (:block/uuid block)
+           :block/properties properties'
+           :block/properties-text-values (dissoc (:block/properties-text-values block) property-uuid)
+           :block/refs refs}])))))
 
 (defn- fix-cardinality-many-values!
   [property-uuid]
@@ -254,12 +247,13 @@
             (let [properties (:block/properties block)
                   properties' (update properties property-id
                                       (fn [col]
-                                        (vec (remove #{property-value} col))))]
-              (outliner-tx/transact!
-                {:outliner-op :save-block}
-                (outliner-core/save-block!
+                                        (vec (remove #{property-value} col))))
+                  refs (outliner-core/rebuild-block-refs block properties')]
+              (db/transact! repo
+                [[:db/retract (:db/id block) :block/refs]
                  {:block/uuid (:block/uuid block)
-                  :block/properties properties'}))))
+                  :block/properties properties'
+                  :block/refs refs}])))
           (state/clear-edit!))))))
 
 (defn set-editing-new-property!
