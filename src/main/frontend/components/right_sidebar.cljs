@@ -5,7 +5,6 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -19,10 +18,10 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [goog.object :as gobj]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.common :as common-handler]))
 
 (rum/defc toggle
   []
@@ -61,12 +60,12 @@
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
-    [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
+    [[:.flex.items-center {:class (when ref? "ml-8")}
+      (ui/icon "block" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
-                         :sidebar-key sidebar-key} repo block-id {})]
-     [:div.ml-2
-      (block-cp repo idx block)]]))
+                         :sidebar-key sidebar-key} repo block-id {:indent? false})]
+     (block-cp repo idx block)]))
 
 (rum/defc history-action-info
   [[k v]]
@@ -116,18 +115,18 @@
   [repo idx db-id block-type]
   (case (keyword block-type)
     :contents
-    [(t :right-side-bar/contents)
+    [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
      (contents)]
 
     :help
-    [(t :right-side-bar/help) (onboarding/help)]
+    [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
 
     :page-graph
-    [(t :right-side-bar/page-graph)
+    [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
      (page/page-graph)]
 
     :history
-    [(t :right-side-bar/history)
+    [[:.flex.items-center (ui/icon "history" {:class "text-md mr-2"}) (t :right-side-bar/history)]
      (history)]
 
     :block-ref
@@ -144,20 +143,15 @@
         (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
 
     :page
-    (when-let [page-name (if (integer? db-id)
-                           (:block/name (db/entity db-id))
-                           db-id)]
-      [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
-                                   (rfe/href :whiteboard {:name page-name})
-                                   (rfe/href :page {:name page-name}))
-                       :draggable true
-                       :on-drag-start (fn [event] (editor-handler/block->data-transfer! page-name event))
-                       :on-click (fn [e]
-                                   (when (gobj/get e "shiftKey")
-                                     (.preventDefault e)))}
-        (db-model/get-page-original-name page-name)]
-       [:div.ml-2
-        (page-cp repo page-name)]])
+    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
+          page (db/entity repo lookup)
+          page-name (:block/name page)]
+      [[:.flex.items-center.page-title
+        (if-let [icon (get-in page [:block/properties :icon])]
+          [:.text-md.mr-2 icon]
+          (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
+        [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
+       (page-cp repo page-name)])
 
     :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
@@ -167,39 +161,117 @@
         (slide/slide page-name)]])
 
     :shortcut-settings
-    [(t :help/shortcuts) (shortcut-settings)]
+    [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
+     (shortcut-settings)]
 
     ["" [:span]]))
 
-(defn close
-  ([on-close]
-   (close nil on-close))
-  ([class on-close]
-   [:a.close.flex.items-center
-    (cond-> {:on-click on-close
-             :style {:margin-right -4}}
-      class
-      (assoc :class class))
-    svg/close]))
+(defonce *drag-to
+  (atom nil))
+
+(defonce *drag-from
+  (atom nil))
+
+(rum/defc context-menu-content
+  [db-id idx type collapsed? block-count toggle-fn]
+  [:.menu-links-wrapper.text-left
+   {:on-click toggle-fn}
+   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close) nil)
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-clese-others) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click (fn []
+                                                      (state/clear-sidebar-blocks!)
+                                                      (state/hide-right-sidebar!))} (t :right-side-bar/pane-clese-all) nil))
+   (when (or (not collapsed?) (> block-count 1)) [:hr.menu-separator])
+   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all) nil))
+   (when (or collapsed? (> block-count 1)) [:hr.menu-separator])
+   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand) nil))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)}  (t :right-side-bar/pane-expand-all) nil))
+   (when (= type :page) [:hr.menu-separator])
+   (when (= type :page)
+     (let [name (:block/name (db/entity db-id))]
+       (ui/menu-link {:href (if (db-model/whiteboard-page? name)
+                              (rfe/href :whiteboard {:name name})
+                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page) nil)))])
+
+(rum/defc drop-indicator
+  [idx drag-to]
+  [:.sidebar-drop-indicator {:on-drag-enter #(when drag-to (reset! *drag-to idx))
+                             :on-drag-over util/stop
+                             :class (when (= idx drag-to) "drag-over")}])
+
+(rum/defc drop-area
+  [idx]
+  [:.sidebar-item-drop-area
+   {:on-drag-over util/stop}
+   [:.sidebar-item-drop-area-overlay.top
+    {:on-drag-enter #(reset! *drag-to (dec idx))}]
+   [:.sidebar-item-drop-area-overlay.bottom
+    {:on-drag-enter #(reset! *drag-to idx)}]])
+
+(rum/defc inner-component <
+  {:should-update (fn [_prev-state state] (last (:rum/args state)))}
+  [component _should-update?]
+  component)
 
 (rum/defc sidebar-item < rum/reactive
-  [repo idx db-id block-type]
-  (let [item (build-sidebar-item repo idx db-id block-type)]
+  [repo idx db-id block-type block-count]
+  (let [drag-from (rum/react *drag-from)
+        drag-to (rum/react *drag-to)
+        item (build-sidebar-item repo idx db-id block-type)]
     (when item
-      (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4.shadow-md
-         (let [[title component] item]
-           [:div.flex.flex-col
-            [:div.flex.flex-row.justify-between
-             [:div.flex.flex-row.justify-center
-              [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
-               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
-               (ui/rotating-arrow collapse?)]
-              [:div.ml-1.font-medium
-               title]]
-             (close #(state/sidebar-remove-block! idx))]
-            [:div {:class (if collapse? "hidden" "initial")}
-             component]])]))))
+      (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+        [:<>
+         (when (zero? idx) (drop-indicator (dec idx) drag-to))
+         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
+          {:class [(str "item-type-" (name block-type))
+                   (when collapsed? "collapsed")]}
+          (let [[title component] item]
+            [:div.flex.flex-col.w-full.relative
+             [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level
+              {:draggable true
+               :on-drag-start (fn [event]
+                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
+                                (reset! *drag-from idx))
+               :on-drag-end (fn [_event]
+                              (when drag-to (state/sidebar-move-block! idx drag-to))
+                              (reset! *drag-to nil)
+                              (reset! *drag-from nil))
+               :on-mouse-up (fn [event]
+                              (when (= (.-which (.-nativeEvent event)) 2)
+                                (state/sidebar-remove-block! idx)))
+               :on-context-menu (fn [e]
+                                  (util/stop e)
+                                  (common-handler/show-custom-context-menu! e (context-menu-content db-id idx block-type collapsed? block-count #())))}
+              [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
+               {:aria-expanded (str (not collapsed?))
+                :id (str "sidebar-panel-header-" idx)
+                :aria-controls (str "sidebar-panel-content-" idx)
+                :on-click (fn [event]
+                            (util/stop event)
+                            (state/sidebar-block-toggle-collapse! db-id))}
+               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
+                (ui/rotating-arrow collapsed?)]
+               [:div.ml-1.font-medium.overflow-hidden
+                title]]
+              [:.item-actions.flex.items-center
+               (ui/dropdown (fn [{:keys [toggle-fn]}]
+                              [:button.button {:title (t :right-side-bar/pane-more)
+                                               :on-click (fn [e]
+                                                           (util/stop e)
+                                                           (toggle-fn))} (ui/icon "dots")])
+                            (fn [{:keys [close-fn]}]
+                              (context-menu-content db-id idx block-type collapsed? block-count close-fn)))
+               [:button.button.close {:title (t :right-side-bar/pane-close)
+                                      :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
+             [:div.scrollbar-spacing.p-4 {:role "region"
+                                          :id (str "sidebar-panel-content-" idx)
+                                          :aria-labelledby (str "sidebar-panel-header-" idx)
+                                          :class (if collapsed? "hidden" "initial")}
+              (inner-component component (not drag-from))]
+             (when drag-from (drop-area idx))])]
+         (drop-indicator idx drag-to)]))))
 
 (defn- get-page
   [match]
@@ -283,8 +355,8 @@
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
-                                    ((add-resizing-class)
-                                     (set-width! ratio)))))))
+                                    (do (add-resizing-class)
+                                        (set-width! ratio)))))))
              (.on "keyup" remove-resizing-class)))
        #())
      [])
@@ -311,7 +383,8 @@
                  (js/setTimeout (fn [] (reset! (get state ::anim-finished?) true)) 300)
                  state)}
   [state repo t blocks]
-  (let [*anim-finished? (get state ::anim-finished?)]
+  (let [*anim-finished? (get state ::anim-finished?)
+        block-count (count blocks)]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -319,43 +392,41 @@
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "contents" :contents))}
+                                                                     (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                         (when-let [page (get-current-page)]
-                                                           (state/sidebar-add-block!
-                                                            repo
-                                                            page
-                                                            :page-graph)))}
+                                                                     (when-let [page (get-current-page)]
+                                                                       (state/sidebar-add-block!
+                                                                        repo
+                                                                        page
+                                                                        :page-graph)))}
           (t :right-side-bar/page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "help" :help))}
+                                                                     (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when config/dev? [:div.text-sm
-                           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                                       (state/sidebar-add-block! repo "history" :history))}
-                            (t :right-side-bar/history)]])]]
+        (when (and config/dev? (state/sub [:ui/developer-mode?]))
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "history" :history))}
+            (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.mx-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
-             (sidebar-item repo idx db-id block-type)
-             (str "sidebar-block-" idx)))
+             (sidebar-item repo idx db-id block-type block-count)
+             (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub-right-sidebar-blocks)
-        blocks (if (empty? blocks)
-                 [[(state/get-current-repo) "contents" :contents nil]]
-                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]

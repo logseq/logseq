@@ -531,14 +531,13 @@ html[data-theme='dark'] {
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
-  background-color: var(--ls-secondary-background-color, #d8e1e8);
   position: relative;
   user-select: none;
 
   .resizer {
     @apply absolute top-0 bottom-0;
     touch-action: none;
-    left: 0;
+    left: 2px;
     width: 4px;
     user-select: none;
     cursor: col-resize !important;
@@ -592,7 +591,6 @@ html[data-theme='dark'] {
     top: 0;
     left: 0;
     right: 0;
-    background-color: var(--ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;
@@ -621,15 +619,95 @@ html[data-theme='dark'] {
     margin-left: 12px;
   }
 
+  .sidebar-drop-indicator {
+    @apply relative;
+    height: 8px;
+
+    &::after {
+      @apply absolute block w-full rounded;
+      top: 2px;
+      height: 4px;
+      content: " ";
+      transition: background-color 200ms;
+    }
+
+    &.drag-over {
+      &::after {
+        background-color: var(--ls-active-primary-color);
+      }
+    }
+  }
+
   .sidebar-item {
-    @apply p-4;
+    @apply relative;
+    flex: 1 1;
+    min-height: 100px;
+    border: 1px solid transparent;
+    transition: border-color 0.1s;
 
-    .close {
-      transform: scale(0.8);
-      transition: transform 0.1s;
+    .sidebar-item-header {
+      white-space: nowrap;
 
-      &:hover {
-        transform: scale(1);
+      .breadcrumb {
+        margin-top: 0;
+        margin-bottom: 0;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+    }
+
+    .sidebar-item-drop-area {
+      @apply flex flex-col absolute h-full w-full;
+    }
+
+    .sidebar-item-drop-area-overlay {
+      flex: 1 1 50%;
+    }
+
+    &.item-type-block .sidebar-item-header {
+      background: linear-gradient(0deg, var(--ls-secondary-background-color), var(--ls-tertiary-background-color));
+    }
+
+    &.collapsed {
+      flex: 0;
+      overflow: initial;
+      min-height: initial;
+
+      &.item-type-block .sidebar-item-header {
+        background: var(--ls-tertiary-background-color);
+      }
+    }
+
+    &:not(:hover) {
+      ::-webkit-scrollbar-thumb,
+      ::-webkit-scrollbar,
+      ::-webkit-scrollbar-thumb:active {
+        background-color: transparent;
+      }
+    }
+
+    .initial {
+      flex: 1;
+    }
+
+    .item-actions {
+      @apply h-full;
+
+      .button {
+        @apply hidden p-0 ml-2 flex items-center;
+
+        &:focus {
+          @apply flex;
+        }
+      }
+    }
+
+    .is-mobile &,
+    &:hover {
+      .item-actions {
+        .button {
+          @apply flex;
+        }
       }
     }
   }

@@ -1069,11 +1069,21 @@ Similar to re-frame subscriptions"
 
 (defn toggle-sidebar-open?!
   []
-  (swap! state update :ui/sidebar-open? not))
+  (let [current-repo (get-current-repo)
+        blocks (filter #(= (first %) current-repo) (:sidebar/blocks @state))]
+    (when (and (not (:ui/sidebar-open? @state)) (empty? blocks))
+      (swap! state assoc :sidebar/blocks [[current-repo "contents" :contents nil]])
+      (set-state! [:ui/sidebar-collapsed-blocks "contents"] false))
+    (swap! state update :ui/sidebar-open? not)))
 
 (defn open-right-sidebar!
   []
-  (swap! state assoc :ui/sidebar-open? true))
+  (let [current-repo (get-current-repo)
+        blocks (filter #(= (first %) current-repo) (:sidebar/blocks @state))]
+    (when (empty? blocks)
+      (swap! state assoc :sidebar/blocks [[current-repo "contents" :contents nil]])
+      (set-state! [:ui/sidebar-collapsed-blocks "contents"] false))
+    (swap! state assoc :ui/sidebar-open? true)))
 
 (defn hide-right-sidebar!
   []
@@ -1087,9 +1097,21 @@ Similar to re-frame subscriptions"
                                        (->> (remove #(= (second %) db-id) blocks)
                                             (cons [repo db-id block-type])
                                             (distinct))))
+      (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
+
+(defn sidebar-move-block!
+  [from to]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (let [to (if (> from to) (inc to) to)]
+                                     (if (not= to from)
+                                       (let [item (nth blocks from)
+                                             blocks (keep-indexed #(when (not= %1 from) %2) blocks)
+                                             [l r] (split-at to blocks)]
+                                         (concat l [item] r))
+                                       blocks)))))
 
 (defn sidebar-remove-block!
   [idx]
@@ -1099,6 +1121,12 @@ Similar to re-frame subscriptions"
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-remove-rest!
+  [db-id]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (remove #(not= (second %) db-id) blocks)))
+  (set-state! [:ui/sidebar-collapsed-blocks db-id] false))
 
 (defn sidebar-replace-block!
   [old-sidebar-key new-sidebar-key]
@@ -1119,6 +1147,17 @@ Similar to re-frame subscriptions"
   [db-id]
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
+
+(defn sidebar-block-collapse-rest!
+  [db-id]
+  (let [items (disj (set (map second (:sidebar/blocks @state))) db-id)]
+    (doseq [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
+
+(defn sidebar-block-set-collapsed-all!
+  [collapsed?]
+  (let [items (map second (:sidebar/blocks @state))]
+    (doseq [item items]
+      (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
 (defn get-edit-block
   []
