@@ -3,7 +3,8 @@
   (:require [promesa.core :as p]
             [frontend.state :as state]
             [frontend.handler.plugin :as plugin-handler]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [lambdaisland.glogi :as log]))
 
 (defn- call-service!
   "Handling communication with text encoder plugin
@@ -21,14 +22,17 @@
                             (fn [^js e]
                               (resolve (bean/->clj e))))))
              (p/timeout 20000)
-             (p/catch #(prn "Timeout waiting reply from text encoder service" hookEvent %))))))))
+             (p/catch #(log/error :ai-text-encoder/encode-text-timeout {:message "Timeout waiting reply from text encoder service" 
+                                                                        :hookEvent hookEvent 
+                                                                        :error %}))))))))
 
 (defn- text-encode'
   [text service]
   (call-service! service "textEncoder:textEncode" {:text text} true))
 
 (defn text-encode
-  "Return a promise of the encoded text"
+  "Return a promise of the encoded text
+   Or return nil if no matching text encoder available"
   ([text]
    (text-encode' text (when state/lsp-enabled?
                         (->> (state/get-all-plugin-services-with-type :text-encoder)

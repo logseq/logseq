@@ -398,7 +398,6 @@
 
 (defn ^:export register_text_encoder_service
   [pid name ^js opts]
-  (prn "register_text_encoder_service") ;; TODO Junyi
   (plugin-handler/register-plugin-text-encoder pid name (bean/->clj opts)))
 
 (defn ^:export unregister_text_encoder_services
