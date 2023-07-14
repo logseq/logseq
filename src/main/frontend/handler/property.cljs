@@ -117,14 +117,16 @@
     (db/transact! repo [(outliner-core/block-with-updated-at
                          {:block/schema {:type property-type}
                           :block/uuid property-uuid
-                          :block/type "property"})]))
+                          :block/type "property"})]
+      {:outliner-op :update-property}))
   (when (nil? property) ;if property not exists yet
     (db/transact! repo [(outliner-core/block-with-timestamps
                          {:block/schema {:type property-type}
                           :block/original-name k-name
                           :block/name (util/page-name-sanity-lc k-name)
                           :block/uuid property-uuid
-                          :block/type "property"})])))
+                          :block/type "property"})]
+      {:outliner-op :create-new-property})))
 
 (defn add-property!
   [repo block k-name v & {:keys [old-value]}]
@@ -191,7 +193,8 @@
                    {:block/uuid (:block/uuid block)
                     :block/properties block-properties
                     :block/properties-text-values block-properties-text-values
-                    :block/refs refs}])))))))))
+                    :block/refs refs}]
+                  {:outliner-op :add-property})))))))))
 
 (defn remove-property!
   [repo block property-uuid]
@@ -206,10 +209,11 @@
            {:block/uuid (:block/uuid block)
            :block/properties properties'
            :block/properties-text-values (dissoc (:block/properties-text-values block) property-uuid)
-           :block/refs refs}])))))
+            :block/refs refs}]
+          {:outliner-op :remove-property})))))
 
 (defn- fix-cardinality-many-values!
-  [property-uuid]
+  [repo property-uuid]
   (let [ev (->> (model/get-block-property-values property-uuid)
                 (remove (fn [[_ v]] (coll? v))))
         tx-data (map (fn [[e v]]
@@ -218,7 +222,8 @@
                          {:db/id e
                           :block/properties (assoc properties property-uuid [v])})) ev)]
     (when (seq tx-data)
-      (db/transact! tx-data))))
+      (db/transact! repo tx-data
+        {:outliner-op :property-fix-cardinality}))))
 
 (defn update-property!
   [repo property-uuid {:keys [property-name property-schema]}]
@@ -227,14 +232,15 @@
     (when (and (= :many (:cardinality property-schema))
                (not= :many (:cardinality (:block/schema property))))
       ;; cardinality changed from :one to :many
-      (fix-cardinality-many-values! property-uuid))
+      (fix-cardinality-many-values! repo property-uuid))
     (let [tx-data (cond-> {:block/uuid property-uuid}
                     property-name (merge
                                    {:block/original-name property-name
                                     :block/name (gp-util/page-name-sanity-lc property-name)})
                     property-schema (assoc :block/schema property-schema)
                     true outliner-core/block-with-updated-at)]
-      (db/transact! repo [tx-data]))))
+      (db/transact! repo [tx-data]
+        {:outliner-op :update-property}))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
@@ -253,7 +259,8 @@
                 [[:db/retract (:db/id block) :block/refs]
                  {:block/uuid (:block/uuid block)
                   :block/properties properties'
-                  :block/refs refs}])))
+                  :block/refs refs}]
+                {:outliner-op :delete-property-value})))
           (state/clear-edit!))))))
 
 (defn set-editing-new-property!
@@ -275,8 +282,10 @@
           _ (upsert-property! repo property k-name property-uuid property-type)
           new-properties (vec (distinct (conj properties property-uuid)))
           class-new-schema (assoc class-schema :properties new-properties)]
-      (db/transact! [{:db/id (:db/id class)
-                      :block/schema class-new-schema}]))))
+      (db/transact! repo
+        [{:db/id (:db/id class)
+          :block/schema class-new-schema}]
+        {:outliner-op :class-add-property}))))
 
 (defn class-remove-property!
   [repo class k-uuid]
@@ -286,5 +295,6 @@
             {:keys [properties] :as class-schema} (:block/schema class)
             new-properties (vec (distinct (remove #{property-uuid} properties)))
             class-new-schema (assoc class-schema :properties new-properties)]
-        (db/transact! [{:db/id (:db/id class)
-                       :block/schema class-new-schema}])))))
+        (db/transact! repo [{:db/id (:db/id class)
+                             :block/schema class-new-schema}]
+          {:outliner-op :class-remove-property})))))
