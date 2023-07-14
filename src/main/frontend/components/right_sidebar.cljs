@@ -210,7 +210,6 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
-
 (rum/defc inner-component <
   {:should-update (fn [_prev-state state] (last (:rum/args state)))}
   [component _should-update?]
