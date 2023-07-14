@@ -82,6 +82,7 @@
   width: var(--ls-left-sidebar-sm-width);
   overflow-y: auto;
   overflow-x: hidden;
+  background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translate3d(-100%, 0, 0);
   z-index: 3;
