@@ -1230,16 +1230,15 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-property-values
   "Get blocks which have this property."
   [property-uuid]
-  (->>
-   (d/q
-     '[:find ?b ?v
-       :in $ ?property-uuid
-       :where
-       [?b :block/properties ?p]
-       [(get ?p ?property-uuid) ?v]
-       [(some? ?v)]]
-     (conn/get-db)
-     property-uuid)))
+  (d/q
+    '[:find ?b ?v
+      :in $ ?property-uuid
+      :where
+      [?b :block/properties ?p]
+      [(get ?p ?property-uuid) ?v]
+      [(some? ?v)]]
+    (conn/get-db)
+    property-uuid))
 
 (defn get-template-by-name
   [name]

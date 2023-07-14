@@ -214,7 +214,10 @@
   [block property]
   (let [repo (state/get-current-repo)
         items (->> (model/get-block-property-values (:block/uuid property))
-                   (map (fn [[_id value]] {:value value}))
+                   (mapcat (fn [[_id value]]
+                             (if (coll? value)
+                               (map (fn [v] {:value v}) value)
+                               [{:value value}])))
                    (distinct))
         add-property-f #(add-property! block (:block/original-name property) % true)]
     (select/select {:items items
@@ -257,7 +260,7 @@
                                         (add-property!)))}))
        ;; :others
        (if editing?
-         [:div.flex.flex-1 {:class "property-value-content"}
+         [:div.flex.flex-1
           (case type
             (list :number :url)
             (select block property)
