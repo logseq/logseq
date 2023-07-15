@@ -11,7 +11,7 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]))
 
-(defn create-draws-directory!
+(defn- create-draws-directory!
   [repo]
   (when repo
     (let [repo-dir (config/get-repo-dir repo)]
@@ -26,6 +26,7 @@
         repo (state/get-current-repo)]
     (when repo
       (let [repo-dir (config/get-repo-dir repo)]
+        (js/console.trace)
         (->
          (p/do!
           (create-draws-directory! repo)

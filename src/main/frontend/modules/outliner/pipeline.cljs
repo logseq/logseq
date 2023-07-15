@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
-            [cognitect.transit :as t]))
+            [cognitect.transit :as t]
+            [frontend.persist-db :as persist-db]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -157,7 +158,8 @@
                                    (map (fn [b]
                                           (let [uuid (or (:block/uuid b) (random-uuid))]
                                             (assoc b :block/uuid uuid)))))]
-            (p/let [_ipc-result (ipc/ipc :db-transact-data repo
+            (p/let [_transact-result (persist-db/transact-data repo upsert-blocks deleted-block-uuids)
+                    _ipc-result (comment ipc/ipc :db-transact-data repo
                                          (pr-str
                                           {:blocks upsert-blocks
                                            :deleted-block-uuids deleted-block-uuids}))]

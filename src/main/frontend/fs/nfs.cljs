@@ -183,6 +183,9 @@
                      (js/console.debug "mkdir error: " error ", dir: " dir)
                      (throw error))))))
 
+  (mkdir-recur! [this dir]
+    (protocol/mkdir! this dir))
+
   (readdir [_this dir]
     ;; This method is only used for repo-dir and version-files dir
     ;; There's no Logseq Sync support for nfs. So assume dir is always a repo dir.
