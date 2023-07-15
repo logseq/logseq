@@ -699,10 +699,17 @@
               new-name
               (not (string/blank? new-name))
               name-changed?)
-       (if (and (not= old-page-name new-page-name)
-                (db/entity [:block/name new-page-name]))
+       (cond
+         (= old-page-name new-page-name) ; case changed
+         (db/transact! [{:db/id (:db/id page-e)
+                         :block/original-name new-name}])
+
+         (and (not= old-page-name new-page-name)
+                (db/entity [:block/name new-page-name])) ; merge page
          (when (string/blank? new-name)
            (notification/show! "Merging pages is not supported yet." :info))
+
+         :else                          ; rename
          (create! new-page-name
                   {:rename? true
                    :uuid (:block/uuid page-e)
