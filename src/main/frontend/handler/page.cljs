@@ -376,42 +376,90 @@
     (let [refs (:block/_refs page-entity)
           id-ref->page #(db-utils/special-id-ref->page % [page-entity])]
       (when (seq refs)
-        (let [tx-data (keep (fn [{:block/keys [raw-content properties] :as ref}]
-                              ;; block content or properties
-                              (let [content' (id-ref->page raw-content)
-                                    content-tx (when (not= raw-content content')
-                                                 {:db/id (:db/id ref)
-                                                  :block/content content'})
-                                    page-uuid (:block/uuid page-entity)
-                                    properties' (-> (medley/map-vals (fn [v]
-                                                                       (cond
-                                                                         (and (coll? v) (uuid? (first v)))
-                                                                         (vec (remove #{page-uuid} v))
+        (let [tx-data (mapcat (fn [{:block/keys [raw-content properties] :as ref}]
+                                ;; block content or properties
+                                (let [content' (id-ref->page raw-content)
+                                      content-tx (when (not= raw-content content')
+                                                   {:db/id (:db/id ref)
+                                                    :block/content content'})
+                                      page-uuid (:block/uuid page-entity)
+                                      properties' (-> (medley/map-vals (fn [v]
+                                                                         (cond
+                                                                           (and (coll? v) (uuid? (first v)))
+                                                                           (vec (remove #{page-uuid} v))
 
-                                                                         (and (uuid? v) (= v page-uuid))
-                                                                         nil
+                                                                           (and (uuid? v) (= v page-uuid))
+                                                                           nil
 
-                                                                         (and (coll? v) (string? (first v)))
-                                                                         (mapv id-ref->page v)
+                                                                           (and (coll? v) (string? (first v)))
+                                                                           (mapv id-ref->page v)
 
-                                                                         (string? v)
-                                                                         (id-ref->page v)
+                                                                           (string? v)
+                                                                           (id-ref->page v)
 
-                                                                         :else
-                                                                         v)) properties)
-                                                    (util/remove-nils-non-nested))
-                                    tx (merge
-                                        content-tx
-                                        (when (not= (seq properties) (seq properties'))
-                                          {:db/id (:db/id ref)
-                                           :block/properties properties'}))]
-                                tx)) refs)]
+                                                                           :else
+                                                                           v)) properties)
+                                                      (util/remove-nils-non-nested))
+                                      tx (merge
+                                          content-tx
+                                          (when (not= (seq properties) (seq properties'))
+                                            {:db/id (:db/id ref)
+                                             :block/properties properties'}))]
+                                  (concat
+                                   [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
+                                   (when tx [tx])))) refs)]
+          tx-data)))))
+
+(defn db-replace-ref
+  "Replace from-page refs with to-page"
+  [repo from-page to-page]
+  (when (config/db-based-graph? repo)
+    (let [refs (:block/_refs from-page)
+          from-uuid (:block/uuid from-page)
+          to-uuid (:block/uuid to-page)
+          replace-ref (fn [content] (string/replace content (str from-uuid) (str to-uuid)))]
+      (when (seq refs)
+        (let [tx-data (mapcat
+                       (fn [{:block/keys [raw-content properties] :as ref}]
+                         ;; block content or properties
+                         (let [content' (replace-ref raw-content)
+                               content-tx (when (not= raw-content content')
+                                            {:db/id (:db/id ref)
+                                             :block/content content'})
+                               properties' (-> (medley/map-vals (fn [v]
+                                                                  (cond
+                                                                    (and (coll? v) (uuid? (first v)))
+                                                                    (mapv (fn [id] (if (= id from-uuid) to-uuid id)) v)
+
+                                                                    (and (uuid? v) (= v from-uuid))
+                                                                    to-uuid
+
+                                                                    (and (coll? v) (string? (first v)))
+                                                                    (mapv replace-ref v)
+
+                                                                    (string? v)
+                                                                    (replace-ref v)
+
+                                                                    :else
+                                                                    v)) properties)
+                                               (util/remove-nils-non-nested))
+                               tx (merge
+                                   content-tx
+                                   (when (not= (seq properties) (seq properties'))
+                                     {:db/id (:db/id ref)
+                                      :block/properties properties'}))]
+                           (concat
+                            [[:db/add (:db/id ref) :block/refs (:db/id to-page)]
+                             [:db/retract (:db/id ref) :block/refs (:db/id from-page)]]
+                            (when tx [tx]))))
+                       refs)]
           tx-data)))))
 
 (defn delete!
-  [page-name ok-handler & {:keys [delete-file?]
-                           :or {delete-file? true}}]
-  (route-handler/redirect-to-home!)
+  [page-name ok-handler & {:keys [delete-file? redirect-to-home?]
+                           :or {delete-file? true
+                                redirect-to-home? true}}]
+  (when redirect-to-home? (route-handler/redirect-to-home!))
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (util/page-name-sanity-lc page-name)
@@ -440,8 +488,6 @@
                              :else
                              nil)
             tx-data (concat truncate-blocks-tx-data delete-page-tx)]
-
-        (util/pprint tx-data)
 
         (db/transact! repo tx-data {:outliner-op :delete-page})
 
@@ -495,25 +541,24 @@
   [page old-original-name new-name]
   (let [old-namespace? (text/namespace-page? old-original-name)
         new-namespace? (text/namespace-page? new-name)
-        update-namespace! (fn [] (let [namespace (first (gp-util/split-last "/" new-name))]
-                                   (when namespace
-                                     (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
-                                     (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
-                                           repo                (state/get-current-repo)
-                                           page-txs [{:db/id (:db/id page)
-                                                      :block/namespace (:db/id namespace-block)}]]
-                                       (d/transact! (db/get-db repo false) page-txs)))))
-        remove-namespace! (fn []
-                            (db/transact! [[:db/retract (:db/id page) :block/namespace]]))]
+        repo           (state/get-current-repo)]
+    (cond
+      new-namespace?
+      ;; update namespace
+      (let [namespace (first (gp-util/split-last "/" new-name))]
+        (when namespace
+          (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
+          (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
+                page-txs [{:db/id (:db/id page)
+                           :block/namespace (:db/id namespace-block)}]]
+            (d/transact! (db/get-db repo false) page-txs))))
 
-    (when old-namespace?
-      (if new-namespace?
-        (update-namespace!)
-        (remove-namespace!)))
+      old-namespace?
+      ;; retract namespace
+      (db/transact! [[:db/retract (:db/id page) :block/namespace]])
 
-    (when-not old-namespace?
-      (when new-namespace?
-        (update-namespace!)))))
+      :else
+      nil)))
 
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
@@ -634,7 +679,7 @@
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
-(defn merge-pages!
+(defn file-based-merge-pages!
   "Only accepts sanitized page names"
   [from-page-name to-page-name]
   (when (and (db/page-exists? from-page-name)
@@ -684,6 +729,50 @@
                               :push        false
                               :path-params {:name to-page-name}})))
 
+(defn db-based-merge-pages!
+  [from-page-name to-page-name]
+  (when (and (db/page-exists? from-page-name)
+             (db/page-exists? to-page-name)
+             (not= from-page-name to-page-name))
+    (let [to-page (db/entity [:block/name to-page-name])
+          to-id (:db/id to-page)
+          from-page (db/entity [:block/name from-page-name])
+          from-id (:db/id from-page)
+          from-first-child (some->> (db/pull from-id)
+                                    (outliner-core/block)
+                                    (outliner-tree/-get-down)
+                                    (outliner-core/get-data))
+          to-last-direct-child-id (model/get-block-last-direct-child (db/get-db) to-id false)
+          repo (state/get-current-repo)
+          conn (conn/get-db repo false)
+          datoms (d/datoms @conn :avet :block/page from-id)
+          block-eids (mapv :e datoms)
+          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+          blocks-tx-data (map (fn [block]
+                                (let [id (:db/id block)]
+                                  (cond->
+                                      {:db/id id
+                                       :block/page {:db/id to-id}}
+
+                                    (and from-first-child (= id (:db/id from-first-child)))
+                                    (assoc :block/left {:db/id (or to-last-direct-child-id to-id)})
+
+                                    (= (:block/parent block) {:db/id from-id})
+                                    (assoc :block/parent {:db/id to-id})))) blocks)
+          replace-ref-tx-data (db-replace-ref repo from-page to-page)
+          tx-data (concat blocks-tx-data replace-ref-tx-data)]
+      (d/transact! conn tx-data)
+      (rename-update-namespace! from-page
+                                (util/get-page-original-name from-page)
+                                (util/get-page-original-name to-page)))
+
+
+    (delete! from-page-name nil :redirect-to-home? false)
+
+    (route-handler/redirect! {:to          :page
+                              :push        false
+                              :path-params {:name to-page-name}})))
+
 ;; FIXME:
 (defn db-based-rename!
   ([old-name new-name]
@@ -705,9 +794,8 @@
                          :block/original-name new-name}])
 
          (and (not= old-page-name new-page-name)
-                (db/entity [:block/name new-page-name])) ; merge page
-         (when (string/blank? new-name)
-           (notification/show! "Merging pages is not supported yet." :info))
+              (db/entity [:block/name new-page-name])) ; merge page
+         (db-based-merge-pages! old-page-name new-page-name)
 
          :else                          ; rename
          (create! new-page-name
@@ -740,7 +828,7 @@
             (rename-page-aux old-name new-name redirect?)
 
             (db/pull [:block/name new-page-name])
-            (merge-pages! old-page-name new-page-name)
+            (file-based-merge-pages! old-page-name new-page-name)
 
             :else
             (rename-namespace-pages! repo old-name new-name))
