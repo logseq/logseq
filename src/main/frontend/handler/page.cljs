@@ -45,7 +45,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [medley.core :as medley]))
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -368,6 +369,45 @@
       (unfavorite-page! page-name)
       (favorite-page! page-name)))))
 
+(defn db-refs->page
+  "Replace [[page name]] with page name"
+  [repo page-entity]
+  (when (config/db-based-graph? repo)
+    (let [refs (:block/_refs page-entity)
+          id-ref->page #(db-utils/special-id-ref->page % [page-entity])]
+      (when (seq refs)
+        (let [tx-data (keep (fn [{:block/keys [raw-content properties] :as ref}]
+                              ;; block content or properties
+                              (let [content' (id-ref->page raw-content)
+                                    content-tx (when (not= raw-content content')
+                                                 {:db/id (:db/id ref)
+                                                  :block/content content'})
+                                    page-uuid (:block/uuid page-entity)
+                                    properties' (-> (medley/map-vals (fn [v]
+                                                                       (cond
+                                                                         (and (coll? v) (uuid? (first v)))
+                                                                         (vec (remove #{page-uuid} v))
+
+                                                                         (and (uuid? v) (= v page-uuid))
+                                                                         nil
+
+                                                                         (and (coll? v) (string? (first v)))
+                                                                         (mapv id-ref->page v)
+
+                                                                         (string? v)
+                                                                         (id-ref->page v)
+
+                                                                         :else
+                                                                         v)) properties)
+                                                    (util/remove-nils-non-nested))
+                                    tx (merge
+                                        content-tx
+                                        (when (not= (seq properties) (seq properties'))
+                                          {:db/id (:db/id ref)
+                                           :block/properties properties'}))]
+                                tx)) refs)]
+          tx-data)))))
+
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
                            :or {delete-file? true}}]
@@ -376,25 +416,34 @@
     (when-let [repo (state/get-current-repo)]
       (let [page-name (util/page-name-sanity-lc page-name)
             blocks (db/get-page-blocks-no-cache page-name)
-            tx-data (mapv
-                     (fn [block]
-                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)
-            page (db/entity [:block/name page-name])]
-        (db/transact! tx-data)
+            truncate-blocks-tx-data (mapv
+                                     (fn [block]
+                                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                                     blocks)
+            page (db/entity [:block/name page-name])
+            _ (delete-file! repo page-name delete-file?)
+            ;; if other page alias this pagename,
+            ;; then just remove some attrs of this entity instead of retractEntity
+            delete-page-tx (cond
+                             (contains? #{"property" "class"} (:block/type page))
+                             nil
 
-        (delete-file! repo page-name delete-file?)
+                             (not (:block/_namespace page))
+                             (if (model/get-alias-source-page (state/get-current-repo) page-name)
+                               (when-let [id (:db/id (db/entity [:block/name page-name]))]
+                                 (mapv (fn [attribute]
+                                         [:db/retract id attribute])
+                                       db-schema/retract-page-attributes))
+                               (concat (db-refs->page repo page)
+                                       [[:db.fn/retractEntity [:block/name page-name]]]))
 
-        ;; if other page alias this pagename,
-        ;; then just remove some attrs of this entity instead of retractEntity
-        (when-not (:block/_namespace page)
-          (if (model/get-alias-source-page (state/get-current-repo) page-name)
-            (when-let [id (:db/id (db/entity [:block/name page-name]))]
-              (let [txs (mapv (fn [attribute]
-                                [:db/retract id attribute])
-                              db-schema/retract-page-attributes)]
-                (db/transact! txs)))
-            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])))
+                             :else
+                             nil)
+            tx-data (concat truncate-blocks-tx-data delete-page-tx)]
+
+        (util/pprint tx-data)
+
+        (db/transact! repo tx-data {:outliner-op :delete-page})
 
         (unfavorite-page! page-name)
 

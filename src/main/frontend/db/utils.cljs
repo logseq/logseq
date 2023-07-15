@@ -6,7 +6,8 @@
             [frontend.db.conn :as conn]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 ;; transit serialization
 
@@ -68,6 +69,22 @@
    (fn [content ref]
      (if (:block/name ref)
        (string/replace content (str config/page-ref-special-chars (:block/uuid ref)) (:block/original-name ref))
+       content))
+   content
+   refs))
+
+(defn special-id-ref->page
+  "Convert special id ref backs to page name."
+  [content refs]
+  (reduce
+   (fn [content ref]
+     (if (:block/name ref)
+       (string/replace content
+                       (str page-ref/left-brackets
+                            config/page-ref-special-chars
+                            (:block/uuid ref)
+                            page-ref/right-brackets)
+                       (:block/original-name ref))
        content))
    content
    refs))

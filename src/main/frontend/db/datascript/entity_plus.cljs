@@ -10,7 +10,11 @@
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
-   (if (and (= k :block/content) (config/db-based-graph? (state/get-current-repo)))
+   (cond
+     (and (= k :block/raw-content) (config/db-based-graph? (state/get-current-repo)))
+     (lookup-entity e :block/content default-value)
+
+     (and (= k :block/content) (config/db-based-graph? (state/get-current-repo)))
      (let [result (lookup-entity e k default-value)
            refs (:block/refs e)]
        (or
@@ -18,6 +22,8 @@
           (db-utils/special-id->page result refs)
           result)
         default-value))
+
+     :else
      (or (get (.-kv e) k)
          (lookup-entity e k default-value)))))
 
