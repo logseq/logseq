@@ -28,7 +28,7 @@
 }
 
 .action-bar {
-  position: absolute;
+  position: fixed;
   bottom: 100px;
   height: 70px;
   padding: 6px;
