@@ -352,7 +352,10 @@
 
 (rum/defcs sidebar < rum/reactive
   [state]
-  (let [blocks (state/sub-right-sidebar-blocks)
+  (let [blocks (->> (state/sub-right-sidebar-blocks)
+                    (remove (fn [item]
+                              (and (contains? #{:page :block} (last item))
+                                   (nil? (db/entity (second item)))))))
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
