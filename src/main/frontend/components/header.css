@@ -135,7 +135,9 @@
   position: relative;
 }
 
-.cp__header a, .cp__header svg {
+.cp__header a,
+.cp__header svg,
+.cp__header button {
   -webkit-app-region: no-drag;
 }
 
