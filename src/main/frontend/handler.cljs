@@ -221,11 +221,10 @@
      (mobile/mobile-preinit))
    (-> (p/let [repos (get-repos)
                _ (state/set-repos! repos)
+               _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                _ (restore-and-setup! repos)]
          (when (mobile-util/native-platform?)
-           (p/do!
-            (mobile-util/hide-splash)
-            (state/restore-mobile-theme!))))
+           (state/restore-mobile-theme!)))
        (p/catch (fn [e]
                   (js/console.error "Error while restoring repos: " e)))
        (p/finally (fn []

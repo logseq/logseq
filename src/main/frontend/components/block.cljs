@@ -1043,10 +1043,12 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:on-mouse-down (fn [event]
-                           (when-let [current (pdf-assets/inflate-asset s)]
-                             (state/set-current-pdf! current)
-                             (util/stop event)))}
+         {:on-click (fn [event]
+                      (when-let [current (pdf-assets/inflate-asset s)]
+                        (state/set-current-pdf! current)
+                        (util/stop event)))
+          :draggable true
+          :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
          (or label-text
              (->elem :span (map-inline config label)))]
 

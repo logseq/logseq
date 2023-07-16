@@ -105,7 +105,7 @@
   [text]
   (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
 
-(defn- get-revert-cut-tx
+(defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
   [blocks]
   (let [{:keys [retracted-block-ids revert-tx]} (get-in @state/state [:editor/last-replace-ref-content-tx (state/get-current-repo)])
@@ -126,7 +126,7 @@
                                    (get-whiteboard-tldr-from-text html))
                           ;; text should always be prepared block-ref generated in tldr
                           text)
-        {:keys [value selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+        {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
         text-url? (gp-util/url? text)
         selection-url? (gp-util/url? selection)]
     (cond
@@ -139,9 +139,8 @@
           (and text-url? selection-url?))
       (replace-text-f text)
 
-      ;; Pastes a formatted link over selected text
-      (and (or text-url?
-               (and value (gp-util/url? (string/trim value))))
+      ;; Paste a formatted link over selected text or paste text over a selected formatted link
+      (and (or text-url? selection-url?)
            (not (string/blank? (util/get-selected-text))))
       (editor-handler/html-link-format! text)
 
@@ -184,11 +183,9 @@
    (p/let [copied-blocks (get-copied-blocks)]
      (if (seq copied-blocks)
        ;; Handle internal paste
-       (let [revert-cut-tx (get-revert-cut-tx copied-blocks)
-             cut-paste? (boolean (seq revert-cut-tx))
-             keep-uuid? cut-paste?]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-tx revert-cut-tx
-                                                     :cut-paste? cut-paste?
+       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
+             keep-uuid? (= (state/get-block-op-type) :cut)]
+         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
                                                      :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
@@ -248,7 +245,7 @@
       (cond
         (and (string/blank? text) (string/blank? html))
         ;; When both text and html are blank, paste file if exists.
-        ;; NOTE: util/stop is not called here if no file is provided, 
+        ;; NOTE: util/stop is not called here if no file is provided,
         ;; so the default paste behavior of the native platform will be used.
         (when has-files?
           (paste-file-if-exists id e))

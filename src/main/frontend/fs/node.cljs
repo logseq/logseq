@@ -118,7 +118,9 @@
 
   (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
-
+  ;; copy with overwrite, without confirmation
+  (copy! [_this repo old-path new-path]
+    (ipc/ipc "copyFile" repo old-path new-path))
   (stat [_this fpath]
     (-> (ipc/ipc "stat" fpath)
         (p/then bean/->clj)))

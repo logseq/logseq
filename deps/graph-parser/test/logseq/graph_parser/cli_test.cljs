@@ -47,7 +47,7 @@
   (fs/mkdirSync (path/join dir "journals"))
   (fs/mkdirSync (path/join dir "pages")))
 
-(deftest ^:focus build-graph-files
+(deftest build-graph-files
   (create-logseq-graph "tmp/test-graph")
   ;; Create files that are recognized
   (fs/writeFileSync "tmp/test-graph/pages/foo.md" "")
