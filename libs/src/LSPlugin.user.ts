@@ -735,13 +735,23 @@ export class LSPluginUser
             if (hookMatcher != null) {
               const f = hookMatcher[0].toLowerCase()
               const s = hookMatcher.input!
-              const e = s.slice(f.length)
               const isOff = f === 'off'
               const pid = that.baseInfo.id
 
-              const type = `hook:${tag}:${safeSnakeCase(e)}`
-              const handler = args[0]
-              const opts = args[1]
+              let type = s.slice(f.length)
+              let handler = args[0]
+              let opts = args[1]
+
+              // condition mode
+              if (typeof handler === 'string' && typeof opts === 'function') {
+                handler = handler.replace(/^logseq./, ':')
+                type = `${type}${handler}`
+                handler = opts
+                opts = args[2]
+              }
+
+              type = `hook:${tag}:${safeSnakeCase(type)}`
+
               caller[f](type, handler)
 
               const unlisten = () => {

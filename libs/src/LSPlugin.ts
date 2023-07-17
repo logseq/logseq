@@ -512,9 +512,10 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<
-    Partial<{ name: string; mode: string; pid: string; url: string }>
-  >
+    Partial<{ name: string; mode: string; pid: string; url: string }>>
   onTodayJournalCreated: IUserHook<{ title: string }>
+  onBeforeCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+  onAfterCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
 
   /**
    * provide ui slot to specific block with UUID

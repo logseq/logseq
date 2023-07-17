@@ -659,6 +659,15 @@
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
 
+(defn hook-lifecycle-fn!
+  [type f & args]
+  (when (and type (fn? f))
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :before-command-invoked type) nil))
+    (apply f args)
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :after-command-invoked type) nil))))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
@@ -788,7 +797,6 @@
   (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))
-
 
 (comment
   {:pending        (count (:plugin/updates-pending @state/state))
