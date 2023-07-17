@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.handler.repo :as repo-handler]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -71,14 +72,14 @@
   (.addListener App "backButton"
                 #(let [href js/window.location.href]
                    (when (true? (cond
-                                  (state/get-left-sidebar-open?)
-                                  (state/set-left-sidebar-open! false)
-
                                   (state/settings-open?)
                                   (state/close-settings!)
 
                                   (state/modal-opened?)
                                   (state/close-modal!)
+
+                                  (state/get-left-sidebar-open?)
+                                  (state/set-left-sidebar-open! false)
 
                                   :else true))
 
@@ -103,7 +104,8 @@
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (when-not is-active?
-        (editor-handler/save-current-block!))
+        (editor-handler/save-current-block!)
+        (repo-handler/persist-db!))
       (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
