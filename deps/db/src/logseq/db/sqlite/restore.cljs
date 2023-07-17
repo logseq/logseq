@@ -51,6 +51,14 @@
           new-db (init-db-fn all-datoms db-schema/schema-for-db-based-graph)]
       new-db)))
 
+(defn- datoms-str->eav-vec
+  "Given a block's `datoms` transit string and an associated entity id, returns
+  a vector of eav triples"
+  [datoms-str eid]
+  (->> datoms-str
+       (transit/read t-reader)
+       (mapv (partial apply vector eid))))
+
 (defn restore-initial-data
   "Given initial sqlite data, returns a datascript connection and other data
   needed for subsequent restoration"
@@ -63,13 +71,10 @@
                                  (conj! uuid->db-id-tmap [uuid-str id])
                                  (swap! *next-db-id inc)
                                  id))
-        pages (mapv (fn [page]
-                      (let [eid (assign-id-to-uuid-fn (:uuid page))]
-                        (->> page
-                             :datoms
-                             (transit/read t-reader)
-                             (mapv (partial apply vector eid)))))
-                    all-pages)
+        pages-eav-coll (doall (mapcat (fn [page]
+                                        (let [eid (assign-id-to-uuid-fn (:uuid page))]
+                                          (datoms-str->eav-vec (:datoms page) eid)))
+                                      all-pages))
         all-blocks' (doall
                      (keep (fn [b]
                              (let [eid (assign-id-to-uuid-fn (:uuid b))]
@@ -84,21 +89,14 @@
                               (if (and (uuid-string? (:uuid b))
                                        (not (contains?  #{3 6} (:type b)))) ; deleted blocks still refed
                                 [[eid :block/uuid (:uuid b)]]
-                                (->> b
-                                     :datoms
-                                     (transit/read t-reader)
-                                     (mapv (partial apply vector eid))))))
+                                (datoms-str->eav-vec (:datoms b) eid))))
                           init-data))
         uuid->db-id-map (persistent! uuid->db-id-tmap)
         journal-blocks' (mapv
                          (fn [b]
                            (let [eid (get uuid->db-id-map (:uuid b))]
-                             (->> b
-                                  :datoms
-                                  (transit/read t-reader)
-                                  (mapv (partial apply vector eid)))))
+                             (datoms-str->eav-vec (:datoms b) eid)))
                          journal-blocks)
-        pages-eav-coll (apply concat pages)
         blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
                               (apply concat))
         all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
