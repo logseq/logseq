@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -130,10 +131,12 @@
       (register-shortcut! handler id))
 
     (let [f (fn [e]
-              (let [shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
-                    dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
+              (let [id (keyword (.-identifier e))
+                    shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
+                    dispatch-fn (get shortcut-map id)]
                 ;; trigger fn
-                (when dispatch-fn (dispatch-fn e))))
+                (when dispatch-fn
+                  (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
           install-id (random-uuid)
           data {install-id
                 {:group       handler-id

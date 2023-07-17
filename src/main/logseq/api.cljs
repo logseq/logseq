@@ -422,7 +422,7 @@
                            (util/safe-lower-case)
                            (keyword)))]
       (when-let [action (get-in (palette-handler/get-commands-unique) [id :action])]
-        (apply action args)))))
+        (apply plugin-handler/hook-lifecycle-fn! id action args)))))
 
 ;; flag - boolean | 'toggle'
 (def ^:export set_left_sidebar_visible
