@@ -2064,7 +2064,8 @@
   (property-component/properties-area block
                                       edit-input-id
                                       (merge
-                                       {:inline-text inline-text
+                                       {:blocks-container-id (:blocks-container-id config)
+                                        :inline-text inline-text
                                         :page-cp page-cp
                                         :block-cp blocks-container
                                         :editor-box (get config :editor-box)}

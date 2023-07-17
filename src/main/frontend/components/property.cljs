@@ -238,9 +238,10 @@
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id
                                 editor-box editor-args
-                                new-item? editing?]}]
+                                new-item? editing?
+                                blocks-container-id]}]
   (let [multiple-values? (= :many (:cardinality (:block/schema property)))
-        editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
+        editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
         repo (state/get-current-repo)
         type (:type (:block/schema property))]
@@ -271,27 +272,25 @@
             :block
             (select-block block property)
 
-            (let [config (if multiple-values?
-                          {:editor-opts
-                           {:on-key-down
-                            (fn [e]
-                              (let [enter? (= (util/ekey e) "Enter")]
-                                (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
-                                           (not (state/get-editor-action)))
-                                  (util/stop e)
-                                  (property-handler/add-property! repo block
-                                                                  (:block/original-name property)
-                                                                  (state/get-edit-content)
-                                                                  :old-value value)
-                                  (exit-edit-property)
+            (let [config {:editor-opts
+                          {:on-key-down
+                           (fn [e]
+                             (let [enter? (= (util/ekey e) "Enter")]
+                               (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
+                                          (not (state/get-editor-action)))
+                                 (util/stop e)
+                                 (property-handler/add-property! repo block
+                                                                 (:block/original-name property)
+                                                                 (util/evalue e)
+                                                                 :old-value value)
+                                 (exit-edit-property)
 
-                                  (when enter?
-                                    (let [values-count (-> (:block/properties (db/entity (:db/id block)))
-                                                           (get (:block/uuid property))
-                                                           (count))
-                                          editor-id (str "ls-property-" (:db/id block) "-" (:db/id property) "-" values-count)]
-                                      (set-editing! property editor-id nil ""))))))}}
-                          {})]
+                                 (when (and enter? multiple-values?)
+                                   (let [values-count (-> (:block/properties (db/entity (:db/id block)))
+                                                          (get (:block/uuid property))
+                                                          (count))
+                                         editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property) "-" values-count)]
+                                     (set-editing! property editor-id nil ""))))))}}]
              (editor-box editor-args editor-id (cond-> config
                                                  multiple-values?
                                                  (assoc :property-value value)))))]
@@ -330,7 +329,7 @@
 
 (rum/defcs property-key-input <
   (rum/local false ::key-down-triggered?)
-  [state block *property-key *property-value *search?]
+  [state block *property-key *property-value *search? blocks-container-id]
   (let [*key-down-triggered? (::key-down-triggered? state)]
     [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
      {:placeholder "Add a property"
@@ -361,7 +360,7 @@
                            (reset! *property-value value)
                            (add-property! block @*property-key @*property-value (some? value))
                            (when property
-                             (let [editor-id (str "ls-property-" (:db/id block) "-" (:db/id property))]
+                             (let [editor-id (str "ls-property-" blocks-container-id (:db/id block) "-" (:db/id property))]
                                (set-editing! property editor-id "" "")))))
 
                        nil)
@@ -382,12 +381,14 @@
                    (db/entity [:block/name (util/page-name-sanity-lc @*property-key)]))]
     [:div
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
-      (property-key-input entity *property-key *property-value *search?)
-      (when (and property (not (:class-schema? opts)))
-        (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
-
-      [:a.close {:on-mouse-down exit-edit-property}
-       svg/close]]
+      (property-key-input entity *property-key *property-value *search? (:blocks-container-id opts))
+      [:div.col-span-3.flex.flex-row
+       (when (and property
+                  (not (:class-schema? opts))
+                  (not @*search?))
+         (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
+       [:a.close {:on-mouse-down exit-edit-property}
+        svg/close]]]
      (when @*search?
        (ui/auto-complete
         result
@@ -442,7 +443,8 @@
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property items item {:keys [dom-id editor-id
                                             page-cp inline-text
-                                            new-item?]
+                                            new-item?
+                                            parsed-value]
                                      :as opts}]
   (let [*show-close? (::show-close? state)
         object? (= :object (:type (:block/schema property)))
@@ -461,7 +463,7 @@
            (property-handler/delete-property-value! (state/get-current-repo)
                                                     entity
                                                     (:block/uuid property)
-                                                    item))}
+                                                    (or parsed-value item)))}
         svg/close])]))
 
 (rum/defcs property-value < rum/reactive
@@ -470,8 +472,8 @@
         v (get (:block/properties-text-values block)
                k
                (get (:block/properties block) k))
-        dom-id (str "ls-property-" k)
-        editor-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+        dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
+        editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         type (:type schema)
@@ -563,7 +565,7 @@
          {:class "select-none"})
        (when (seq properties)
          (for [[prop-uuid-or-built-in-prop v] properties]
-           (let [v (get properties-text-values prop-uuid-or-built-in-prop v)]
+           (let [v* (get properties-text-values prop-uuid-or-built-in-prop v)]
              (if (uuid? prop-uuid-or-built-in-prop)
                (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
                  [:div.property-pair
@@ -573,10 +575,10 @@
                     [:div.property-description.col-span-3.font-light
                      (get-in property [:block/schema :description])]
                     [:div.property-value.col-span-3
-                     (property-value block property v opts)])])
+                     (property-value block property v* (assoc opts :parsed-value v))])])
                ;; TODO: built in properties should have UUID and corresponding schema
                ;; builtin
                [:div
                 [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-                [:span v]]))))
+                [:span v*]]))))
        (new-property repo block edit-input-id properties new-property? opts)])))

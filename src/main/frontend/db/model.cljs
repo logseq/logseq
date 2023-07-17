@@ -1177,6 +1177,7 @@ independent of format as format specific heading characters are stripped"
          sort)))
 
 (defn db-based-get-all-properties
+  ":block/type could be one of [property, class]."
   []
   (let [db (conn/get-db)
         ids (->> (d/datoms db :aevt :block/schema)
