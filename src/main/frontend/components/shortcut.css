@@ -103,8 +103,7 @@
     @apply p-10 m-[-30px];
 
     &:active, &:focus, &:focus-within {
-      outline: auto;
-      outline-color: burlywood;
+      outline: burlywood hidden medium;
     }
 
     .shortcuts-keys-wrap {

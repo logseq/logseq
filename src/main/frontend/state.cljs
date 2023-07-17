@@ -1452,9 +1452,19 @@ Similar to re-frame subscriptions"
   (when value (set-state! [:config repo-url] value)))
 
 (defn set-global-config!
-  [value]
+  [value str-content]
   ;; Placed under :config so cursors can work seamlessly
-  (when value (set-config! ::global-config value)))
+  (when value
+    (set-config! ::global-config value)
+    (set-config! ::global-config-str-content str-content)))
+
+(defn get-global-config
+  []
+  (get-in @state [:config ::global-config]))
+
+(defn get-global-config-str-content
+  []
+  (get-in @state [:config ::global-config-str-content]))
 
 (defn get-wide-mode?
   []

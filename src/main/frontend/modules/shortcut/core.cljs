@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -303,8 +304,10 @@
 
 (defn persist-user-shortcut!
   [id binding]
-  (when-let [user-shortcuts (and id (:shortcuts (state/get-config)))]
-    (config-handler/set-config!
+  (when-let [user-shortcuts (and id (or (:shortcuts (state/get-global-config)) {}))]
+    ;; TODO: exclude current graph config shortcuts
+    (global-config-handler/set-global-config-kv!
+      ;;config-handler/set-config!
       :shortcuts
       (cond-> user-shortcuts
               (nil? binding)
