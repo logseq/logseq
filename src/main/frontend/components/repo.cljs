@@ -193,8 +193,9 @@
               (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
                 {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
                 {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
-              {:title (str (t :new-graph) " - DB version")
-               :options {:on-click #(state/pub-event! [:graph/new-db-graph])}}
+              (when config/db-graph-enabled?
+                {:title (str (t :new-graph) " - DB version")
+                :options {:on-click #(state/pub-event! [:graph/new-db-graph])}})
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               (when-not (config/db-based-graph? current-repo)

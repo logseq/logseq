@@ -78,6 +78,8 @@
   []
   (and lsp-enabled? (global-config-enabled?)))
 
+(def db-graph-enabled? dev?)
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 

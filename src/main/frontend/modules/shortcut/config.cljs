@@ -411,7 +411,7 @@
 
    :graph/db-add                   {:fn #(state/pub-event! [:graph/new-db-graph])
                                     ;; TODO: Remove this once feature is released
-                                    :inactive (not config/dev?)
+                                    :inactive (not config/db-graph-enabled?)
                                     :binding false}
 
    :graph/save                     {:fn #(state/pub-event! [:graph/save])
