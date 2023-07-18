@@ -1655,7 +1655,7 @@
                                                                     (p/catch (fn [_] nil)))
                                                 current-content (or current-content "")
                                                 incoming-content (fs/read-file repo-dir incoming-file)
-                                                merged-content (diff-merge/three-way-merge current-content current-content incoming-content format)]
+                                                merged-content (diff-merge/three-way-merge "" incoming-content current-content format)]
                                           (if (= incoming-content merged-content)
                                             (p/do!
                                              (fs/copy! repo
