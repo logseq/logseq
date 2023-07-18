@@ -46,16 +46,16 @@
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
 
-  [:div.nav-content-item
+  [:div.nav-content-item.mt-3
    {:class (util/classnames [class {:is-expand (not (state/sub [:ui/navigation-item-collapsed? class]))}])}
    [:div.nav-content-item-inner
     [:div.header.items-center.mb-1
      {:on-click (fn [^js/MouseEvent _e]
                   (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium name]
+     [:div.font-medium.text-xs name]
      [:span
       [:a.more svg/arrow-down-v2]]]
-    [:div.bd child]]])
+    [:div.bd.ml-3 child]]])
 
 (defn- delta-y
   [e]
@@ -345,7 +345,7 @@
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.gap-1.flex-col
+        [:div.nav-header.flex.gap-1.flex-col.mt-3
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item

@@ -135,20 +135,28 @@
     transition: background-color .3s;
 
     .ui__icon {
+      @apply flex justify-center;
       width: 20px;
-      text-align: center;
       font-size: 16px;
       margin-right: 8px;
-      opacity: .9;
+      opacity: .7;
       position: relative;
     }
 
     &:hover {
       background-color: var(--ls-tertiary-background-color);
+
+      .ui__icon {
+        opacity: .9;
+      }
     }
 
     &.active, &:active {
       background-color: var(--ls-quaternary-background-color);
+
+      .ui__icon {
+        opacity: .9;
+      }
     }
   }
 
@@ -175,6 +183,15 @@
       align-items: center;
       user-select: none;
       cursor: pointer;
+
+      .ui__icon {
+        @apply flex justify-center;
+        width: 20px;
+      }
+
+      a {
+        opacity: .7;
+      }
 
       > span {
         > a {
@@ -232,7 +249,8 @@
         a {
           width: 100%;
           padding: 4px 24px;
-          transition: background-color .3s;
+          opacity: .8;
+          transition: background-color .3s, opacity .3s;
 
           .page-title {
             white-space: nowrap;
@@ -247,6 +265,7 @@
           }
 
           &:hover {
+            opacity: 1;
             background-color: var(--ls-quaternary-background-color);
           }
         }
