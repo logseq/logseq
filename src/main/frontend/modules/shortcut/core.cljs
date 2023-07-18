@@ -21,10 +21,10 @@
 (defonce *pending-shortcuts (atom []))
 
 (def global-keys #js
-                  [KeyCodes/TAB
-                   KeyCodes/ENTER
-                   KeyCodes/BACKSPACE KeyCodes/DELETE
-                   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+        [KeyCodes/TAB
+         KeyCodes/ENTER
+         KeyCodes/BACKSPACE KeyCodes/DELETE
+         KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
 
@@ -192,7 +192,7 @@
   [handler-id]
   {:did-mount
    (fn [state]
-     (let [*state     (volatile! state)
+     (let [*state (volatile! state)
            install-id (install-shortcut-handler! handler-id {:state *state})]
        (assoc state ::install-id install-id
                     ::*state *state)))
@@ -248,16 +248,16 @@
 (def refresh! (debounce refresh-internal! 1000))
 
 (defn- name-with-meta [e]
-  (let [ctrl    (.-ctrlKey e)
-        alt     (.-altKey e)
-        meta    (.-metaKey e)
-        shift   (.-shiftKey e)
+  (let [ctrl (.-ctrlKey e)
+        alt (.-altKey e)
+        meta (.-metaKey e)
+        shift (.-shiftKey e)
         keyname (get key-names (str (.-keyCode e)))]
     (cond->> keyname
-      ctrl  (str "ctrl+")
-      alt   (str "alt+")
-      meta  (str "meta+")
-      shift (str "shift+"))))
+             ctrl (str "ctrl+")
+             alt (str "alt+")
+             meta (str "meta+")
+             shift (str "shift+"))))
 
 (defn keyname [e]
   (let [name (get key-names (str (.-keyCode e)))]
@@ -304,16 +304,20 @@
 
 (defn persist-user-shortcut!
   [id binding]
-  (when-let [user-shortcuts (and id (or (:shortcuts (state/get-global-config)) {}))]
-    ;; TODO: exclude current graph config shortcuts
-    (global-config-handler/set-global-config-kv!
-      ;;config-handler/set-config!
-      :shortcuts
-      (cond-> user-shortcuts
-              (nil? binding)
-              (dissoc id)
+  (let [graph-shortcuts (or (:shortcuts (state/get-graph-config)))
+        global-shortcuts (or (:shortcuts (state/get-global-config)) {})
+        global? true]
+    (letfn [(get-shortcuts [shortcuts]
+              (cond-> shortcuts
+                      (nil? binding)
+                      (dissoc id)
 
-              (or (string? binding)
-                  (vector? binding)
-                  (boolean? binding))
-              (assoc id binding)))))
+                      (and global?
+                           (or (string? binding)
+                               (vector? binding)
+                               (boolean? binding)))
+                      (assoc id binding)))]
+      ;; TODO: exclude current graph config shortcuts
+      (when (nil? binding)
+        (config-handler/set-config! :shortcuts (get-shortcuts graph-shortcuts)))
+      (global-config-handler/set-global-config-kv! :shortcuts (get-shortcuts global-shortcuts)))))

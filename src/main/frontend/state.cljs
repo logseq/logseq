@@ -345,6 +345,18 @@
              (merge current new)
              new)))))
 
+(defn get-global-config
+  []
+  (get-in @state [:config ::global-config]))
+
+(defn get-global-config-str-content
+  []
+  (get-in @state [:config ::global-config-str-content]))
+
+(defn get-graph-config
+  ([] (get-graph-config (get-current-repo)))
+  ([repo-url] (get-in @state [:config repo-url])))
+
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -353,8 +365,8 @@ should be done through this fn in order to get global config and config defaults
   ([repo-url]
    (merge-configs
     default-config
-    (get-in @state [:config ::global-config])
-    (get-in @state [:config repo-url]))))
+    (get-global-config)
+    (get-graph-config repo-url))))
 
 (defonce publishing? (atom nil))
 
@@ -1457,14 +1469,6 @@ Similar to re-frame subscriptions"
   (when value
     (set-config! ::global-config value)
     (set-config! ::global-config-str-content str-content)))
-
-(defn get-global-config
-  []
-  (get-in @state [:config ::global-config]))
-
-(defn get-global-config-str-content
-  []
-  (get-in @state [:config ::global-config-str-content]))
 
 (defn get-wide-mode?
   []

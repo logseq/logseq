@@ -68,10 +68,13 @@
         v (cond->> v
                    (map? v)
                    (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
-        new-result (rewrite/assoc-in result ks v)
+        new-result (if (and (= 1 (count ks))
+                            (nil? v))
+                     (rewrite/dissoc result (first ks))
+                     (rewrite/assoc-in result ks v))
         new-str-content (str new-result)]
     (fs/write-file! nil nil (global-config-path) new-str-content {:skip-compare? true})
-    (state/set-global-config! new-result new-str-content)))
+    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
 
 (defn start
   "This component has four responsibilities on start:
