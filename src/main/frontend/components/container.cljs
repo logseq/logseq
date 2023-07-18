@@ -52,10 +52,10 @@
     [:div.header.items-center.mb-1
      {:on-click (fn [^js/MouseEvent _e]
                   (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium.text-xs name]
+     [:div.font-medium name]
      [:span
       [:a.more svg/arrow-down-v2]]]
-    [:div.bd.ml-3 child]]])
+    [:div.bd child]]])
 
 (defn- delta-y
   [e]
@@ -88,7 +88,7 @@
             (if whiteboard-page?
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-icon.ml-3 (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitiled? "opacity-50")}
       (if untitiled? (t :untitled)
           (pdf-utils/fix-local-asset-pagename original-name))]]))
