@@ -33,11 +33,13 @@
     (fs/ensureDirSync graph-dir)
     (open-db! db-name)))
 
+(def unlinked-graphs-dir "Unlinked graphs")
+
 (defn unlink-graph!
   [repo]
   (let [db-name (sqlite-db/sanitize-db-name repo)
         path (node-path/join (get-graphs-dir) db-name)
-        unlinked (node-path/join (get-graphs-dir) "Unlinked graphs")
+        unlinked (node-path/join (get-graphs-dir) unlinked-graphs-dir)
         new-path (node-path/join unlinked db-name)
         new-path-exists? (fs/existsSync new-path)
         new-path' (if new-path-exists?

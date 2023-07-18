@@ -237,7 +237,7 @@
   []
   (let [dir (get-db-based-graphs-dir)]
     (->> (common-graph/read-directories dir)
-         (remove (fn [s] (= s "Unlinked graphs")))
+         (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
          (map (fn [s] (str "logseq_db_" s))))))
 
