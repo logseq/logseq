@@ -111,7 +111,7 @@
 
              :else
              v)]
-    (when v'
+    (when (some? v')
       [a v'])))
 
 (defn invoke-hooks
