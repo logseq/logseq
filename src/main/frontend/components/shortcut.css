@@ -31,7 +31,7 @@
   @apply relative;
 
   &-pane-controls {
-    @apply flex space-x-3 absolute top-3 right-1 items-center;
+    @apply flex space-x-3 absolute top-[-4px] right-4 items-center;
 
     .search-input-wrap {
       @apply pr-1 relative;
@@ -73,14 +73,30 @@
     }
   }
 
+  > header {
+    @apply px-4 pb-4 pt-2;
+
+    > h2 {
+      @apply relative top-[-6px];
+    }
+  }
+
   > article {
+    @apply relative max-h-[500px] pb-4 overflow-y-auto;
+
+    overflow-y: overlay;
+
     > ul {
+      @apply px-4 m-0 py-0;
+
       li {
-        @apply text-[16px];
+        @apply text-[15px] px-1;
 
         &.th {
-          @apply rounded my-2 sticky top-[-1rem] cursor-pointer
-          select-none active:opacity-80;
+          @apply rounded mb-2 sticky top-0 cursor-pointer
+          select-none active:opacity-80 px-2 py-1;
+
+          background-color: var(--ls-tertiary-background-color);
         }
 
         .label-wrap {

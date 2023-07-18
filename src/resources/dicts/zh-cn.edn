@@ -233,6 +233,7 @@
  :settings-page/show-full-blocks "显示块引用的所有行"
  :settings-page/tab-general "常规"
  :settings-page/tab-editor "编辑器"
+ :settings-page/tab-keymap "快捷键"
  :settings-page/tab-assets "附件设置"
  :settings-page/tab-advanced "高级设置"
  :settings-page/tab-features "更多功能"

@@ -64,12 +64,12 @@
   ([handler-id id shortcut-map]
    (if (and (keyword? handler-id) (not @*pending-inited?))
      (swap! *pending-shortcuts conj [handler-id id shortcut-map])
-     (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
-                          (let [handler-id (keyword handler-id)]
-                            (get-handler-by-id handler-id))
+     (when-let [^js handler (if (or (string? handler-id) (keyword? handler-id))
+                              (let [handler-id (keyword handler-id)]
+                                (get-handler-by-id handler-id))
 
-                          ;; as Handler instance
-                          handler-id)]
+                              ;; as Handler instance
+                              handler-id)]
 
        (when shortcut-map
          (shortcut-config/add-shortcut! handler-id id shortcut-map))

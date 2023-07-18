@@ -145,10 +145,11 @@
 
 (rum/defc shortcut-desc-label
   [id binding-map]
-  (when (and id binding-map)
-    [:span {:title (some-> (str id) (string/replace "plugin." ""))}
+  (when-let [id' (and id binding-map
+                      (some-> (str id) (string/replace "plugin." "")))]
+    [:span {:title id'}
      [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
-     [:small [:code.text-xs (str (:handler-id binding-map))]]]))
+     [:small.pl-1 [:code.text-xs (str ":" (name (:handler-id binding-map)))]]]))
 
 (defn- open-customize-shortcut-dialog!
   [id]
@@ -322,7 +323,7 @@
                          (set-key-conflicts! conflicts)
                          (let [binding' (if (= binding binding') nil binding')]
                            (shortcut/persist-user-shortcut! k binding')
-                           (notification/show! "Saved!" :success)
+                           ;(notification/show! "Saved!" :success)
                            (state/close-modal!)
                            (saved-cb))))))
 
@@ -369,13 +370,12 @@
 
     (rum/use-effect!
       (fn []
-        (js/setTimeout #(set-ready! true) 800))
+        (js/setTimeout #(set-ready! true) 100))
       [])
 
     [:div.cp__shortcut-page-x
      [:header.relative
-      [:h1.text-4xl "Keymap"]
-      [:h2.text-xs.pt-2.opacity-70
+      [:h2.text-xs.opacity-70
        (str "Total shortcuts "
             (if ready?
               (apply + (map #(count (second %)) result-list-map))
@@ -397,11 +397,11 @@
             (when (and (not in-query?)
                        (not in-filters?)
                        (not in-keystroke?))
-              [:li.bg-green-600.flex.justify-between.th.text-white.px-3.items-center.py-1
+              [:li.flex.justify-between.th
                {:key      (str c)
                 :on-click #(let [f (if folded? disj conj)]
                              (set-folded-categories! (f folded-categories c)))}
-               [:strong (t c)]
+               [:strong.font-semibold (t c)]
                [:i.flex.items-center
                 (ui/icon (if folded? "chevron-left" "chevron-down"))]])
 

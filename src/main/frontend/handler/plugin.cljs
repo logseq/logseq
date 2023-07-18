@@ -176,7 +176,7 @@
 
 (defn has-setting-schema?
   [id]
-  (when-let [pl (and id (get-plugin-inst (name id)))]
+  (when-let [^js pl (and id (get-plugin-inst (name id)))]
     (boolean (.-settingsSchema pl))))
 
 (defn get-enabled-plugins-if-setting-schema
