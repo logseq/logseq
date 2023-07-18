@@ -440,7 +440,7 @@
                                              :fn      route-handler/redirect-to-whiteboard-dashboard!}
 
    :go/keyboard-shortcuts                   {:binding "g s"
-                                             :fn      #(state/pub-event! [:modal/keymap-manager])}
+                                             :fn      #(state/pub-event! [:modal/keymap])}
 
    :go/tomorrow                             {:binding "g t"
                                              :fn      journal-handler/go-to-tomorrow!}
@@ -460,7 +460,7 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
-   :ui/toggle-settings                      {:binding (if mac? "t s" ["t s" "mod+,"])
+   :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}
 
    :ui/toggle-right-sidebar                 {:binding "t r"

@@ -1723,8 +1723,8 @@ Similar to re-frame subscriptions"
   (set-state! :ui/settings-open? false))
 
 (defn open-settings!
-  []
-  (set-state! :ui/settings-open? true))
+  ([] (open-settings! true))
+  ([active-tab] (set-state! :ui/settings-open? active-tab)))
 
 ;; TODO: Move those to the uni `state`
 

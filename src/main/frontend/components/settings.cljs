@@ -1060,12 +1060,19 @@
      (fn [state]
        (state/load-app-user-cfgs)
        state)
+     :did-mount
+     (fn [state]
+       (let [active-tab (first (:rum/args state))
+             *active (::active state)]
+         (when (keyword? active-tab)
+           (reset! *active [active-tab nil])))
+       state)
      :will-unmount
      (fn [state]
        (state/close-settings!)
        state)}
     rum/reactive
-  [state]
+  [state active-tab]
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
