@@ -43,7 +43,7 @@
             avs (->> (gobj/get block "datoms")
                      (transit/read t-reader))]
         (doseq [[a v] avs]
-          (when (not= :block/uuid a)
+          (when (not (#{:block/uuid :page_uuid} a))
             (let [datom (eav->datom uuid->db-id-map [eid a v])]
               (conj! datoms datom))))))
 
@@ -57,6 +57,8 @@
   [datoms-str eid]
   (->> datoms-str
        (transit/read t-reader)
+       ;; Remove :page_uuid as it's a transient attribute used during restore but not in the UI
+       (remove #(= :page_uuid (first %)))
        (mapv (partial apply vector eid))))
 
 (defn restore-initial-data

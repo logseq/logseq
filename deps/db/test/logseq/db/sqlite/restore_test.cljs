@@ -63,7 +63,7 @@
                        frontend-blocks)
           _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
           {:keys [conn]} (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data "test-db")))]
-      (is (= frontend-blocks
+      (is (= (map #(dissoc % :page_uuid) frontend-blocks)
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]
                        @conn)
@@ -97,7 +97,7 @@
                   conn
                   (sqlite-db/get-other-data "test-db" [])
                   uuid->db-id-map)]
-      (is (= frontend-blocks
+      (is (= (map #(dissoc % :page_uuid) frontend-blocks)
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]
                        new-db)
