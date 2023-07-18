@@ -107,7 +107,7 @@
                       (.from Buf content)
                       content)]
     (try
-      (when (and (fs/existsSync path) (not (writable? path)))
+      (when (and (not (cfgs/get-item :feature/disable-automatic-chmod?)) (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
