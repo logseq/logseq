@@ -1051,6 +1051,14 @@ Similar to re-frame subscriptions"
                                vec)
          :selection/direction direction))
 
+(defn drop-selection-block!
+  [block]
+  (swap! state assoc
+         :selection/mode true
+         :selection/blocks (-> (filter #(not= block %) (get-selection-blocks))
+                               util/sort-by-height
+                               vec)))
+
 (defn drop-last-selection-block!
   []
   (let [direction (:selection/direction @state)

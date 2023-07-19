@@ -2163,7 +2163,10 @@
                (not= "A" (gobj/get target "tagName")))
         (do
           (util/stop e)
-          (state/conj-selection-block! (gdom/getElement block-id) :down)
+          (let [block-dom-element (gdom/getElement block-id)]
+            (if (some #(= block-dom-element %) (state/get-selection-blocks))
+              (state/drop-selection-block! block-dom-element)
+              (state/conj-selection-block! block-dom-element :down)))
           (when block-id
             (state/set-selection-start-block! block-id)))
         (when (contains? #{1 0} button)
