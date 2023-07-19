@@ -222,7 +222,9 @@
                                 [:span.flex.relative
                                  {:style {:top 1}}
                                  (ui/icon (if logged-in?
-                                            (str "letter-" (first (user-handler/email)))
+                                            (let [icon (str "letter-" (first (user-handler/email)))
+                                                  tabler-icon (ui/tabler-icon icon)]
+                                              (if tabler-icon icon "user"))
                                             "database") {:size (if logged-in? 12 16)
                                                          :id "database-icon"
                                                          :class (when logged-in? "p-1 rounded color-level-5")})]

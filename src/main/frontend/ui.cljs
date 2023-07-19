@@ -1003,6 +1003,10 @@
 (def get-adapt-icon-class
   (memoize (fn [klass] (r/adapt-class klass))))
 
+(defn tabler-icon
+  [name]
+  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
+
 (rum/defc icon
   ([name] (icon name nil))
   ([name {:keys [extension? font? class] :as opts}]
@@ -1018,7 +1022,7 @@
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
+         (when-let [klass (tabler-icon name)]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" name " " class)}
