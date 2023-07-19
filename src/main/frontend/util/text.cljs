@@ -142,14 +142,17 @@
       [value nil nil])))
 
 (defn get-graph-name-from-path
-  "Get `Dir/GraphName` style name for from repo-url"
+  "Get `Dir/GraphName` style name for from repo-url.
+
+   On iOS, repo-url might be nil"
   [repo-url]
-  (let [path (config/get-local-dir repo-url)
-        path (if (path/is-file-url? path)
-               (path/url-to-path path)
-               path)
-        parts (->> (string/split path #"/")
-                   (take-last 2))]
-    (if (not= (first parts) "0")
-      (util/string-join-path parts)
-      (last parts))))
+  (when (not-empty repo-url)
+    (let [path (config/get-local-dir repo-url)
+          path (if (path/is-file-url? path)
+                 (path/url-to-path path)
+                 path)
+          parts (->> (string/split path #"/")
+                     (take-last 2))]
+      (if (not= (first parts) "0")
+        (util/string-join-path parts)
+        (last parts)))))

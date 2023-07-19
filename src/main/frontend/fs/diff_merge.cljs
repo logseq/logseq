@@ -182,7 +182,7 @@
         income-diffblocks (ast->diff-blocks-alt income-ast income format options)
         current-ast (->ast current)
         current-diffblocks (ast->diff-blocks-alt current-ast current format options)
-        branch-diffblocks [income-diffblocks current-diffblocks]
+        branch-diffblocks [current-diffblocks income-diffblocks]
         merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
         ;; For extracting diff-merge test cases
         ;; _ (prn "input:")

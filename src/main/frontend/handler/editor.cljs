@@ -2696,7 +2696,8 @@
             (delete-concat current-block)))
 
         :else
-        (delete-and-update input current-pos (inc current-pos))))))
+        (delete-and-update 
+          input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
 (defn keydown-backspace-handler
   [cut? e]
@@ -3625,11 +3626,6 @@
         edit-block (state/get-edit-block)
         target-element (.-nodeName (.-target e))]
     (cond
-      (and (whiteboard?) (not edit-input))
-      (do
-        (util/stop e)
-        (.selectAll (.-api ^js (state/active-tldraw-app))))
-
       ;; editing block fully selected
       (and edit-block edit-input
            (= (util/get-selected-text) (.-value edit-input)))
@@ -3644,6 +3640,11 @@
       ;; Focusing other input element, e.g. when editing page title.
       (contains? #{"INPUT" "TEXTAREA"} target-element)
       nil
+
+      (whiteboard?)
+      (do
+        (util/stop e)
+        (.selectAll (.-api ^js (state/active-tldraw-app))))
 
       :else
       (do
