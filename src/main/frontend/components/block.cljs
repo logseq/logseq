@@ -2167,7 +2167,8 @@
             (if (some #(= block-dom-element %) (state/get-selection-blocks))
               (state/drop-selection-block! block-dom-element)
               (state/conj-selection-block! block-dom-element :down)))
-          (when block-id
+          (if (empty? (state/get-selection-blocks))
+            (state/clear-selection!)
             (state/set-selection-start-block! block-id)))
         (when (contains? #{1 0} button)
           (when-not forbidden-edit?
