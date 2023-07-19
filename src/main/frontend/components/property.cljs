@@ -66,7 +66,6 @@
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
-                         :disabled (if (= type :default) "disabled")
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
@@ -463,15 +462,13 @@
            (property-handler/delete-property-value! (state/get-current-repo)
                                                     entity
                                                     (:block/uuid property)
-                                                    (or parsed-value item)))}
+                                                    item))}
         svg/close])]))
 
 (rum/defcs property-value < rum/reactive
   [state block property value opts]
   (let [k (:block/uuid property)
-        v (get (:block/properties-text-values block)
-               k
-               (get (:block/properties block) k))
+        v (get (:block/properties block) k)
         dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
@@ -545,8 +542,6 @@
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
                      (:block/properties block))
-        properties-text-values (if (:class-schema? opts) {}
-                                   (:block/properties-text-values block))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
@@ -565,20 +560,19 @@
          {:class "select-none"})
        (when (seq properties)
          (for [[prop-uuid-or-built-in-prop v] properties]
-           (let [v* (get properties-text-values prop-uuid-or-built-in-prop v)]
-             (if (uuid? prop-uuid-or-built-in-prop)
-               (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
-                 [:div.property-pair
-                  [:div.property-key.col-span-1
-                   (property-key block property)]
-                  (if (:class-schema? opts)
-                    [:div.property-description.col-span-3.font-light
-                     (get-in property [:block/schema :description])]
-                    [:div.property-value.col-span-3
-                     (property-value block property v* (assoc opts :parsed-value v))])])
-               ;; TODO: built in properties should have UUID and corresponding schema
-               ;; builtin
-               [:div
-                [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-                [:span v*]]))))
+           (if (uuid? prop-uuid-or-built-in-prop)
+             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
+               [:div.property-pair
+                [:div.property-key.col-span-1
+                 (property-key block property)]
+                (if (:class-schema? opts)
+                  [:div.property-description.col-span-3.font-light
+                   (get-in property [:block/schema :description])]
+                  [:div.property-value.col-span-3
+                   (property-value block property v (assoc opts :parsed-value v))])])
+             ;; TODO: built in properties should have UUID and corresponding schema
+             ;; builtin
+             [:div
+              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
+              [:span v]])))
        (new-property repo block edit-input-id properties new-property? opts)])))

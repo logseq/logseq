@@ -13,6 +13,8 @@
             [logseq.graph-parser.util :as gp-util]
             [frontend.db.listener :as db-listener]))
 
+;; FIXME: db-version properties
+
 (defn clear-selection!
   []
   (state/clear-selection!))

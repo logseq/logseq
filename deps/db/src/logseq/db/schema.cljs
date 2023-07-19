@@ -112,7 +112,7 @@
 
 (def schema-for-db-based-graph
   (merge
-   schema
+   (dissoc schema :block/properties-text-values)
    {}))
 
 (def retract-attributes

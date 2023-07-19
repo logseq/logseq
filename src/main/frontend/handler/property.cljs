@@ -19,6 +19,9 @@
             [malli.core :as m]
             [malli.error :as me]))
 
+;; TODO:
+;; Validate && list fixes for non-validated values when updating property schema
+
 (defn- date-str?
   [value]
   (when-let [d (js/Date. value)]
@@ -43,7 +46,7 @@
          (seq (:block/class e)))))
 
 (def builtin-schema-types
-  {:default  string?                     ; default, might be mixed with refs, tags
+  {:default  string?                     ; refs/tags will not be extracted
    :number   number?
    :date     [:fn
               {:error/message "should be a date"}
@@ -152,47 +155,32 @@
               (notification/show! msg' :warning))
             (do
               (upsert-property! repo property k-name property-uuid property-type)
-              (let [refs (cond
-                           (= property-type :default)
-                           (block/extract-refs-from-text v*)
-
-                           (uuid? v*)
-                           [:block/uuid v*])
-                    v' (if (= property-type :default)
-                         (if (seq refs)
-                           (distinct (map :block/uuid refs)) v*)
-                         v*)
-                    new-value (cond
+              (let [new-value (cond
                                 (and multiple-values? old-value
                                      (not= old-value :frontend.components.property/new-value-placeholder))
-                                (if (coll? v')
-                                  (vec (distinct (concat value v')))
-                                  (let [v (mapv (fn [x] (if (= x old-value) v' x)) value)]
-                                   (if (contains? (set v) v')
+                                (if (coll? v*)
+                                  (vec (distinct (concat value v*)))
+                                  (let [v (mapv (fn [x] (if (= x old-value) v* x)) value)]
+                                   (if (contains? (set v) v*)
                                      v
-                                     (conj v v'))))
+                                     (conj v v*))))
 
                                 multiple-values?
-                                (let [f (if (coll? v') concat conj)]
-                                  (vec (distinct (f value v'))))
+                                (let [f (if (coll? v*) concat conj)]
+                                  (vec (distinct (f value v*))))
 
                                 :else
-                                v')
+                                v*)
                     new-value (if (coll? new-value)
                                 (vec (remove string/blank? new-value))
                                 new-value)
                     block-properties (assoc properties property-uuid new-value)
-                    block-properties-text-values
-                    (if (= property-type :default)
-                      (assoc (:block/properties-text-values block) property-uuid v*)
-                      (dissoc (:block/properties-text-values block) property-uuid))
                     refs (outliner-core/rebuild-block-refs block block-properties)]
                 ;; TODO: fix block/properties-order
                 (db/transact! repo
                   [[:db/retract (:db/id block) :block/refs]
                    {:block/uuid (:block/uuid block)
                     :block/properties block-properties
-                    :block/properties-text-values block-properties-text-values
                     :block/refs refs}]
                   {:outliner-op :add-property})))))))))
 
@@ -207,8 +195,7 @@
          repo
           [[:db/retract (:db/id block) :block/refs]
            {:block/uuid (:block/uuid block)
-           :block/properties properties'
-           :block/properties-text-values (dissoc (:block/properties-text-values block) property-uuid)
+            :block/properties properties'
             :block/refs refs}]
           {:outliner-op :remove-property})))))
 
