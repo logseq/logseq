@@ -1766,7 +1766,9 @@
         content         (.-value input)
         last-input-char (util/nth-safe content (dec pos))
         last-prev-input-char (util/nth-safe content (dec (dec pos)))
-        prev-prev-input-char (util/nth-safe content (- pos 3))]
+        prev-prev-input-char (util/nth-safe content (- pos 3))
+        repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)]
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
@@ -1792,7 +1794,8 @@
 
       (and (= last-input-char last-prev-input-char commands/colon)
            (or (nil? prev-prev-input-char)
-               (= prev-prev-input-char "\n")))
+               (= prev-prev-input-char "\n"))
+           (not db-based?))
       (do
         (cursor/move-cursor-backward input 2)
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
@@ -1801,12 +1804,15 @@
       (and
        (not= :property-search (state/get-editor-action))
        (let [{:keys [line start-pos]} (text-util/get-current-line-by-pos (.-value input) (dec pos))]
-         (text-util/wrapped-by? line (- pos start-pos) "" gp-property/colons)))
+         (text-util/wrapped-by? line (- pos start-pos) "" gp-property/colons))
+       (not db-based?))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-action! :property-search))
 
-      (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
+      (and (= last-input-char commands/colon)
+           (= :property-search (state/get-editor-action))
+           (not db-based?))
       (state/clear-editor-action!)
 
       ;; Open "Search page or New page" auto-complete

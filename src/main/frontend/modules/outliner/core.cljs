@@ -247,12 +247,15 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [m (-> (:data this)
+    (let [m* (-> (:data this)
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 gp-util/remove-nils
                 block-with-timestamps
                 fix-tag-ids)
+          m (if (config/db-based-graph? (state/get-current-repo))
+              (dissoc m* :block/properties :block/properties-order :block/properties-text-values)
+              m*)
           id (:db/id (:data this))
           block-entity (db/entity id)]
       (when id
