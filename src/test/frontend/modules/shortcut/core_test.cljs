@@ -14,10 +14,10 @@
     (is (= (count (dh/get-conflicts-by-keys "mod+c")) 1))
 
     (is (contains?
-          (-> (dh/get-conflicts-by-keys
-                "mod+c" :shortcut.handler/editor-global
-                {:exclude-ids #{:editor/copy} :group-global? true})
-              (first) (second) (second) (second) (second))
+          (->> (dh/get-conflicts-by-keys
+                 "mod+c" :shortcut.handler/editor-global
+                 {:exclude-ids #{:editor/copy} :group-global? true})
+               (vals) (mapcat #(vals %)) (some #(when (= (first %) "meta+c") (second %))))
           :misc/copy))
 
     (is (->> (dh/get-conflicts-by-keys ["t"])
