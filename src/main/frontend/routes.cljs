@@ -9,7 +9,6 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.shortcut2 :as shortcut2]
             [frontend.components.whiteboard :as whiteboard] 
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]

@@ -304,10 +304,10 @@
 
 (defn persist-user-shortcut!
   [id binding]
-  (let [graph-shortcuts (or (:shortcuts (state/get-graph-config)))
+  (let [graph-shortcuts (or (:shortcuts (state/get-graph-config)) {})
         global-shortcuts (or (:shortcuts (state/get-global-config)) {})
         global? true]
-    (letfn [(get-shortcuts [shortcuts]
+    (letfn [(into-shortcuts [shortcuts]
               (cond-> shortcuts
                       (nil? binding)
                       (dissoc id)
@@ -319,5 +319,5 @@
                       (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
       (when (nil? binding)
-        (config-handler/set-config! :shortcuts (get-shortcuts graph-shortcuts)))
-      (global-config-handler/set-global-config-kv! :shortcuts (get-shortcuts global-shortcuts)))))
+        (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts)))
+      (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts)))))

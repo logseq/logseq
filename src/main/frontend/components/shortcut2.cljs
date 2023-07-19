@@ -15,8 +15,7 @@
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.modules.shortcut.config :as shortcut-config])
-  (:import [goog.events KeyHandler]
-           [goog.ui KeyboardShortcutHandler]))
+  (:import [goog.events KeyHandler]))
 
 (defonce categories
          (vector :shortcut.category/basics
@@ -390,8 +389,7 @@
       (when ready?
         [:ul.list-none.m-0.py-3
          (for [[c binding-map] result-list-map
-               :let [plugin? (= c :shortcut.category/plugins)
-                     folded? (contains? folded-categories c)]]
+               :let [folded? (contains? folded-categories c)]]
            [:<>
             ;; category row
             (when (and (not in-query?)

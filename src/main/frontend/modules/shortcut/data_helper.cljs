@@ -1,8 +1,7 @@
 (ns frontend.modules.shortcut.data-helper
   (:require [borkdude.rewrite-edn :as rewrite]
-            [clojure.set :as set]
+            [clojure.set :refer [rename-keys] :as set]
             [clojure.string :as str]
-            [clojure.set :refer [rename-keys]]
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.config :as config]
