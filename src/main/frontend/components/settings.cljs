@@ -1072,7 +1072,7 @@
        (state/close-settings!)
        state)}
     rum/reactive
-  [state active-tab]
+  [state _active-tab]
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
@@ -1139,7 +1139,7 @@
          (settings-editor current-repo)
 
          :keymap
-         (shortcut2/shortcut-page-x)
+         (shortcut2/shortcut-keymap-x)
 
          :version-control
          (settings-git)

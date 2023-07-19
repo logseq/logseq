@@ -69,10 +69,6 @@
     {:name :settings
      :view settings/settings}]
 
-   ["/settings/shortcut"
-    {:name :shortcut-setting
-     :view shortcut2/shortcut-page-x}]
-
    ["/settings/zotero"
     {:name :zotero-setting
      :view zotero/settings}]

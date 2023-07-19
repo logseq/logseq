@@ -8,8 +8,7 @@
     (is (= (dh/get-group :editor/copy) :shortcut.handler/editor-global))))
 
 (deftest test-shortcut-conflicts-detection
-  (testing "get conflicts with shortcut id"
-    (do ";; TODO"))
+  (testing "get conflicts with shortcut id")
 
   (testing "get conflicts with binding keys"
     (is (= (count (dh/get-conflicts-by-keys "mod+c")) 1))

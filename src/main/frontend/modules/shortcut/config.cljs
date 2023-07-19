@@ -602,6 +602,8 @@
           [:editor/escape-editing
            :editor/backspace
            :editor/delete
+           :editor/zoom-in
+           :editor/zoom-out
            :editor/new-block
            :editor/new-line
            :editor/follow-link
@@ -661,8 +663,6 @@
     (-> (build-category-map
           [:editor/insert-link
            :editor/select-all-blocks
-           :editor/zoom-in
-           :editor/zoom-out
            :editor/toggle-undo-redo-mode
            :editor/toggle-number-list
            :editor/undo

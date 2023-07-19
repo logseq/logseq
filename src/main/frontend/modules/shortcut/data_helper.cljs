@@ -75,7 +75,7 @@
             (and (string? desc) (str/starts-with? desc "{Missing")))
       (str id) desc)))
 
-(defn- mod-key [shortcut]
+(defn mod-key [shortcut]
   (when (string? shortcut)
     (str/replace shortcut #"(?i)mod"
                  (if util/mac? "meta" "ctrl"))))

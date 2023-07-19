@@ -15,7 +15,7 @@
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.modules.shortcut.config :as shortcut-config])
-  (:import [goog.events KeyCodes KeyHandler KeyNames]
+  (:import [goog.events KeyHandler]
            [goog.ui KeyboardShortcutHandler]))
 
 (defonce categories
@@ -188,7 +188,7 @@
               (shortcut-utils/decorate-binding k)]
              [:small (str id')] [:small (str handler-id)]]]))]])])
 
-(rum/defc customize-shortcut-dialog-inner
+(rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
   [k action-name binding user-binding {:keys [saved-cb modal-id]}]
   (let [*ref-el (rum/use-ref nil)
         [modal-life _] (r/use-atom *customize-modal-life-sentry)
@@ -336,7 +336,7 @@
   (->> categories
        (map #(vector % (into (sorted-map) (dh/binding-by-category %))))))
 
-(rum/defc shortcut-page-x
+(rum/defc ^:large-vars/cleanup-todo shortcut-keymap-x
   []
   (let [_ (r/use-atom shortcut-config/*category)
         _ (r/use-atom *refresh-sentry)
