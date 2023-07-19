@@ -44,18 +44,21 @@
             [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
-  [name {:keys [class]} child]
-
-  [:div.nav-content-item.mt-3
-   {:class (util/classnames [class {:is-expand (not (state/sub [:ui/navigation-item-collapsed? class]))}])}
-   [:div.nav-content-item-inner
-    [:div.header.items-center.mb-1
-     {:on-click (fn [^js/MouseEvent _e]
-                  (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium name]
-     [:span
-      [:a.more svg/arrow-down-v2]]]
-    [:div.bd child]]])
+  [name {:keys [class count]} child]
+  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
+        shrink? (and (not collapsed?) (> count 3))]
+    [:div.nav-content-item.mt-3
+     {:class (util/classnames [class {:is-expand (not collapsed?)
+                                      :flex-shrink-0 (not shrink?)
+                                      :flex-shrink shrink?}])}
+     [:div.nav-content-item-inner
+      [:div.header.items-center
+       {:on-click (fn [^js/MouseEvent _e]
+                    (state/toggle-navigation-item-collapsed! class))}
+       [:div.font-medium name]
+       [:span
+        [:a.more svg/arrow-down-v2]]]
+      [:div.bd child]]]))
 
 (defn- delta-y
   [e]
@@ -134,20 +137,20 @@
 
 (rum/defc favorites < rum/reactive
   [t]
-  (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "star" {:size 16})
-    [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+  (let [favorites (->> (:favorites (state/sub-config))
+                       (remove string/blank?)
+                       (filter string?))]
+    (nav-content-item
+     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      (ui/icon "star" {:size 16})
+      [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
-   {:class "favorites"
-    :edit-fn
-    (fn [e]
-      (rfe/push-state :page {:name "Favorites"})
-      (util/stop e))}
-
-   (let [favorites (->> (:favorites (state/sub-config))
-                        (remove string/blank?)
-                        (filter string?))]
+     {:class "favorites"
+      :count (count favorites)
+      :edit-fn
+      (fn [e]
+        (rfe/push-state :page {:name "Favorites"})
+        (util/stop e))}
      (when (seq favorites)
        [:ul.favorites.text-sm
         (for [name favorites]
@@ -158,21 +161,22 @@
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
-  (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "history" {:size 16})
-    [:span.flex-1.ml-2
-     (string/upper-case (t :left-side-bar/nav-recent-pages))]]
+  (let [pages (->> (db/sub-key-value :recent/pages)
+                   (remove string/blank?)
+                   (filter string?)
+                   (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
+                                    :page page}))
+                   (util/distinct-by :lowercase)
+                   (map :page))]
+    (nav-content-item
+     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      (ui/icon "history" {:size 16})
+      [:span.flex-1.ml-2
+       (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
-   {:class "recent"}
+     {:class "recent"
+      :count (count pages)}
 
-   (let [pages (->> (db/sub-key-value :recent/pages)
-                    (remove string/blank?)
-                    (filter string?)
-                    (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
-                                     :page page}))
-                    (util/distinct-by :lowercase)
-                    (map :page))]
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]

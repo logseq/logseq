@@ -161,10 +161,7 @@
   }
 
   .nav-contents-container {
-    @apply h-full flex-grow-0 flex-grow-0
-    overflow-x-hidden overflow-y-auto;
-
-    padding-bottom: 60px;
+    @apply h-full flex-grow-0 overflow-hidden;
 
     &.is-scrolled {
       border-top: 1px solid var(--ls-tertiary-border-color);
@@ -172,8 +169,14 @@
   }
 
   .nav-content-item {
-    &-inner {
-      border-radius: 8px;
+    @apply overflow-hidden;
+
+    &.is-expand {
+      min-height: 120px;
+    }
+
+    .nav-content-item-inner {
+      @apply flex flex-col h-full overflow-hidden;
     }
 
     .header {
@@ -235,7 +238,10 @@
     }
 
     .bd {
+      @apply py-1 overflow-y-auto;
+
       display: none;
+      min-height: 40px;
 
       ul {
         list-style: none;
@@ -286,9 +292,6 @@
   }
 
   .create {
-    position: absolute;
-    bottom: 0;
-    left: 0;
     width: 100%;
     padding: 14px;
     background-image: linear-gradient(transparent, var(--ls-primary-background-color));
