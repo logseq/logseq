@@ -1673,9 +1673,6 @@
                                              (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
                                              (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
                                                                                                                :from-disk? true
-                                                                                                               :fs/event :fs/remote-file-change})
-                                             (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
-                                                                                                               :from-disk? true
                                                                                                                :fs/event :fs/remote-file-change})))))))))))))))))
 
 (defn- apply-filetxns
@@ -2481,7 +2478,7 @@
                 local-all-files-meta    (<! local-all-files-meta-c)
                 {diff-remote-files :result elapsed-time :time}
                 (util/with-time (diff-file-metadata-sets remote-all-files-meta local-all-files-meta))
-                _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
+                 _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
                 recent-10-days-range    ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                                         (sort-by
@@ -2869,7 +2866,7 @@
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
-    (println (str "[SyncManager " graph-uuid "]")
+    (println "[SyncManager]"
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :args args :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
@@ -3266,7 +3263,7 @@
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopping")
+      (println "[SyncManager]" "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
 
@@ -3274,7 +3271,7 @@
 
       (reset! *sync-entered? false)
 
-      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopped"))
+      (println "[SyncManager]" "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 
