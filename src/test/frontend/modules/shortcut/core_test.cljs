@@ -1,7 +1,8 @@
 (ns frontend.modules.shortcut.core-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
-            [frontend.modules.shortcut.data-helper :as dh]))
+            [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.util :as util]))
 
 (deftest test-core-basic
   (testing "get handler id"
@@ -17,7 +18,7 @@
           (->> (dh/get-conflicts-by-keys
                  "mod+c" :shortcut.handler/editor-global
                  {:exclude-ids #{:editor/copy} :group-global? true})
-               (vals) (mapcat #(vals %)) (some #(when (= (first %) "meta+c") (second %))))
+               (vals) (mapcat #(vals %)) (some #(when (= (first %) (if util/mac? "meta+c" "ctrl+c")) (second %))))
           :misc/copy))
 
     (is (->> (dh/get-conflicts-by-keys ["t"])
