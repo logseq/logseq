@@ -133,14 +133,17 @@
     (when (and (config/db-based-graph? (state/get-current-repo))
                (:block/page block-entity)
                tags)
-      (when-let [instance-id (first (remove (set (map :block/uuid tags))
-                                            (map :block/uuid (:block/refs m))))]
-        (swap! txs-state (fn [txs]
-                           (concat txs
-                                   [{:block/uuid instance-id
-                                     :block/tags (:block/tags m)}
-                                    {:db/id (:db/id block-entity)
-                                     :block/instance [:block/uuid instance-id]}])))))))
+      (let [tag-names (set (map :block/name tags))]
+        (when-let [instance-id (:block/uuid
+                                (first (remove (fn [ref]
+                                                 (contains? tag-names (:block/name ref)))
+                                               (:block/refs m))))]
+          (swap! txs-state (fn [txs]
+                             (concat txs
+                                     [{:block/uuid instance-id
+                                       :block/tags (:block/tags m)}
+                                      {:db/id (:db/id block-entity)
+                                       :block/instance [:block/uuid instance-id]}]))))))))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -176,6 +179,19 @@
                     (concat (:block/refs m)))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]))))))
+
+(defn- fix-tag-ids
+  [m]
+  (let [refs (set (map :block/name (seq (:block/refs m))))
+        tags (seq (:block/tags m))]
+    (if (and refs tags)
+      (update m :block/tags (fn [tags]
+                              (map (fn [tag]
+                                     (if (contains? refs (:block/name tag))
+                                       (dissoc tag :block/uuid)
+                                       tag))
+                                tags)))
+     m)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -235,7 +251,8 @@
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 gp-util/remove-nils
-                block-with-timestamps)
+                block-with-timestamps
+                fix-tag-ids)
           id (:db/id (:data this))
           block-entity (db/entity id)]
       (when id
