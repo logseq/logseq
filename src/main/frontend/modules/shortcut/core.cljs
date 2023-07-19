@@ -211,9 +211,9 @@
      state)})
 
 (defn unlisten-all []
-  (doseq [{:keys [handler group]} (vals @*installed-handlers)
+  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
-    (.removeAllListeners handler)))
+    (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
 (defn listen-all []
   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
