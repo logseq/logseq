@@ -154,6 +154,7 @@
         pages (->> (model/get-all-page-original-names repo)
                    (map (fn [p] {:value p})))]
     (select/select {:items pages
+                    :dropdown? true
                     :on-chosen (fn [chosen]
                                  (let [page (:value chosen)
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
@@ -180,6 +181,7 @@
                    (map (fn [b]
                           (assoc b :value (:block/content b)))))]
     (select/select {:items blocks
+                    :dropdown? true
                     :on-chosen (fn [chosen]
                                  (let [id (:block/uuid chosen)]
                                    (add-property! block (:block/original-name property) id true)))
@@ -220,6 +222,7 @@
                    (distinct))
         add-property-f #(add-property! block (:block/original-name property) % true)]
     (select/select {:items items
+                    :dropdown? true
                     :on-chosen (fn [chosen] (add-property-f (:value chosen)))
                     :input-opts (fn [not-matched?]
                                   {:on-key-down (fn [e]

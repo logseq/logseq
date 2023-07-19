@@ -31,6 +31,14 @@
     .cp__select-main {
         width: fit-content;
         margin: 0;
+
+        .ui__dropdown-trigger {
+            position: absolute;
+
+            .dropdown-wrapper {
+                left: 0;
+            }
+        }
     }
 
     .cp__select .input-wrap {
@@ -38,12 +46,17 @@
         min-width: 14em;
     }
 
-    .cp__select .input-wrap input {
+    .cp__select .input-wrap input.cp__select-input {
         border: none;
     }
 
+    .cp__select .input-wrap input.cp__select-input:focus {
+        outline: none;
+        box-shadow: none;
+    }
+
     .cp__select-input {
-        padding: 0.5em 1em;
+        padding: 0.25em;
     }
 
     .ls-block, .editor-wrapper {

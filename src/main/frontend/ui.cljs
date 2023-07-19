@@ -142,8 +142,16 @@
 
 ;; public exports
 (rum/defcs dropdown < (mixins/modal :open?)
+  {:init (fn [state]
+           (let [opts (->> (drop 2 (:rum/args state))
+                           (partition 2)
+                           (map vec)
+                           (into {}))]
+             (when (:initial-open? opts)
+               (reset! (:open? state) true)))
+           state)}
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index trigger-class]
+   & [{:keys [modal-class z-index trigger-class initial-open?]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)
