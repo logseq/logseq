@@ -116,24 +116,26 @@
 
 (defn- upsert-property!
   [repo property k-name property-uuid property-type]
-  (when (and property (nil? (:block/type property)))
-    (db/transact! repo [(outliner-core/block-with-updated-at
-                         {:block/schema {:type property-type}
-                          :block/uuid property-uuid
-                          :block/type "property"})]
-      {:outliner-op :update-property}))
-  (when (nil? property) ;if property not exists yet
-    (db/transact! repo [(outliner-core/block-with-timestamps
-                         {:block/schema {:type property-type}
-                          :block/original-name k-name
-                          :block/name (util/page-name-sanity-lc k-name)
-                          :block/uuid property-uuid
-                          :block/type "property"})]
-      {:outliner-op :create-new-property})))
+  (let [k-name (name k-name)]
+    (when (and property (nil? (:block/type property)))
+     (db/transact! repo [(outliner-core/block-with-updated-at
+                          {:block/schema {:type property-type}
+                           :block/uuid property-uuid
+                           :block/type "property"})]
+       {:outliner-op :update-property}))
+    (when (nil? property) ;if property not exists yet
+      (db/transact! repo [(outliner-core/block-with-timestamps
+                           {:block/schema {:type property-type}
+                            :block/original-name k-name
+                            :block/name (util/page-name-sanity-lc k-name)
+                            :block/uuid property-uuid
+                            :block/type "property"})]
+        {:outliner-op :create-new-property}))))
 
 (defn add-property!
   [repo block k-name v & {:keys [old-value]}]
-  (let [property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+  (let [k-name (name k-name)
+        property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         v (if property v (or v ""))]
     (when (some? v)
       (let [property-uuid (or (:block/uuid property) (random-uuid))
@@ -262,7 +264,8 @@
 (defn class-add-property!
   [repo class k-name]
   (when (= "class" (:block/type class))
-    (let [property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+    (let [k-name (name k-name)
+          property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
           property-uuid (or (:block/uuid property) (random-uuid))
           property-type (get-in property [:block/schema :type] :default)
           {:keys [properties] :as class-schema} (:block/schema class)
