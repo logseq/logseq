@@ -21,9 +21,7 @@
 
 (rum/defc handbooks-popup
   []
-
   (let [popup-ref (rum/use-ref nil)]
-
     (rum/use-effect!
      (fn []
        (when-let [^js popup-el (rum/deref popup-ref)]

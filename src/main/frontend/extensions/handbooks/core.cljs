@@ -9,6 +9,7 @@
             [frontend.handler.notification :as notification]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.rum :as r]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [camel-snake-kebab.core :as csk]
@@ -18,6 +19,8 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.context.i18n :refer [t]]
             [clojure.edn :as edn]))
+
+(defonce *config (atom {}))
 
 (defn get-handbooks-endpoint
   [resource]
@@ -424,18 +427,25 @@
    :topic-detail [pane-topic-detail]
    :settings     [pane-settings]})
 
+
+(defonce discord-endpoint "https://discord.com/api/v9/invites/VNfUaTtdFb?with_counts=true&with_expiration=true")
+
 (rum/defc footer-link-cards
   []
-  (let [discord-endpoint "https://discord.com/api/v9/invites/VNfUaTtdFb?with_counts=true&with_expiration=true"
-        [ds-count, set-ds-count!] (rum/use-state nil)]
+  (let [[config _] (r/use-atom *config)
+        discord-count (:discord-online config)]
 
     (rum/use-effect!
       (fn []
-        (-> (js/window.fetch discord-endpoint)
-            (p/then #(.json %))
-            (p/then #(when-let [count (.-approximate_presence_count ^js %)]
-                       (set-ds-count! (.toLocaleString count))))))
-      [])
+        (when (or (nil? discord-count)
+                  (> (- (js/Date.now) (:discord-online-created config)) (* 10 60 1000)))
+          (-> (js/window.fetch discord-endpoint)
+              (p/then #(.json %))
+              (p/then #(when-let [count (.-approximate_presence_count ^js %)]
+                         (swap! *config assoc
+                                :discord-online (.toLocaleString count)
+                                :discord-online-created (js/Date.now)))))))
+      [discord-count])
 
     [:<>
      ;; discord
@@ -448,7 +458,7 @@
           [:strong.font-semibold {:style {:font-size 16}} "Join our discord"]
           [:small.flex.items-center
            [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
-           [:span.pl-1.opacity-90 [:strong (or ds-count "?")] [:span.opacity-70 " users online currently"]]]]
+           [:span.pl-1.opacity-90 [:strong (or discord-count "?")] [:span.opacity-70 " users online currently"]]]]
          [:span.flex.items-center.opacity-60 (ui/icon "external-link" {:size 17})]]])
 
      ;; more links
