@@ -48,11 +48,9 @@
                                    (catch :default _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db (db-conn/get-schema repo))))
-                    attached-db (d/db-with stored-db
-                                           default-db/built-in-pages) ;; TODO bug overriding uuids?
-                    db (if (old-schema? attached-db)
-                         (db-migrate/migrate attached-db)
-                         attached-db)]
+                    db (if (old-schema? stored-db)
+                         (db-migrate/migrate stored-db)
+                         stored-db)]
                 (db-conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
@@ -74,9 +72,9 @@
                             (str "DB init! " (count all-datoms) " datoms")
                             (d/init-db all-datoms schema)))
         new-db (sqlite-restore/restore-other-data conn data uuid->db-id-map {:init-db-fn profiled-init-db})]
-    
+
     (reset! conn new-db)
-    
+
     (let [end (util/time-ms)]
       (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
 
