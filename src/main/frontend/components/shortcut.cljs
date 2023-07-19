@@ -210,19 +210,6 @@
    (shortcut-table :shortcut.category/plugins true)
    (shortcut-table :shortcut.category/others true)])
 
-(rum/defc keymap-pane
-  []
-  (let [[ready?, set-ready!] (rum/use-state false)]
-    (rum/use-effect!
-      (fn [] (js/setTimeout #(set-ready! true) 32))
-      [])
-
-    [:div.cp__keymap-pane
-     [:h1.pb-2.text-3xl.pt-2 "Keymap"]
-     (if ready?
-       (keymap-tables)
-       [:p.flex.justify-center.py-20 (ui/loading "")])]))
-
 (rum/defc shortcut-page
   [{:keys [show-title?]
     :or {show-title? true}}]
