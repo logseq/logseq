@@ -117,6 +117,21 @@
     }
   }
 
+  .nav-header a {
+    .keyboard-shortcut {
+      width: 0;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    &:hover {
+      .keyboard-shortcut {
+        width: auto;
+        opacity: 1;
+      }
+    }
+  }
+
   .page-icon {
     @apply flex items-center mr-1 align-baseline;
 

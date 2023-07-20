@@ -216,13 +216,7 @@
         (dissoc default-home :page)))))
 
 (defn sidebar-item
-  [{on-click-handler :on-click-handler
-    class :class
-    title :title
-    icon :icon
-    icon-extension? :icon-extension?
-    active :active
-    href :href}]
+  [{:keys [on-click-handler class title icon icon-extension? active href shortcut]}]
   [:div
    {:class class}
    [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
@@ -230,7 +224,9 @@
      :class (when active "active")
      :href href}
     (ui/icon (str icon) {:extension? icon-extension?})
-    [:span.flex-1 title]]])
+    [:span.flex-1 title]
+    (when shortcut
+      [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config shortcut))])]])
 
 (defn close-sidebar-on-mobile!
   []
@@ -353,51 +349,54 @@
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
-              {:class            "home-nav"
-               :title            page
+              {:class "home-nav"
+               :title page
                :on-click-handler route-handler/redirect-to-home!
-               :active           (and (not srs-open?)
-                                      (= route-name :page)
-                                      (= page (get-in route-match [:path-params :name])))
-               :icon             "home"})
+               :active (and (not srs-open?)
+                            (= route-name :page)
+                            (= page (get-in route-match [:path-params :name])))
+               :icon "home"})
              (sidebar-item
-              {:class            "journals-nav"
-               :active           (and (not srs-open?)
-                                      (or (= route-name :all-journals) (= route-name :home)))
-               :title            (t :left-side-bar/journals)
+              {:class "journals-nav"
+               :active (and (not srs-open?)
+                            (or (= route-name :all-journals) (= route-name :home)))
+               :title (t :left-side-bar/journals)
                :on-click-handler (fn [e]
                                    (if (gobj/get e "shiftKey")
                                      (route-handler/sidebar-journals!)
                                      (route-handler/go-to-journals!)))
-               :icon             "calendar"})))
+               :icon "calendar"
+               :shortcut :go/journals})))
 
          (when enable-whiteboards?
            (sidebar-item
-            {:class            "whiteboard"
-             :title            (t :right-side-bar/whiteboards)
-             :href             (rfe/href :whiteboards)
+            {:class "whiteboard"
+             :title (t :right-side-bar/whiteboards)
+             :href (rfe/href :whiteboards)
              :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-             :active           (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon             "whiteboard"
-             :icon-extension? true}))
+             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon "whiteboard"
+             :icon-extension? true
+             :shortcut :go/whiteboards}))
 
          (when (state/enable-flashcards? (state/get-current-repo))
            [:div.flashcards-nav
             (flashcards srs-open?)])
 
          (sidebar-item
-          {:class  "graph-view-nav"
-           :title  (t :right-side-bar/graph-view)
-           :href   (rfe/href :graph)
+          {:class "graph-view-nav"
+           :title (t :right-side-bar/graph-view)
+           :href (rfe/href :graph)
            :active (and (not srs-open?) (= route-name :graph))
-           :icon   "hierarchy"})
+           :icon "hierarchy"
+           :shortcut :go/graph-view})
 
          (sidebar-item
-          {:class  "all-pages-nav"
-           :title  (t :right-side-bar/all-pages)
-           :href   (rfe/href :all-pages)
+          {:class "all-pages-nav"
+           :title (t :right-side-bar/all-pages)
+           :href (rfe/href :all-pages)
            :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})]]
+           :icon "files"})]]
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}
