@@ -242,6 +242,10 @@
         @apply py-0.5 text-xs font-semibold;
       }
 
+      p {
+        @apply leading-[1.6rem] my-[0.75rem];
+      }
+
       blockquote {
         margin: 0;
       }
