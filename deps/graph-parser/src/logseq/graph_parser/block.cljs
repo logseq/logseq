@@ -560,12 +560,12 @@
                        :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (-> (assoc block
-                           :uuid id
-                           :refs ref-pages-in-properties
-                           :format format
-                           :meta pos-meta)
-                    (dissoc :size))
+               (-> (assoc block
+                          :uuid id
+                          :refs ref-pages-in-properties
+                          :format format
+                          :meta pos-meta)
+                   (dissoc :size :unordered))
                 (or (seq (:properties properties)) markdown-heading?)
                 (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block))
                        :properties-text-values (:properties-text-values properties)
