@@ -77,10 +77,10 @@ pre {
 }
 
 #time-repeater {
-  width: 135px;
+  min-width: 300px;
 
   @screen sm {
-    min-width: 300px;
+    width: 135px;
   }
 }
 

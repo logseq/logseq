@@ -122,6 +122,28 @@
           (is (= expected-paste result))
           (reset))))))
 
+(deftest-async editor-on-paste-with-text-over-link
+  (testing "Paste text over a selected formatted link"
+    (let [actual-text (atom nil)
+          clipboard "logseq"
+          selected-text "https://logseq.com"
+          block-content (str selected-text " is awesome")
+          expected-paste "[logseq](https://logseq.com) is awesome"]
+      (test-helper/with-reset
+        reset
+        [;; paste-copied-blocks-or-text mocks below
+         util/stop (constantly nil)
+         util/get-selected-text (constantly selected-text)
+         editor-handler/get-selection-and-format
+         (constantly {:selection-start 0 :selection-end (count selected-text)
+                      :selection selected-text :format :markdown :value block-content})
+         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
+         cursor/move-cursor-to (constantly nil)]
+        (p/let [_ ((paste-handler/editor-on-paste! nil)
+                   #js {:clipboardData #js {:getData (constantly clipboard)}})]
+          (is (= expected-paste @actual-text))
+          (reset))))))
+
 (deftest-async editor-on-paste-with-selected-text-and-special-link
   (testing "Formatted paste with special link on selected text pastes a formatted link"
     (let [actual-text (atom nil)

@@ -213,6 +213,7 @@
   (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
 
 (defn get-format
+  "File path to format keyword, :org, :markdown, etc."
   [file]
   (when file
     (normalize-format (keyword (some-> (path->file-ext file) string/lower-case)))))

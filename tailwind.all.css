@@ -2,20 +2,17 @@
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
-@import "resources/css/inter.css";
+@import "inter-ui/inter.css";
 @import "resources/css/reveal.min.css";
 @import "resources/css/reveal_black.min.css";
-@import "resources/css/photoswipe.css";
+@import "photoswipe/dist/photoswipe.css";
 @import "resources/css/shepherd.css";
-@import "resources/css/fonts.css";
-@import "resources/css/excalidraw.min.css";
 @import "resources/css/amplify.css";
 @import "tldraw/apps/tldraw-logseq/src/styles.css";
-@import "resources/css/katex.min.css";
-@import "resources/css/codemirror.min.css";
-@import "resources/css/codemirror.solarized.css";
-@import "resources/css/show-hint.css";
-
+@import "katex/dist/katex.min.css";
+@import "codemirror/lib/codemirror.css";
+@import "codemirror/theme/solarized.css";
+@import "codemirror/addon/hint/show-hint.css";
 @import "resources/css/animation.css";
 @import "resources/css/table.css";
 @import "resources/css/datepicker.css";

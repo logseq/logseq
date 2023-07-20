@@ -74,7 +74,8 @@
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
     (for [color built-in-colors]
       [:a
-       {:title (t (keyword "color" color))
+       {:key (str "key-" color)
+        :title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
        [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
     [:a
@@ -166,12 +167,13 @@
                    sequence)]
     [:span.keyboard-shortcut
      (map-indexed (fn [i key]
-                    [:code {:key i}
-                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                   ;; mod key, because that's what the Mac keyboards actually say.
-                     (if (or (= :meta key) (= "meta" key))
-                       (util/meta-key-name)
-                       (name key))])
+                    (let [key' (shortcut-helper/decorate-binding (str key))]
+                      [:code {:key i}
+                      ;; Display "cmd" rather than "meta" to the user to describe the Mac
+                      ;; mod key, because that's what the Mac keyboards actually say.
+                       (if (= "meta" key')
+                        (util/meta-key-name)
+                        key')]))
                   sequence)]))
 
 (rum/defc menu-link
@@ -1161,15 +1163,16 @@
    [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
     [:div.flex.flex-row.justify-between.flex-1.px-1
      (for [i (range 1 7)]
-       (button
-        ""
-        :disabled? (and (some? heading) (= heading i))
-        :icon (str "h-" i)
-        :title (t :heading i)
-        :class "to-heading-button"
-        :on-click #(add-heading-fn i)
-        :intent "link"
-        :small? true))
+       (rum/with-key (button
+                      ""
+                      :disabled? (and (some? heading) (= heading i))
+                      :icon (str "h-" i)
+                      :title (t :heading i)
+                      :class "to-heading-button"
+                      :on-click #(add-heading-fn i)
+                      :intent "link"
+                      :small? true)
+         (str "key-h-" i)))
      (button
       ""
       :icon "h-auto"

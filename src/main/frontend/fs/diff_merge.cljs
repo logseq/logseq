@@ -1,24 +1,17 @@
 (ns frontend.fs.diff-merge
   "Implementation of text (file) based content diff & merge for conflict resolution"
-  (:require ["@logseq/diff-merge" :refer [Differ attach_uuids]]
+  (:require ["@logseq/diff-merge" :refer [attach_uuids Differ Merger]]
+            [cljs-bean.core :as bean]
+            [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
-            [cljs-bean.core :as bean]
-            [frontend.db.utils :as db-utils]
-            [frontend.db.model :as db-model]))
+            [clojure.string :as string]))
 
-;; (defn diff-merge
-;;   "N-ways diff & merge
-;;    Accept: blocks
-;;    https://github.com/logseq/diff-merge/blob/44546f2427f20bd417b898c8ba7b7d10a9254774/lib/mldoc.ts#L17-L22
-;;    https://github.com/logseq/diff-merge/blob/85ca7e9bf7740d3880ed97d535a4f782a963395d/lib/merge.ts#L40"
-;;   [base & branches]
-;;   ()
-;;   (let [merger (Merger.)]
-;;     (.mergeBlocks merger (bean/->js base) (bean/->js branches))))
 
-(defn diff 
+(defn diff
   "2-ways diff
    Accept: blocks in the struct with the required info
    Please refer to the `Block` struct in the link below
@@ -46,6 +39,7 @@
                     blocks levels)]
     blocks))
 
+;; TODO: Switch to ast->diff-blocks-alt
 ;; Diverged from gp-block/extract-blocks for decoupling
 ;; The process of doing 2 way diff is like:
 ;; 1. Given a base ver. of page (AST in DB), and a branch ver. of page (externally modified file content)
@@ -71,7 +65,7 @@
               pos-meta (assoc pos-meta :end_pos end-pos)]
           (cond
             (gp-block/heading-block? block)
-            (let [content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)]
+            (let [content (gp-block/get-block-content encoded-content (second block) format pos-meta block-pattern)]
               (recur (conj headings {:body  content
                                      :level (:level (second block))
                                      :uuid  (:id properties)})
@@ -87,6 +81,7 @@
             (recur headings (rest blocks) properties (:end_pos pos-meta))))
         (if (empty? properties)
           (reverse headings)
+          ;; Add pre-blocks
           (let [[block _] (first blocks)
                 pos-meta {:start_pos 0 :end_pos end-pos}
                 content (gp-block/get-block-content encoded-content block format pos-meta block-pattern)
@@ -95,3 +90,107 @@
                    :level 1
                    :uuid uuid}
                   (reverse headings))))))))
+
+
+(defn- get-sub-content-from-pos-meta
+  "Replace gp-block/get-block-content, return bare content, without any trim"
+  [raw-content pos-meta]
+  (let [{:keys [start_pos end_pos]} pos-meta]
+    (utf8/substring raw-content start_pos end_pos)))
+
+;; Diverged from ast->diff-blocks
+;; Add :meta :raw-body to the block
+(defn- ast->diff-blocks-alt
+  "Prepare the blocks for diff-merge
+   blocks: ast of blocks
+   content: corresponding raw content"
+  [blocks content format {:keys [user-config block-pattern]}]
+  {:pre [(string? content) (contains? #{:markdown :org} format)]}
+  (let [utf8-encoded-content (utf8/encode content)]
+    (loop [headings []
+           blocks (reverse blocks)
+           properties {}
+           end-pos (.-length utf8-encoded-content)]
+      (cond
+        (seq blocks)
+        (let [[block pos-meta] (first blocks)
+              ;; fix start_pos for properties
+              fixed-pos-meta (assoc pos-meta :end_pos end-pos)]
+          (cond
+            (gp-block/heading-block? block)
+            (let [content (gp-block/get-block-content utf8-encoded-content (second block) format fixed-pos-meta block-pattern)
+                  content-raw (get-sub-content-from-pos-meta utf8-encoded-content fixed-pos-meta)]
+              (recur (conj headings {:body  content
+                                     :meta  {:raw-body (string/trimr content-raw)}
+                                     :level (:level (second block))
+                                     :uuid  (:id properties)})
+                     (rest blocks)
+                     {}
+                     (:start_pos fixed-pos-meta))) ;; The current block's start pos is the next block's end pos
+
+            (gp-property/properties-ast? block)
+            (let [new-props (:properties (gp-block/extract-properties (second block) (assoc user-config :format format)))]
+              ;; sending the current end pos to next, as it's not finished yet
+              ;; supports multiple properties sub-block possible in future
+              (recur headings (rest blocks) (merge properties new-props) (:end_pos fixed-pos-meta)))
+
+            :else
+            (recur headings (rest blocks) properties (:end_pos fixed-pos-meta))))
+
+        (empty? properties)
+        (reverse headings)
+
+        ;; Add pre-blocks
+        :else ;; ??? unreachable
+        (let [[block _] (first blocks)
+              pos-meta {:start_pos 0 :end_pos end-pos}
+              content (gp-block/get-block-content utf8-encoded-content block format pos-meta block-pattern)
+              content-raw (get-sub-content-from-pos-meta utf8-encoded-content pos-meta)
+              uuid (:id properties)]
+          (cons {:body content
+                 :meta {:raw-body (string/trimr content-raw)}
+                 :level 1
+                 :uuid uuid}
+                (reverse headings)))))))
+
+(defn- rebuild-content
+  "translate [[[op block]]] to merged content"
+  [_base-diffblocks diffs _format]
+  ;; [[[0 {:body "attrib:: xxx", :level 1, :uuid nil}] ...] ...]
+  (let  [ops-fn (fn [ops]
+                  (map (fn [[op {:keys [meta]}]]
+                         (when (or (= op 0) (= op 1)) ;; equal or insert
+                           (:raw-body meta)))
+                       ops))]
+    (->> diffs
+         (mapcat ops-fn)
+         (filter seq)
+         (string/join "\n"))))
+
+(defn three-way-merge
+  [base income current format]
+  (let [->ast (fn [text] (if (= format :org)
+                           (gp-mldoc/->edn text (gp-mldoc/default-config :org))
+                           (gp-mldoc/->edn text (gp-mldoc/default-config :markdown))))
+        options (if (= format :org)
+                  {:block-pattern "*"}
+                  {:block-pattern "-"})
+        merger (Merger.)
+        base-ast (->ast base)
+        base-diffblocks (ast->diff-blocks-alt base-ast base format options)
+        income-ast (->ast income)
+        income-diffblocks (ast->diff-blocks-alt income-ast income format options)
+        current-ast (->ast current)
+        current-diffblocks (ast->diff-blocks-alt current-ast current format options)
+        branch-diffblocks [current-diffblocks income-diffblocks]
+        merged (.mergeBlocks merger (bean/->js base-diffblocks) (bean/->js branch-diffblocks))
+        ;; For extracting diff-merge test cases
+        ;; _ (prn "input:")
+        ;; _ (prn (js/JSON.stringify (bean/->js base-diffblocks)))
+        ;; _ (prn (js/JSON.stringify (bean/->js branch-diffblocks)))
+        ;; _ (prn "logseq diff merge version: " version)
+        ;; _ (prn "output:")
+        ;; _ (prn (js/JSON.stringify merged))
+        merged-diff (bean/->clj merged)
+        merged-content (rebuild-content base-diffblocks merged-diff format)]
+    merged-content))

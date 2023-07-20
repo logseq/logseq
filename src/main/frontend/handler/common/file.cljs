@@ -72,8 +72,8 @@
    Decide how to treat the parsed file based on the file's triggering event
    options - 
      :fs/reset-event - the event that triggered the file update
-       :fs/local-file-change - file changed on local disk
-       :fs/remote-file-change - file changed on remote"
+     :fs/local-file-change - file changed on local disk
+     :fs/remote-file-change - file changed on remote"
   [repo-url file-path content {:fs/keys [event] :as options}]
   (let [db-conn (db/get-db repo-url false)]
     (case event

@@ -52,12 +52,23 @@ const common = {
       () => gulp.src([
         './node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**',
         '!**/*/i18n-*.js'
-      ])
-        .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
-      () => gulp.src('node_modules/@tabler/icons/iconfont/tabler-icons.min.css')
-        .pipe(gulp.dest(path.join(outputPath, 'css'))),
-      () => gulp.src('node_modules/@tabler/icons/iconfont/fonts/**')
-        .pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
+      () => gulp.src([
+        'node_modules/katex/dist/katex.min.js',
+        'node_modules/html2canvas/dist/html2canvas.min.js',
+        'node_modules/interactjs/dist/interact.min.js',
+        'node_modules/photoswipe/dist/umd/*.js'
+      ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src([
+        'node_modules/@tabler/icons/iconfont/tabler-icons.min.css',
+        'node_modules/inter-ui/inter.css'
+      ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
+      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
+        .pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
+      () => gulp.src([
+        'node_modules/@tabler/icons/iconfont/fonts/**',
+        'node_modules/katex/dist/fonts/*.woff2'
+      ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
     )(...params)
   },
 

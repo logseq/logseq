@@ -57,7 +57,9 @@ export interface LogseqContextValue {
     isWhiteboardPage: (pageName: string) => boolean
     isMobile: () => boolean
     saveAsset: (file: File) => Promise<string>
-    makeAssetUrl: (relativeUrl: string) => string
+    makeAssetUrl: (relativeUrl: string | null) => string
+    inflateAsset: (src: string) => object
+    setCurrentPdf: (src: string | null) => void
     sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void
     redirectToPage: (uuidOrPageName: string) => void
     copyToClipboard: (text: string, html: string) => void

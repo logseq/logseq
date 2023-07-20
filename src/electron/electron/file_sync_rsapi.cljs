@@ -26,6 +26,9 @@
 (defn delete-local-files [graph-uuid base-path file-paths]
   (rsapi/deleteLocalFiles graph-uuid base-path (clj->js file-paths)))
 
+(defn fetch-remote-files [graph-uuid base-path file-paths token]
+  (rsapi/fetchRemoteFiles graph-uuid base-path (clj->js file-paths) token))
+
 (defn update-local-files [graph-uuid base-path file-paths token]
   (rsapi/updateLocalFiles graph-uuid base-path (clj->js file-paths) token))
 
