@@ -202,6 +202,8 @@
   (register-components-fns!)
   (user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
+  (when (util/electron?)
+    (el/listen!))
   (render)
   (i18n/start)
   (instrument/init)
@@ -238,8 +240,6 @@
 
    (when config/dev?
      (enable-datalog-console))
-   (when (util/electron?)
-     (el/listen!))
    (persist-var/load-vars)
    (js/setTimeout instrument! (* 60 1000))))
 
