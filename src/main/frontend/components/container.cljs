@@ -58,7 +58,7 @@
        [:div.font-medium name]
        [:span
         [:a.more svg/arrow-down-v2]]]
-      [:div.bd child]]]))
+      (when child [:div.bd child])]]))
 
 (defn- delta-y
   [e]
