@@ -991,8 +991,7 @@ Similar to re-frame subscriptions"
 
 (defn set-selection-start-block!
   [start-block]
-  (when-not (get-selection-start-block)
-    (swap! state assoc :selection/start-block start-block)))
+  (swap! state assoc :selection/start-block start-block))
 
 (defn set-selection-blocks!
   ([blocks]
