@@ -3,9 +3,7 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
-            [cognitect.transit :as t]
             [datascript.core :as d]
-            [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.restore :as sqlite-restore]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -24,19 +22,6 @@
 (defn- create-graph-dir
   [dir db-name]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true}))
-
-(defn- block-map->datoms-str
-  [blocks m]
-  (let [t-writer (t/writer :json)]
-    (->> (dissoc m :db/id)
-         ;; This fn should match pipeline/datom->av-vector
-         (map (fn m->av-vector [[a v]]
-                [a v]
-                (if (contains? db-schema/ref-type-attributes a)
-                  [a
-                   [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
-                  [a v])))
-         (t/write t-writer))))
 
 (deftest restore-initial-data
   (testing "Restore a journal page with its block"
@@ -59,7 +44,7 @@
                             :block/updated-at created-at
                             :page_uuid page-uuid}]
           blocks (mapv #(sqlite-util/ds->sqlite-block
-                         (assoc % :datoms (block-map->datoms-str frontend-blocks %)))
+                         (assoc % :datoms (sqlite-util/block-map->datoms-str frontend-blocks %)))
                        frontend-blocks)
           _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
           {:keys [conn]} (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data "test-db")))]
@@ -88,7 +73,7 @@
                             :page_uuid page-uuid
                             :block/created-at created-at}]
           blocks (mapv #(sqlite-util/ds->sqlite-block
-                         (assoc % :datoms (block-map->datoms-str frontend-blocks %)))
+                         (assoc % :datoms (sqlite-util/block-map->datoms-str frontend-blocks %)))
                        frontend-blocks)
           _ (sqlite-db/upsert-blocks! "test-db" (bean/->js blocks))
           {:keys [uuid->db-id-map conn]}

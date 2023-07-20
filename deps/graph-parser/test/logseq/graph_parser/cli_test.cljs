@@ -8,8 +8,6 @@
             [logseq.db.sqlite.restore :as sqlite-restore]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
-            [cognitect.transit :as t]
-            [logseq.db.schema :as db-schema]
             [logseq.db :as ldb]
             [clojure.set :as set]
             ["fs" :as fs]
@@ -96,19 +94,6 @@
                       (string/join "\n" (map #(str "- " (:block/content %)) blocks))))
   (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
 
-(defn- block-map->datoms-str
-  [blocks m]
-  (let [t-writer (t/writer :json)]
-    (->> (dissoc m :db/id)
-         ;; This fn should match pipeline/datom->av-vector
-         (map (fn m->av-vector [[a v]]
-                [a v]
-                (if (contains? db-schema/ref-type-attributes a)
-                  [a
-                   [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
-                  [a v])))
-         (t/write t-writer))))
-
 (defn- create-frontend-blocks
   "For a map of pages to their blocks, this creates frontend blocks assuming only top level blocks
    are desired. Anything more complex starts to recreate outliner namespaces"
@@ -148,7 +133,7 @@
   (sqlite-db/open-db! dir db-name)
   (let [frontend-blocks (create-frontend-blocks pages-to-blocks)
         blocks (mapv #(sqlite-util/ds->sqlite-block
-                       (assoc % :datoms (block-map->datoms-str frontend-blocks %)))
+                       (assoc % :datoms (sqlite-util/block-map->datoms-str frontend-blocks %)))
                      frontend-blocks)
         _ (sqlite-db/upsert-blocks! db-name (bean/->js blocks))
         {:keys [uuid->db-id-map conn]}

@@ -1,7 +1,9 @@
 (ns logseq.db.sqlite.util
   "Utils fns for backend sqlite db"
   (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [cognitect.transit :as transit]
+            [logseq.db.schema :as db-schema]))
 
 (defn- type-of-block
   "
@@ -40,3 +42,18 @@
    :datoms (:datoms b)
    :created_at (or (:block/created-at b) (time-ms))
    :updated_at (or (:block/updated-at b) (time-ms))})
+
+(defn block-map->datoms-str
+  "Given a block map and all existing blocks, return the block as transit data
+   to be stored in the `datoms` column. This is currently only used in testing"
+  [blocks m]
+  (let [t-writer (transit/writer :json)]
+    (->> (dissoc m :db/id)
+         ;; This fn should match pipeline/datom->av-vector
+         (map (fn m->av-vector [[a v]]
+                [a v]
+                (if (contains? db-schema/ref-type-attributes a)
+                  [a
+                   [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
+                  [a v])))
+         (transit/write t-writer))))
