@@ -50,7 +50,8 @@
     [:div.nav-content-item.mt-3
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :flex-shrink-0 (not shrink?)
-                                      :flex-shrink shrink?}])}
+                                      :flex-shrink shrink?}])
+      :style {:min-height (when (not shrink?) (* count 28))}}
      [:div.nav-content-item-inner
       [:div.header.items-center
        {:on-click (fn [^js/MouseEvent _e]

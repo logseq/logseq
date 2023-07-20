@@ -186,10 +186,6 @@
   .nav-content-item {
     @apply overflow-hidden;
 
-    &.is-expand {
-      min-height: 120px;
-    }
-
     .nav-content-item-inner {
       @apply flex flex-col h-full overflow-hidden;
     }
