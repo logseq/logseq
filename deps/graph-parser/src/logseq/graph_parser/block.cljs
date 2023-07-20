@@ -527,7 +527,6 @@
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? true
-                                :block/unordered true
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
