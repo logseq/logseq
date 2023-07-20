@@ -207,18 +207,9 @@
         opacity: .7;
       }
 
-      > span {
-        > a {
-          padding-left: 12px;
-          display: none;
-          transition: none;
-
-          &:last-child {
-            transform: translateY(-6px) translateX(2px) rotate(90deg);
-            transform-origin: center center;
-            transition: .15s transform;
-          }
-        }
+      .more {
+        display: none;
+        transition: .15s transform;
       }
 
       &:hover {
@@ -228,15 +219,10 @@
           opacity: 1 !important;
         }
 
-        > span {
-          > a {
-            display: block;
+        .more {
 
-            &:last-child {
-              display: block;
-              opacity: .6;
-            }
-          }
+          display: block;
+          opacity: .6;
         }
       }
 
@@ -290,12 +276,9 @@
     }
 
     &.is-expand {
-      .header > span > a {
-        &:last-child {
-          transform: translateY(2px) translateX(-3px);
-        }
+      .header .more {
+        transform: rotate(-90deg);
       }
-
       .bd {
         display: block;
       }

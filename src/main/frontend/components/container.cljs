@@ -58,8 +58,7 @@
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
        [:div.font-medium name]
-       [:span
-        [:a.more svg/arrow-down-v2]]]
+       [:.more (ui/icon "chevron-left")]]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
