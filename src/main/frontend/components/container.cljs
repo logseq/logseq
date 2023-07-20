@@ -249,17 +249,17 @@
    (->>
     [{:title (t :left-side-bar/new-page)
       :class "new-page-link"
-      :shortcut (ui/keyboard-shortcut-from-config :go/search)
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (state/pub-event! [:go/search]))}
+                               (state/pub-event! [:go/search]))
+                :shortcut (ui/keyboard-shortcut-from-config :go/search)}
       :icon (ui/type-icon {:name "new-page"
                            :class "highlight"
                            :extension? true})}
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
-      :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard-and-redirect!))}
+                               (whiteboard-handler/create-new-whiteboard-and-redirect!))
+                :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"
                            :extension? true})}])

@@ -177,7 +177,7 @@
                   sequence)]))
 
 (rum/defc menu-link
-  [{:keys [only-child? no-padding? class] :as options} child shortcut]
+  [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
@@ -224,7 +224,7 @@
                  (if hr
                    [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
-                    (menu-link new-options child nil)
+                    (menu-link new-options child)
                     title)))))
 
            wrapper-children
@@ -539,7 +539,7 @@
                                         (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                           (on-shift-chosen item)
                                           (on-chosen item)))}
-                      (if item-render (item-render item chosen?) item) nil))]]
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
