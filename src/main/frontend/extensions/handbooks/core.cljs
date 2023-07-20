@@ -452,10 +452,10 @@
      (link-card
        {:href "https://discord.gg/KpN4eHY"}
        [:div.inner.flex.items-center
-        [:div.l.flex.items-center.pl-1.opacity-50 (ui/icon "brand-discord" {:size 26})]
+        [:div.l.flex.items-center.pl-1.opacity-30 (ui/icon "brand-discord" {:size 22})]
         [:div.r.flex.flex-1.justify-between.items-center
          [:div.flex.flex-col.pl-3
-          [:strong.font-semibold {:style {:font-size 16}} "Join our discord"]
+          [:strong.font-semibold {:style {:font-size 16}} "Chat on Discord"]
           [:small.flex.items-center
            [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
            [:span.pl-1.opacity-90 [:strong (or discord-count "?")] [:span.opacity-70 " users online currently"]]]]
@@ -467,7 +467,7 @@
       (link-card
         {:class "flex-1" :href "https://discuss.logseq.com"}
         [:div.inner.flex.items-center.justify-center.space-x-1
-         (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Read the forum"]])
+         (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Visit the forum"]])
 
       (link-card
         {:class "flex-1 as-primary" :href "https://discuss.logseq.com/c/feedback/13"}
