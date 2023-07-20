@@ -2180,7 +2180,9 @@
                 (editor-handler/highlight-selection-area! block-id))
 
               shift?
-              (util/clear-selection!)
+              (do
+                (util/clear-selection!)
+                (state/set-selection-start-block! block-id))
 
               :else
               (do
