@@ -609,7 +609,11 @@
                               [:div [:strong.block "Handbook link copied!"]
                                [:label.opacity-50 s]] :success)))}
            (ui/icon "copy")])
-        [:a.flex.items-center {:aria-label (t :handbook/settings) :tabIndex "0" :on-click #(nav-to-pane! [:settings nil "Settings"] active-pane-state)} (ui/icon "settings")]
+        (when (state/developer-mode?)
+          [:a.flex.items-center {:aria-label (t :handbook/settings)
+                                 :tabIndex   "0"
+                                 :on-click   #(nav-to-pane! [:settings nil "Settings"] active-pane-state)}
+           (ui/icon "settings")])
         [:a.flex.items-center {:aria-label (t :handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
