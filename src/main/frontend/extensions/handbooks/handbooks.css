@@ -40,8 +40,8 @@
         }
 
         > input {
-          @apply text-sm w-full border-none py-[7px] px-[24px] bg-transparent
-          focus:outline-0 dark:text-gray-100;
+          @apply text-base leading-none w-full border-none py-[7px] px-[24px] bg-transparent
+          focus:outline-0 dark:text-gray-100 font-medium;
         }
 
       }
@@ -56,7 +56,7 @@
     }
 
     .pane > h2, .ft > h2 {
-      @apply py-2 text-[16px] dark:text-gray-100;
+      @apply py-2 text-base font-medium dark:text-gray-100;
     }
 
     .ft {
@@ -84,7 +84,7 @@
         @apply leading-none flex-1;
 
         > strong {
-          @apply font-semibold text-[14px] py-1.5;
+          @apply font-medium text-base pt-1 pb-[2px] opacity-90 leading-5;
         }
 
         > span {
@@ -134,14 +134,16 @@
       }
 
       > .text-wrap {
-        @apply flex flex-col min-h-[56px] justify-end;
+        @apply flex flex-col min-h-[48px] justify-end;
 
         > strong {
-          @apply font-[500] leading-tight;
+          @apply font-medium leading-tight text-sm;
         }
 
         > span {
-          @apply text-[11px] opacity-90 pt-1;
+          @apply text-xs pt-1;
+
+          color: var(--ls-primary-text-color);
         }
       }
     }
@@ -321,9 +323,9 @@
     background-color: var(--ls-tertiary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
     touch-action: none;
-    height: 720px;
+    height: 700px;
     max-height: 86vh;
-    width: 450px;
+    width: 420px;
     right: 32px;
     bottom: 58px;
   }

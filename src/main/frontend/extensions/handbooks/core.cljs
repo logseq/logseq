@@ -583,7 +583,7 @@
      [:div.pane-wrap
       [:div.hd.flex.justify-between.select-none.draggable-handle
 
-       [:h1.text-lg.flex.items-center
+       [:h1.text-xl.flex.items-center.font-bold
         (if pane-dashboard?
           [:span (t :handbook/title)]
           [:button.active:opacity-80.flex.items-center.cursor-pointer
