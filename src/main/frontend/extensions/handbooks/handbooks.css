@@ -308,6 +308,10 @@
     img {
       @apply cursor-pointer active:opacity-80;
     }
+
+    img, video {
+      @apply inline-block my-1;
+    }
   }
 
   &-popup {
