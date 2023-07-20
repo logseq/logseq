@@ -49,7 +49,9 @@
       (fn []
         (let [key-handler (KeyHandler. js/document)]
           ;; setup
-          (shortcut/unlisten-all)
+          (util/profile
+            "[shortcuts] unlisten*"
+            (shortcut/unlisten-all! true))
           (events/listen key-handler "key"
                          (fn [^js e]
                            (.preventDefault e)
@@ -57,7 +59,9 @@
 
           ;; teardown
           #(do
-             (shortcut/listen-all)
+             (util/profile
+               "[shortcuts] listen*"
+               (shortcut/listen-all!))
              (.dispose key-handler))))
       [])
 
@@ -238,10 +242,10 @@
 
               teardown-global!
               (when-not @*global-listener-setup?
-                (shortcut/unlisten-all)
+                (shortcut/unlisten-all! true)
                 (reset! *global-listener-setup? true)
                 (fn []
-                  (shortcut/listen-all)
+                  (shortcut/listen-all!)
                   (reset! *global-listener-setup? false)))]
 
           ;; setup

@@ -102,7 +102,7 @@
    (when-let [handler (-> (get @*installed-handlers install-id)
                           :handler)]
      (.dispose ^js handler)
-     (println "[shortcuts]" (if refresh? "[R]" "") "uninstall handler" (-> @*installed-handlers (get install-id) :group str))
+     (js/console.debug "[shortcuts]" "uninstall handler" (-> @*installed-handlers (get install-id) :group str) (if refresh? "*" ""))
      (swap! *installed-handlers dissoc install-id))))
 
 (defn install-shortcut-handler!
@@ -146,7 +146,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (println "[shortcuts] install handler" (str handler-id))
+      (js/console.debug "[shortcuts] install handler" (str handler-id))
       (swap! *installed-handlers merge data)
 
       install-id)))
@@ -210,25 +210,31 @@
        (some-> (::*state state) (vreset! nil)))
      state)})
 
-(defn unlisten-all []
-  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
-          :when (not= group :shortcut.handler/misc)]
-    (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
+(defn unlisten-all!
+  ([] (unlisten-all! false))
+  ([dispose?]
+   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
+           :when (not= group :shortcut.handler/misc)]
+     (if dispose?
+       (.dispose handler)
+       (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
 
-(defn listen-all []
+(defn listen-all! []
   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
-    (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
+    (if (.isDisposed handler)
+      (install-shortcut-handler! group {})
+      (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))
 
 (def disable-all-shortcuts
   {:will-mount
    (fn [state]
-     (unlisten-all)
+     (unlisten-all!)
      state)
 
    :will-unmount
    (fn [state]
-     (listen-all)
+     (listen-all!)
      state)})
 
 (defn refresh-internal!
