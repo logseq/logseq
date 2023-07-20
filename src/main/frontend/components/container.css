@@ -161,7 +161,7 @@
   }
 
   .nav-contents-container {
-    @apply h-full flex-grow-0 overflow-hidden;
+    @apply h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
 
     &.is-scrolled {
       border-top: 1px solid var(--ls-tertiary-border-color);
