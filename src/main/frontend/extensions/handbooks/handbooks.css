@@ -230,12 +230,16 @@
         @apply py-1 text-lg font-semibold;
       }
 
+      h4 {
+        @apply text-base;
+      }
+
       h5 {
-        @apply py-0.5 font-semibold;
+        @apply py-0.5 font-semibold text-sm;
       }
 
       h6 {
-        @apply py-0.5 text-sm font-semibold;
+        @apply py-0.5 text-xs font-semibold;
       }
 
       blockquote {
