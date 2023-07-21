@@ -2596,13 +2596,15 @@
   (util/stop event)
   (when-not (dnd-same-block? uuid)
     (let [over-block (gdom/getElement block-id)
-          rect (utils/getOffsetRect over-block)
+          rect (.getBoundingClientRect over-block)
           element-top (gobj/get rect "top")
           element-left (gobj/get rect "left")
+          element-bottom (gobj/get rect "bottom")
+          element-height (- element-bottom element-top)
           x-offset (- (.. event -pageX) element-left)
-          cursor-top (gobj/get event "clientY")
+          y-offset (- (.. event -pageY) element-top)
           move-to-value (cond
-                          (and top? (<= (js/Math.abs (- cursor-top element-top)) 16))
+                          (and top? (<= y-offset (/ element-height 2)))
                           :top
 
                           (> x-offset 50)
