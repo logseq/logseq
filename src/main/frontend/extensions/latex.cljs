@@ -39,7 +39,7 @@
        (config/asset-uri "/static/js/katex.min.js")
        (fn []
          (loader/load
-          (config/asset-uri "/static/js/mhchem.min.js")
+          (config/asset-uri "/static/js/mhchem.js")
           (fn []
             (p/finally
               (p/all (when-let [enhancers (and config/lsp-enabled? (seq (hook-extensions-enhancer-by-type :katex)))]

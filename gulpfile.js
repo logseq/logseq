@@ -55,6 +55,7 @@ const common = {
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
       () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
+        'node_modules/katex/contrib/mhchem/mhchem.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
