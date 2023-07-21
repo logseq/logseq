@@ -140,6 +140,7 @@
         "reveal.js": "^4.5.0",
         "sanitize-filename": "1.6.3",
         "send-intent": "3.0.11",
+        "shepherd.js": "^9.1.0",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
         "url": "^0.11.0",
