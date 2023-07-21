@@ -9,7 +9,6 @@
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.select :as select]
-            [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.config :as config]
@@ -58,7 +57,7 @@
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
        [:div.font-medium name]
-       [:.more (ui/icon "chevron-left")]]
+       (ui/icon "chevron-left" {:class "more"})]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
