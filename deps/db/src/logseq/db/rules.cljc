@@ -119,8 +119,7 @@
      [?prop-b :block/name ?prop-name-str]
      [?prop-b :block/type "property"]
      [?prop-b :block/uuid ?prop-uuid]
-     [(str ?prop-uuid) ?prop-uuid-str]
-     [(get ?bp ?prop-uuid-str)]]
+     [(get ?bp ?prop-uuid)]]
 
    :block-content
    '[(block-content ?b ?query)
@@ -156,8 +155,7 @@
      [?prop-b :block/name ?key-str]
      [?prop-b :block/type "property"]
      [?prop-b :block/uuid ?prop-uuid]
-     [(str ?prop-uuid) ?prop-uuid-str]
-     [(get ?prop ?prop-uuid-str) ?v]
+     [(get ?prop ?prop-uuid) ?v]
      [(str ?val) ?str-val]
      (or [(= ?v ?val)]
          [(contains? ?v ?val)]
