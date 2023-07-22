@@ -351,6 +351,7 @@
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
 
+ :settings-page/auto-chmod "Automatically change file permissions"
  :yes "Yes"
 
  :submit "Submit"
