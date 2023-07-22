@@ -97,6 +97,12 @@
     (catch :default _e
       false)))
 
+(defn chmod-enabled?
+  []
+  (if (= nil (cfgs/get-item :feature/enable-automatic-chmod?))
+    true
+    (cfgs/get-item :feature/enable-automatic-chmod?)))
+
 (defmethod handle :copyFile [_window [_ _repo from-path to-path]]
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
@@ -107,7 +113,7 @@
                       (.from Buf content)
                       content)]
     (try
-      (when (and (cfgs/get-item :feature/enable-automatic-chmod?) (fs/existsSync path) (not (writable? path)))
+      (when (and (chmod-enabled?) (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)

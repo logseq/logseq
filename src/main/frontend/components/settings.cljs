@@ -603,7 +603,9 @@
 
 (rum/defcs auto-chmod-row < rum/reactive
   [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?])]
+  (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+                   true
+                   (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
      "automatic-chmod"
      (t :settings-page/auto-chmod)
