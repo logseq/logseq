@@ -352,6 +352,7 @@
  :settings-permission/start-granting "Grant"
 
  :settings-page/auto-chmod "Automatically change file permissions"
+ :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."
  :yes "Yes"
 
  :submit "Submit"
