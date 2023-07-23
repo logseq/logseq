@@ -68,6 +68,10 @@
   "any number between 0 and 1 (the greater it is the faster the changes of the OF matrix)"
   0.5)
 
+(def regex-firstl-no-prop
+  "RegEx used to add #card to the end of the first line without a property"
+  #"(?m)(?<!::.*) ?$")
+
 (defn- learning-fraction []
   (if-let [learning-fraction (:srs/learning-fraction (state/get-config))]
     (if (and (number? learning-fraction)
@@ -779,7 +783,7 @@
         (editor-handler/save-block!
          (state/get-current-repo)
          block-id
-         (str (string/trim content) " #" card-hash-tag))))))
+         (string/replace-first content regex-firstl-no-prop (str " #" card-hash-tag)))))))
 
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
@@ -787,8 +791,8 @@
    (let [block-content-fn (fn [block]
                             [block (-> (property/remove-built-in-properties (:block/format block) (:block/content block))
                                        (drawer/remove-logbook)
-                                       string/trim
-                                       (str " #" card-hash-tag))])
+                                       (string/replace-first regex-firstl-no-prop (str " #" card-hash-tag))
+                                       )])
          blocks (->> block-ids
                      (map #(db/entity [:block/uuid %]))
                      (remove card-block?)
