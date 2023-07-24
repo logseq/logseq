@@ -173,7 +173,7 @@
                        datoms->entity-maps
                        (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
                                         %)
-                                    :attributes (disj (set (keys %)) :block/unordered :block/file)))
+                                    :attributes (disj (set (keys %)) :block/file)))
                        set)
         db-ents (->> (d/datoms graph-db :eavt)
                      datoms->entity-maps
