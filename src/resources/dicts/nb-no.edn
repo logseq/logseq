@@ -770,4 +770,18 @@
  :whiteboard/dashboard-card-edited "Redigert "
  :whiteboard/dashboard-card-new-whiteboard "Nytt whiteboard"
  :whiteboard/snap-to-grid "Fest til rutenett"
- :whiteboard/toggle-grid "Veksle rutenett"}
+ :whiteboard/toggle-grid "Veksle rutenett"
+ :export-copied-to-clipboard "Kopiert til utklippstavle!"
+ :export-copy-to-clipboard "Kopier til utklippstavle"
+ :export-save-to-file "Lagre til fil"
+ :export-transparent-background "Transparent bakgrunn"
+ :bug-report/clipboard-inspector-title "Utklippstavle datainspektør"
+ :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Tips: trykk "] [:code "f"] [:span.opacity-70 " for fullskjerm"]])
+ :query/config-property-settings "Egenskapsinnstillinger for denne spørringen:"
+ :right-side-bar/history-global "global"
+ :right-side-bar/history-pageonly "kun side"
+ :right-side-bar/history-redos "Omgjøringer"
+ :right-side-bar/history-undos "Angret"
+ :search-item/no-result "Ingen matchende resultat"
+ :settings-permission/start-granting "Gi tillatelse"
+ :whiteboard/edit-pdf "Rediger PDF"}
