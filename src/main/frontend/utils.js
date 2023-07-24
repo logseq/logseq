@@ -19,6 +19,29 @@ export const closest = (target, selector) => {
   return null
 }
 
+export const getOffsetRect = (elem) => {
+  // (1)
+  const box = elem.getBoundingClientRect(),
+    body = document.body,
+    docElem = document.documentElement,
+    // (2)
+    scrollTop = window.pageYOffset || docElem.scrollTop || body.scrollTop,
+    scrollLeft = window.pageXOffset || docElem.scrollLeft || body.scrollLeft,
+
+    // (3)
+    clientTop = docElem.clientTop || body.clientTop || 0,
+    clientLeft = docElem.clientLeft || body.clientLeft || 0,
+
+    // (4)
+    top = box.top + scrollTop - clientTop,
+    left = box.left + scrollLeft - clientLeft;
+
+  return {
+    top: Math.round(top),
+    left: Math.round(left)
+  }
+}
+
 // jquery focus
 export const focus = (elem) => {
   return elem === document.activeElement &&
