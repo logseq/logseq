@@ -3,10 +3,10 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 @import "inter-ui/inter.css";
-@import "resources/css/reveal.min.css";
-@import "resources/css/reveal_black.min.css";
+@import "reveal.js/dist/reveal.css";
+@import "reveal.js/dist/theme/black.css";
 @import "photoswipe/dist/photoswipe.css";
-@import "resources/css/shepherd.css";
+@import "shepherd.js/dist/css/shepherd.css";
 @import "resources/css/amplify.css";
 @import "tldraw/apps/tldraw-logseq/src/styles.css";
 @import "katex/dist/katex.min.css";
