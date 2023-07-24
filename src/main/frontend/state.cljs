@@ -126,6 +126,7 @@
       :editor/args                           nil
       :editor/on-paste?                      (atom false)
       :editor/last-key-code                  (atom nil)
+      :editor/block-op-type                  nil             ;; :cut, :copy
 
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
@@ -1022,7 +1023,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (util/sort-by-height (remove nil? blocks))]
+     (let [blocks (vec (util/sort-by-height (remove nil? blocks)))]
        (set-state! :selection/mode true)
        (set-state! :selection/blocks blocks)
        (set-state! :selection/direction direction)))))
@@ -1067,7 +1068,8 @@ Similar to re-frame subscriptions"
   [block direction]
   (set-state! :selection/mode true)
   (set-state! :selection/blocks (-> (conj (vec @(:selection/blocks @state)) block)
-                                    (util/sort-by-height)))
+                                    (util/sort-by-height)
+                                    vec))
   (set-state! :selection/direction direction))
 
 (defn drop-last-selection-block!
@@ -1078,9 +1080,11 @@ Similar to re-frame subscriptions"
         last-block (if up?
                      (first blocks)
                      (peek (vec blocks)))
-        blocks' (if up?
-                  (rest blocks)
-                  (pop (vec blocks)))]
+        blocks' (-> (if up?
+                      (rest blocks)
+                      (pop (vec blocks)))
+                    util/sort-by-height
+                    vec)]
     (set-state! :selection/mode true)
     (set-state! :selection/blocks blocks')
     last-block))
@@ -1903,6 +1907,14 @@ Similar to re-frame subscriptions"
 (defn get-last-key-code
   []
   @(:editor/last-key-code @state))
+
+(defn set-block-op-type!
+  [op-type]
+  (set-state! :editor/block-op-type op-type))
+
+(defn get-block-op-type
+  []
+  (:editor/block-op-type @state))
 
 (defn feature-http-server-enabled?
   []

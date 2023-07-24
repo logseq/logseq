@@ -35,7 +35,7 @@
       [:span.flex.items-center
        (if local?
          (let [local-dir (config/get-local-dir url)
-               graph-name (text-util/get-graph-name-from-path local-dir)]
+               graph-name (text-util/get-graph-name-from-path url)]
            [:a.flex.items-center {:title    local-dir
                                   :on-click #(on-click graph)}
             [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
@@ -147,12 +147,12 @@
                     (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
-                            repo-path (cond
+                            repo-url (cond
                                         local? (db/get-repo-name url)
                                         db-only? url
                                         :else GraphName)
                             short-repo-name (cond
-                                              local? (text-util/get-graph-name-from-path repo-path)
+                                              local? (text-util/get-graph-name-from-path repo-url)
                                               db-only? url
                                               :else GraphName)]
                         (when short-repo-name
@@ -160,7 +160,7 @@
                                           (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
                                                          (ui/icon "cloud" {:size 18})])]
-                           :hover-detail repo-path ;; show full path on hover
+                           :hover-detail repo-url ;; show full path on hover
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])

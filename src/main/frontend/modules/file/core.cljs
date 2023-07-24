@@ -32,7 +32,7 @@
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties] :as b} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]}]
   (let [repo (state/get-current-repo)
         block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
                                   (not (string/includes? content (str (:block/uuid b)))))
@@ -51,7 +51,6 @@
                   :else
                   (let [markdown-top-heading? (and markdown?
                                                    (= parent page)
-                                                   (not unordered)
                                                    heading)
                         [prefix spaces-tabs]
                         (cond

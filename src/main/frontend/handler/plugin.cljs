@@ -376,7 +376,7 @@
   (when-let [hook (and uuid (str "hook:db:block_" (string/replace (str uuid) "-" "_")))]
     (boolean (seq (get (get-installed-hooks) hook)))))
 
-(def *fenced-code-providers (atom #{}))
+(defonce *fenced-code-providers (atom #{}))
 
 (defn register-fenced-code-renderer
   [pid type {:keys [before subs render edit] :as _opts}]
@@ -389,8 +389,10 @@
 (defn hook-fenced-code-by-type
   [type]
   (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
-    (first (map #(state/get-plugin-resource % :fenced-code-renderers key)
-                @*fenced-code-providers))))
+    (->> @*fenced-code-providers
+         (map #(state/get-plugin-resource % :fenced-code-renderers key))
+         (remove nil?)
+         (first))))
 
 (def *extensions-enhancer-providers (atom #{}))
 
