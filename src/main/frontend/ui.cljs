@@ -152,7 +152,7 @@
                (reset! (:open? state) true)))
            state)}
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index trigger-class initial-open?]
+   & [{:keys [modal-class z-index trigger-class]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)

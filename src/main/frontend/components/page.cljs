@@ -9,7 +9,6 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
-            [frontend.components.property :as property]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -1149,12 +1148,11 @@
                      :on-change #(to-page %))]])]))
 
 (rum/defcs configure < rum/reactive
-  [state repo page]
+  [state page]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         type (:block/type page)
         class? (= "class" type)
-        property? (= "property" type)
         journal? (:block/journal? page)]
     (when page
       [:div.page-configure

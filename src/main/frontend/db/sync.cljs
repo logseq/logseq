@@ -1,11 +1,9 @@
-(ns frontend.db.sync
+(ns ^:no-doc frontend.db.sync
   (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
-            [frontend.state :as state]))
+            [frontend.db.conn :as conn]))
 
 
-
-(defn- export-as-blocks
+(defn export-as-blocks
   [repo]
   (let [db (conn/get-db repo)
         datoms (d/datoms db :eavt)]

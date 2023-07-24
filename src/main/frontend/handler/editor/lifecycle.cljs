@@ -6,8 +6,6 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [dommy.core :as d]
-            [goog.object :as gobj]
-            [clojure.string :as string]
             [frontend.db :as db]))
 
 (defn did-mount!

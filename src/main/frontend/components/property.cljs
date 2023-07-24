@@ -5,14 +5,12 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.config :as config]
             [rum.core :as rum]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
-            [clojure.edn :as edn]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [frontend.search :as search]
@@ -21,22 +19,20 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.components.select :as select]
             [medley.core :as medley]
-            [cljs-time.coerce :as tc]
-            [frontend.date :as date]))
+            [cljs-time.coerce :as tc]))
 
 (rum/defcs property-config <
   rum/static
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
-                 (let [[repo property] (:rum/args state)]
+                 (let [[_repo property] (:rum/args state)]
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
   [state repo property ]
   (let [*property-name (::property-name state)
-        *property-schema (::property-schema state)
-        type (:type @*property-schema)]
+        *property-schema (::property-schema state)]
     [:div.property-configure
      [:h1.title "Configure property"]
 
@@ -213,8 +209,7 @@
 
 (defn- select
   [block property]
-  (let [repo (state/get-current-repo)
-        items (->> (model/get-block-property-values (:block/uuid property))
+  (let [items (->> (model/get-block-property-values (:block/uuid property))
                    (mapcat (fn [[_id value]]
                              (if (coll? value)
                                (map (fn [v] {:value v}) value)
@@ -411,7 +406,7 @@
                  (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
-  [state repo block edit-input-id properties new-property? opts]
+  [state block edit-input-id properties new-property? opts]
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
@@ -443,14 +438,9 @@
      (:block/original-name property)]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property items item {:keys [dom-id editor-id
-                                            page-cp inline-text
-                                            new-item?
-                                            parsed-value]
+  [state entity property items item {:keys [editor-id new-item?]
                                      :as opts}]
   (let [*show-close? (::show-close? state)
-        object? (= :object (:type (:block/schema property)))
-        block (when object? (db/pull [:block/uuid item]))
         editing? (state/sub [:editor/editing? editor-id])]
     [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
                                 :on-mouse-out  #(reset! *show-close? false)}
@@ -476,7 +466,6 @@
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
-        type (:type schema)
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
@@ -485,7 +474,7 @@
       (let [items (if (coll? v) v (when v [v]))
             v' (if (seq items) items [""])
             v' (conj v' ::new-value-placeholder) ; new one
-            editor-id' (str editor-id (count v'))]
+            ]
         [:div.grid.gap-1
          (for [[idx item] (medley/indexed v')]
            (let [dom-id' (str dom-id "-" idx)
@@ -539,8 +528,7 @@
 
 (rum/defcs properties-area < rum/reactive
   [state target-block edit-input-id opts]
-  (let [repo (state/get-current-repo)
-        block (resolve-instance-page-if-exists target-block)
+  (let [block (resolve-instance-page-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
@@ -578,4 +566,4 @@
              [:div
               [:a.mr-2 (str prop-uuid-or-built-in-prop)]
               [:span v]])))
-       (new-property repo block edit-input-id properties new-property? opts)])))
+       (new-property block edit-input-id properties new-property? opts)])))

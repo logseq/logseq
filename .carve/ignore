@@ -85,3 +85,7 @@ frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop
 ;; Used in macro
 frontend.state/get-current-edit-block-and-position
+;; For debugging
+frontend.db.model/get-all-classes
+;; Repl fn
+frontend.db.sync/export-as-blocks

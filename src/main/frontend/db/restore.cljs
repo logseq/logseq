@@ -11,7 +11,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [goog.object :as gobj]
-            [logseq.db.default :as default-db]
             [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.restore :as sqlite-restore]
             [promesa.core :as p]

@@ -5,18 +5,12 @@
             [clojure.set :as set]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.format.block :as block]
             [frontend.handler.notification :as notification]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
             [malli.util :as mu]
-            [malli.core :as m]
             [malli.error :as me]))
 
 ;; TODO:
@@ -68,8 +62,9 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
-(def builtin-schema->type
-  (set/map-invert builtin-schema-types))
+;; TODO: Enable or delete if unused
+#_(def builtin-schema->type
+    (set/map-invert builtin-schema-types))
 
 (defn- infer-schema-from-input-string
   [v-str]

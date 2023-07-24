@@ -980,8 +980,7 @@
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
 (defmethod handle :page/configure [[_ page]]
-  (when-let [repo (state/get-current-repo)]
-    (state/set-modal! #(page/configure repo page))))
+  (state/set-modal! #(page/configure page)))
 
 (defn run!
   []

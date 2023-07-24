@@ -7,9 +7,7 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
 
@@ -276,7 +274,3 @@
     (catch :default _
       (println "decodeURIComponent failed: " uri)
       uri)))
-
-(defn time-ms
-  []
-  (tc/to-long (t/now)))
