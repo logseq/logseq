@@ -198,9 +198,6 @@ html:not(.is-native-android) {
 
 /* region Reset top elements */
 html {
-  /* FIXME: rewrite revealjs.css ? */
-  height: unset !important;
-
   overflow: hidden;
 }
 
