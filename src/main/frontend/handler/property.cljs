@@ -163,12 +163,12 @@
 
                                 multiple-values?
                                 (let [f (if (coll? v*) concat conj)]
-                                  (vec (distinct (f value v*))))
+                                  (f value v*))
 
                                 :else
                                 v*)
                     new-value (if (coll? new-value)
-                                (vec (remove string/blank? new-value))
+                                (set (remove string/blank? new-value))
                                 new-value)
                     block-properties (assoc properties property-uuid new-value)
                     refs (outliner-core/rebuild-block-refs block block-properties)]
@@ -203,7 +203,7 @@
                        (let [entity (db/entity e)
                              properties (:block/properties entity)]
                          {:db/id e
-                          :block/properties (assoc properties property-uuid [v])})) ev)]
+                          :block/properties (assoc properties property-uuid #{v})})) ev)]
     (when (seq tx-data)
       (db/transact! repo tx-data
         {:outliner-op :property-fix-cardinality}))))
@@ -236,7 +236,7 @@
             (let [properties (:block/properties block)
                   properties' (update properties property-id
                                       (fn [col]
-                                        (vec (remove #{property-value} col))))
+                                        (set (remove #{property-value} col))))
                   refs (outliner-core/rebuild-block-refs block properties')]
               (db/transact! repo
                 [[:db/retract (:db/id block) :block/refs]
