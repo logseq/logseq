@@ -427,6 +427,9 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub-right-sidebar-blocks)
+        blocks (if (empty? blocks)
+                 [[(state/get-current-repo) "contents" :contents nil]]
+                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]
