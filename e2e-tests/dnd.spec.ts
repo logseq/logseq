@@ -6,7 +6,7 @@ import { createRandomPage, enterNextBlock } from './utils'
  * Drag and Drop tests.
  *
  * When we drag and drop a block, it should always be moved under the target element,
- * unless the targer is the first element of its container. In that case, if we drop
+ * unless the targer is the first element of its container. In thas case, if we drop
  * it at the top half of the target, it should be moved on top of it.
  */
 
