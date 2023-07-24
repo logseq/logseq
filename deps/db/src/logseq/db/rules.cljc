@@ -156,11 +156,14 @@
      [?prop-b :block/type "property"]
      [?prop-b :block/uuid ?prop-uuid]
      [(get ?prop ?prop-uuid) ?v]
-     [(str ?val) ?str-val]
-     (or [(= ?v ?val)]
-         [(contains? ?v ?val)]
-         ;; For integer pages that aren't strings
-         [(contains? ?v ?str-val)])]
+     ;; TODO: Need to find a more performant way to do this
+     (or-join [?v]
+              [(= ?v ?val)]
+              (and [(str ?val) ?str-val]
+                    ;; str-val is for integer pages that aren't strings
+                   [?prop-val-b :block/original-name ?str-val]
+                   [?prop-val-b :block/uuid ?val-uuid]
+                   [(contains? ?v ?val-uuid)]))]
 
    :page-ref
    '[(page-ref ?b ?page-name)

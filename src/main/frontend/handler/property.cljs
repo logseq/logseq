@@ -2,7 +2,6 @@
   "Block properties handler."
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.set :as set]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.notification :as notification]

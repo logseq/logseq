@@ -86,8 +86,13 @@ prop-c:: [[page a]], [[page b]], [[page c]]
 prop-linked-num:: [[3000]]
 prop-d:: [[no-space-link]]
 - b4
-prop-d:: nada"}])
-
+prop-d:: nada"
+                     :file/blocks [["b1" {:prop-a "val-a" :prop-num 2000}]
+                                   ["b2" {:prop-a "val-a" :prop-b "val-b"}]
+                                   ["b3" {:prop-c #{"page a" "page b" "page c"}
+                                           :prop-linked-num #{"3000"}
+                                           :prop-d #{"no-space-link"}}]
+                                   ["b4" {:prop-d "nada"}]]}])
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
            (set (map (comp first str/split-lines :block/content)
@@ -139,7 +144,7 @@ prop-d:: nada"}])
               (dsl-query "(property prop-d)")))
       "Blocks that have a property"))
 
-(deftest block-property-queries
+(deftest ^:focus block-property-queries
   (testing "block property tests with default config"
     (test-helper/with-config {}
       (block-property-queries-test))))
