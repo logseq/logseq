@@ -527,7 +527,6 @@
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? true
-                                :block/unordered true
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
@@ -561,12 +560,12 @@
                        :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (-> (assoc block
-                           :uuid id
-                           :refs ref-pages-in-properties
-                           :format format
-                           :meta pos-meta)
-                    (dissoc :size))
+               (-> (assoc block
+                          :uuid id
+                          :refs ref-pages-in-properties
+                          :format format
+                          :meta pos-meta)
+                   (dissoc :size :unordered))
                 (or (seq (:properties properties)) markdown-heading?)
                 (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block))
                        :properties-text-values (:properties-text-values properties)

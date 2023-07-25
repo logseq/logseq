@@ -1069,11 +1069,21 @@ Similar to re-frame subscriptions"
 
 (defn toggle-sidebar-open?!
   []
-  (swap! state update :ui/sidebar-open? not))
+  (let [current-repo (get-current-repo)
+        blocks (filter #(= (first %) current-repo) (:sidebar/blocks @state))]
+    (when (and (not (:ui/sidebar-open? @state)) (empty? blocks))
+      (swap! state assoc :sidebar/blocks [[current-repo "contents" :contents nil]])
+      (set-state! [:ui/sidebar-collapsed-blocks "contents"] false))
+    (swap! state update :ui/sidebar-open? not)))
 
 (defn open-right-sidebar!
   []
-  (swap! state assoc :ui/sidebar-open? true))
+  (let [current-repo (get-current-repo)
+        blocks (filter #(= (first %) current-repo) (:sidebar/blocks @state))]
+    (when (empty? blocks)
+      (swap! state assoc :sidebar/blocks [[current-repo "contents" :contents nil]])
+      (set-state! [:ui/sidebar-collapsed-blocks "contents"] false))
+    (swap! state assoc :ui/sidebar-open? true)))
 
 (defn hide-right-sidebar!
   []

@@ -178,7 +178,6 @@ export interface BlockEntity {
   left: IEntityID
   format: 'markdown' | 'org'
   parent: IEntityID
-  unordered: boolean
   content: string
   page: IEntityID
   properties?: Record<string, any>

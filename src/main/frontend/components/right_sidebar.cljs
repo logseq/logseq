@@ -22,6 +22,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.handler.common :as common-handler]))
+            [rum.core :as rum]
+            [frontend.handler.common :as common-handler]))
 
 (rum/defc toggle
   []
@@ -427,9 +429,6 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub-right-sidebar-blocks)
-        blocks (if (empty? blocks)
-                 [[(state/get-current-repo) "contents" :contents nil]]
-                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]
