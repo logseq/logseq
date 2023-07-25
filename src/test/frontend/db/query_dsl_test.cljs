@@ -155,7 +155,8 @@ prop-d:: nada"
                                   {:file/path (str "pages/page" idx ".md")
                                    :file/content (if (seq tags)
                                                    (str "tags:: " (str/join ", " (map page-ref/->page-ref tags)))
-                                                   "")})))
+                                                   "")
+                                   :file/blocks [[(str "block for page" idx) {:tags (set tags)}]]})))
         _ (load-test-files pages)
         {:keys [result time]}
         (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]

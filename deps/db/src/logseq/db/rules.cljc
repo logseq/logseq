@@ -157,19 +157,39 @@
       [(get ?bp ?prop-uuid)]]
 
     :property
-    '[(property ?b ?key ?val)
-      [?b :block/properties ?prop]
-      [(missing? $ ?b :block/name)]
-      [(name ?key) ?key-str]
-      [?prop-b :block/name ?key-str]
-      [?prop-b :block/type "property"]
-      [?prop-b :block/uuid ?prop-uuid]
-      [(get ?prop ?prop-uuid) ?v]
-     ;; TODO: Need to find a more performant way to do this
-      (or-join [?v]
-               [(= ?v ?val)]
-               (and [(str ?val) ?str-val]
-                    ;; str-val is for integer pages that aren't strings
-                    [?prop-val-b :block/original-name ?str-val]
-                    [?prop-val-b :block/uuid ?val-uuid]
-                    [(contains? ?v ?val-uuid)]))]}))
+    '[;; Clause 1: Match non-ref values
+      [(property ?b ?key ?val)
+       [?b :block/properties ?prop]
+       [(missing? $ ?b :block/name)]
+       [(name ?key) ?key-str]
+       [?prop-b :block/name ?key-str]
+       [?prop-b :block/type "property"]
+       [?prop-b :block/uuid ?prop-uuid]
+       [(get ?prop ?prop-uuid) ?v]
+       [(= ?v ?val)]]
+
+      ;; Clause 2: Match values joined by ref values
+      [(property ?b ?key ?val)
+       [?b :block/properties ?prop]
+       [(missing? $ ?b :block/name)]
+       [(name ?key) ?key-str]
+       [?prop-b :block/name ?key-str]
+       [?prop-b :block/type "property"]
+       [?prop-b :block/uuid ?prop-uuid]
+       [(get ?prop ?prop-uuid) ?v]
+       [(str ?val) ?str-val]
+      ;; str-val is for integer pages that aren't strings
+       [?prop-val-b :block/original-name ?str-val]
+       [?prop-val-b :block/uuid ?val-uuid]
+       [(contains? ?v ?val-uuid)]]]}))
+
+(defn extract-rules
+  "Given a rules map and the rule names to extract, returns a vector of rules to
+  be passed to datascript.core/q. Can handle rules with multiple or single clauses"
+  ([rules-m] (extract-rules rules-m (keys rules-m)))
+  ([rules-m rules]
+   (vec
+    (mapcat #(let [val (rules-m %)]
+              ;; if vector?, rule has multiple clauses
+               (if (vector? (first val)) val [val]))
+            rules))))

@@ -555,7 +555,7 @@ Some bindings in this fn:
                                      (if (= key :and) (rest result) result))))]
       {:query result'
        :rules (if db-graph?
-                (mapv rules/db-query-dsl-rules rules)
+                (rules/extract-rules rules/db-query-dsl-rules rules)
                 (mapv rules/query-dsl-rules rules))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)

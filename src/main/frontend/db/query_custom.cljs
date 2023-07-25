@@ -38,7 +38,7 @@
                   (assoc (vec inputs)
                          ;; last position is rules
                          (dec (count inputs))
-                         (->> (mapv query-dsl-rules rules-found)
+                         (->> (rules/extract-rules query-dsl-rules rules-found)
                               (into (last inputs))
                               ;; user could give rules that we already have
                               distinct
@@ -56,7 +56,7 @@
             (update :rules
                     (fn [rules]
                       (into (or rules [])
-                            (mapv query-dsl-rules rules-found))))))
+                            (rules/extract-rules query-dsl-rules rules-found))))))
       query-m)))
 
 (defn custom-query
