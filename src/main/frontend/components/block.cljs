@@ -298,6 +298,7 @@
        [:img.rounded-sm.relative
         (merge
          {:loading "lazy"
+          :referrerPolicy "no-referrer"
           :src     src
           :title   title}
          metadata)]
