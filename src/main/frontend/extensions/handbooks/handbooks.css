@@ -13,7 +13,12 @@
       @apply dark:text-white px-3 pt-3 pb-2 sticky top-0 left-0 z-[4]
       transition-shadow duration-200;
 
-      background-color: var(--ls-quaternary-background-color);
+      background-color: var(--ls-tertiary-background-color);
+
+      .title {
+        text-align: left;
+        width: 266px;
+      }
     }
 
     &.scrolled {
@@ -23,11 +28,7 @@
     }
 
     .search {
-      @apply flex flex-col;
-
-      background-color: var(--ls-quaternary-background-color);
-      padding-bottom: 6px;
-      margin-bottom: 8px;
+      @apply flex flex-col pb-[6px] mb-0;
 
       > .input-wrap {
         @apply mx-4 mb-2 flex rounded-lg mt-1.5;
@@ -60,7 +61,15 @@
     }
 
     .ft {
-      @apply px-4 py-2;
+      @apply px-4 pt-4 pb-2;
+
+      background-color: var(--ls-quaternary-background-color);
+
+      /*noinspection ALL*/
+
+      svg {
+        stroke-width: 1.5px;
+      }
     }
 
     .topic-card, .link-card {
@@ -72,11 +81,13 @@
       transition: background-color .3s;
 
       > .l {
-        @apply pr-2.5 w-[64px] bg-transparent rounded overflow-hidden;
+        @apply pr-2.5 w-[80px] min-h-[64px] bg-transparent rounded overflow-hidden;
 
         img {
           mix-blend-mode: luminosity;
           opacity: .8;
+          float: left;
+          width: 100%;
         }
       }
 
@@ -84,11 +95,11 @@
         @apply leading-none flex-1;
 
         > strong {
-          @apply font-medium text-base pt-1 pb-[2px] opacity-90 leading-5;
+          @apply font-medium text-sm pt-0.5 pb-[1px] opacity-90 leading-5 dark:text-gray-5;
         }
 
         > span {
-          @apply text-xs opacity-40;
+          @apply text-xs opacity-40 leading-4;
         }
       }
 
@@ -213,6 +224,10 @@
           display: none;
         }
       }
+
+      .ft {
+        display: none;
+      }
     }
 
     .markdown-body {
@@ -323,7 +338,7 @@
     background-color: var(--ls-tertiary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
     touch-action: none;
-    height: 700px;
+    height: 686px;
     max-height: 86vh;
     width: 420px;
     right: 32px;
@@ -356,6 +371,9 @@ html[data-theme="light"] {
       background-color: var(--ls-primary-background-color);
     }
 
+    .ft {
+      background-color: var(--ls-primary-background-color);
+    }
 
     .search {
       background-color: var(--ls-primary-background-color);
@@ -371,7 +389,6 @@ html[data-theme="light"] {
       .category-card {
         &:hover, &:active {
           background-color: var(--ls-tertiary-background-color);
-          opacity: .9;
         }
       }
     }

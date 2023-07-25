@@ -106,8 +106,8 @@
 
 (rum/defc media-render
   [src]
-  (let [src        (util/trim-safe src)
-        extname    (some-> src (util/full-path-extname) (subs 1))
+  (let [src (util/trim-safe src)
+        extname (some-> src (util/full-path-extname) (subs 1))
         youtube-id (and (string/includes? src "youtube.com/watch?v=")
                         (subs src (+ 2 (string/last-index-of src "v="))))]
     (cond
@@ -175,16 +175,16 @@
 
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
-        (let [chapters            (:children topic)
-              has-chapters?       (seq chapters)
-              topic               (if has-chapters? (first chapters) topic)
-              parent              (get handbook-nodes (:parent (bind-parent-key topic)))
-              chapters            (or chapters (:children parent))
-              parent-key          (:key parent)
-              parent-category?    (not (string/includes? parent-key "/"))
-              show-chapters?      (and (not parent-category?) (seq chapters))
+        (let [chapters (:children topic)
+              has-chapters? (seq chapters)
+              topic (if has-chapters? (first chapters) topic)
+              parent (get handbook-nodes (:parent (bind-parent-key topic)))
+              chapters (or chapters (:children parent))
+              parent-key (:key parent)
+              parent-category? (not (string/includes? parent-key "/"))
+              show-chapters? (and (not parent-category?) (seq chapters))
 
-              chapters-len        (count chapters)
+              chapters-len (count chapters)
               chapter-current-idx (when-not (zero? chapters-len)
                                     (util/find-index #(= (:key %) (:key topic)) chapters))]
 
@@ -324,10 +324,10 @@
                           :down (if (= selected ldx) 0 (min (inc selected) ldx))
                           :dune)))
 
-        q          (util/trim-safe q)
-        active?    (not (string/blank? (util/trim-safe q)))
-        reset-q!   #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
-        focus-q!   #(some-> (rum/deref *input-ref) (.focus))]
+        q (util/trim-safe q)
+        active? (not (string/blank? (util/trim-safe q)))
+        reset-q! #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
+        focus-q! #(some-> (rum/deref *input-ref) (.focus))]
 
     (rum/use-effect!
       #(focus-q!)
@@ -448,31 +448,32 @@
       [discord-count])
 
     [:<>
-     ;; discord
-     (link-card
-       {:href "https://discord.gg/KpN4eHY"}
-       [:div.inner.flex.items-center
-        [:div.l.flex.items-center.pl-1.opacity-30 (ui/icon "brand-discord" {:size 22})]
-        [:div.r.flex.flex-1.justify-between.items-center
-         [:div.flex.flex-col.pl-3
-          [:strong.font-semibold {:style {:font-size 16}} "Chat on Discord"]
-          [:small.flex.items-center
-           [:i.block.rounded-full.bg-green-400 {:style {:width "8px" :height "8px"}}]
-           [:span.pl-1.opacity-90 [:strong (or discord-count "?")] [:span.opacity-70 " users online currently"]]]]
-         [:span.flex.items-center.opacity-60 (ui/icon "external-link" {:size 17})]]])
-
      ;; more links
-     [:div.flex.space-x-2
+     [:div.flex.space-x-3
       {:style {:padding-top "4px"}}
       (link-card
-        {:class "flex-1" :href "https://discuss.logseq.com"}
-        [:div.inner.flex.items-center.justify-center.space-x-1
-         (ui/icon "message-dots" {:class "opacity-40"}) [:span.font-semibold "Visit the forum"]])
+        {:class "flex-1" :href "https://discord.gg/KpN4eHY"}
+        [:div.inner.flex.space-x-1.flex-col
+         (ui/icon "brand-discord" {:class "opacity-30" :size 26})
+         [:h1.font-medium.py-1 "Chat on Discord"]
+         [:h2.text-xs.leading-4.opacity-40 "Ask quick questions, meet fellow users, and learn new workflows."]
+         [:small.flex.items-center.pt-1.5
+          [:i.block.rounded-full.bg-green-500 {:style {:width "8px" :height "8px"}}]
+          [:span.pl-2.opacity-90
+           [:strong.opacity-60 (or discord-count "?")]
+           [:span.opacity-70.font-light " users online"]]]])
 
       (link-card
-        {:class "flex-1 as-primary" :href "https://discuss.logseq.com/c/feedback/13"}
-        [:div.inner.flex.items-center.justify-center.space-x-1
-         (ui/icon "messages" {:class "opacity-40"}) [:span.font-semibold "Give us feedback"]])]]))
+        {:class "flex-1" :href "https://discuss.logseq.com"}
+        [:div.inner.flex.space-x-1.flex-col
+         (ui/icon "message-dots" {:class "opacity-30" :size 26})
+         [:h1.font-medium.py-1 "Visit the forum"]
+         [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth discussions."]
+         [:small.flex.items-center.pt-1.5
+          [:i.flex.items-center.opacity-50 (ui/icon "bolt" {:size 14})]
+          [:span.pl-1.opacity-90
+           [:strong.opacity-60 "800+"]
+           [:span.opacity-70.font-light " monthly posts"]]]])]]))
 
 (rum/defc ^:large-vars/data-var content
   []
@@ -494,43 +495,43 @@
         [search-state, set-search-state!]
         (rum/use-state {:active? false})
 
-        reset-handbooks!     #(set-handbooks-state! {:status nil :data nil :error nil})
-        update-handbooks!    #(set-handbooks-state! (fn [v] (merge v %)))
-        load-handbooks!      (fn []
-                               (when-not (= :pending (:status handbooks-state))
-                                 (reset-handbooks!)
-                                 (update-handbooks! {:status :pending})
-                                 (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn"))
-                                             data    (.text res)]
-                                       (update-handbooks! {:data (edn/read-string data)}))
-                                     (p/catch #(update-handbooks! {:error (str %)}))
-                                     (p/finally #(update-handbooks! {:status :completed})))))
+        reset-handbooks! #(set-handbooks-state! {:status nil :data nil :error nil})
+        update-handbooks! #(set-handbooks-state! (fn [v] (merge v %)))
+        load-handbooks! (fn []
+                          (when-not (= :pending (:status handbooks-state))
+                            (reset-handbooks!)
+                            (update-handbooks! {:status :pending})
+                            (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn"))
+                                        data (.text res)]
+                                  (update-handbooks! {:data (edn/read-string data)}))
+                                (p/catch #(update-handbooks! {:error (str %)}))
+                                (p/finally #(update-handbooks! {:status :completed})))))
 
-        active-pane-name     (first active-pane-state)
-        pane-render          (first (get panes-mapping active-pane-name))
-        pane-dashboard?      (= :dashboard active-pane-name)
-        pane-settings?       (= :settings active-pane-name)
-        pane-topic?          (= :topic-detail active-pane-name)
+        active-pane-name (first active-pane-state)
+        pane-render (first (get panes-mapping active-pane-name))
+        pane-dashboard? (= :dashboard active-pane-name)
+        pane-settings? (= :settings active-pane-name)
+        pane-topic? (= :topic-detail active-pane-name)
         force-nav-dashboard! (fn []
                                (set-active-pane-state! [:dashboard])
                                (set-history-state! '()))
 
-        handbooks-loaded?    (and (seq (:data handbooks-state))
-                                  (= :completed (:status handbooks-state)))
-        handbooks-data       (:data handbooks-state)
-        nav-to-pane!         (fn [next-state prev-state]
-                               (let [next-key     (:key (second next-state))
-                                     prev-key     (:key (second prev-state))
-                                     in-chapters? (and prev-key next-key (string/includes? prev-key "/")
-                                                       (or (string/starts-with? next-key prev-key)
-                                                           (apply = (map parse-parent-key [prev-key next-key]))))]
-                                 (when-not in-chapters?
-                                   (set-history-state!
-                                     (conj (sequence history-state) prev-state))))
-                               (set-active-pane-state! next-state))
+        handbooks-loaded? (and (seq (:data handbooks-state))
+                               (= :completed (:status handbooks-state)))
+        handbooks-data (:data handbooks-state)
+        nav-to-pane! (fn [next-state prev-state]
+                       (let [next-key (:key (second next-state))
+                             prev-key (:key (second prev-state))
+                             in-chapters? (and prev-key next-key (string/includes? prev-key "/")
+                                               (or (string/starts-with? next-key prev-key)
+                                                   (apply = (map parse-parent-key [prev-key next-key]))))]
+                         (when-not in-chapters?
+                           (set-history-state!
+                             (conj (sequence history-state) prev-state))))
+                       (set-active-pane-state! next-state))
 
         [scrolled?, set-scrolled!] (rum/use-state false)
-        on-scroll            (rum/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))) [])]
+        on-scroll (rum/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))) [])]
 
     ;; load handbooks
     (rum/use-effect!
@@ -554,16 +555,16 @@
     (rum/use-effect!
       (fn []
         (let [*cnt-len (atom 0)
-              check!   (fn []
-                         (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
-                               (when-let [cl (.get (.-headers res) "content-length")]
-                                 (when (not= @*cnt-len cl)
-                                   (println "[Handbooks] dev reload!")
-                                   (load-handbooks!))
-                                 (reset! *cnt-len cl)))
-                             (p/catch #(println "[Handbooks] dev check Error:" %))))
-              timer0   (if dev-watch?
-                         (js/setInterval check! 2000) 0)]
+              check! (fn []
+                       (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
+                             (when-let [cl (.get (.-headers res) "content-length")]
+                               (when (not= @*cnt-len cl)
+                                 (println "[Handbooks] dev reload!")
+                                 (load-handbooks!))
+                               (reset! *cnt-len cl)))
+                           (p/catch #(println "[Handbooks] dev check Error:" %))))
+              timer0 (if dev-watch?
+                       (js/setInterval check! 2000) 0)]
           #(js/clearInterval timer0)))
       [dev-watch?])
 
@@ -582,7 +583,6 @@
       :on-scroll on-scroll}
      [:div.pane-wrap
       [:div.hd.flex.justify-between.select-none.draggable-handle
-
        [:h1.text-xl.flex.items-center.font-bold
         (if pane-dashboard?
           [:span (t :handbook/title)]
@@ -594,7 +594,8 @@
                                (set-active-pane-state! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
-           [:span (or (last active-pane-state) (t :handbook/title))]])]
+           (let [title (or (last active-pane-state) (t :handbook/title) "")]
+             [:span.truncate.title {:title title} title])])]
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
@@ -643,13 +644,13 @@
 
      (when handbooks-loaded?
        ;; footer
-       [:div.ft
-        (when pane-dashboard?
-          (footer-link-cards))
+       (when pane-dashboard?
+         [:div.ft
+          (footer-link-cards)
 
-        ;; TODO: how to get related topics?
-        ;(when (= :topic-detail active-pane)
-        ;  [:<>
-        ;   [:h2.uppercase.opacity-60 "Related"]
-        ;   (related-topics)])
-        ])]))
+          ;; TODO: how to get related topics?
+          ;(when (= :topic-detail active-pane)
+          ;  [:<>
+          ;   [:h2.uppercase.opacity-60 "Related"]
+          ;   (related-topics)])
+          ]))]))
