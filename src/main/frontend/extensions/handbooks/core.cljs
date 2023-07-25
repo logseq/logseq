@@ -468,7 +468,7 @@
         [:div.inner.flex.space-x-1.flex-col
          (ui/icon "message-dots" {:class "opacity-30" :size 26})
          [:h1.font-medium.py-1 "Visit the forum"]
-         [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth discussions."]
+         [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth conversations."]
          [:small.flex.items-center.pt-1.5
           [:i.flex.items-center.opacity-50 (ui/icon "bolt" {:size 14})]
           [:span.pl-1.opacity-90
