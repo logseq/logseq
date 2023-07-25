@@ -166,7 +166,8 @@
        [?prop-b :block/type "property"]
        [?prop-b :block/uuid ?prop-uuid]
        [(get ?prop ?prop-uuid) ?v]
-       [(= ?v ?val)]]
+       (or [(= ?v ?val)]
+           [(contains? ?v ?val)])]
 
       ;; Clause 2: Match values joined by ref values
       [(property ?b ?key ?val)
@@ -181,7 +182,8 @@
       ;; str-val is for integer pages that aren't strings
        [?prop-val-b :block/original-name ?str-val]
        [?prop-val-b :block/uuid ?val-uuid]
-       [(contains? ?v ?val-uuid)]]]}))
+       (or ([= ?v ?val-uuid])
+           [(contains? ?v ?val-uuid)])]]}))
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to

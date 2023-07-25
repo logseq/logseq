@@ -2,5 +2,9 @@
 logseq.db/start-conn
 ;; API
 logseq.db.rules/query-dsl-rules
+;; API
+logseq.db.rules/db-query-dsl-rules
+;; API
+logseq.db.rules/extract-rules
 ;; Internal API
 logseq.db.rules/rules
