@@ -29,7 +29,7 @@
   (let [[graph-name query*] args
         conn (read-graph graph-name)
         query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
-        results (mapv first (apply d/q query @conn [(vals rules/query-dsl-rules)]))]
+        results (mapv first (apply d/q query @conn [(vals rules/db-query-dsl-rules)]))]
     (println "DB contains" (count (d/datoms @conn :eavt)) "datoms")
     (prn results)))
 

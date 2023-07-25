@@ -253,7 +253,7 @@
       result)))
 
 (defn- build-property-two-arg
-  [e db-version?]
+  [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
@@ -261,21 +261,21 @@
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
-     :rules [(if db-version? :property-db-version :property)]}))
+     :rules [:property]}))
 
 (defn- build-property-one-arg
-  [e db-version?]
+  [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")]
     {:query (list 'has-property '?b (keyword k))
-     :rules [(if db-version? :has-property-db-version :has-property)]}))
+     :rules [:has-property]}))
 
-(defn- build-property [e db-version?]
+(defn- build-property [e]
   (cond
     (= 3 (count e))
-    (build-property-two-arg e db-version?)
+    (build-property-two-arg e)
 
     (= 2 (count e))
-    (build-property-one-arg e db-version?)))
+    (build-property-one-arg e)))
 
 (defn- build-task
   [e]
@@ -386,7 +386,7 @@ Some bindings in this fn:
 * fe - the query operator e.g. `property`"
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
-  ([e {:keys [sort-by blocks? sample db-version?] :as env :or {blocks? (atom nil)}} level]
+  ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
@@ -413,7 +413,7 @@ Some bindings in this fn:
        (build-between e)
 
        (= 'property fe)
-       (build-property e db-version?)
+       (build-property e)
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
@@ -530,7 +530,7 @@ Some bindings in this fn:
 
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
-  [s db-version?]
+  [s {:keys [db-graph?]}]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
@@ -544,8 +544,7 @@ Some bindings in this fn:
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
-                                        :sample sample
-                                        :db-version? db-version?}))
+                                        :sample sample}))
           result' (when (seq result)
                     (let [key (if (coll? (first result))
                                 ;; Only queries for this branch are not's like:
@@ -555,7 +554,9 @@ Some bindings in this fn:
                       (add-bindings! form
                                      (if (= key :and) (rest result) result))))]
       {:query result'
-       :rules (mapv rules/query-dsl-rules rules)
+       :rules (if db-graph?
+                (mapv rules/db-query-dsl-rules rules)
+                (mapv rules/query-dsl-rules rules))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))
@@ -578,9 +579,10 @@ Some bindings in this fn:
       (conj q where))))
 
 (defn parse-query
-  [q db-version?]
-  (let [q' (template/resolve-dynamic-template! q)]
-    (parse q' db-version?)))
+  ([q] (parse-query q {}))
+  ([q options]
+   (let [q' (template/resolve-dynamic-template! q)]
+     (parse q' options))))
 
 (defn pre-transform-query
   [q]
@@ -593,7 +595,7 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string (config/db-based-graph? repo))]
+     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string {:db-graph? (config/db-based-graph? repo)})]
        (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
          (let [sort-by (or sort-by identity)
                random-samples (if @sample
@@ -615,7 +617,7 @@ Some bindings in this fn:
   [repo query-m query-opts]
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
-          {:keys [query sort-by blocks? rules]} (parse query-string (config/db-based-graph? repo))]
+          {:keys [query sort-by blocks? rules]} (parse query-string {:db-graph? (config/db-based-graph? repo)})]
       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (query-react/react-query repo
                            (merge

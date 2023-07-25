@@ -270,7 +270,7 @@
                                                    (string/starts-with? query-string "["))
                                          (page-ref/->page-ref (string/trim query-string))
                                          query-string)
-                          {:keys [query sort-by rules]} (query-dsl/parse query-string (config/db-based-graph? repo))
+                          {:keys [query sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
                           query* (util/concat-without-nil
                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
                                   (if (coll? (first query)) query [query]))]

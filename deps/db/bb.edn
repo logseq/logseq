@@ -27,11 +27,11 @@
               [logseq.db.rules :as rules])
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
-          (into (mapcat val rules/rules)
-                (-> rules/query-dsl-rules
-                    ;; TODO: Update linter to handle false positive on ?str-val
-                    (dissoc :property :property-db-version)
-                    vals)))}}
+          (set
+           (concat (mapcat val rules/rules)
+                  ;; TODO: Update linter to handle false positive on ?str-val for :property
+                   (-> rules/query-dsl-rules (dissoc :property) vals)
+                   (-> rules/db-query-dsl-rules (dissoc :property) vals))))}}
 
  :tasks/config
  {:large-vars

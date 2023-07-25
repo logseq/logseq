@@ -61,9 +61,9 @@
 ;;                      [?e ?a ?v]))]
 
 (def ^:large-vars/data-var query-dsl-rules
-  "Rules used by frontend.db.query-dsl. The symbols ?b and ?p respectively refer
-  to block and page. Do not alter them as they are programmatically built by the
-  query-dsl ns"
+  "Rules used by frontend.db.query-dsl for file graphs. The symbols ?b and ?p
+  respectively refer to block and page. Do not alter them as they are
+  programmatically built by the query-dsl ns"
   {:page-property
    '[(page-property ?p ?key ?val)
      [?p :block/name]
@@ -111,16 +111,6 @@
      [(missing? $ ?b :block/name)]
      [(get ?bp ?prop)]]
 
-   :has-property-db-version
-   '[(has-property ?b ?prop)
-     [?b :block/properties ?bp]
-     [(missing? $ ?b :block/name)]
-     [(name ?prop) ?prop-name-str]
-     [?prop-b :block/name ?prop-name-str]
-     [?prop-b :block/type "property"]
-     [?prop-b :block/uuid ?prop-uuid]
-     [(get ?bp ?prop-uuid)]]
-
    :block-content
    '[(block-content ?b ?query)
      [?b :block/content ?content]
@@ -147,25 +137,39 @@
          ;; For integer pages that aren't strings
          [(contains? ?v ?str-val)])]
 
-   :property-db-version
-   '[(property ?b ?key ?val)
-     [?b :block/properties ?prop]
-     [(missing? $ ?b :block/name)]
-     [(name ?key) ?key-str]
-     [?prop-b :block/name ?key-str]
-     [?prop-b :block/type "property"]
-     [?prop-b :block/uuid ?prop-uuid]
-     [(get ?prop ?prop-uuid) ?v]
-     ;; TODO: Need to find a more performant way to do this
-     (or-join [?v]
-              [(= ?v ?val)]
-              (and [(str ?val) ?str-val]
-                    ;; str-val is for integer pages that aren't strings
-                   [?prop-val-b :block/original-name ?str-val]
-                   [?prop-val-b :block/uuid ?val-uuid]
-                   [(contains? ?v ?val-uuid)]))]
-
    :page-ref
    '[(page-ref ?b ?page-name)
      [?b :block/path-refs ?br]
      [?br :block/name ?page-name]]})
+
+(def db-query-dsl-rules
+  "Rules used by frontend.query.dsl for db graphs"
+  (merge
+   query-dsl-rules
+   {:has-property
+    '[(has-property ?b ?prop)
+      [?b :block/properties ?bp]
+      [(missing? $ ?b :block/name)]
+      [(name ?prop) ?prop-name-str]
+      [?prop-b :block/name ?prop-name-str]
+      [?prop-b :block/type "property"]
+      [?prop-b :block/uuid ?prop-uuid]
+      [(get ?bp ?prop-uuid)]]
+
+    :property
+    '[(property ?b ?key ?val)
+      [?b :block/properties ?prop]
+      [(missing? $ ?b :block/name)]
+      [(name ?key) ?key-str]
+      [?prop-b :block/name ?key-str]
+      [?prop-b :block/type "property"]
+      [?prop-b :block/uuid ?prop-uuid]
+      [(get ?prop ?prop-uuid) ?v]
+     ;; TODO: Need to find a more performant way to do this
+      (or-join [?v]
+               [(= ?v ?val)]
+               (and [(str ?val) ?str-val]
+                    ;; str-val is for integer pages that aren't strings
+                    [?prop-val-b :block/original-name ?str-val]
+                    [?prop-val-b :block/uuid ?val-uuid]
+                    [(contains? ?v ?val-uuid)]))]}))
