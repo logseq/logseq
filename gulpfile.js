@@ -3,7 +3,6 @@ const utils = require('util')
 const cp = require('child_process')
 const exec = utils.promisify(cp.exec)
 const path = require('path')
-const rename = require('gulp-rename')
 const gulp = require('gulp')
 const cleanCSS = require('gulp-clean-css')
 const del = require('del')
@@ -66,9 +65,6 @@ const common = {
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
-      () => gulp.src([
-        'node_modules/magic-portal/dist/index.umd.js',
-      ]).pipe(rename('magic_portal.js')).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/tabler-icons.min.css',
         'node_modules/inter-ui/inter.css',

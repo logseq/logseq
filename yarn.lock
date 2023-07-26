@@ -3492,11 +3492,6 @@ gulp-cli@^2.2.0:
     v8flags "^3.2.0"
     yargs "^7.1.0"
 
-gulp-rename@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.npmjs.org/gulp-rename/-/gulp-rename-2.0.0.tgz#9bbc3962b0c0f52fc67cd5eaff6c223ec5b9cf6c"
-  integrity sha512-97Vba4KBzbYmR5VBs9mWmK+HwIf5mj+/zioxfZhOKeXtx5ZjBk57KFlePf5nxq9QsTtFl0ejnHE3zTC9MHXqyQ==
-
 gulp@^4.0.2:
   version "4.0.2"
   resolved "https://registry.yarnpkg.com/gulp/-/gulp-4.0.2.tgz#543651070fd0f6ab0a0650c6a3e6ff5a7cb09caa"
@@ -4506,11 +4501,6 @@ lru-cache@^6.0.0:
   integrity sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==
   dependencies:
     yallist "^4.0.0"
-
-magic-portal@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.npmjs.org/magic-portal/-/magic-portal-1.0.0.tgz#b7c07e6675e11428b42649807430b2628b214bd1"
-  integrity sha512-RRFQ9N1LQFETObTOmDoQeyAfsUUnSW59LqVpJjFxyCYE7vHb7EkYsw9PImvcI6ZdGzYs46Yc1r47n6RptYliUw==
 
 make-iterator@^1.0.0:
   version "1.0.1"
