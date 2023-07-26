@@ -7,7 +7,8 @@
             [clojure.set :as set]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.db :as db]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.graph-parser.text :as text]))
 
 (defonce test-db (if (some? js/process.env.DB_GRAPH) "logseq_db_test-db" "test-db"))
 
@@ -24,12 +25,35 @@
   (destroy-test-db!)
   (start-test-db!))
 
+(defn- parse-property-value [value]
+  (if-let [refs (seq (map second (re-seq #"\[\[(.*?)\]\]" value)))]
+    (set refs)
+    (if-some [new-val (text/parse-non-string-property-value value)]
+      new-val
+      value)))
+
+(defn- build-blocks
+  "Parses properties and content from a markdown block"
+  [file-content]
+  (if (string/includes? file-content "\n-")
+    (->> (string/split file-content #"\n-\s*")
+         (mapv (fn [s]
+                 (let [[content & props] (string/split-lines s)]
+                   [content (->> props
+                                 (map #(let [[k v] (string/split % #"::\s*" 2)]
+                                         [(keyword k) (parse-property-value v)]))
+                                 (into {}))]))))
+    ;; TODO: page-properties
+    []))
+
 ;; Currently this only works for load-test-files that have added a :file/blocks for each file arg
 (defn- load-test-files-for-db-graph
   [files*]
-  (let [files (mapv #(assoc % :file/content
-                            (string/join "\n"
-                                         (map (fn [x] (str "- " (first x))) (:file/blocks %))))
+  (let [files (mapv #(let [blocks (build-blocks (:file/content %))]
+                       (merge %
+                              {:file/blocks blocks
+                               :file/content (string/join "\n"
+                                                          (map (fn [x] (str "- " (first x))) blocks))}))
                     files*)]
     ;; TODO: Use sqlite instead of file graph to create client db
     (repo-handler/parse-files-and-load-to-db!

@@ -86,13 +86,7 @@ prop-c:: [[page a]], [[page b]], [[page c]]
 prop-linked-num:: [[3000]]
 prop-d:: [[no-space-link]]
 - b4
-prop-d:: nada"
-                     :file/blocks [["b1" {:prop-a "val-a" :prop-num 2000}]
-                                   ["b2" {:prop-a "val-a" :prop-b "val-b"}]
-                                   ["b3" {:prop-c #{"page a" "page b" "page c"}
-                                           :prop-linked-num #{"3000"}
-                                           :prop-d #{"no-space-link"}}]
-                                   ["b4" {:prop-d "nada"}]]}])
+prop-d:: nada"}])
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
            (set (map (comp first str/split-lines :block/content)
@@ -154,9 +148,9 @@ prop-d:: nada"
                    (map-indexed (fn [idx {:keys [tags]}]
                                   {:file/path (str "pages/page" idx ".md")
                                    :file/content (if (seq tags)
-                                                   (str "tags:: " (str/join ", " (map page-ref/->page-ref tags)))
-                                                   "")
-                                   :file/blocks [[(str "block for page" idx) {:tags (set tags)}]]})))
+                                                   (str "page-prop:: b\n- block for page" idx
+                                                        "\ntags:: " (str/join ", " (map page-ref/->page-ref tags)))
+                                                   "")})))
         _ (load-test-files pages)
         {:keys [result time]}
         (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]
@@ -329,10 +323,11 @@ prop-d:: nada"
          (set (map :block/content
                    (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
 
-  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]] [[page 3]]"
+  (is (= #{"foo:: bar" "DONE b1 [[page 1]] [[page 3]]"
            "DONE b2 [[page 1]]"}
          (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
               (keep :block/content)
+              (map str/trimr)
               set)))
 
   ;; FIXME: not working
@@ -462,11 +457,11 @@ tags: [[other]]
                 (dsl-query "(or [[tag2]] [[page 3]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (is (= ["b1 [[page 1]] #tag2" "foo:: bar\n" "b3"]
+    (is (= ["b1 [[page 1]] #tag2" "foo:: bar" "b3"]
            (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
                 (filter #(= "page1" (get-in % [:block/page :block/name])))
-                (map :block/content)))
+                (map (comp str/trimr :block/content))))
         "NOT query")))
 
 (deftest nested-page-ref-queries
