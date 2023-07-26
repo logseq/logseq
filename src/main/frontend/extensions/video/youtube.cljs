@@ -119,7 +119,7 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
 
 
 (defn parse-timestamp [timestamp]
-  (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"
+  (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
         reg-number #"^\d+$"
         timestamp (str timestamp)
         total-seconds (some-> (re-matches reg-number timestamp)
@@ -144,8 +144,8 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
 
 (comment
   ;; hh:mm:ss
-  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
-  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
+  (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
+  (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
 
   (parse-timestamp "01:23") ;; => 83
 
