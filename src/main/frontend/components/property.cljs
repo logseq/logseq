@@ -51,7 +51,7 @@
                                       {:label type
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
-                                                    type)})))]
+                                                    (:type @*property-schema))})))]
          (ui/select schema-types
            (fn [_e v]
              (let [type (keyword (string/lower-case v))]
