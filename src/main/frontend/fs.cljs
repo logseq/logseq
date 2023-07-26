@@ -127,7 +127,7 @@
   [repo old-path new-path]
   (let [new-path (gp-util/path-normalize new-path)]
     (cond
-                                        ; See https://github.com/isomorphic-git/lightning-fs/issues/41
+      ; See https://github.com/isomorphic-git/lightning-fs/issues/41
       (= old-path new-path)
       (p/resolved nil)
 
@@ -187,7 +187,7 @@
 
 (defn get-files
   "List all files in the directory, recursively.
-   
+
    Wrap as {:path string :files []}, using relative path"
   [dir]
   (let [fs-record (get-native-backend)]
