@@ -230,7 +230,7 @@
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium
-                                          (if (= config/local-repo short-repo-name) "Demo" short-repo-name)
+                                          [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
