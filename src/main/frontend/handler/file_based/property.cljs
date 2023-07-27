@@ -1,20 +1,16 @@
-(ns frontend.util.property-edit
-  "Wrappers for fns in `frontend.util.property`, do nothing when repo is db-based"
-  (:require [frontend.util.property :as property]
+(ns frontend.handler.file-based.property
+  (:require [frontend.handler.file-based.property.util :as property]
             [frontend.config :as config]))
-
 
 ;; Why need these XXX-when-file-based fns?
 ;; there're a lot of usages of property-related fns(e.g. property/insert-property) in the whole codebase.
 ;; I want to minimize extensive modifications as much as possible when we add db-based graph support.
 
-;; (def insert-property-when-file-based
+;; (def insert-property
 ;;   (fn-when-file-based property/insert-property [format content key value & args]))
-(defn insert-property-when-file-based
-  [repo format content key value & args]
-  (if (config/db-based-graph? repo)
-    content
-    (apply property/insert-property format content key value args)))
+(defn insert-property
+  [format content key value & args]
+  (apply property/insert-property format content key value args))
 
 (defn insert-properties-when-file-based
   [repo format content kvs]
@@ -34,11 +30,9 @@
     content
     (property/remove-properties format content)))
 
-(defn remove-id-property-when-file-based
-  [repo format content]
-  (if (config/db-based-graph? repo)
-    content
-    (property/remove-id-property format content)))
+(defn remove-id-property
+  [format content]
+  (property/remove-id-property format content))
 
 (defn remove-built-in-properties-when-file-based
   [repo format content]

@@ -1,6 +1,6 @@
 (ns frontend.util.property-test
   (:require [cljs.test :refer [are deftest testing]]
-            [frontend.util.property :as property]))
+            [frontend.handler.file-based.property.util :as property]))
 
 (deftest remove-id-property
   (testing "org"

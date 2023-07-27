@@ -9,7 +9,7 @@
             [clojure.set :as set]
             [medley.core :as medley]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property-edit :as property-edit]))
+            [frontend.handler.file-based.property :as file-property]))
 
 ;;;; APIs
 
@@ -161,7 +161,7 @@
   (when-let [block (state/get-edit-block)]
     (when-let [content (:block/content (db/entity (:db/id block)))]
       (let [repo (state/get-current-repo)
-            content' (-> (property-edit/remove-built-in-properties-when-file-based repo (:block/format block) content)
+            content' (-> (file-property/remove-built-in-properties-when-file-based repo (:block/format block) content)
                          (drawer/remove-logbook))]
         (state/set-edit-content! (state/get-edit-input-id) content')))))
 

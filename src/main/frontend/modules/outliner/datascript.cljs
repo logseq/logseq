@@ -11,7 +11,7 @@
             [frontend.search :as search]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.db.validate :as db-validate]))
 
@@ -90,7 +90,7 @@
                               (let [refs (:block/_refs block)]
                                 (map (fn [ref]
                                        (let [id (:db/id ref)
-                                             block-content (property-edit/remove-properties-when-file-based
+                                             block-content (file-property/remove-properties-when-file-based
                                                             repo (:block/format block) (:block/content block))
                                              new-content (-> (:block/content ref)
                                                              (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))

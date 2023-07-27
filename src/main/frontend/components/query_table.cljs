@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
@@ -94,7 +94,7 @@
   "Get keys for a query table result, which are the columns in a table"
   [result page?]
   (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
-                  (remove (property-edit/built-in-properties))
+                  (remove (file-property/built-in-properties))
                   (remove #{:template}))
         keys (if page? (cons :page keys) (concat '(:block :page) keys))
         keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]

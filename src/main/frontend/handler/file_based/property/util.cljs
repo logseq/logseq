@@ -1,4 +1,4 @@
-(ns frontend.util.property
+(ns frontend.handler.file-based.property.util
   "Property fns needed by the rest of the app and not graph-parser"
   (:require [clojure.string :as string]
             [frontend.util :as util]

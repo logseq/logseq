@@ -12,7 +12,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
@@ -518,8 +518,10 @@
             (cond-> block
               (and (some? (:block/uuid block))
                    (nil? (list-type-fn block)))
-              (-> (update :block/properties #(assoc % :logseq.order-list-type list-type))
-                  (assoc :block/content (property-edit/insert-property-when-file-based (state/get-current-repo) format content :logseq.order-list-type list-type)))))
+              (update :block/properties #(assoc % :logseq.order-list-type list-type))
+
+              (not (config/db-based-graph? (state/get-current-repo)))
+              (assoc :block/content (file-property/insert-property format content :logseq.order-list-type list-type))))
           blocks)
         blocks))))
 

@@ -10,7 +10,7 @@
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.block-ref :as block-ref]))
@@ -79,7 +79,7 @@
                      properties)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
-                  (property-edit/with-built-in-properties-when-file-based repo properties content format)
+                  (file-property/with-built-in-properties-when-file-based repo properties content format)
                   content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
@@ -115,7 +115,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         new-properties (merge
-                        (select-keys properties (property-edit/hidden-properties))
+                        (select-keys properties (file-property/hidden-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block.temp/top?

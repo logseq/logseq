@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [goog.object :as gobj]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db.listener :as db-listener]))
@@ -74,7 +74,7 @@
 
                             :else
                             (subs content 0 pos))
-               content (-> (property-edit/remove-built-in-properties-when-file-based
+               content (-> (file-property/remove-built-in-properties-when-file-based
                             repo (:block/format block) content)
                            (drawer/remove-logbook))]
            (clear-selection!)
@@ -111,11 +111,11 @@
                                     (filter (set (keys properties)))
                                     distinct
                                     vec)
-                   content (property-edit/remove-properties-when-file-based repo format content)
+                   content (file-property/remove-properties-when-file-based repo format content)
                    kvs (for [key property-ks] [key (or (get properties-text-values key)
                                                        (get properties key))])
-                   content (property-edit/insert-properties-when-file-based repo format content kvs)
-                   content (property-edit/remove-empty-properties-when-file-based repo content)
+                   content (file-property/insert-properties-when-file-based repo format content kvs)
+                   content (file-property/remove-empty-properties-when-file-based repo content)
                    block {:block/uuid block-id
                           :block/properties properties
                           :block/properties-order property-ks

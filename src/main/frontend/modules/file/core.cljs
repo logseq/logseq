@@ -9,7 +9,7 @@
             [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.fs :as fs-util]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [logseq.common.path :as path]))
 
 (defn- indented-block-content
@@ -22,11 +22,11 @@
   [repo format content collapsed?]
   (cond
     collapsed?
-    (property-edit/insert-property-when-file-based repo format content :collapsed true)
+    (file-property/insert-property format content :collapsed true)
 
     ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
     (false? collapsed?)
-    (property-edit/remove-property-when-file-based repo format :collapsed content)
+    (file-property/remove-property-when-file-based repo format :collapsed content)
 
     :else
     content))
@@ -84,7 +84,7 @@
                               " ")]
                     (str prefix sep new-content)))
         content (if block-ref-not-saved?
-                  (property-edit/insert-property-when-file-based repo format content :id (str (:block/uuid b)))
+                  (file-property/insert-property format content :id (str (:block/uuid b)))
                   content)]
     content))
 

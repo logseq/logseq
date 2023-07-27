@@ -32,7 +32,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [frontend.util.page :as page-util]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.file-based.property :as file-property]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
@@ -578,11 +578,10 @@
                                            properties-content
                                            (string/includes? (util/page-name-sanity-lc properties-content)
                                                              old-page-name))
-                                  (let [front-matter? (and (property-edit/front-matter?-when-file-based properties-content)
+                                  (let [front-matter? (and (file-property/front-matter?-when-file-based properties-content)
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
-                                     :block/content (property-edit/insert-property-when-file-based
-                                                     repo
+                                     :block/content (file-property/insert-property
                                                      (:block/format properties-block)
                                                      properties-content
                                                      :title

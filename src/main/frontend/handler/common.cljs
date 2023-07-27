@@ -5,13 +5,13 @@
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property-edit :as property-edit]
+            [frontend.handler.property :as property-handler]
             [goog.object :as gobj]
             ["ignore" :as Ignore]))
 
 (defn copy-to-clipboard-without-id-property!
   [repo format raw-text html blocks]
-  (util/copy-to-clipboard! (property-edit/remove-id-property-when-file-based repo format raw-text)
+  (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
                            :html html
                            :blocks blocks))
 
