@@ -63,7 +63,8 @@ const common = {
         'node_modules/shepherd.js/dist/js/shepherd.min.js',
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
-        'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js'
+        'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
+        'packages/amplify/dist/amplify.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/pdfjs-dist/build/pdf.js',

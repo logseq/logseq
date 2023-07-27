@@ -72,7 +72,8 @@
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
         "tldraw:build": "yarn --cwd tldraw install",
-        "postinstall": "yarn tldraw:build"
+        "amplify:build": "yarn --cwd packages/amplify install",
+        "postinstall": "yarn tldraw:build && yarn amplify:build "
     },
     "dependencies": {
         "@capacitor/android": "^4.0.0",
