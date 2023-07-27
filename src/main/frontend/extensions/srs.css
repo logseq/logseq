@@ -11,7 +11,8 @@
   padding: 4px 6px;
 }
 
-.cp__right-sidebar .cards-title, .ui__modal .cards-title {
+.cp__right-sidebar .cards-title,
+.ui__modal .cards-title {
   background: var(--color-level-2);
 }
 
