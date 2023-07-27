@@ -1,8 +1,10 @@
 (ns frontend.components.query-table
   (:require [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.utils :as db-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor.property :as editor-property]
@@ -161,85 +163,96 @@
                (get-in row [:block/content]))
     :block (or (get-in row [:block/original-name])
                (get-in row [:block/content]))
-           (or (get-in row [:block/properties column])
-               (get-in row [:block/properties-text-values column])
-               (get-in row [(keyword :block column)]))))
+    (or (get-in row [:block/properties column])
+        (get-in row [:block/properties-text-values column])
+        (get-in row [(keyword :block column)]))))
 
-(rum/defcs result-table < rum/reactive
+(rum/defcs result-table-v1 < rum/reactive
   (rum/local false ::select?)
   (rum/local false ::mouse-down?)
-  [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text inline]
+  [state config current-block sort-result sort-state columns {:keys [page?]} map-inline page-cp ->elem inline-text]
+  (let [select? (get state ::select?)
+        *mouse-down? (::mouse-down? state)
+        clock-time-total (when-not page?
+                           (->> (map #(get-in % [:block/properties :clock-time] 0) sort-result)
+                                (apply +)))
+        property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
+        column-uuid-names
+        (when (config/db-based-graph? (state/get-current-repo))
+          (some->> (seq (filter uuid? columns))
+                   (map #(vector :block/uuid %))
+                   (db-utils/pull-many '[:block/uuid :block/original-name])
+                   (map (juxt :block/uuid :block/original-name))
+                   (into {})))
+        render-column-value (fn [row-format cell-format value]
+                              (cond
+                                  ;; elements should be rendered as they are provided
+                                (= :element cell-format) value
+                                  ;; collections are treated as a comma separated list of page-cps
+                                (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
+                                                   (interpose [:span ", "]))
+                                  ;; boolean values need to first be stringified
+                                (boolean? value) (str value)
+                                  ;; string values will attempt to be rendered as pages, falling back to
+                                  ;; inline-text when no page entity is found
+                                (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                                                  (page-cp {} page)
+                                                  (inline-text row-format value))
+                                  ;; anything else should just be rendered as provided
+                                :else value))]
+    [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
+                           :style {:width "100%"}
+                           :class (when-not page? "query-table")}
+     [:table.table-auto
+      [:thead
+       [:tr.cursor
+        (for [column columns]
+          (let [column-name (if (uuid? column) (get column-uuid-names column) column)
+                title (if (and (= column :clock-time) (integer? clock-time-total))
+                        (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
+                                                              clock-time-total))
+                        (name column-name))]
+            (sortable-title title column sort-state (:block/uuid current-block))))]]
+      [:tbody
+       (for [row sort-result]
+         (let [format (:block/format row)]
+           [:tr.cursor
+            (for [column columns]
+              (let [value (build-column-value row
+                                              column
+                                              {:page? page?
+                                               :->elem ->elem
+                                               :map-inline map-inline
+                                               :config config
+                                               :comma-separated-property? (property-separated-by-commas? column)})]
+                [:td.whitespace-nowrap {:on-mouse-down (fn []
+                                                         (reset! *mouse-down? true)
+                                                         (reset! select? false))
+                                        :on-mouse-move (fn [] (reset! select? true))
+                                        :on-mouse-up (fn []
+                                                       (when (and @*mouse-down? (not @select?))
+                                                         (state/sidebar-add-block!
+                                                          (state/get-current-repo)
+                                                          (:db/id row)
+                                                          :block-ref)
+                                                         (reset! *mouse-down? false)))}
+                 (when value
+                   (apply render-column-value format value))]))]))]]]))
+
+(rum/defc result-table < rum/reactive
+  [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text inline]
   (when current-block
-    (let [select? (get state ::select?)
-          *mouse-down? (::mouse-down? state)
-          result' (if page? result (attach-clock-property result))
-          clock-time-total (when-not page?
-                             (->> (map #(get-in % [:block/properties :clock-time] 0) result')
-                                  (apply +)))
+    (let [result' (if page? result (attach-clock-property result))
           columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block)
           sort-result (sort-result result (assoc sort-state :page? page?))
-          property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
-          table-version (get-shui-component-version :table config)
-          result-as-text (for [row sort-result]
-                           (for [column columns]
-                             (build-column-text row column)))
-          render-column-value (fn [row-format cell-format value]
-                                (cond
-                                  ;; elements should be rendered as they are provided
-                                  (= :element cell-format) value
-                                  ;; collections are treated as a comma separated list of page-cps
-                                  (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
-                                                     (interpose [:span ", "]))
-                                  ;; boolean values need to first be stringified
-                                  (boolean? value) (str value)
-                                  ;; string values will attempt to be rendered as pages, falling back to
-                                  ;; inline-text when no page entity is found
-                                  (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                                                    (page-cp {} page)
-                                                    (inline-text row-format value))
-                                  ;; anything else should just be rendered as provided
-                                  :else value))]
-
+          table-version (get-shui-component-version :table config)]
       (case table-version
-        2 (shui/table-v2 {:data (conj [[columns]] result-as-text)}
-                         (make-shui-context config inline))
-        1 [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
-                                 :style {:width "100%"}
-                                 :class (when-not page? "query-table")}
-           [:table.table-auto
-            [:thead
-             [:tr.cursor
-              (for [column columns]
-                (let [title (if (and (= column :clock-time) (integer? clock-time-total))
-                              (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
-                                                                    clock-time-total))
-                              (name column))]
-                  (sortable-title title column sort-state (:block/uuid current-block))))]]
-            [:tbody
-             (for [row sort-result]
-               (let [format (:block/format row)]
-                 [:tr.cursor
-                  (for [column columns]
-                    (let [value (build-column-value row
-                                                    column
-                                                    {:page? page?
-                                                     :->elem ->elem
-                                                     :map-inline map-inline
-                                                     :config config
-                                                     :comma-separated-property? (property-separated-by-commas? column)})]
-                      [:td.whitespace-nowrap {:on-mouse-down (fn []
-                                                               (reset! *mouse-down? true)
-                                                               (reset! select? false))
-                                              :on-mouse-move (fn [] (reset! select? true))
-                                              :on-mouse-up (fn []
-                                                             (when (and @*mouse-down? (not @select?))
-                                                               (state/sidebar-add-block!
-                                                                (state/get-current-repo)
-                                                                (:db/id row)
-                                                                :block-ref)
-                                                               (reset! *mouse-down? false)))}
-                       (when value
-                         (apply render-column-value format value))]))]))]]]))))
+        2 (let [result-as-text (for [row sort-result]
+                                 (for [column columns]
+                                   (build-column-text row column)))]
+            (shui/table-v2 {:data (conj [[columns]] result-as-text)}
+                           (make-shui-context config inline)))
+        1 (result-table-v1 config current-block sort-result sort-state columns options map-inline page-cp ->elem inline-text)))))
