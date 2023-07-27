@@ -1,0 +1,87 @@
+.tippy-popper {
+  max-width: 800px;
+}
+
+.tippy-popper[x-placement^=top] [x-arrow],
+.tippy-popper[x-placement^=top] [x-arrow].arrow-small,
+.tippy-popper[x-placement^=top] [x-arrow].arrow-big {
+  border-top-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-popper[x-placement^=top] .tippy-tooltip.transparent-theme [x-circle],
+.tippy-popper[x-placement^=bottom] .tippy-tooltip.transparent-theme [x-circle],
+.tippy-popper[x-placement^=left] .tippy-tooltip.transparent-theme [x-circle],
+.tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-circle],
+.tippy-popper .tippy-tooltip.transparent-theme {
+  background-color: var(--ls-secondary-background-color);
+}
+
+.tippy-popper[x-placement^=top] .tippy-tooltip.transparent-theme [x-arrow],
+.tippy-popper[x-placement^=top] .tippy-tooltip.transparent-theme [x-arrow].arrow-small,
+.tippy-popper[x-placement^=top] .tippy-tooltip.transparent-theme [x-arrow].arrow-big {
+  border-top-color: var(--ls-secondary-background-color);
+}
+
+.tippy-popper[x-placement^=bottom] [x-arrow],
+.tippy-popper[x-placement^=bottom] [x-arrow].arrow-small,
+.tippy-popper[x-placement^=bottom] [x-arrow].arrow-big {
+  border-bottom-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-popper[x-placement^=bottom] .tippy-tooltip.transparent-theme [x-arrow],
+.tippy-popper[x-placement^=bottom] .tippy-tooltip.transparent-theme [x-arrow].arrow-small,
+.tippy-popper[x-placement^=bottom] .tippy-tooltip.transparent-theme [x-arrow].arrow-big {
+  border-bottom-color: var(--ls-secondary-background-color);
+}
+
+.tippy-popper[x-placement^=left] [x-arrow],
+.tippy-popper[x-placement^=left] [x-arrow].arrow-small,
+.tippy-popper[x-placement^=left] [x-arrow].arrow-big {
+  border-left-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-popper[x-placement^=left] .tippy-tooltip.transparent-theme [x-arrow],
+.tippy-popper[x-placement^=left] .tippy-tooltip.transparent-theme [x-arrow].arrow-small,
+.tippy-popper[x-placement^=left] .tippy-tooltip.transparent-theme [x-arrow].arrow-big {
+  border-left-color: var(--ls-secondary-background-color);
+}
+
+.tippy-popper[x-placement^=right] [x-arrow],
+.tippy-popper[x-placement^=right] [x-arrow].arrow-small,
+.tippy-popper[x-placement^=right] [x-arrow].arrow-big {
+  border-right-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow],
+.tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow].arrow-small,
+.tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow].arrow-big {
+  border-right-color: var(--ls-secondary-background-color);
+}
+
+.tippy-tooltip {
+  color: var(--ls-primary-text-color);
+  font-size: inherit;
+  padding: 0;
+  will-change: auto;
+  background-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-tooltip [x-circle] {
+  will-change: auto;
+}
+
+.tippy-popper .tippy-tooltip.customized-theme * {
+  text-align: left;
+}
+
+.tippy-wrapper {
+  background-color: var(--ls-quaternary-background-color);
+}
+
+.tippy-hover {
+  cursor: pointer;
+}
+
+.tippy-popper .tippy-tooltip.monospace-theme {
+  font-family: 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+}
