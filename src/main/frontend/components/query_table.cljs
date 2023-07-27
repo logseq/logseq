@@ -167,6 +167,34 @@
         (get-in row [:block/properties-text-values column])
         (get-in row [(keyword :block column)]))))
 
+(defn- render-column-value
+  [{:keys [row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
+  (cond
+    ;; elements should be rendered as they are provided
+    (= :element cell-format) value
+    ;; collections are treated as a comma separated list of page-cps if they
+    ;; have uuids or else as normal values
+    (coll? value) (if db-graph?
+                    (->> (map #(if (uuid? %)
+                                 (page-cp {} {:block/name (get uuid-names %)})
+                                 (str %))
+                              value)
+                         (interpose [:span ", "]))
+                    (->> (map #(page-cp {} {:block/name %}) value)
+                         (interpose [:span ", "])))
+    ;; boolean values need to first be stringified
+    (boolean? value) (str value)
+    ;; string values will attempt to be rendered as pages, falling back to
+    ;; inline-text when no page entity is found
+    (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                      (page-cp {} page)
+                      (inline-text row-format value))
+    ;; render uuids as page refs
+    (uuid? value)
+    (page-cp {} {:block/name (get uuid-names value)})
+    ;; anything else should just be rendered as provided
+    :else value))
+
 (rum/defcs result-table-v1 < rum/reactive
   (rum/local false ::select?)
   (rum/local false ::mouse-down?)
@@ -177,29 +205,21 @@
                            (->> (map #(get-in % [:block/properties :clock-time] 0) sort-result)
                                 (apply +)))
         property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
-        column-uuid-names
-        (when (config/db-based-graph? (state/get-current-repo))
-          (some->> (seq (filter uuid? columns))
-                   (map #(vector :block/uuid %))
-                   (db-utils/pull-many '[:block/uuid :block/original-name])
-                   (map (juxt :block/uuid :block/original-name))
-                   (into {})))
-        render-column-value (fn [row-format cell-format value]
-                              (cond
-                                  ;; elements should be rendered as they are provided
-                                (= :element cell-format) value
-                                  ;; collections are treated as a comma separated list of page-cps
-                                (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
-                                                   (interpose [:span ", "]))
-                                  ;; boolean values need to first be stringified
-                                (boolean? value) (str value)
-                                  ;; string values will attempt to be rendered as pages, falling back to
-                                  ;; inline-text when no page entity is found
-                                (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                                                  (page-cp {} page)
-                                                  (inline-text row-format value))
-                                  ;; anything else should just be rendered as provided
-                                :else value))]
+        db-graph? (config/db-based-graph? (state/get-current-repo))
+        ;; Fetch all uuid's names once so we aren't doing it N times for N appearances in a table
+        uuid-names
+        (when db-graph?
+          (let [property-ref-vals (->> sort-result
+                                       (map :block/properties)
+                                       (mapcat (fn [m]
+                                                 (concat (->> m vals (filter #(and (set? %) (every? uuid? %))) (mapcat identity))
+                                                         (->> m vals (filter uuid?)))))
+                                       set)]
+            (some->> (seq (concat property-ref-vals (filter uuid? columns)))
+                     (map #(vector :block/uuid %))
+                     (db-utils/pull-many '[:block/uuid :block/original-name])
+                     (map (juxt :block/uuid :block/original-name))
+                     (into {}))))]
     [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class (when-not page? "query-table")}
@@ -207,7 +227,7 @@
       [:thead
        [:tr.cursor
         (for [column columns]
-          (let [column-name (if (uuid? column) (get column-uuid-names column) column)
+          (let [column-name (if (uuid? column) (get uuid-names column) column)
                 title (if (and (= column :clock-time) (integer? clock-time-total))
                         (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
                                                               clock-time-total))
@@ -218,13 +238,13 @@
          (let [format (:block/format row)]
            [:tr.cursor
             (for [column columns]
-              (let [value (build-column-value row
-                                              column
-                                              {:page? page?
-                                               :->elem ->elem
-                                               :map-inline map-inline
-                                               :config config
-                                               :comma-separated-property? (property-separated-by-commas? column)})]
+              (let [[cell-format value] (build-column-value row
+                                                            column
+                                                            {:page? page?
+                                                             :->elem ->elem
+                                                             :map-inline map-inline
+                                                             :config config
+                                                             :comma-separated-property? (property-separated-by-commas? column)})]
                 [:td.whitespace-nowrap {:on-mouse-down (fn []
                                                          (reset! *mouse-down? true)
                                                          (reset! select? false))
@@ -237,7 +257,11 @@
                                                           :block-ref)
                                                          (reset! *mouse-down? false)))}
                  (when value
-                   (apply render-column-value format value))]))]))]]]))
+                   (render-column-value {:format format :cell-format cell-format :value value}
+                                        page-cp
+                                        inline-text
+                                        {:uuid-names uuid-names
+                                         :db-graph? db-graph?}))]))]))]]]))
 
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text inline]
