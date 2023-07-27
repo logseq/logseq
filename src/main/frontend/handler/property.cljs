@@ -9,24 +9,29 @@
 
 (defn add-property!
   [repo block k-name v & opts]
+  ;; TODO: Remove ignores when finished
+  #_:clj-kondo/ignore
   (if (config/db-based-graph? repo)
     (db-property/add-property! repo block k-name v opts)))
 
 (defn remove-property!
   [repo block property-uuid]
   {:pre (uuid? property-uuid)}
+  #_:clj-kondo/ignore
   (if (config/db-based-graph? repo)
     (db-property/remove-property! repo block property-uuid)))
 
 (defn update-property!
   [repo property-uuid opts]
   {:pre [(uuid? property-uuid)]}
+  #_:clj-kondo/ignore
   (if (config/db-based-graph? repo)
     (db-property/update-property! repo property-uuid opts)))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
   [repo block property-id property-value]
+  #_:clj-kondo/ignore
   (if (config/db-based-graph? repo)
     (db-property/delete-property-value! repo block property-id property-value)))
 

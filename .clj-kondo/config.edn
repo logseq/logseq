@@ -77,6 +77,8 @@
              frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
+             frontend.handler.file-based.property file-property
+             frontend.handler.file-based.property.util property
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
              frontend.handler.query.builder query-builder

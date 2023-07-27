@@ -246,15 +246,6 @@
                 {:outliner-op :delete-property-value})))
           (state/clear-edit!))))))
 
-(defn set-editing-new-property!
-  [value]
-  (state/set-state! :ui/new-property-input-id value))
-
-(defn editing-new-property!
-  []
-  (set-editing-new-property! (state/get-edit-input-id))
-  (state/clear-edit!))
-
 (defn class-add-property!
   [repo class k-name]
   (when (= "class" (:block/type class))
