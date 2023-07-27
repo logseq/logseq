@@ -150,13 +150,13 @@
   [id binding-map]
   (when-let [id' (and id binding-map
                       (some-> (str id) (string/replace "plugin." "")))]
-    [:span {:title id'}
+    [:span {:title (str id' "#" (name (:handler-id binding-map)))}
      [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
-     [:small.pl-1 [:code.text-xs (str ":" (name (:handler-id binding-map)))]]]))
+     [:small.pl-1 [:code.text-xs (str id')]]]))
 
 (defn- open-customize-shortcut-dialog!
   [id]
-  (when-let [{:keys [binding user-binding] :as m} (some->> id (get (dh/get-bindings-ids-map)))]
+  (when-let [{:keys [binding user-binding] :as m} (dh/shortcut-item id)]
     (let [binding (to-vector binding)
           user-binding (and user-binding (to-vector user-binding))
           modal-id (str :customize-shortcut id)
@@ -183,13 +183,19 @@
        (for [v (vals ks)
              :let [k (first v)
                    vs (second v)]]
-         (for [[id' handler-id] vs]
+         (for [[id' handler-id] vs
+               :let [m (dh/shortcut-item id')]
+               :when (not (nil? m))]
            [:li
             [:a.select-none.hover:underline
-             {:on-click #(open-customize-shortcut-dialog! id')}
+             {:on-click #(open-customize-shortcut-dialog! id')
+              :title (str handler-id)}
              [:code.inline-block.mr-1.text-xs
               (shortcut-utils/decorate-binding k)]
-             [:small (str id')] [:small (str handler-id)]]]))]])])
+             [:span
+              (dh/get-shortcut-desc m)
+              (ui/icon "external-link" {:size 18})]
+             [:code [:small (str id')]]]]))]])])
 
 (rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
   [k action-name binding user-binding {:keys [saved-cb modal-id]}]

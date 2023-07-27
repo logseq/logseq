@@ -27,7 +27,8 @@
               {id (if binding-only?
                     (get user-shortcuts id binding)
                     (assoc opts :user-binding (get user-shortcuts id)
-                                :handler-id (get-group id)))}))
+                                :handler-id (get-group id)
+                                :id id))}))
        (into {})))
 
 (defn- flatten-bindings-by-key
@@ -102,6 +103,10 @@
 (defn shortcut-cmd
   [id]
   (get @shortcut-config/*shortcut-cmds id))
+
+(defn shortcut-item
+  [id]
+  (get (get-bindings-ids-map) id))
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
