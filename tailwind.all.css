@@ -14,11 +14,5 @@
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";
 @import "react-tippy/dist/tippy.css";
-@import "resources/css/animation.css";
-@import "resources/css/table.css";
-@import "resources/css/datepicker.css";
-@import "resources/css/highlight.css";
-@import "resources/css/common.css";
-@import "resources/css/srs_cards.css";
 @import "resources/css/tabler-extension.css";
 @import-glob "src/main/frontend/**/[!_]*.css";
