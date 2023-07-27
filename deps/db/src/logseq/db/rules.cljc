@@ -146,7 +146,46 @@
   "Rules used by frontend.query.dsl for db graphs"
   (merge
    query-dsl-rules
-   {:has-property
+   {:has-page-property
+    '[(has-page-property ?p ?prop)
+      [?p :block/name]
+      [?p :block/properties ?bp]
+      [(name ?prop) ?prop-name-str]
+      [?prop-b :block/name ?prop-name-str]
+      [?prop-b :block/type "property"]
+      [?prop-b :block/uuid ?prop-uuid]
+      [(get ?bp ?prop-uuid)]]
+
+    :page-property
+    '[;; Clause 1: Match non-ref values
+      [(page-property ?p ?key ?val)
+       [?p :block/name]
+       [?p :block/properties ?prop]
+       [(name ?key) ?key-str]
+       [?prop-b :block/name ?key-str]
+       [?prop-b :block/type "property"]
+       [?prop-b :block/uuid ?prop-uuid]
+       [(get ?prop ?prop-uuid) ?v]
+       (or ([= ?v ?val])
+           [(contains? ?v ?val)])]
+
+      ;; Clause 2: Match values joined by refs
+      [(page-property ?p ?key ?val)
+       [?p :block/name]
+       [?p :block/properties ?prop]
+       [(name ?key) ?key-str]
+       [?prop-b :block/name ?key-str]
+       [?prop-b :block/type "property"]
+       [?prop-b :block/uuid ?prop-uuid]
+       [(get ?prop ?prop-uuid) ?v]
+       [(str ?val) ?str-val]
+      ;; str-val is for integer pages that aren't strings
+       [?prop-val-b :block/original-name ?str-val]
+       [?prop-val-b :block/uuid ?val-uuid]
+       (or ([= ?v ?val-uuid])
+           [(contains? ?v ?val-uuid)])]]
+
+    :has-property
     '[(has-property ?b ?prop)
       [?b :block/properties ?bp]
       [(missing? $ ?b :block/name)]
@@ -169,7 +208,7 @@
        (or [(= ?v ?val)]
            [(contains? ?v ?val)])]
 
-      ;; Clause 2: Match values joined by ref values
+      ;; Clause 2: Match values joined by refs
       [(property ?b ?key ?val)
        [?b :block/properties ?prop]
        [(missing? $ ?b :block/name)]
