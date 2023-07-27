@@ -142,7 +142,7 @@
      [?b :block/path-refs ?br]
      [?br :block/name ?page-name]]})
 
-(def db-query-dsl-rules
+(def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for db graphs"
   (merge
    query-dsl-rules
