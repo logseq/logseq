@@ -1,5 +1,5 @@
 (ns frontend.handler.db-based.property
-  "Block properties handler."
+  "Properties handler for db graphs"
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
             [frontend.db :as db]

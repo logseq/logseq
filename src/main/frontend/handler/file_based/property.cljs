@@ -1,4 +1,5 @@
 (ns frontend.handler.file-based.property
+  "Properties handler for file graphs and file graph specific feature implementations"
   (:require [frontend.handler.file-based.property.util :as property]
             [frontend.config :as config]))
 
