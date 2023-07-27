@@ -133,12 +133,6 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
       (and minutes seconds)
       (+ (* 3600 hours) (* 60 minutes) seconds)
 
-      minutes
-      (+ (* 3600 hours) (* 60 minutes))
-
-      hours
-      (* 3600 hours)
-
       :else
       nil)))
 
