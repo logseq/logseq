@@ -358,7 +358,7 @@
            title))])))
 
 (rum/defc property-custom-context-menu-content
-  [block property]
+  [block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)]
     [:.menu-links-wrapper
     (ui/menu-link
@@ -371,7 +371,7 @@
      {:key "Delete this property"
       :on-click (fn []
                   (let [class? (= "class" (:block/type block))
-                        f (if class?
+                        f (if (and class? class-schema?)
                             property-handler/class-remove-property!
                             property-handler/remove-property!)]
                     (f repo block (:block/uuid property))))}
@@ -402,7 +402,9 @@
                             (when (and block property)
                               (common-handler/show-custom-context-menu!
                                e
-                               (property-custom-context-menu-content block property))))
+                               (property-custom-context-menu-content block
+                                                                     property
+                                                                     {:class-schema? (some-> target (.getAttribute "data-class-schema") (= "true"))}))))
 
                           page
                           (do

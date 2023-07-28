@@ -100,15 +100,19 @@
   (state/clear-edit!))
 
 (defn- add-property!
-  [block property-key property-value exit-edit?]
-  (let [repo (state/get-current-repo)
-        class? (= (:block/type block) "class")]
-    (when property-key
-      (if class?
-        (property-handler/class-add-property! repo block property-key)
-        (property-handler/add-property! repo block property-key property-value)))
-    (when exit-edit?
-      (exit-edit-property))))
+  "If a class and in a class schema context, add the property to its schema.
+  Otherwise, add a block's property and its value"
+  ([block property-key property-value] (add-property! block property-key property-value {}))
+  ([block property-key property-value {:keys [exit-edit? class-schema?]
+                                       :or {exit-edit? true}}]
+   (let [repo (state/get-current-repo)
+         class? (= (:block/type block) "class")]
+     (when property-key
+       (if (and class? class-schema?)
+         (property-handler/class-add-property! repo block property-key)
+         (property-handler/add-property! repo block property-key property-value)))
+     (when exit-edit?
+       (exit-edit-property)))))
 
 (rum/defc date-picker
   [block property value]
@@ -154,7 +158,7 @@
                     :on-chosen (fn [chosen]
                                  (let [page (:value chosen)
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                   (add-property! block (:block/original-name property) id true)))
+                                   (add-property! block (:block/original-name property) id)))
                     :input-opts (fn [not-matched?]
                                   {:on-key-down
                                    (fn [e]
@@ -166,7 +170,7 @@
                                              (page-handler/create! page {:redirect? false
                                                                          :create-first-block? false})
                                              (let [id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                               (add-property! block (:block/original-name property) id true)))))
+                                               (add-property! block (:block/original-name property) id)))))
                                        "Escape"
                                        (exit-edit-property)
                                        nil))})})))
@@ -180,7 +184,7 @@
                     :dropdown? true
                     :on-chosen (fn [chosen]
                                  (let [id (:block/uuid chosen)]
-                                   (add-property! block (:block/original-name property) id true)))
+                                   (add-property! block (:block/original-name property) id)))
                     :input-opts (fn [not-matched?]
                                   {:on-key-down
                                    (fn [e]
@@ -202,7 +206,7 @@
                                                                                                      {:page property-page
                                                                                                       :replace-empty-target? false})]
                                                  (when-let [id (:block/uuid new-block)]
-                                                   (add-property! block (:block/original-name property) id true)))))))
+                                                   (add-property! block (:block/original-name property) id)))))))
                                        "Escape"
                                        (exit-edit-property)
                                        nil))})})))
@@ -215,7 +219,7 @@
                                (map (fn [v] {:value v}) value)
                                [{:value value}])))
                    (distinct))
-        add-property-f #(add-property! block (:block/original-name property) % true)]
+        add-property-f #(add-property! block (:block/original-name property) %)]
     (select/select {:items items
                     :dropdown? true
                     :on-chosen (fn [chosen] (add-property-f (:value chosen)))
@@ -249,7 +253,7 @@
 
        :checkbox
        (let [add-property! (fn []
-                             (add-property! block (:block/original-name property) (boolean (not value)) true))]
+                             (add-property! block (:block/original-name property) (boolean (not value))))]
          (ui/checkbox {:tabIndex "0"
                        :checked value
                        :on-change (fn [_e] (add-property!))
@@ -326,7 +330,7 @@
 
 (rum/defcs property-key-input <
   (rum/local false ::key-down-triggered?)
-  [state block *property-key *property-value *search? blocks-container-id]
+  [state block *property-key *property-value *search? {:keys [blocks-container-id class-schema?]}]
   (let [*key-down-triggered? (::key-down-triggered? state)]
     [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
      {:placeholder "Add a property"
@@ -355,7 +359,8 @@
                                value (when-not (contains? #{:date :checkbox :number :url} (:type (:block/schema property)))
                                        "")]
                            (reset! *property-value value)
-                           (add-property! block @*property-key @*property-value (some? value))
+                           (add-property! block @*property-key @*property-value {:exit-edit? (some? value)
+                                                                                 :class-schema? class-schema?})
                            (when property
                              (let [editor-id (str "ls-property-" blocks-container-id (:db/id block) "-" (:db/id property))]
                                (set-editing! property editor-id "" "")))))
@@ -378,7 +383,7 @@
                    (db/entity [:block/name (util/page-name-sanity-lc @*property-key)]))]
     [:div
      [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
-      (property-key-input entity *property-key *property-value *search? (:blocks-container-id opts))
+      (property-key-input entity *property-key *property-value *search? (select-keys opts [:blocks-container-id :class-schema?]))
       [:div.col-span-3.flex.flex-row
        (when (and property
                   (not (:class-schema? opts))
@@ -427,11 +432,12 @@
         (ui/icon "circle-plus")]]])))
 
 (rum/defcs property-key
-  [state block property]
+  [state block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)]
     [:a
      {:propertyid (:block/uuid property)
       :blockid (:block/uuid block)
+      :data-class-schema (boolean class-schema?)
       :title (str "Configure property: " (:block/original-name property))
       :on-click (fn []
                   (state/set-sub-modal! #(property-config repo property)))}
@@ -538,7 +544,7 @@
                               (mapcat (fn [tag]
                                         (when (= "class" (:block/type tag))
                                           (let [e (db/entity (:db/id tag))]
-                                            (:properties (:block/schema e)) ))))
+                                            (:properties (:block/schema e))))))
                               (map (fn [id]
                                      [id nil])))
         properties (->> (concat (seq properties) class-properties)
@@ -555,7 +561,7 @@
              (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
                [:div.property-pair
                 [:div.property-key.col-span-1
-                 (property-key block property)]
+                 (property-key block property (select-keys opts [:class-schema?]))]
                 (if (:class-schema? opts)
                   [:div.property-description.col-span-3.font-light
                    (get-in property [:block/schema :description])]

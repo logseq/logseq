@@ -1171,18 +1171,29 @@
 
         (case type
           "class"
-          [:div.structured-schema
+          [:div
+           [:div.structured-schema
            ;; properties
-           [:h2.text-lg.font-medium.mb-2 "Properties:"]
-           [:div.grid.gap-1
-            (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
-              (component-block/db-properties-cp
-               {:editor-box editor/box}
-               page
-               edit-input-id
-               {:selected? false
-                :page-configure? true
-                :class-schema? true}))]]
+            [:h2.text-lg.font-medium.mb-2 "Schema properties:"]
+            [:div.grid.gap-1
+             (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
+               (component-block/db-properties-cp
+                {:editor-box editor/box}
+                page
+                edit-input-id
+                {:selected? false
+                 :page-configure? true
+                 :class-schema? true}))]]
+           [:div
+            [:h2.text-lg.font-medium.mb-2 "Page properties:"]
+            [:div.grid.gap-1
+             (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+               (component-block/db-properties-cp
+                {:editor-box editor/box}
+                page
+                edit-input-id
+                {:selected? false
+                 :page-configure? true}))]]]
 
           [:div
            [:h2.text-lg.font-medium.mb-2 "Properties:"]
