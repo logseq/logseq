@@ -837,15 +837,6 @@ a.tooltip-priority {
   font-size: 13px;
 }
 
-/* excalidraw */
-.Island > div > div > div {
-  width: 44px;
-}
-
-.excalidraw hr {
-  margin: 0;
-}
-
 .text-link {
   color: var(--ls-primary-text-color);
 }
