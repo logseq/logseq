@@ -224,7 +224,7 @@
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
          (when (zero? idx) (drop-indicator (dec idx) drag-to))
-         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded
+         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded-md.overflow-hidden
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
