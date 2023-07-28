@@ -12,6 +12,11 @@
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 
+(defn get-graphs-dir
+  []
+  (let [path (.getPath ^object app "home")]
+    (node-path/join path "logseq" "graphs")))
+
 (defn close!
   []
   (when @databases
@@ -106,7 +111,7 @@
 ;; other data such as config.edn, custom css/js
 ;; current page, sidebar blocks
 
-(defn- query
+(defn query
   [repo db sql]
   (let [stmt (prepare db sql repo)]
     (.all ^object stmt)))

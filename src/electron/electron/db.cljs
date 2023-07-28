@@ -4,15 +4,9 @@
             ["fs-extra" :as fs]
             ["electron" :refer [app]]
             [electron.logger :as logger]
-            [logseq.db.sqlite.db :as sqlite-db]))
+            [logseq.db.sqlite.db :as sqlite-db :refer [get-graphs-dir]]))
 
 (def close! sqlite-db/close!)
-
-;; ~/logseq
-(defn get-graphs-dir
-  []
-  (let [path (.getPath ^object app "home")]
-    (node-path/join path "logseq" "graphs")))
 
 (defn ensure-graphs-dir!
   []

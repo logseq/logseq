@@ -58,6 +58,12 @@
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")))
 
+
+(goog-define ENABLE-RTC-SYNC-PRODUCTION false)
+(if ENABLE-RTC-SYNC-PRODUCTION
+  (do (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?graphuuid=%"))
+  (do (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?graphuuid=%"))
+  )
 ;; Feature flags
 ;; =============
 
