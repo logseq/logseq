@@ -435,8 +435,8 @@
   [state block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)]
     [:a
-     {:propertyid (:block/uuid property)
-      :blockid (:block/uuid block)
+     {:data-propertyid (:block/uuid property)
+      :data-blockid (:block/uuid block)
       :data-class-schema (boolean class-schema?)
       :title (str "Configure property: " (:block/original-name property))
       :on-click (fn []
