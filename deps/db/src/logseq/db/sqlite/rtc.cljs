@@ -17,9 +17,8 @@
     (.run ^object init-stmt (clj->js (ds-op->sqlite-op {:local-tx 0})))))
 
 (defn init!
-  [repo]
-  (let [graphs-dir (sqlite-db/get-graphs-dir)
-        [_db-sanitized-name db-full-path] (sqlite-db/get-db-full-path graphs-dir repo)
+  [graphs-dir repo]
+  (let [[_db-sanitized-name db-full-path] (sqlite-db/get-db-full-path graphs-dir repo)
         db (new sqlite-db/sqlite db-full-path nil)]
     (create-op-table! db repo)))
 
