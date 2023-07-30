@@ -444,8 +444,8 @@
  
  :tips/all-done "Alles erledigt!"
 
- :tutorial/text #resource "tutorials/tutorial-en.md"
- :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
+ :tutorial/text #resource "tutorials/tutorial-de.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-de.md"
 
  :whiteboard/add-block-or-page "Block oder Seite hinzufügen"
  :whiteboard/align-bottom "Am unteren Rand ausrichten"
