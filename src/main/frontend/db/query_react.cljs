@@ -24,10 +24,11 @@
    (db-util/resolve-input db
                           input
                           (merge {:current-page-fn (fn []
-                                                     (or (state/get-current-page)
-                                                         (:page (state/get-default-home))
-                                                         (date/today)))}
-                                 opts))))
+                                                    (or (if (state/home?) (:current-block-parent opts) false)
+                                                        (state/get-current-page)
+                                                        (:page (state/get-default-home))
+                                                        (date/today)))}
+                                  opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -99,7 +100,7 @@
     (let [query (resolve-query query)
           repo (or repo (state/get-current-repo))
           db (conn/get-db repo)
-          resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
+          resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid :current-block-parent])
           resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
           inputs (cond-> resolved-inputs
                          rules
