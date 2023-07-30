@@ -496,10 +496,10 @@
   resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.32.tgz#fcb978e5e62f1b61a8ac22e57d5e96a39adffa7a"
   integrity sha512-WA0O+NAHJkZZTXqCRDXFRW9VNADsXJXBoMGuMnPimenxoZimpqgX3awT30AcIWxRppLz/H9vFumQyZF10rojTA==
 
-"@logseq/diff-merge@0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.1.0.tgz#fca282e3ff7c256a1f447d0463d78fb23ebee1d9"
-  integrity sha512-VNAJI7Mo/xHEw2LN6rpoWf/BbVfsC1wRpyyLbvm1jQbRxcwRgqYwWkSIVS0t1wswquDS64ZolJkCIFXeNXQbTA==
+"@logseq/diff-merge@0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.2.0.tgz#be52ad3c6f44a34d115eb9030f9cc8a42fd57f99"
+  integrity sha512-6fM9CeAU5NBzXv5lQQcx6ehr0nfsAwswX0XhFKyyGmrL8BySxxKTuArejaCRhI8IJu2fTT50YK+kQucVWeVcxw==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
