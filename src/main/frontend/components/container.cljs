@@ -587,7 +587,7 @@
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
-                                              [page :page])]
+                                              [(:db/id (db/pull [:block/name page])) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
