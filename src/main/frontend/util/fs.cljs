@@ -69,9 +69,9 @@
     []))
 
 (defn read-repo-file
-  [repo-url file]
+  [repo-url file-rpath]
   (when-let [repo-dir (config/get-repo-dir repo-url)]
-    (fs/read-file repo-dir file)))
+    (fs/read-file repo-dir file-rpath)))
 
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
