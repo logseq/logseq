@@ -344,9 +344,9 @@
                 :desc)
         comp (if (= order :desc) >= <=)]
     (reset! sort-by_
-            (fn sort-results [result block-attribute]
+            (fn sort-results [result property-val-fn]
               ;; first because there is one binding result in query-wrapper
-              (sort-by #(-> % first (get-in [block-attribute k]))
+              (sort-by #(-> % first (property-val-fn k))
                        comp
                        result)))
     ;; blank b/c this post-process filter doesn't effect query
@@ -612,6 +612,15 @@ Some bindings in this fn:
            col))
     col))
 
+(defn get-db-property-value
+  "Fetch a property's value given a block map and proeprty name. Similar to
+  query-table/sort-by-fn. We should standardize this soon"
+  [m prop]
+  (case prop
+    :created-at (:block/created-at m)
+    :updated-at (:block/updated-at m)
+    (get-in m [:block/properties-by-name prop])))
+
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
   ([repo query-string]
@@ -626,8 +635,8 @@ Some bindings in this fn:
                                 identity)
                sort-by' (if sort-by
                           (if (config/db-based-graph? repo)
-                            (comp (fn [col] (sort-by col :block/properties-by-name)) sort-by-prep)
-                            #(sort-by % :block/properties))
+                            (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
+                            #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))
                           identity)
                transform-fn (comp sort-by' random-samples)]
            (query-react/react-query repo
@@ -654,9 +663,10 @@ Some bindings in this fn:
                                  (merge
                                   query-opts
                                   (when sort-by
-                                    {:transform-fn (if (config/db-based-graph? repo)
-                                                     (comp (fn [col] (sort-by col :block/properties-by-name)) sort-by-prep)
-                                                     #(sort-by % :block/properties))})))))))
+                                    {:transform-fn
+                                    (if (config/db-based-graph? repo)
+                                                     (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
+                                                     #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
 
 (defn query-contains-filter?
   [query filter-name]

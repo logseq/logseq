@@ -149,22 +149,24 @@
            (fn [file]
              (map
               (fn [{:keys [name-or-content properties page-properties?]}]
-                {:block/uuid (if page-properties?
-                               (or (page-name-map name-or-content)
-                                   (throw (ex-info "No uuid for page" {:page-name name-or-content})))
-                               (or (content-uuid-map name-or-content)
-                                   (throw (ex-info "No uuid for content" {:content name-or-content}))))
-                 :block/properties
-                 (->> properties
-                      (map
-                       (fn [[prop-name val]]
-                         [(or (property-uuids prop-name)
-                              (throw (ex-info "No uuid for property" {:name prop-name})))
-                          (if (set? val)
-                            (set (map (fn [p] (or (page-uuids p) (throw (ex-info "No uuid for page" {:name p}))))
-                                      val))
-                            val)]))
-                      (into {}))})
+                (cond-> {:block/uuid (if page-properties?
+                                       (or (page-name-map name-or-content)
+                                           (throw (ex-info "No uuid for page" {:page-name name-or-content})))
+                                       (or (content-uuid-map name-or-content)
+                                           (throw (ex-info "No uuid for content" {:content name-or-content}))))
+                         :block/properties
+                         (->> (dissoc properties :created-at)
+                              (map
+                               (fn [[prop-name val]]
+                                 [(or (property-uuids prop-name)
+                                      (throw (ex-info "No uuid for property" {:name prop-name})))
+                                  (if (set? val)
+                                    (set (map (fn [p] (or (page-uuids p) (throw (ex-info "No uuid for page" {:name p}))))
+                                              val))
+                                    val)]))
+                              (into {}))}
+                  (:created-at properties)
+                  (assoc :block/created-at (:created-at properties))))
               (:file/block-properties file)))
            files)]
       (db/transact! test-db (vec (concat page-tx new-properties-tx block-properties-tx))))))

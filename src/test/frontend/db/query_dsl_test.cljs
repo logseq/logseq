@@ -518,10 +518,10 @@ created-at:: 1608968448116
       "Query with rule that can't be derived from the form itself"))
 
 (if js/process.env.DB_GRAPH
-  (def get-property-value  #(get-in %1 [:block/properties-by-name %2]))
+  (def get-property-value query-dsl/get-db-property-value)
   (def get-property-value  #(get-in %1 [:block/properties %2])))
 
-(deftest ^:focus2 sort-by-queries
+(deftest sort-by-queries
   (load-test-files [{:file/path "journals/2020_02_25.md"
                      :file/content "rating:: 10"}
                     {:file/path "journals/2020_12_26.md"
@@ -539,8 +539,7 @@ created-at:: 1608968448116
 "}])
   (testing "sort-by user block property fruit"
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit))")
-                      (map #(get-property-value % :fruit))
-                      #_set)]
+                      (map #(get-property-value % :fruit)))]
       (is (= ["plum" "apple" nil]
              result)
           "sort-by correctly defaults to desc"))
