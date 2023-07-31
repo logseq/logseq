@@ -1934,6 +1934,13 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
+(defn semsearch-enabled?
+  "Conditions to enable semantic search"
+  []
+  (-> (:ai/text-encoders @state)
+      (not-empty)
+      (boolean)))
+
 (defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]

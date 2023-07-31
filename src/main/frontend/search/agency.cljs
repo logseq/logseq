@@ -4,6 +4,7 @@
             [frontend.search.browser :as search-browser]
             [frontend.search.node :as search-node]
             [frontend.search.plugin :as search-plugin]
+            [frontend.search.semantic :as search-semantic]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -14,7 +15,9 @@
      (search-browser/->Browser repo))
    (when state/lsp-enabled?
      (for [s (state/get-all-plugin-services-with-type :search)]
-       (search-plugin/->Plugin s repo)))])
+       (search-plugin/->Plugin s repo)))
+   (when state/semsearch-enabled?
+     (search-semantic/->Semantic repo))])
 
 (defn- get-flatten-registered-engines
   [repo]

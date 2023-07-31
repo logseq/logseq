@@ -279,7 +279,7 @@ class LSPluginCaller extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`handshake Timeout (Missing wait for ready?)`))
+        reject(new Error(`handshake Timeout (forget to await logseq.ready() before calling Logseq apis in plugin?)`))
         pt.destroy()
       }, 4 * 1000) // 4 secs
 

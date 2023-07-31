@@ -5,8 +5,16 @@
 (defprotocol Engine
   (query [this q option]) 
   (query-page [this q option])
-  (rebuild-blocks-indice! [this]) ;; TODO: rename to rebuild-indice!
+
+  ;; Do a full rebuild of the index on the repo
+  ;; TODO: rename to rebuild-indice!
+  (rebuild-blocks-indice! [this])
   (transact-blocks! [this data])
-  (truncate-blocks! [this]) ;; TODO: rename to truncate-indice!
+
+  ;; Reseting the index to empty
+  ;; TODO: rename to truncate-indice! 
+  (truncate-blocks! [this])
   (transact-pages! [this data])
+
+  ;; Invoked when the repo is removed
   (remove-db! [this]))

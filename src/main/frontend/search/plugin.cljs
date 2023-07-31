@@ -6,7 +6,9 @@
             [cljs-bean.core :as bean]))
 
 (defn call-service!
-  "Handling communication with search service plugin"
+  "Handling communication with search service plugin
+   When reply? is true, it will listen to the `service:<event>:<name>:reply` event 
+     and update the state with the result, by attaching :result to the state"
   ([service event payload] (call-service! service event payload false))
   ([service event payload reply?]
    (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]

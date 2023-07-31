@@ -10,7 +10,7 @@ This page is a work in progress. Contributions are welcome.
 
 The entry point of Logseq APIs in ClojureScript is `src/main/logseq/api.cljs`. 
 
-Then they will be exposed to plugin sandbox environment in `libs/src/LSPlugin.user.ts`. The communication between Logseq and Plugin is done via `_execCallableAPI` or `_execCallableAPIAsync`.
+Then they will be exposed to plugin sandbox environment in `libs/src/LSPlugin.user.ts`. The Plugin -> Logseq communication is done via `_execCallableAPI` or `_execCallableAPIAsync` in `libs`.
 
 ## Service
 
