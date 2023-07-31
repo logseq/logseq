@@ -7,6 +7,7 @@
             [clojure.set :as set]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.db :as db]
+            [frontend.date :as date]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]))
 
@@ -33,6 +34,13 @@
       new-val
       value)))
 
+(defn- property-lines->properties
+  [property-lines]
+  (->> property-lines
+       (map #(let [[k v] (string/split % #"::\s*" 2)]
+               [(keyword k) (parse-property-value v)]))
+       (into {})))
+
 (defn- build-block-properties
   "Parses out properties from a file's content and associates it with the page name
    or block content"
@@ -42,16 +50,22 @@
      (->> (string/split file-content #"\n-\s*")
           (mapv (fn [s]
                   (let [[content & props] (string/split-lines s)]
-                    [content (->> props
-                                  (map #(let [[k v] (string/split % #"::\s*" 2)]
-                                          [(keyword k) (parse-property-value v)]))
-                                  (into {}))]))))}
+                    {:name-or-content content
+                     :properties (property-lines->properties props)}))))}
     {:page-properties
      (->> file-content
           string/split-lines
-          (map #(let [[k v] (string/split % #"::\s*" 2)]
-                  [(keyword k) (parse-property-value v)]))
-          (into {}))}))
+          property-lines->properties)}))
+
+(defn- file-path->page-name
+  [file-path]
+  (or (if (string/starts-with? file-path "journals")
+        (some-> (second (re-find #"([^/]+).md" file-path))
+                date/normalize-date
+                date/journal-name
+                string/lower-case)
+        (second (re-find #"([^/]+).md" file-path)))
+      (throw (ex-info "No page found" {}))))
 
 (defn- update-file-for-db-graph
   "Adds properties by block/page for a file and updates block content"
@@ -60,15 +74,22 @@
         (build-block-properties (:file/content file))]
     (if page-properties
       (merge file
-             {:file/block-properties [[(or (second (re-find #"([^/]+).md" (:file/path file)))
-                                           (throw (ex-info "No page found" {})))
-                                       page-properties]]
-              :page-properties? true})
+             {:file/block-properties [{:name-or-content (file-path->page-name (:file/path file))
+                                       :properties page-properties
+                                       :page-properties? true}]
+              :page-properties? false})
       (merge file
-             {:file/block-properties block-properties
-                                 ;; Rewrite content to strip it of properties which shouldn't be in content
+             {:file/block-properties (cond-> block-properties
+                                       ;; Optionally add page properties as a page block
+                                       (re-find #"^\s*[^-]+" (:name-or-content (first block-properties)))
+                                       (conj {:name-or-content (file-path->page-name (:file/path file))
+                                              :properties (->> (:name-or-content (first block-properties))
+                                                               string/split-lines
+                                                               property-lines->properties)
+                                              :page-properties? true}))
+              ;; Rewrite content to strip it of properties which shouldn't be in content
               :file/content (string/join "\n"
-                                         (map (fn [x] (str "- " (first x))) block-properties))}))))
+                                         (map (fn [x] (str "- " (:name-or-content x))) block-properties))}))))
 
 (defn- load-test-files-for-db-graph
   [files*]
@@ -91,14 +112,14 @@
                                     [?b :block/uuid ?uuid]]
                                   (db/get-db test-db)))
           property-uuids (->> files
-                              (mapcat #(->> % :file/block-properties (map second) (mapcat keys)))
+                              (mapcat #(->> % :file/block-properties (map :properties) (mapcat keys)))
                               set
                               ;; Property pages may be created by file graphs automatically,
                               ;; usually by page properties. Delete this if file graphs are long
                               ;; used to create datascript db
                               (map #(vector % (or (page-name-map (name %)) (random-uuid))))
                               (into {}))
-            ;; from upsert-property!
+          ;; from upsert-property!
           new-properties-tx (mapv (fn [[prop-name uuid]]
                                     (outliner-core/block-with-timestamps
                                      {:block/uuid uuid
@@ -110,7 +131,7 @@
           page-uuids (->> files
                           (mapcat #(->> %
                                         :file/block-properties
-                                        (map second)
+                                        (map :properties)
                                         (mapcat (fn [m]
                                                   (->> m vals (filter set?) (apply set/union))))))
                           set
@@ -122,19 +143,19 @@
                             :block/original-name page-name
                             :block/uuid uuid}))
                         page-uuids)
-            ;; from add-property!
+          ;; from add-property!
           block-properties-tx
           (mapcat
-           (fn [{:keys [page-properties?] :as file}]
+           (fn [file]
              (map
-              (fn [[page-name-or-content props]]
+              (fn [{:keys [name-or-content properties page-properties?]}]
                 {:block/uuid (if page-properties?
-                               (or (page-name-map page-name-or-content)
-                                   (throw (ex-info "No uuid for page" {:page-name page-name-or-content})))
-                               (or (content-uuid-map page-name-or-content)
-                                   (throw (ex-info "No uuid for content" {:content page-name-or-content}))))
+                               (or (page-name-map name-or-content)
+                                   (throw (ex-info "No uuid for page" {:page-name name-or-content})))
+                               (or (content-uuid-map name-or-content)
+                                   (throw (ex-info "No uuid for content" {:content name-or-content}))))
                  :block/properties
-                 (->> props
+                 (->> properties
                       (map
                        (fn [[prop-name val]]
                          [(or (property-uuids prop-name)

@@ -517,7 +517,11 @@ created-at:: 1608968448116
          (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
       "Query with rule that can't be derived from the form itself"))
 
-(deftest sort-by-queries
+(if js/process.env.DB_GRAPH
+  (def get-property-value  #(get-in %1 [:block/properties-by-name %2]))
+  (def get-property-value  #(get-in %1 [:block/properties %2])))
+
+(deftest ^:focus2 sort-by-queries
   (load-test-files [{:file/path "journals/2020_02_25.md"
                      :file/content "rating:: 10"}
                     {:file/path "journals/2020_12_26.md"
@@ -533,43 +537,43 @@ created-at:: 1608968448115
 - 26-b4
 created-at:: 1608968448116
 "}])
-
   (testing "sort-by user block property fruit"
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit))")
-                      (map #(get-in % [:block/properties :fruit])))]
+                      (map #(get-property-value % :fruit))
+                      #_set)]
       (is (= ["plum" "apple" nil]
              result)
           "sort-by correctly defaults to desc"))
 
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit desc))")
-                      (map #(get-in % [:block/properties :fruit])))]
-      (is (= ["plum" "apple" nil]
-             result)
-          "sort-by desc"))
+                        (map #(get-property-value % :fruit)))]
+        (is (= ["plum" "apple" nil]
+               result)
+            "sort-by desc"))
 
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit asc))")
-                      (map #(get-in % [:block/properties :fruit])))]
-      (is (= ["apple" "plum" nil]
-             result)
-          "sort-by asc")))
+                        (map #(get-property-value % :fruit)))]
+        (is (= ["apple" "plum" nil]
+               result)
+            "sort-by asc")))
 
   (testing "sort-by hidden, built-in block property created-at"
-    (let [result (->> (dsl-query "(and (task now later done) (sort-by created-at desc))")
-                      (map #(get-in % [:block/properties :created-at])))]
-      (is (= [1608968448115 1608968448114 1608968448113]
-             result))
-      "sorted-by desc")
+      (let [result (->> (dsl-query "(and (task now later done) (sort-by created-at desc))")
+                        (map #(get-property-value % :created-at)))]
+        (is (= [1608968448115 1608968448114 1608968448113]
+               result))
+        "sorted-by desc")
 
-    (let [result (->> (dsl-query "(and (todo now later done) (sort-by created-at asc))")
-                      (map #(get-in % [:block/properties :created-at])))]
-      (is (= [1608968448113 1608968448114 1608968448115]
-             result)
-          "sorted-by asc")))
+      (let [result (->> (dsl-query "(and (todo now later done) (sort-by created-at asc))")
+                        (map #(get-property-value % :created-at)))]
+        (is (= [1608968448113 1608968448114 1608968448115]
+               result)
+            "sorted-by asc")))
 
   (testing "user page property rating"
-    (is (= [10 8]
-           (->> (dsl-query "(and (page-property rating) (sort-by rating))")
-                (map #(get-in % [:block/properties :rating])))))))
+      (is (= [10 8]
+             (->> (dsl-query "(and (page-property rating) (sort-by rating))")
+                  (map #(get-property-value % :rating)))))))
 
 (deftest simplify-query
   (are [x y] (= (query-dsl/simplify-query x) y)

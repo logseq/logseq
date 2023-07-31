@@ -9,6 +9,9 @@
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.conn :as conn]
+            [datascript.core :as d]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.db.rules :as rules]
             [frontend.template :as template]
@@ -341,9 +344,9 @@
                 :desc)
         comp (if (= order :desc) >= <=)]
     (reset! sort-by_
-            (fn sort-results [result]
+            (fn sort-results [result block-attribute]
               ;; first because there is one binding result in query-wrapper
-              (sort-by #(-> % first (get-in [:block/properties k]))
+              (sort-by #(-> % first (get-in [block-attribute k]))
                        comp
                        result)))
     ;; blank b/c this post-process filter doesn't effect query
@@ -589,6 +592,26 @@ Some bindings in this fn:
   (let [q' (template/resolve-dynamic-template! q)]
     (pre-transform q')))
 
+(defn- sort-by-prep
+  "For a db graph, adds a block attribute :block/properties-by-name to be used
+  for sorting with its keys being property names"
+  [col]
+  ;; Only modify result shapes that we know of
+  (if (map? (ffirst col))
+    (let [prop-uuid-names (->> (d/datoms (conn/get-db) :avet :block/type "property")
+                               (map :e)
+                               (db-utils/pull-many '[:block/uuid :block/name])
+                               (map #(vector (:block/uuid %) (keyword (:block/name %))))
+                               (into {}))]
+      (map (fn [blocks]
+             (mapv (fn [block]
+                     (assoc block
+                            :block/properties-by-name
+                            (update-keys (:block/properties block) #(prop-uuid-names % %))))
+                   blocks))
+           col))
+    col))
+
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
   ([repo query-string]
@@ -597,12 +620,16 @@ Some bindings in this fn:
    (when (and (string? query-string) (not= "\"\"" query-string))
      (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string {:db-graph? (config/db-based-graph? repo)})]
        (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
-         (let [sort-by (or sort-by identity)
-               random-samples (if @sample
+         (let [random-samples (if @sample
                                 (fn [col]
                                   (take @sample (shuffle col)))
                                 identity)
-               transform-fn (comp sort-by random-samples)]
+               sort-by' (if sort-by
+                          (if (config/db-based-graph? repo)
+                            (comp (fn [col] (sort-by col :block/properties-by-name)) sort-by-prep)
+                            #(sort-by % :block/properties))
+                          identity)
+               transform-fn (comp sort-by' random-samples)]
            (query-react/react-query repo
                                     {:query query'
                                      :query-string query-string
@@ -620,14 +647,16 @@ Some bindings in this fn:
           {:keys [query sort-by blocks? rules]} (parse query-string {:db-graph? (config/db-based-graph? repo)})]
       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (query-react/react-query repo
-                           (merge
-                            query-m
-                            {:query query'
-                             :rules rules})
-                           (merge
-                            query-opts
-                            (when sort-by
-                              {:transform-fn sort-by})))))))
+                                 (merge
+                                  query-m
+                                  {:query query'
+                                   :rules rules})
+                                 (merge
+                                  query-opts
+                                  (when sort-by
+                                    {:transform-fn (if (config/db-based-graph? repo)
+                                                     (comp (fn [col] (sort-by col :block/properties-by-name)) sort-by-prep)
+                                                     #(sort-by % :block/properties))})))))))
 
 (defn query-contains-filter?
   [query filter-name]
