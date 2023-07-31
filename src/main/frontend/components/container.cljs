@@ -524,8 +524,9 @@
       (when show-action-bar?
         (action-bar/action-bar))
 
-      [:div.cp__sidebar-main-content
-       {:data-is-margin-less-pages margin-less-pages?
+      [:div.rounded-xl.cp__sidebar-main-content
+       {:class (when (not= route-name :whiteboards) "color-level")
+        :data-is-margin-less-pages margin-less-pages?
         :data-is-full-width        (or margin-less-pages?
                                        (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
@@ -544,17 +545,11 @@
          nil
 
          db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading)]]
+         (ui/loading)
 
          :else
          [:div
-          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto.pb-24"))
-           :style {:margin-bottom  (cond
-                                     margin-less-pages? 0
-                                     onboarding-and-home? 0
-                                     :else 120)}}
+          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto"))}
           main-content])
 
        (when onboarding-and-home?

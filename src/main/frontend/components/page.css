@@ -98,11 +98,11 @@
   }
 
   .actions {
-    position: sticky;
-    background-color: var(--ls-primary-background-color);
+    @apply py-3 sticky;
+
+    background-color: var(--color-level-1);
     white-space: nowrap;
-    top: -18px;
-    padding-bottom: 10px;
+    top: -32px;
     z-index: 1;
 
     @screen md {
@@ -235,9 +235,6 @@
 
 .ls-page-title {
   @apply rounded-sm;
-
-  padding: 5px 8px;
-  margin: 0 -6px;
 
   &.title {
     margin-bottom: 12px;

@@ -950,7 +950,7 @@
     [:div.flex-1.cp__all_pages
      [:h1.title (t :all-pages)]
 
-     [:div.text-sm.ml-1.opacity-70.mb-4 (t :paginates/pages total-items)]
+     [:div.text-sm.opacity-70 (t :paginates/pages total-items)]
 
      (when current-repo
 
