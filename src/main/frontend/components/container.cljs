@@ -356,7 +356,8 @@
                :active (and (not srs-open?)
                             (= route-name :page)
                             (= page (get-in route-match [:path-params :name])))
-               :icon "home"})
+               :icon "home"
+               :shortcut :go/home})
              (sidebar-item
               {:class "journals-nav"
                :active (and (not srs-open?)
