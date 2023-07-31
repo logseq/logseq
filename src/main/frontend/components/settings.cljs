@@ -739,6 +739,16 @@
                (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
              true))
 
+(defn semsearch-status-row []
+  (row-with-button-action {:left-label (str (t :settings-page/semsearch) " (" (t :experimental-warn) ")")
+                           :action     [:div (:name (state/get-semsearch-encoder))]
+                           :desc       (ui/tippy {:html        [:div
+                                                                [:div (t :settings-page/semsearch-enabling)]]
+                                                  :class       "tippy-hover ml-2"
+                                                  :interactive true
+                                                  :disabled    false}
+                                                 (svg/info))}))
+
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
    {:left-label (t :settings-page/sync)
@@ -746,7 +756,7 @@
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
+   {:left-label (str (t :settings-page/sync-diff-merge) " ("(t :experimental-warn)")") ;; Not included in i18n to avoid outdating translations
     :action (sync-diff-merge-enabled-switcher enabled?)
     :desc (ui/tippy {:html        [:div
                                    [:div (t :settings-page/sync-diff-merge-desc)]
@@ -964,6 +974,7 @@
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
+        enable-semsearch? (state/semsearch-enabled?)
         enable-sync? (state/enable-sync?)
         enable-sync-diff-merge? (state/enable-sync-diff-merge?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
@@ -1014,6 +1025,8 @@
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (when enable-semsearch?
+           (semsearch-status-row))
          (sync-switcher-row enable-sync?)
          (when enable-sync?
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))

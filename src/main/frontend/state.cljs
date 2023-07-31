@@ -1934,10 +1934,20 @@ Similar to re-frame subscriptions"
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
 
+;; TODO make this setting configurable
+(defn get-semsearch-encoder
+  "Returns a semantic search encoder in the state map"
+  []
+  (-> (sub :ai/text-encoders)
+      seq
+      first ;; Pick a "first" elem in the map, temporarily
+      second ;; Return the encoder, without the encoder key
+      ))
+
 (defn semsearch-enabled?
   "Conditions to enable semantic search"
   []
-  (-> (:ai/text-encoders @state)
+  (-> (sub :ai/text-encoders)
       (not-empty)
       (boolean)))
 

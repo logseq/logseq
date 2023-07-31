@@ -10,8 +10,9 @@
 (defonce js-vector-store-class VectorStorage)
 
 (defn create
-  "Get a vector store handler
+  "Get a vector store handler in the app runtime state
    It the store is persisted, it will be loaded from the disk
+   If the handler is already created, return a rejected promise.
    - id-str: identifier for the vector store (should be unique!)
    - dim: dimension of the vector
    
@@ -19,12 +20,30 @@
    or throw an error if the store already exists"
   [id-str dim]
   ;; Check if the store already exists
-  (when (contains? @*stores id-str)
-    (throw (js/Error. (str "Vector store " id-str " already exists"))))
-  (let [store (VectorStorage. id-str dim)]
-    (swap! *stores assoc id-str store)
-    (p/let [_ (.initialize store)]
-      (.load store))))
+  (if (contains? @*stores id-str)
+    (p/rejected (js/Error. (str "Vector store " id-str " already exists")))
+    (let [store (VectorStorage. id-str dim)]
+      (swap! *stores assoc id-str store)
+      (p/let [_ (.initialize store)]
+        (.load store)))))
+
+(defn try-create
+  "Get a vector store handler in the app runtime state
+   It the store is persisted, it will be loaded from the disk
+   If the handler is already created, return a rejected promise.
+   - id-str: identifier for the vector store (should be unique!)
+   - dim: dimension of the vector
+   
+   Returns a promise of the vector store prepared (loaded, and the num of vecs that loaded)
+   or nil if the store already exists"
+  [id-str dim]
+  ;; Check if the store already exists
+  (if (contains? @*stores id-str)
+    nil
+    (let [store (VectorStorage. id-str dim)]
+      (swap! *stores assoc id-str store)
+      (p/let [_ (.initialize store)]
+        (.load store)))))
 
 (defn add
   "Add a record to the vector store
