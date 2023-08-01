@@ -19,7 +19,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -65,8 +65,8 @@
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 
-(def clear-selection! editor-property/clear-selection!)
-(def edit-block! editor-property/edit-block!)
+(def clear-selection! state/clear-selection!)
+(def edit-block! block-handler/edit-block!)
 
 (defn get-block-own-order-list-type
   [block]
@@ -75,12 +75,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (editor-property/set-block-property! uuid :logseq.order-list-type (name type))))
+    (property-handler/set-block-property! (state/get-current-repo) uuid :logseq.order-list-type (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (editor-property/remove-block-property! uuid :logseq.order-list-type)))
+    (property-handler/remove-block-property! (state/get-current-repo) uuid :logseq.order-list-type)))
 
 (defn own-order-number-list?
   [block]
@@ -95,10 +95,11 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop :logseq.order-list-type]
+          order-list-prop :logseq.order-list-type
+          repo (state/get-current-repo)]
       (if has-ordered?
-        (editor-property/batch-remove-block-property! blocks-uuids order-list-prop)
-        (editor-property/batch-add-block-property! blocks-uuids order-list-prop "number")))))
+        (property-handler/batch-remove-block-property! repo blocks-uuids order-list-prop)
+        (property-handler/batch-add-block-property! repo blocks-uuids order-list-prop "number")))))
 
 (defn get-selection-and-format
   []
@@ -804,10 +805,11 @@
           query-properties (if add?
                              (distinct (conj query-properties key))
                              (remove #{key} query-properties))
-          query-properties (vec query-properties)]
+          query-properties (vec query-properties)
+          repo (state/get-current-repo)]
       (if (seq query-properties)
-        (editor-property/set-block-property! block-id :query-properties (str query-properties))
-        (editor-property/remove-block-property! block-id :query-properties)))))
+        (property-handler/set-block-property! repo block-id :query-properties (str query-properties))
+        (property-handler/remove-block-property! repo block-id :query-properties)))))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -844,15 +846,16 @@
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
    Accepts a list of uuids."
   [block-ids]
-  (when-not (config/db-based-graph? (state/get-current-repo))
-    (let [block-ids (remove nil? block-ids)
-          col (map (fn [block-id]
-                     (when-let [block (db/entity [:block/uuid block-id])]
-                       (when-not (:block/pre-block? block)
-                         [block-id :id (str block-id)])))
-                block-ids)
-          col (remove nil? col)]
-      (editor-property/batch-set-block-property! col))))
+  (let [repo (state/get-current-repo)]
+    (when-not (config/db-based-graph? repo)
+      (let [block-ids (remove nil? block-ids)
+            col (map (fn [block-id]
+                       (when-let [block (db/entity [:block/uuid block-id])]
+                         (when-not (:block/pre-block? block)
+                           [block-id :id (str block-id)])))
+                  block-ids)
+            col (remove nil? col)]
+        (property-handler/file-batch-set-property! repo col)))))
 
 (defn copy-block-ref!
   ([block-id]
@@ -1751,7 +1754,7 @@
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
-    (editor-property/mark-last-input-time! repo)
+    (block-handler/mark-last-input-time! repo)
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
@@ -1858,9 +1861,7 @@
                         :command :block-ref})
 
       ;; Save it so it'll be parsed correctly in the future
-      (editor-property/set-block-property! (:block/uuid chosen)
-                                           :id
-                                           uuid-string)
+      (property-handler/file-persist-block-id! (state/get-current-repo) (:block/uuid chosen))
 
       (when-let [input (gdom/getElement id)]
         (.focus input)))))
@@ -2623,7 +2624,7 @@
         top-block? (= (:block/left block) (:block/page block))
         single-block? (inside-of-single-block (.-target e))
         root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
-    (editor-property/mark-last-input-time! repo)
+    (block-handler/mark-last-input-time! repo)
     (cond
       (not= selected-start selected-end)
       (do

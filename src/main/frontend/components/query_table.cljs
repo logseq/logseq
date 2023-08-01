@@ -7,7 +7,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
             [frontend.shui :refer [get-shui-component-version make-shui-context]]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -82,15 +82,16 @@
 ;; ==========
 (rum/defc sortable-title
   [title column {:keys [sort-by-column sort-desc?]} block-id]
-  [:th.whitespace-nowrap
-   [:a {:on-click (fn []
-                    (editor-property/set-block-property! block-id :query-sort-by (name column))
-                    (editor-property/set-block-property! block-id :query-sort-desc (not sort-desc?)))}
-    [:div.flex.items-center
-     [:span.mr-1 title]
-     (when (= sort-by-column column)
-       [:span
-        (if sort-desc? (svg/caret-down) (svg/caret-up))])]]])
+  (let [repo (state/get-current-repo)]
+    [:th.whitespace-nowrap
+     [:a {:on-click (fn []
+                      (property-handler/set-block-property! repo block-id :query-sort-by (name column))
+                      (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?)))}
+      [:div.flex.items-center
+       [:span.mr-1 title]
+       (when (= sort-by-column column)
+         [:span
+          (if sort-desc? (svg/caret-down) (svg/caret-up))])]]]))
 
 (defn get-keys
   "Get keys for a query table result, which are the columns in a table"

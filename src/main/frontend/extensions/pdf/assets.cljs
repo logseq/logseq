@@ -6,7 +6,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
@@ -133,7 +133,7 @@
                                (get-in highlight [:content :image])
                                (js/Date.now))
                    :hl-color (get-in highlight [:properties :color])}]
-      (editor-property/set-block-property! (:block/uuid block) k v))))
+      (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]

@@ -7,7 +7,7 @@
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [logseq.common.path :as path]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
@@ -33,7 +33,7 @@
                            nil))]
         (let [id-property (:id (:block/properties block))]
           (when-not (= (str id-property) (str block-id))
-            (editor-property/set-block-property! block-id "id" block-id)))))))
+            (property-handler/file-persist-block-id! (state/get-current-repo) block-id)))))))
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]

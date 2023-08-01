@@ -126,9 +126,10 @@
                             :block/type "property"})]
         {:outliner-op :create-new-property}))))
 
-(defn add-property!
-  [repo block k-name v {:keys [old-value]}]
-  (let [k-name (name k-name)
+(defn set-block-property!
+  [repo block-id k-name v {:keys [old-value]}]
+  (let [block (db/entity repo [:block/uuid block-id])
+        k-name (name k-name)
         property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         v (if property v (or v ""))]
     (when (some? v)
@@ -179,21 +180,6 @@
                     :block/properties block-properties
                     :block/refs refs}]
                   {:outliner-op :add-property})))))))))
-
-(defn remove-property!
-  [repo block property-uuid]
-  {:pre (string? property-uuid)}
-  (let [origin-properties (:block/properties block)]
-    (when (contains? (set (keys origin-properties)) property-uuid)
-      (let [properties' (dissoc origin-properties property-uuid)
-            refs (outliner-core/rebuild-block-refs block properties')]
-        (db/transact!
-         repo
-          [[:db/retract (:db/id block) :block/refs]
-           {:block/uuid (:block/uuid block)
-            :block/properties properties'
-            :block/refs refs}]
-          {:outliner-op :remove-property})))))
 
 (defn- fix-cardinality-many-values!
   [repo property-uuid]
@@ -273,3 +259,60 @@
         (db/transact! repo [{:db/id (:db/id class)
                              :block/schema class-new-schema}]
           {:outliner-op :class-remove-property})))))
+
+(defn batch-add-property!
+  "Notice that this works only for properties with cardinality equals to `one`."
+  [repo block-ids k-name v]
+  (let [k-name (name k-name)
+        property (db/entity repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property-uuid (or (:block/uuid property) (random-uuid))
+        type (:type (:block/schema property))
+        infer-schema (when-not type (infer-schema-from-input-string v))
+        property-type (or type infer-schema :default)
+        _ (when (nil? property)
+            (upsert-property! repo property k-name property-uuid property-type))
+        {:keys [type cardinality]} (:block/schema property)
+        property (db/entity repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        txs (mapcat
+             (fn [id]
+               (when-let [block (db/entity [:block/uuid id])]
+                 (when (and (some? v) (not= cardinality :many))
+                   (let [schema (get builtin-schema-types property-type)
+                         v* (try
+                              (convert-property-input-string property-type v)
+                              (catch :default e
+                                (notification/show! (str e) :error false)
+                                nil))
+                         properties (:block/properties block)
+                         block-properties (assoc properties property-uuid v*)
+                         refs (outliner-core/rebuild-block-refs block block-properties)]
+                     [[:db/retract (:db/id block) :block/refs]
+                      {:block/uuid (:block/uuid block)
+                       :block/properties block-properties
+                       :block/refs refs}]))))
+             block-ids)]
+    (when (seq txs)
+      (db/transact! repo txs {:outliner-op :batch-add-property}))))
+
+(defn batch-remove-property!
+  [repo block-ids property-uuid]
+  {:pre (string? property-uuid)}
+  (let [txs (mapcat
+             (fn [id]
+               (when-let [block (db/entity [:block/uuid id])]
+                 (let [origin-properties (:block/properties block)]
+                   (when (contains? (set (keys origin-properties)) property-uuid)
+                     (let [properties' (dissoc origin-properties property-uuid)
+                           refs (outliner-core/rebuild-block-refs block properties')]
+                       [[:db/retract (:db/id block) :block/refs]
+                        {:block/uuid (:block/uuid block)
+                         :block/properties properties'
+                         :block/refs refs}])))))
+             block-ids)]
+    (when (seq txs)
+      (db/transact! repo txs {:outliner-op :remove-property}))))
+
+(defn remove-block-property!
+  [repo block-id property-uuid]
+  {:pre (string? property-uuid)}
+  (batch-remove-property! repo [block-id] property-uuid))

@@ -11,7 +11,6 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -33,85 +32,86 @@
 
 (rum/defc custom-context-menu-content
   []
-  [:.menu-links-wrapper
-   (ui/menu-background-color #(editor-property/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
-                             #(editor-property/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
+  (let [repo (state/get-current-repo)]
+    [:.menu-links-wrapper
+     (ui/menu-background-color #(property-handler/batch-add-block-property! repo (state/get-selection-block-ids) :background-color %)
+                               #(property-handler/batch-remove-block-property! repo (state/get-selection-block-ids) :background-color))
 
-   (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
-                    #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
-                    #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
+     (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
+                      #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
+                      #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
 
-   [:hr.menu-separator]
+     [:hr.menu-separator]
 
-   (ui/menu-link
-    {:key "cut"
-     :on-click #(editor-handler/cut-selection-blocks true)}
-    (t :editor/cut)
-    (ui/keyboard-shortcut-from-config :editor/cut))
-   (ui/menu-link
-    {:key "delete"
-     :on-click #(do (editor-handler/delete-selection %)
-                    (state/hide-custom-context-menu!))}
-    (t :editor/delete-selection)
-    (ui/keyboard-shortcut-from-config :editor/delete))
-   (ui/menu-link
-    {:key "copy"
-     :on-click editor-handler/copy-selection-blocks}
-    (t :editor/copy)
-    (ui/keyboard-shortcut-from-config :editor/copy))
-   (ui/menu-link
-    {:key "copy as"
-     :on-click (fn [_]
-                 (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
-                   (state/set-modal!
-                    #(export/export-blocks block-uuids {:whiteboard? false}))))}
-    (t :content/copy-export-as)
-    nil)
-   (ui/menu-link
-    {:key "copy block refs"
-     :on-click editor-handler/copy-block-refs}
-    (t :content/copy-block-ref)
-    nil)
-   (ui/menu-link
-    {:key "copy block embeds"
-     :on-click editor-handler/copy-block-embeds}
-    (t :content/copy-block-emebed)
-    nil)
-
-   [:hr.menu-separator]
-
-   (when (state/enable-flashcards?)
      (ui/menu-link
-      {:key "Make a Card"
-       :on-click #(srs/batch-make-cards!)}
-      (t :context-menu/make-a-flashcard)
-      nil))
+      {:key "cut"
+       :on-click #(editor-handler/cut-selection-blocks true)}
+      (t :editor/cut)
+      (ui/keyboard-shortcut-from-config :editor/cut))
+     (ui/menu-link
+      {:key "delete"
+       :on-click #(do (editor-handler/delete-selection %)
+                      (state/hide-custom-context-menu!))}
+      (t :editor/delete-selection)
+      (ui/keyboard-shortcut-from-config :editor/delete))
+     (ui/menu-link
+      {:key "copy"
+       :on-click editor-handler/copy-selection-blocks}
+      (t :editor/copy)
+      (ui/keyboard-shortcut-from-config :editor/copy))
+     (ui/menu-link
+      {:key "copy as"
+       :on-click (fn [_]
+                   (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
+                     (state/set-modal!
+                      #(export/export-blocks block-uuids {:whiteboard? false}))))}
+      (t :content/copy-export-as)
+      nil)
+     (ui/menu-link
+      {:key "copy block refs"
+       :on-click editor-handler/copy-block-refs}
+      (t :content/copy-block-ref)
+      nil)
+     (ui/menu-link
+      {:key "copy block embeds"
+       :on-click editor-handler/copy-block-embeds}
+      (t :content/copy-block-emebed)
+      nil)
 
-   (ui/menu-link
-     {:key "Toggle number list"
-      :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
-     (t :context-menu/toggle-number-list)
-     nil)
+     [:hr.menu-separator]
 
-   (ui/menu-link
-    {:key "cycle todos"
-     :on-click editor-handler/cycle-todos!}
-    (t :editor/cycle-todo)
-    (ui/keyboard-shortcut-from-config :editor/cycle-todo))
+     (when (state/enable-flashcards?)
+       (ui/menu-link
+        {:key "Make a Card"
+         :on-click #(srs/batch-make-cards!)}
+        (t :context-menu/make-a-flashcard)
+        nil))
 
-   [:hr.menu-separator]
+     (ui/menu-link
+      {:key "Toggle number list"
+       :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+      (t :context-menu/toggle-number-list)
+      nil)
 
-   (ui/menu-link
-    {:key "Expand all"
-     :on-click editor-handler/expand-all-selection!}
-    (t :editor/expand-block-children)
-    (ui/keyboard-shortcut-from-config :editor/expand-block-children))
+     (ui/menu-link
+      {:key "cycle todos"
+       :on-click editor-handler/cycle-todos!}
+      (t :editor/cycle-todo)
+      (ui/keyboard-shortcut-from-config :editor/cycle-todo))
 
-   (ui/menu-link
-    {:key "Collapse all"
-     :on-click editor-handler/collapse-all-selection!}
-    (t :editor/collapse-block-children)
-    (ui/keyboard-shortcut-from-config :editor/collapse-block-children))])
+     [:hr.menu-separator]
+
+     (ui/menu-link
+      {:key "Expand all"
+       :on-click editor-handler/expand-all-selection!}
+      (t :editor/expand-block-children)
+      (ui/keyboard-shortcut-from-config :editor/expand-block-children))
+
+     (ui/menu-link
+      {:key "Collapse all"
+       :on-click editor-handler/collapse-all-selection!}
+      (t :editor/collapse-block-children)
+      (ui/keyboard-shortcut-from-config :editor/collapse-block-children))]))
 
 (defonce *template-including-parent? (atom nil))
 
@@ -135,7 +135,8 @@
         template-including-parent? (rum/react *template-including-parent?)
         block-id (if (string? block-id) (uuid block-id) block-id)
         block (db/entity [:block/uuid block-id])
-        has-children? (seq (:block/_parent block))]
+        has-children? (seq (:block/_parent block))
+        repo (state/get-current-repo)]
     (when (and (nil? template-including-parent?) has-children?)
       (reset! *template-including-parent? true))
 
@@ -160,9 +161,9 @@
                                         [:p (t :context-menu/template-exists-warning)]
                                         :error)
                                        (do
-                                         (editor-property/set-block-property! block-id :template title)
+                                         (property-handler/set-block-property! repo block-id :template title)
                                          (when (false? template-including-parent?)
-                                           (editor-property/set-block-property! block-id :template-including-parent false))
+                                           (property-handler/set-block-property! repo block-id :template-including-parent false))
                                          (state/hide-custom-context-menu!)))))))]
          [:hr.menu-separator]])
       (ui/menu-link
@@ -177,10 +178,11 @@
   shortcut/disable-all-shortcuts
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [heading (-> block :block/properties :heading (or false))]
+      (let [heading (-> block :block/properties :heading (or false))
+            repo (state/get-current-repo)]
         [:.menu-links-wrapper
-         (ui/menu-background-color #(editor-property/set-block-property! block-id :background-color %)
-                                   #(editor-property/remove-block-property! block-id :background-color))
+         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)
+                                   #(property-handler/remove-block-property! repo block-id :background-color))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)
@@ -373,7 +375,7 @@
                   (let [class? (= "class" (:block/type block))
                         f (if (and class? class-schema?)
                             property-handler/class-remove-property!
-                            property-handler/remove-property!)]
+                            property-handler/remove-block-property!)]
                     (f repo block (:block/uuid property))))}
      (t :context-menu/delete-property)
      nil)]))

@@ -12,11 +12,11 @@
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.file-based.property :as file-property]
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.set :as set]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (defn get-engine
   [repo]
@@ -184,7 +184,7 @@
 (defn get-all-properties
   []
   (->> (db-model/get-all-properties)
-       (remove (file-property/hidden-properties))
+       (remove (property-util/hidden-properties))
        ;; Complete full keyword except the ':'
        (map (fn [property]
               (if (keyword? property)

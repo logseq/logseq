@@ -11,9 +11,9 @@
             [frontend.search :as search]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.handler.file-based.property :as file-property]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.db.validate :as db-validate]))
+            [frontend.db.validate :as db-validate]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -90,8 +90,8 @@
                               (let [refs (:block/_refs block)]
                                 (map (fn [ref]
                                        (let [id (:db/id ref)
-                                             block-content (file-property/remove-properties-when-file-based
-                                                            repo (:block/format block) (:block/content block))
+                                             block-content (property-util/remove-properties
+                                                            (:block/format block) (:block/content block))
                                              new-content (-> (:block/content ref)
                                                              (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                              block-content)

@@ -11,7 +11,12 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]))
+   [goog.object :as gobj]
+   [logseq.graph-parser.block :as gp-block]
+   [frontend.config :as config]
+   [frontend.db.listener :as db-listener]
+   [frontend.util.drawer :as drawer]
+   [frontend.handler.file-based.property.util :as property-util]))
 
 ;;  Fns
 
@@ -295,3 +300,68 @@
     (assoc config :own-order-list-type own-order-list-type
                   :own-order-list-index own-order-list-index
                   :own-order-number-list? (= own-order-list-type "number"))))
+
+(defn- get-edit-input-id-with-block-id
+  [block-id]
+  (when-let [first-block (util/get-first-block-by-id block-id)]
+    (string/replace (gobj/get first-block "id")
+                    "ls-block"
+                    "edit-block")))
+
+(defn- text-range-by-lst-fst-line [content [direction pos]]
+  (case direction
+    :up
+    (let [last-new-line (or (string/last-index-of content \newline) -1)
+          end (+ last-new-line pos 1)]
+      (subs content 0 end))
+    :down
+    (-> (string/split-lines content)
+        first
+        (or "")
+        (subs 0 pos))))
+
+(defn mark-last-input-time!
+  [repo]
+  (when repo
+    (state/set-editor-last-input-time! repo (util/time-ms))
+    (db-listener/clear-repo-persistent-job! repo)))
+
+(defn edit-block!
+  ([block pos id]
+   (edit-block! block pos id nil))
+  ([block pos id {:keys [custom-content tail-len retry-times]
+                  :or {tail-len 0
+                       retry-times 0}
+                  :as opts}]
+   (when-not (> retry-times 2)
+     (when-not config/publishing?
+       (when-let [block-id (:block/uuid block)]
+         (let [repo (state/get-current-repo)
+               block (or (db/pull [:block/uuid block-id]) block)
+               edit-input-id (if (uuid? id)
+                               (get-edit-input-id-with-block-id id)
+                               (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                   (string/replace "ls-block" "edit-block")))
+               content (or custom-content (:block/content block) "")
+               content-length (count content)
+               text-range (cond
+                            (vector? pos)
+                            (text-range-by-lst-fst-line content pos)
+
+                            (and (> tail-len 0) (>= (count content) tail-len))
+                            (subs content 0 (- (count content) tail-len))
+
+                            (or (= :max pos) (<= content-length pos))
+                            content
+
+                            :else
+                            (subs content 0 pos))
+               content (-> (property-util/remove-built-in-properties (:block/format block) content)
+                           (drawer/remove-logbook))]
+           (state/clear-selection!)
+           (if edit-input-id
+             (do
+               (state/set-editing! edit-input-id content block text-range)
+               (mark-last-input-time! (state/get-current-repo)))
+             ;; Block may not be rendered yet
+             (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))

@@ -53,8 +53,8 @@
               property (:block/name block)
               old-value (:property-value (last (state/get-editor-args)))]
           (when (and parent-block property)
-            (property-handler/add-property! repo parent-block property value
-                                            :old-value old-value)))
+            (property-handler/set-block-property! repo (:block/uuid parent-block) property value
+                                                  :old-value old-value)))
         (editor-handler/save-block! (get-state) value))))
   state)
 

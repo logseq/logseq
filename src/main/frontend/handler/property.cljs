@@ -7,19 +7,17 @@
 
 (def builtin-schema-types db-property/builtin-schema-types)
 
-(defn add-property!
-  [repo block k-name v & opts]
-  ;; TODO: Remove ignores when finished
-  #_:clj-kondo/ignore
+(defn set-block-property!
+  [repo block-id key v & opts]
   (if (config/db-based-graph? repo)
-    (db-property/add-property! repo block k-name v opts)))
+    (db-property/set-block-property! repo block-id key v opts)
+    (file-property/set-block-property! block-id key v)))
 
-(defn remove-property!
-  [repo block property-uuid]
-  {:pre (uuid? property-uuid)}
-  #_:clj-kondo/ignore
+(defn remove-block-property!
+  [repo block-id key]
   (if (config/db-based-graph? repo)
-    (db-property/remove-property! repo block property-uuid)))
+    (db-property/remove-block-property! repo block-id key)
+    (file-property/remove-block-property! block-id key)))
 
 (defn update-property!
   [repo property-uuid opts]
@@ -59,3 +57,25 @@
   (if (config/db-based-graph? repo)
     content
     (file-property/remove-id-property format content)))
+
+(defn file-persist-block-id!
+  [repo block-id]
+  (when-not (config/db-based-graph? repo)
+    (file-property/set-block-property! block-id :id (str block-id))))
+
+(defn batch-add-block-property!
+  [repo block-ids key value]
+  (if (config/db-based-graph? repo)
+    (db-property/batch-add-property! repo block-ids key value)
+    (file-property/batch-add-block-property! block-ids key value)))
+
+(defn batch-remove-block-property!
+  [repo block-ids key]
+  (if (config/db-based-graph? repo)
+    (db-property/batch-remove-property! repo block-ids key)
+    (file-property/batch-remove-block-property! block-ids key)))
+
+(defn file-batch-set-property!
+  [repo col]
+  (when-not (config/db-based-graph? repo)
+    (file-property/batch-set-block-property! col)))

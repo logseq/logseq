@@ -13,7 +13,7 @@
             [lambdaisland.glogi :as log]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
             [logseq.graph-parser.util :as gp-util]))
 
 (defn built-in-custom-query?
@@ -207,12 +207,12 @@
                (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
+                                            :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
                                                                                                   "query-table"
                                                                                                   false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
+                                            :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
                                                                                                   "query-table"
                                                                                                   true))}
                     (ui/icon "table" {:style {:font-size 20}})]))

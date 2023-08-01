@@ -110,7 +110,7 @@
      (when property-key
        (if (and class? class-schema?)
          (property-handler/class-add-property! repo block property-key)
-         (property-handler/add-property! repo block property-key property-value)))
+         (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
      (when exit-edit?
        (exit-edit-property)))))
 
@@ -125,7 +125,7 @@
                       (state/set-modal!
                        #(ui/datepicker value' {:on-change (fn [_e date]
                                                             (let [repo (state/get-current-repo)]
-                                                              (property-handler/add-property! repo block
+                                                              (property-handler/set-block-property! repo (:block/uuid block)
                                                                                               (:block/name property)
                                                                                               date)
                                                               (exit-edit-property)
@@ -280,10 +280,10 @@
                                (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
                                           (not (state/get-editor-action)))
                                  (util/stop e)
-                                 (property-handler/add-property! repo block
-                                                                 (:block/original-name property)
-                                                                 (util/evalue e)
-                                                                 :old-value value)
+                                 (property-handler/set-block-property! repo (:block/uuid block)
+                                                                       (:block/original-name property)
+                                                                       (util/evalue e)
+                                                                       :old-value value)
                                  (exit-edit-property)
 
                                  (when (and enter? multiple-values?)
@@ -324,7 +324,7 @@
                                      :editor-box editor-box})]
                  (if multiple-values?
                    (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                   (property-handler/remove-property! repo block (:block/uuid property))))
+                   (property-handler/remove-block-property! repo (:block/uuid block) (:block/uuid property))))
 
                (inline-text {} :markdown (str value)))))])))))
 

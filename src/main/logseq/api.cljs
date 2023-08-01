@@ -22,11 +22,11 @@
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -718,11 +718,15 @@
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
-    (editor-property/set-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key value)))
+    (property-handler/set-block-property!
+     (state/get-current-repo)
+     (sdk-utils/uuid-or-throw-error block-uuid) key value)))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (editor-property/remove-block-property! (sdk-utils/uuid-or-throw-error block-uuid) key)))
+    (property-handler/remove-block-property!
+     (state/get-current-repo)
+     (sdk-utils/uuid-or-throw-error block-uuid) key)))
 
 (def ^:export get_block_property
   (fn [block-uuid key]
@@ -968,17 +972,20 @@
   [target-uuid template-name ^js opts]
   (when (and template-name (db-model/get-block-by-uuid target-uuid))
     (let [{:keys [overwrite]} (bean/->clj opts)
-          exist? (page-handler/template-exists? template-name)]
+          exist? (page-handler/template-exists? template-name)
+          repo (state/get-current-repo)]
       (if (or (not exist?) (true? overwrite))
         (do (when-let [old-target (and exist? (db-model/get-template-by-name template-name))]
-              (editor-property/remove-block-property! (:block/uuid old-target) :template))
-            (editor-property/set-block-property! target-uuid :template template-name))
+              (property-handler/remove-block-property! repo (:block/uuid old-target) :template))
+            (property-handler/set-block-property! repo target-uuid :template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template
   [name]
   (when-let [target (db-model/get-template-by-name name)]
-    (editor-property/remove-block-property! (:block/uuid target) :template)))
+    (property-handler/remove-block-property!
+     (state/get-current-repo)
+     (:block/uuid target) :template)))
 
 ;; search
 (defn ^:export search

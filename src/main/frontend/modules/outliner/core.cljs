@@ -12,11 +12,11 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as block]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -521,7 +521,7 @@
               (update :block/properties #(assoc % :logseq.order-list-type list-type))
 
               (not (config/db-based-graph? (state/get-current-repo)))
-              (assoc :block/content (file-property/insert-property format content :logseq.order-list-type list-type))))
+              (assoc :block/content (property-util/insert-property format content :logseq.order-list-type list-type))))
           blocks)
         blocks))))
 
