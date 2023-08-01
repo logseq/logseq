@@ -3,21 +3,22 @@
   (:require [datascript.core :as d]
             [logseq.db.rules :as rules]
             [clojure.set :as set]
-            [clojure.string :as string]
-            [frontend.handler.property.util :as pu]))
+            [clojure.string :as string]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be independent from the frontend app"
-  [block page]
-  (when-some [props (and block page (:block/properties block))]
-    (when-some [uuid (:block/uuid block)]
-      (when-some [stamp (pu/lookup props :hl-stamp)]
-        (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-              hl-page        (pu/lookup props :hl-page)
-              encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-              group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-          (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png")))))))
+  ([block page] (get-area-block-asset-url block page {}))
+  ;; TODO: Add prop-lookup-fn support for db graphs and commandline publishing
+  ([block page {:keys [prop-lookup-fn] :or {prop-lookup-fn get}}]
+   (when-some [props (and block page (:block/properties block))]
+     (when-some [uuid (:block/uuid block)]
+       (when-some [stamp (prop-lookup-fn props :hl-stamp)]
+         (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
+               hl-page        (prop-lookup-fn props :hl-page)
+               encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+               group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
+           (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
 
 (defn- clean-asset-path-prefix
   [path]
