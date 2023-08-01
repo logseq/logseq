@@ -64,7 +64,7 @@
 }
 
 #main-content-container {
-  @apply p-4 sm:p-8;
+  @apply p-4 sm:px-8 sm:py-10;
 
   font-size: 1em;
 }
