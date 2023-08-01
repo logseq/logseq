@@ -460,7 +460,9 @@
                   (config/db-based-graph? repo)
                   (not block?)
                   (not whiteboard?)
-                  (seq (:block/properties page)))
+                  (or (seq (:block/properties page))
+                      (seq (:block/alias page))
+                      (seq (:block/tags page))))
              (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
                (component-block/db-properties-cp
                 {:editor-box editor/box}

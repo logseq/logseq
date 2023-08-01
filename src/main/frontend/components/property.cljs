@@ -111,7 +111,7 @@
          class? (= (:block/type block) "class")]
      (when property-key
        (if (and class? class-schema?)
-         (property-handler/class-add-property! repo block property-key)
+         (property-handler/class-add-property! repo (:block/uuid block) property-key)
          (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
      (when exit-edit?
        (exit-edit-property)))))
@@ -326,7 +326,9 @@
                                      :editor-box editor-box})]
                  (if multiple-values?
                    (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                   (property-handler/remove-block-property! repo (:block/uuid block) (:block/uuid property))))
+                   (property-handler/remove-block-property! repo
+                                                            (:block/uuid block)
+                                                            (:block/uuid property))))
 
                (inline-text {} :markdown (str value)))))])))))
 
@@ -469,7 +471,7 @@
 (rum/defcs property-value < rum/reactive
   [state block property value opts]
   (let [k (:block/uuid property)
-        v (get (:block/properties block) k)
+        v (or (get (:block/properties block) k) value)
         dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
@@ -541,6 +543,13 @@
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
                      (:block/properties block))
+        alias (set (map :block/uuid (:block/alias block)))
+        tags (set (map :block/uuid (:block/tags block)))
+        properties (cond-> properties
+                     (seq alias)
+                     (assoc (:block/uuid (db/entity [:block/name "alias"])) alias)
+                     (seq tags)
+                     (assoc (:block/uuid (db/entity [:block/name "tags"])) tags))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
@@ -572,5 +581,5 @@
                   [:div.property-description.col-span-3.font-light
                    (get-in property [:block/schema :description])]
                   [:div.property-value.col-span-3
-                   (property-value block property v (assoc opts :parsed-value v))])]))))
+                   (property-value block property v opts)])]))))
        (new-property block edit-input-id properties new-property? opts)])))

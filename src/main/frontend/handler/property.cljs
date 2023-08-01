@@ -4,7 +4,8 @@
             [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.db :as db]))
 
 (def builtin-schema-types db-property/builtin-schema-types)
 
@@ -46,14 +47,16 @@
   (state/clear-edit!))
 
 (defn class-add-property!
-  [repo class k-name]
-  (when (config/db-based-graph? repo)
-    (db-property/class-add-property! repo class k-name)))
+  [repo class-uuid k-name]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (config/db-based-graph? repo)
+     (db-property/class-add-property! repo class k-name))))
 
 (defn class-remove-property!
-  [repo class k-uuid]
-  (when (config/db-based-graph? repo)
-    (db-property/class-remove-property! repo class k-uuid)))
+  [repo class-uuid k-uuid]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (config/db-based-graph? repo)
+     (db-property/class-remove-property! repo class k-uuid))))
 
 (defn remove-id-property
   [repo format content]

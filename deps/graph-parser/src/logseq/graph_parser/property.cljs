@@ -82,7 +82,11 @@
 
 ;; FIXME: no support for built-in-extended-properties
 (def db-built-in-properties
-  {:background-color {:schema {:type :default}}
+  {:alias {:schema {:type :page
+                    :cardinality :many}}
+   :tags {:schema {:type :page
+                   :cardinality :many}}
+   :background-color {:schema {:type :default}}
    :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
    :query-table {:schema {:type :checkbox}}
    :query-properties {:schema {:type :coll}}

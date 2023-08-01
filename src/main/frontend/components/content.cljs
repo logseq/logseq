@@ -380,7 +380,7 @@
                         f (if (and class? class-schema?)
                             property-handler/class-remove-property!
                             property-handler/remove-block-property!)]
-                    (f repo block (:block/uuid property))))}
+                    (f repo (:block/uuid block) (:block/uuid property))))}
      (t :context-menu/delete-property)
      nil)]))
 
