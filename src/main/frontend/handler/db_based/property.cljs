@@ -264,7 +264,7 @@
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids k-name v]
   (let [k-name (name k-name)
-        property (db/entity repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property (db/entity repo [:block/name (gp-util/page-name-sanity-lc k-name)])
         property-uuid (or (:block/uuid property) (random-uuid))
         type (:type (:block/schema property))
         infer-schema (when-not type (infer-schema-from-input-string v))
@@ -272,7 +272,7 @@
         _ (when (nil? property)
             (upsert-property! repo property k-name property-uuid property-type))
         {:keys [type cardinality]} (:block/schema property)
-        property (db/entity repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property (db/entity repo [:block/name (gp-util/page-name-sanity-lc k-name)])
         txs (mapcat
              (fn [id]
                (when-let [block (db/entity [:block/uuid id])]
