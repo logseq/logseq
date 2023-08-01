@@ -74,23 +74,28 @@
   ([title format page]
    (default-properties-block title format page {}))
   ([title format page properties]
-   (let [p (common-handler/get-page-default-properties title)
-         ps (merge p properties)
-         content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties properties
-                                                      (db/get-db (state/get-current-repo))
-                                                      (state/get-date-formatter)
-                                                      (state/get-config))]
-     {:block/uuid (db/new-block-id)
-      :block/pre-block? true
-      :block/properties ps
-      :block/properties-order (keys ps)
-      :block/refs refs
-      :block/left page
-      :block/format format
-      :block/content content
-      :block/parent page
-      :block/page page})))
+   (let [repo (state/get-current-repo)
+         db-based? (config/db-based-graph? repo)]
+     (when-not db-based?
+       (let [p (common-handler/get-page-default-properties title)
+             ps (merge p properties)
+             content (if db-based?
+                       ""
+                       (page-property/insert-properties format "" ps))
+             refs (gp-block/get-page-refs-from-properties properties
+                                                          (db/get-db repo)
+                                                          (state/get-date-formatter)
+                                                          (state/get-config))]
+         {:block/uuid (db/new-block-id)
+          :block/refs refs
+          :block/left page
+          :block/format format
+          :block/content content
+          :block/parent page
+          :block/page page
+          :block/pre-block? true
+          :block/properties ps
+          :block/properties-order (keys ps)})))))
 
 (defn- create-title-property?
   [journal? page-name]
@@ -107,20 +112,22 @@
           page          (merge page
                                (when (seq properties) {:block/properties properties})
                                (when whiteboard? {:block/type "whiteboard"}))
-          page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))]
+          page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))
+          db-based? (config/db-based-graph? (state/get-current-repo))]
       (cond
         (not page-empty?)
         [page]
 
         (and create-title?
-             (not whiteboard?))
+             (not whiteboard?)
+             (not db-based?))
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page
            properties-block])
 
         (and (seq properties)
              (not whiteboard?)
-             (not (config/db-based-graph? (state/get-current-repo))))
+             (not db-based?))
         [page (editor-handler/properties-block repo properties format page-entity)]
 
         :else
