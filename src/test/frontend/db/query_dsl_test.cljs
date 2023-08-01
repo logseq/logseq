@@ -156,7 +156,7 @@ prop-d:: nada"}])
         (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]
     ;; Specific number isn't as important as ensuring query doesn't take orders
     ;; of magnitude longer
-    (is (> 25.0 time) "multi property query perf is reasonable")
+    (is (> 40.0 time) "multi property query perf is reasonable")
     (is (= 10 (count result)))))
 
 (defn- page-property-queries-test

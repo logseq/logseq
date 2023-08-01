@@ -5,8 +5,6 @@ logseq.graph-parser.mldoc/ast-export-markdown
 ;; API
 logseq.graph-parser.mldoc/link?
 ;; API
-logseq.graph-parser.property/register-built-in-properties
-;; API
 logseq.graph-parser.util.block-ref/left-and-right-parens
 ;; API
 logseq.graph-parser.util.block-ref/->block-ref
@@ -27,17 +25,9 @@ logseq.graph-parser.util/unquote-string
 ;; API
 logseq.graph-parser.util.page-ref/page-ref-re
 ;; API
-logseq.graph-parser.property/->block-content
-;; API
-logseq.graph-parser.property/property-value-from-content
-;; API
 logseq.graph-parser.whiteboard/page-block->tldr-page
 ;; API
 logseq.graph-parser/get-blocks-to-delete
-;; Future use & be unified with markdown colon
-logseq.graph-parser.property/colons-org
-;; API
-logseq.graph-parser.property/full-built-in-properties
 ;; API
 logseq.graph-parser.util.db/resolve-input
 ;; TODO: use fast-remove-nils instead

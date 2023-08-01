@@ -1,5 +1,5 @@
 {:paths ["src"]
- :api-namespaces [
+ :api-namespaces [logseq.graph-parser.property
                   ;; carve doesn't detect nbb only usage
                   logseq.graph-parser.log
                   ;; Used in tests
