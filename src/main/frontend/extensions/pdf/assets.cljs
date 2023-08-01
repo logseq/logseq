@@ -10,6 +10,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property.util :as pu]
             [frontend.ui :as ui]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.lightbox :as lightbox]
@@ -191,18 +192,21 @@
            ref-block)
          (let [text       (:text content)
                wrap-props #(if-let [stamp (:image content)]
-                             (assoc % :hl-type "area" :hl-stamp stamp) %)]
-
+                             (assoc % :hl-type "area" :hl-stamp stamp)
+                             %)
+               properties (->>
+                           (wrap-props
+                            {:ls-type  "annotation"
+                             :hl-page  page
+                             :hl-color (:color properties)
+                             ;; force custom uuid
+                             :id       (str id)})
+                           (property-handler/replace-key-with-id! (state/get-current-repo)))]
            (when (string? text)
              (editor-handler/api-insert-new-block!
               text (merge {:page        (:block/name ref-page)
                            :custom-uuid id
-                           :properties  (wrap-props
-                                         {:ls-type  "annotation"
-                                          :hl-page  page
-                                          :hl-color (:color properties)
-                                          ;; force custom uuid
-                                          :id       (str id)})}
+                           :properties properties}
                           insert-opts)))))))))
 
 (defn del-ref-block!
@@ -225,7 +229,7 @@
         page      (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
         file-path (:file-path (:block/properties page))
-        hl-page   (:hl-page (:block/properties block))]
+        hl-page   (pu/get-property block :hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]

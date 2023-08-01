@@ -47,7 +47,7 @@
   "Properties used by logseq that user can edit and that can have linkable property values"
   #{:alias :aliases :tags})
 
-;; file based graphs only
+;; file based graphs only (or maybe not for backward compatibility with markdown tables)
 (def editable-view-and-table-properties
   "Properties used by view and table component"
   #{;; view props

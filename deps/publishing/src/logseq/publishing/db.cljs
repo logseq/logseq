@@ -3,7 +3,8 @@
   (:require [datascript.core :as d]
             [logseq.db.rules :as rules]
             [clojure.set :as set]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.handler.property.util :as pu]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
@@ -11,9 +12,9 @@
   [block page]
   (when-some [props (and block page (:block/properties block))]
     (when-some [uuid (:block/uuid block)]
-      (when-some [stamp (:hl-stamp props)]
+      (when-some [stamp (pu/lookup props :hl-stamp)]
         (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-              hl-page        (:hl-page props)
+              hl-page        (pu/lookup props :hl-page)
               encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
               group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
           (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png")))))))

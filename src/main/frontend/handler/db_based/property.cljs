@@ -108,18 +108,20 @@
       :url
       v-str)))
 
-(defn- upsert-property!
-  [repo property k-name property-uuid property-type]
-  (let [k-name (name k-name)]
+(defn upsert-property!
+  [repo k-name schema {:keys [property-uuid]}]
+  (let [property (db/entity [:block/name (gp-util/page-name-sanity-lc k-name)])
+        k-name (name k-name)
+        property-uuid (or (:block/uuid property) property-uuid (random-uuid))]
     (when (and property (nil? (:block/type property)))
       (db/transact! repo [(outliner-core/block-with-updated-at
-                           {:block/schema {:type property-type}
+                           {:block/schema schema
                             :block/uuid property-uuid
                             :block/type "property"})]
         {:outliner-op :update-property}))
     (when (nil? property) ;if property not exists yet
       (db/transact! repo [(outliner-core/block-with-timestamps
-                           {:block/schema {:type property-type}
+                           {:block/schema schema
                             :block/original-name k-name
                             :block/name (util/page-name-sanity-lc k-name)
                             :block/uuid property-uuid
@@ -151,7 +153,8 @@
             (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
               (notification/show! msg' :warning))
             (do
-              (upsert-property! repo property k-name property-uuid property-type)
+              (upsert-property! repo k-name {:type property-type}
+                                {:property-uuid property-uuid})
               (let [new-value (cond
                                 (and multiple-values? old-value
                                      (not= old-value :frontend.components.property/new-value-placeholder))
@@ -240,7 +243,8 @@
           property-uuid (or (:block/uuid property) (random-uuid))
           property-type (get-in property [:block/schema :type] :default)
           {:keys [properties] :as class-schema} (:block/schema class)
-          _ (upsert-property! repo property k-name property-uuid property-type)
+          _ (upsert-property! repo k-name {:type property-type}
+                              {:property-uuid property-uuid})
           new-properties (vec (distinct (conj properties property-uuid)))
           class-new-schema (assoc class-schema :properties new-properties)]
       (db/transact! repo
@@ -270,7 +274,8 @@
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)
         _ (when (nil? property)
-            (upsert-property! repo property k-name property-uuid property-type))
+            (upsert-property! repo k-name {:type property-type}
+                              {:property-uuid property-uuid}))
         {:keys [type cardinality]} (:block/schema property)
         property (db/entity repo [:block/name (gp-util/page-name-sanity-lc k-name)])
         txs (mapcat
@@ -317,3 +322,16 @@
 (defn remove-block-property!
   [repo block-id key]
   (batch-remove-property! repo [block-id] key))
+
+(defn replace-key-with-id!
+  "Notice: properties need to be created first"
+  [m]
+  (zipmap
+   (map (fn [k]
+          (let [property-id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name k))]))]
+            (when-not property-id
+              (throw (ex-info "Property not exists yet"
+                              {:key k})))
+            property-id))
+     (keys m))
+   (vals m)))

@@ -84,3 +84,9 @@
   [repo col]
   (when-not (config/db-based-graph? repo)
     (file-property/batch-set-block-property-aux! col)))
+
+(defn replace-key-with-id!
+  [repo m]
+  (if (config/db-based-graph? repo)
+    (db-property/replace-key-with-id! m)
+    m))
