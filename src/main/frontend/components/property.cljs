@@ -545,11 +545,11 @@
                      (:block/properties block))
         alias (set (map :block/uuid (:block/alias block)))
         tags (set (map :block/uuid (:block/tags block)))
-        properties (cond-> properties
-                     (seq alias)
-                     (assoc (:block/uuid (db/entity [:block/name "alias"])) alias)
-                     (seq tags)
-                     (assoc (:block/uuid (db/entity [:block/name "tags"])) tags))
+        alias-and-tags (cond-> {}
+                         (seq tags)
+                         (assoc (:block/uuid (db/entity [:block/name "tags"])) tags)
+                         (seq alias)
+                         (assoc (:block/uuid (db/entity [:block/name "alias"])) alias))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
@@ -559,7 +559,7 @@
                               (map (fn [id]
                                      [id nil])))
         built-in-properties (set (map name gp-property/db-built-in-properties-keys))
-        properties (->> (concat (seq properties) class-properties)
+        properties (->> (concat (seq alias-and-tags) (seq properties) class-properties)
                         (util/distinct-by first)
                         (remove (fn [[k _v]]
                                   (when (uuid? k)
