@@ -61,7 +61,7 @@
   []
   (set/union #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
                :logseq.query/nlp-date
-          ;; org-mode only
+               ;; org-mode only
                :macro :filetags}
              editable-linkable-built-in-properties
              editable-view-and-table-properties))

@@ -1677,7 +1677,7 @@
 (defn- bullet-on-click
   [e block uuid]
   (cond
-    (gp-whiteboard/shape-block? block)
+    (pu/shape-block? block)
     (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
 
     (gobj/get e "shiftKey")
@@ -2788,7 +2788,7 @@
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
-        whiteboard-block? (gp-whiteboard/shape-block? block)
+        whiteboard-block? (pu/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)

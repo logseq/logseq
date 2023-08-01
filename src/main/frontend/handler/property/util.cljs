@@ -22,4 +22,13 @@
   [block key]
   (let [block (db/entity (:db/id block))]
     (when-let [properties (:block/properties block)]
-     (lookup properties key))))
+      (lookup properties key))))
+
+(defn block->shape [block]
+  (get-property block :logseq.tldraw.shape))
+
+(defn page-block->tldr-page [block]
+  (get-property block :logseq.tldraw.page))
+
+(defn shape-block? [block]
+  (= :whiteboard-shape (get-property block :ls-type)))

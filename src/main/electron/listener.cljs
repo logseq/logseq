@@ -21,8 +21,8 @@
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.property.util :as pu]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -113,7 +113,7 @@
 
                        block-id
                        (if-let [block (db-model/get-block-by-uuid block-id)]
-                         (if (gp-whiteboard/shape-block? block)
+                         (if (pu/shape-block? block)
                           (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
                           (route-handler/redirect-to-page! block-id))
                          (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))

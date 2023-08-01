@@ -8,6 +8,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.property :as property-handler]
             [frontend.modules.editor.undo-redo :as history]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
@@ -51,14 +52,14 @@
     (->> blocks
          (map (fn [block]
                 (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
-         (filter gp-whiteboard/shape-block?)
-         (map gp-whiteboard/block->shape)
+         (filter pu/shape-block?)
+         (map pu/block->shape)
          (sort-by :index))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
         shapes (build-shapes page-block blocks)
-        tldr-page (gp-whiteboard/page-block->tldr-page page-block)
+        tldr-page (pu/page-block->tldr-page page-block)
         assets (:assets tldr-page)
         tldr-page (dissoc tldr-page :assets)]
     (clj->js {:currentPageId id
@@ -188,21 +189,23 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  [#:block{:uuid id
-           :name (util/page-name-sanity-lc page-name),
-           :original-name page-name
-           :type "whiteboard",
-           :properties
-           {:ls-type :whiteboard-page,
-            :logseq.tldraw.page
-            {:id id,
-             :name page-name,
-             :ls-type :whiteboard-page,
-             :bindings {},
-             :nonce 1,
-             :assets []}},
-           :updated-at (util/time-ms),
-           :created-at (util/time-ms)}])
+  (let [properties (->>
+                    {:ls-type :whiteboard-page,
+                     :logseq.tldraw.page
+                     {:id id,
+                      :name page-name,
+                      :ls-type :whiteboard-page,
+                      :bindings {},
+                      :nonce 1,
+                      :assets []}}
+                    (property-handler/replace-key-with-id! (state/get-current-repo)))]
+    [#:block{:uuid id
+             :name (util/page-name-sanity-lc page-name),
+             :original-name page-name
+             :type "whiteboard",
+             :properties properties,
+             :updated-at (util/time-ms),
+             :created-at (util/time-ms)}]))
 
 (defn get-whiteboard-entity [page-name]
   (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
@@ -268,7 +271,7 @@
   "Given a page, return all the logseq blocks (exclude all shapes)"
   [page-name]
   (let [blocks (model/get-page-blocks-no-cache page-name)]
-    (remove gp-whiteboard/shape-block? blocks)))
+    (remove pu/shape-block? blocks)))
 
 (defn- get-last-root-block
   "Get the last root Logseq block in the page. Main purpose is to calculate the new :block/left id"
@@ -323,7 +326,7 @@
    (let [page-block (first pages)
          ;; FIXME: should also clone normal blocks
          shapes (build-shapes page-block blocks)
-         tldr-page (gp-whiteboard/page-block->tldr-page page-block)
+         tldr-page (pu/page-block->tldr-page page-block)
          assets (:assets tldr-page)
          bindings (:bindings tldr-page)]
      (.cloneShapesIntoCurrentPage ^js api (clj->js {:shapes shapes

@@ -3,7 +3,7 @@
             [frontend.db.model :as model]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [frontend.handler.property.util :as pu]))
 
 (defprotocol INode
   (-get-id [this])
@@ -28,7 +28,7 @@
 (defn- blocks->vec-tree-aux
   [blocks root]
   (let [root-id (:db/id root)
-        blocks (remove gp-whiteboard/shape-block? blocks)
+        blocks (remove pu/shape-block? blocks)
         parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (db/sort-by-left (get parent-blocks parent) {:db/id parent}))
