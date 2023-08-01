@@ -519,10 +519,10 @@
   resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.2.2.tgz#583bd8c8c66d5ff05ea70906475efaa078e839a3"
   integrity sha512-0WeKNhq8PsjvunOqNEd9aSM4tgiClwhonXgXzrQ4KYj8VoyLaEAyEWWGOAoE7mwR+aqwM+bMB4MxuNFywnUb8A==
 
-"@logseq/logmind@^0.0.4":
-  version "0.0.4"
-  resolved "https://registry.yarnpkg.com/@logseq/logmind/-/logmind-0.0.4.tgz#7fab031c6d5dc28315d68cbc536a1c76877ac7c3"
-  integrity sha512-DPPyBJjfg5Lx91xHZA9s5POi+G60ICiblYiJLcf2oF4s94F1nMcxXurcR76nDXxDYS2TO2kTlOjZ5VPQOfog+A==
+"@logseq/logmind@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@logseq/logmind/-/logmind-0.1.0.tgz#dda13b967ad0cf7c64b4ad63a24b42790501ff16"
+  integrity sha512-dyoHNDn9/H9r8dlUVnURuBCzPVVnJtUkY/GJiZWYtWkVjbK5LN5ZGN7PCp2BKAKE7Gz+/sHWwIb9yVPNDJP9XQ==
   dependencies:
     "@xenova/transformers" "^2.3.0"
     compromise "^14.8.0"
@@ -6991,6 +6991,13 @@ semver@^6.0.0, semver@^6.2.0, semver@^6.3.0:
   integrity sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==
 
 semver@^7.3.2, semver@^7.3.4, semver@^7.3.5, semver@^7.3.7:
+  version "7.5.4"
+  resolved "https://registry.yarnpkg.com/semver/-/semver-7.5.4.tgz#483986ec4ed38e1c6c48c34894a9182dbff68a6e"
+  integrity sha512-1bCSESV6Pv+i21Hvpxp3Dx+pSD8lIPt8uVjRrxAUt/nbswYc+tK6Y2btiULjd4+fnq15PX+nqQDC7Oft7WkwcA==
+  dependencies:
+    lru-cache "^6.0.0"
+
+semver@^7.3.5, semver@^7.5.4:
   version "7.5.4"
   resolved "https://registry.yarnpkg.com/semver/-/semver-7.5.4.tgz#483986ec4ed38e1c6c48c34894a9182dbff68a6e"
   integrity sha512-1bCSESV6Pv+i21Hvpxp3Dx+pSD8lIPt8uVjRrxAUt/nbswYc+tK6Y2btiULjd4+fnq15PX+nqQDC7Oft7WkwcA==
