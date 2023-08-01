@@ -66,19 +66,21 @@
   (when-not (config/db-based-graph? repo)
     (file-property/set-block-property! block-id :id (str block-id))))
 
-(defn batch-add-block-property!
-  [repo block-ids key value]
-  (if (config/db-based-graph? repo)
-    (db-property/batch-add-property! repo block-ids key value)
-    (file-property/batch-add-block-property! block-ids key value)))
-
 (defn batch-remove-block-property!
   [repo block-ids key]
   (if (config/db-based-graph? repo)
     (db-property/batch-remove-property! repo block-ids key)
     (file-property/batch-remove-block-property! block-ids key)))
 
+(defn batch-set-block-property!
+  [repo block-ids key value]
+  (if (config/db-based-graph? repo)
+    (if (nil? value)
+      (db-property/batch-remove-property! repo block-ids key)
+      (db-property/batch-set-property! repo block-ids key value))
+    (file-property/batch-set-block-property! block-ids key value)))
+
 (defn file-batch-set-property!
   [repo col]
   (when-not (config/db-based-graph? repo)
-    (file-property/batch-set-block-property! col)))
+    (file-property/batch-set-block-property-aux! col)))

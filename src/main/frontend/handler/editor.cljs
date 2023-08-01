@@ -101,7 +101,7 @@
           repo (state/get-current-repo)]
       (if has-ordered?
         (property-handler/batch-remove-block-property! repo blocks-uuids order-list-prop)
-        (property-handler/batch-add-block-property! repo blocks-uuids order-list-prop "number")))))
+        (property-handler/batch-set-block-property! repo blocks-uuids order-list-prop "number")))))
 
 (defn get-selection-and-format
   []
@@ -3707,26 +3707,25 @@
            :block/content content}))
       (set-block-property-aux! repo block :heading heading))))
 
+(defn batch-set-heading!
+  [block-ids heading]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (property-handler/batch-set-block-property! repo block-ids :heading heading)
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
+        (doseq [block-id block-ids]
+          (when-let [block (set-heading-aux! repo block-id heading)]
+            (outliner-core/save-block! block)))))))
+
 (defn set-heading!
   [block-id heading]
-  (let [repo (state/get-current-repo)]
-    (when-let [block (set-heading-aux! repo block-id heading)]
-      (outliner-tx/transact!
-       {:outliner-op :save-block}
-       (outliner-core/save-block! block)))))
+  (batch-set-heading! [block-id] heading))
 
 (defn remove-heading!
   [block-id]
   (set-heading! block-id nil))
 
-(defn batch-set-heading!
-  [block-ids heading]
-  (let [repo (state/get-current-repo)]
-    (outliner-tx/transact!
-     {:outliner-op :save-block}
-     (doseq [block-id block-ids]
-       (when-let [block (set-heading-aux! repo block-id heading)]
-         (outliner-core/save-block! block))))))
 
 (defn batch-remove-heading!
   [block-ids]

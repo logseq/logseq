@@ -1930,6 +1930,7 @@
                       (<= heading-level 6)
                       heading-level)
                  (pu/lookup properties :heading))
+        ;; FIXME: level is missing for db-based graphs
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading

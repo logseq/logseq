@@ -36,7 +36,7 @@
   []
   (let [repo (state/get-current-repo)]
     [:.menu-links-wrapper
-     (ui/menu-background-color #(property-handler/batch-add-block-property! repo (state/get-selection-block-ids) :background-color %)
+     (ui/menu-background-color #(property-handler/batch-set-block-property! repo (state/get-selection-block-ids) :background-color %)
                                #(property-handler/batch-remove-block-property! repo (state/get-selection-block-ids) :background-color))
 
      (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)

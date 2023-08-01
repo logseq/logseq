@@ -260,7 +260,7 @@
                              :block/schema class-new-schema}]
           {:outliner-op :class-remove-property})))))
 
-(defn batch-add-property!
+(defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids k-name v]
   (let [k-name (name k-name)

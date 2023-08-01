@@ -69,7 +69,7 @@
 (def goto-properties-end-when-file-based property/goto-properties-end)
 (def front-matter?-when-file-based property/front-matter?)
 
-(defn batch-set-block-property!
+(defn batch-set-block-property-aux!
   "col: a collection of [block-id property-key property-value]."
   [col]
   #_:clj-kondo/ignore
@@ -117,20 +117,20 @@
                                      input-pos
                                      (state/get-edit-input-id)))))))
 
-(defn batch-add-block-property!
+(defn batch-set-block-property!
   [block-ids property-key property-value]
-  (batch-set-block-property! (map #(vector % property-key property-value) block-ids)))
+  (batch-set-block-property-aux! (map #(vector % property-key property-value) block-ids)))
 
 (defn batch-remove-block-property!
   [block-ids property-key]
-  (batch-set-block-property! (map #(vector % property-key nil) block-ids)))
+  (batch-set-block-property! block-ids property-key nil))
 
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key nil]])))
+    (batch-set-block-property-aux! [[block-id key nil]])))
 
 (defn set-block-property!
   [block-id key value]
   (let [key (keyword key)]
-    (batch-set-block-property! [[block-id key value]])))
+    (batch-set-block-property-aux! [[block-id key value]])))
