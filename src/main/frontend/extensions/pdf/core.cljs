@@ -260,11 +260,12 @@
       rects)]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
-  [^js viewer vw-hl hl {:keys [show-ctx-menu! upd-hl!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu!] :as ops}]
 
-  (let [{:keys [id]} hl
+  (let [{:keys [id]}      hl
         *el               (rum/use-ref nil)
         *dirty            (rum/use-ref nil)
+        *ops-ref          (rum/use-ref ops)
         open-ctx-menu!    (fn [^js/MouseEvent e]
                             (.preventDefault e)
                             (when-not (rum/deref *dirty)
@@ -275,7 +276,13 @@
 
         dragstart-handle! (fn [^js e]
                             (when-let [^js dt (and id (.-dataTransfer e))]
-                              (.setData dt "text/plain" (str "((" id "))"))))]
+                              (.setData dt "text/plain" (str "((" id "))"))))
+        update-hl!        (fn [hl] (some-> (rum/deref *ops-ref) (:upd-hl!) (apply [hl])))]
+
+    (rum/use-effect!
+      (fn []
+        (rum/set-ref! *ops-ref ops))
+      [ops])
 
     ;; resizable
     (rum/use-effect!
@@ -321,7 +328,7 @@
                                                                 (.removeAttribute target "data-x")
                                                                 (.removeAttribute target "data-y")
 
-                                                                (upd-hl! hl')) 200))))
+                                                                (update-hl! hl')) 200))))
 
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
@@ -541,16 +548,17 @@
                           (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
                             (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
-        add-hl!         (fn [hl] (when (:id hl)
-                                   ;; fix js object
-                                   (let [highlights (pdf-utils/fix-nested-js highlights)]
-                                     (set-highlights! (conj highlights hl)))
+        add-hl! (fn [hl]
+                  (when (:id hl)
+                    ;; fix js object
+                    (let [highlights (pdf-utils/fix-nested-js highlights)]
+                      (set-highlights! (conj highlights hl)))
 
-                                   (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                                          (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
-                                     ;; exceptions
-                                     (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                                        hl nil (:bounding vw-pos)))))
+                    (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                      ;; exceptions
+                      (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                                         hl nil (:bounding vw-pos)))))
 
         upd-hl!         (fn [hl]
                           (let [highlights (pdf-utils/fix-nested-js highlights)]
