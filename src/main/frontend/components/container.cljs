@@ -21,6 +21,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -91,7 +92,7 @@
             (if whiteboard-page?
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon.ml-3 (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitiled? "opacity-50")}
       (if untitiled? (t :untitled)
           (pdf-utils/fix-local-asset-pagename original-name))]]))
@@ -186,7 +187,14 @@
             :draggable true
             :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
             :data-ref name}
-           (page-name name (get-page-icon entity) true)]))])))
+           (page-name name (get-page-icon entity) true)]))
+
+      (when-not (empty? pages)
+        [:li.recent-item.select-none
+         [:a.flex.items-center
+          {:on-click #(recent-handler/clear-recent! (state/get-current-repo))}
+          [:span.page-icon.ml-3.opacity-50.justify-center (ui/icon "trash-x")]
+          [:span.page-title.opacity-50 (t :left-side-bar/clear-recent)]]])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -587,7 +595,7 @@
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
-                                              [page :page])]
+                                              [(:db/id (db/pull [:block/name page])) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
