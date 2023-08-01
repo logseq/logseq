@@ -5,7 +5,8 @@
             [frontend.db :as db]
             [logseq.db.default :as default-db]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.property.util :as pu]))
 
 (defn- build-links
   [links]
@@ -99,7 +100,7 @@
 
            pages-after-exclude-filter (cond->> pages-after-journal-filter
                                         (not excluded-pages?)
-                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
+                                        (remove (fn [p] (true? (pu/get-property p :exclude-from-graph-view)))))
 
             links (concat (seq relation)
                           (seq tagged-pages)

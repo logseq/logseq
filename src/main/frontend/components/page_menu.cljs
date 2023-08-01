@@ -17,7 +17,8 @@
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.handler.property.util :as pu]))
 
 (defn- delete-page!
   [page-name]
@@ -68,7 +69,7 @@
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           properties (:block/properties page)
-          public? (true? (:public properties))
+          public? (true? (pu/lookup properties :public))
           favorites (:favorites (state/sub-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)

@@ -39,7 +39,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [frontend.handler.property.util :as pu]))
 
 (defn- get-page-name
   [state]
@@ -1119,7 +1120,7 @@
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (get-in page [:block/properties :icon])]
+                (when-let [icon (pu/get-property page :icon)]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)

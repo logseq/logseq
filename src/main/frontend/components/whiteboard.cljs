@@ -137,7 +137,6 @@
   [page-name]
   (let [page-entity (model/get-page page-name)]
     (or
-     (get-in page-entity [:block/properties :title] nil)
      (:block/original-name page-entity)
      page-name)))
 

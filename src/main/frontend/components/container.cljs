@@ -26,6 +26,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -96,9 +97,9 @@
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})
-        from-properties (get-in (into {} page-entity) [:block/properties :icon])]
+        page-icon (pu/get-property page-entity :icon)]
     (or
-     (when (not= from-properties "") from-properties)
+     (when-not (string/blank? page-icon) page-icon)
      default-icon))) ;; Fall back to default if icon is undefined or empty
 
 (rum/defcs favorite-item <

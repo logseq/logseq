@@ -46,7 +46,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.handler.property.util :as pu]))
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -954,7 +955,7 @@
 (defn get-filters
   [page-name]
   (let [properties (db/get-page-properties page-name)
-        properties-str (get properties :filters "{}")]
+        properties-str (or (pu/lookup properties :filters) "{}")]
     (try (reader/read-string properties-str)
          (catch :default e
            (log/error :syntax/filters e)))))
