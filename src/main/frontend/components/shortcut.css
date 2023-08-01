@@ -82,8 +82,9 @@
   }
 
   > article {
-    @apply relative max-h-[500px] pb-4 overflow-y-auto;
+    @apply relative pb-4 overflow-y-auto;
 
+    max-height: calc(70vh - 100px);
     overflow-y: overlay;
 
     > ul {
