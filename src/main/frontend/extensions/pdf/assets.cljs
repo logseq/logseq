@@ -192,11 +192,11 @@
            ref-block)
          (let [text       (:text content)
                wrap-props #(if-let [stamp (:image content)]
-                             (assoc % :hl-type "area" :hl-stamp stamp)
+                             (assoc % :hl-type :area :hl-stamp stamp)
                              %)
                properties (->>
                            (wrap-props
-                            {:ls-type  "annotation"
+                            {:ls-type  :annotation
                              :hl-page  page
                              :hl-color (:color properties)
                              ;; force custom uuid

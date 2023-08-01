@@ -47,6 +47,7 @@
       [:div.grid.grid-cols-4.gap-1.leading-8
        [:label "Schema type:"]
        (let [schema-types (->> (keys property-handler/builtin-schema-types)
+                               (remove gp-property/db-built-in-properties-keys)
                                (map (comp string/capitalize name))
                                (map (fn [type]
                                       {:label type
@@ -548,7 +549,7 @@
                                             (:properties (:block/schema e))))))
                               (map (fn [id]
                                      [id nil])))
-        built-in-properties (set (map name (gp-property/full-built-in-properties)))
+        built-in-properties (set (map name gp-property/db-built-in-properties-keys))
         properties (->> (concat (seq properties) class-properties)
                         (util/distinct-by first)
                         (remove (fn [[k _v]]

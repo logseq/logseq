@@ -56,7 +56,14 @@
               logseq-block?]
    :object    [:fn
                {:error/message "should be an object"}
-               logseq-object?]})
+               logseq-object?]
+
+   ;; internal usage
+   :map      map?
+   :coll     coll?
+   :any      some?})
+
+(def internal-builtin-schema-types #{:map :coll :any})
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit

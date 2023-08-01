@@ -949,16 +949,20 @@
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
                        (gp-config/draw? name)
-                       (db/built-in-pages-names (string/upper-case name))))))
+                       (db/built-in-pages-names (string/upper-case name))
+                       (gp-property/db-built-in-properties-keys-str name)
+                       (contains? #{"macro"} (:block/type p))))))
        (common-handler/fix-pages-timestamps)))
 
 (defn get-filters
   [page-name]
-  (let [properties (db/get-page-properties page-name)
-        properties-str (or (pu/lookup properties :filters) "{}")]
-    (try (reader/read-string properties-str)
-         (catch :default e
-           (log/error :syntax/filters e)))))
+  (let [properties (db/get-page-properties page-name)]
+    (if (config/db-based-graph? (state/get-current-repo))
+      (pu/lookup properties :filters)
+      (let [properties-str (or (:filters properties) "{}")]
+        (try (reader/read-string properties-str)
+             (catch :default e
+               (log/error :syntax/filters e)))))))
 
 (defn save-filter!
   [page-name filter-state]

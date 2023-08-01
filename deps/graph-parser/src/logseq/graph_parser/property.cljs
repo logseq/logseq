@@ -80,10 +80,35 @@
      :todo :doing :now :later :done}
    @built-in-extended-properties))
 
-(defn full-built-in-properties
-  "All the built-in properties used by logseq"
-  []
-  (set/union (editable-built-in-properties) (hidden-built-in-properties)))
+;; FIXME: no support for built-in-extended-properties
+(def db-built-in-properties
+  {:background-color {:schema {:type :default}}
+   :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
+   :query-table {:schema {:type :checkbox}}
+   :query-properties {:schema {:type :coll}}
+   :query-sort-by {:schema {:type :checkbox}}
+   :query-sort-desc {:schema {:type :checkbox}}
+   :logseq.query/nlp-date {:schema {:type :checkbox}}
+   :ls-type {:schema {:type :keyword}}
+   :hl-type {:schema {:type :keyword}}
+   :hl-page {:schema {:type :number}}
+   :hl-stamp {:schema {:type :number}}
+   :hl-color {:schema {:type :default}}
+   :logseq.macro-name {:schema {:type :default}}
+   :logseq.macro-arguments {:schema {:type :default}}
+   :logseq.order-list-type {:schema {:type :checkbox}}
+   :logseq.tldraw.page {:schema {:type :map}}
+   :logseq.tldraw.shape {:schema {:type :map}}
+   :icon {:schema {:type :default}}
+   :public {:schema {:type :checkbox}}
+   :filters {:schema {:type :map}}
+   :exclude-from-graph-view {:schema {:type :checkbox}}})
+
+(defonce db-built-in-properties-keys
+  (set (keys db-built-in-properties)))
+
+(defonce db-built-in-properties-keys-str
+  (set (map name (keys db-built-in-properties))))
 
 (def built-in-property-types
   "Types for built-in properties. Built-in properties whose values are to be
@@ -92,7 +117,7 @@
    :public :boolean
    :exclude-from-graph-view :boolean
    :logseq.query/nlp-date :boolean
-   :heading :boolean
+   :heading :boolean                    ; FIXME: or integer
    :collapsed :boolean
    :created-at :integer
    :created_at :integer

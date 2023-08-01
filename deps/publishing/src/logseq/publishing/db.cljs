@@ -62,6 +62,12 @@
         db)
        (map first)))
 
+(defn db-graph?
+  "Whether the current graph is db-only"
+  [db]
+  (= "db" (d/entity db :db/type)))
+
+;; FIXME: store assets as blocks for db-based graphs
 (defn- get-assets
   [db datoms]
   (let [pull (fn [eid db]
@@ -71,12 +77,14 @@
                    (pull % db)
                    :block/page
                    :db/id
-                   (pull db)))]
+                   (pull db)))
+        db-based? (= "db" (d/entity db :db/type))
+        hl-type-key (if db-based?
+                      :hl-type)]
     (->>
      (keep
       (fn [datom]
         (cond-> []
-
           (= :block/content (:a datom))
           (concat (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))]
                     (when (seq matched)
@@ -85,7 +93,9 @@
                                    (not (string/ends-with? path ".js")))
                           path)))))
           ;; area image assets
-          (= (:hl-type (:v datom)) "area")
+          (and
+           (= :block/properties (:a datom))
+           (= (keyword (get (:v datom) hl-type-key)) :area))
           (#(let [path (some-> (pull (:e datom) db)
                                (get-area-block-asset-url
                                 (get-page-by-eid (:e datom))))

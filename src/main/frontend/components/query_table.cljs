@@ -110,9 +110,11 @@
 
 (defn get-columns [current-block result {:keys [page?]}]
   (let [properties (:block/properties current-block)
-        query-properties (or (pu/lookup properties :query-properties) "")
-        query-properties (some-> query-properties
-                                 (common-handler/safe-read-string "Parsing query properties failed"))
+        query-properties (pu/lookup properties :query-properties)
+        query-properties (if (config/db-based-graph? (state/get-current-repo))
+                           query-properties
+                           (some-> query-properties
+                                   (common-handler/safe-read-string "Parsing query properties failed")))
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
