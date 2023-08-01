@@ -15,6 +15,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -506,7 +507,8 @@
   "Get textarea css class according to it's content"
   [block content format]
   (let [content (if content (str content) "")
-        heading (-> block :block/properties :heading)
+        properties (:block/properties block)
+        heading (pu/lookup properties :heading)
         heading (if (true? heading)
                   (min (inc (:block/level block)) 6)
                   heading)]

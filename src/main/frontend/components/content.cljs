@@ -16,6 +16,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -26,7 +27,8 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            ))
 
 ;; TODO i18n support
 
@@ -178,7 +180,9 @@
   shortcut/disable-all-shortcuts
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [heading (-> block :block/properties :heading (or false))
+      (let [properties (:block/properties block)
+            heading (or (pu/lookup properties :heading)
+                        false)
             repo (state/get-current-repo)]
         [:.menu-links-wrapper
          (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)

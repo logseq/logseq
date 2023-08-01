@@ -16,7 +16,8 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
             [frontend.format.block :as block]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.handler.property.util :as pu]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -508,17 +509,20 @@
            last
            rest))))
 
-(defn blocks-with-ordered-list-props
+(defn- blocks-with-ordered-list-props
   [blocks target-block sibling?]
   (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))]
-    (letfn [(list-type-fn [b] (some-> b :block/properties :logseq.order-list-type))]
+    (let [list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
+          k (if (config/db-based-graph? (state/get-current-repo))
+              (:block/uuid (db/entity [:block/name "logseq.order-list-type"]))
+              :logseq.order-list-type)]
       (if-let [list-type (and target-block (list-type-fn target-block))]
         (mapv
           (fn [{:block/keys [content format] :as block}]
             (cond-> block
               (and (some? (:block/uuid block))
                    (nil? (list-type-fn block)))
-              (update :block/properties #(assoc % :logseq.order-list-type list-type))
+              (update :block/properties assoc k list-type)
 
               (not (config/db-based-graph? (state/get-current-repo)))
               (assoc :block/content (property-util/insert-property format content :logseq.order-list-type list-type))))

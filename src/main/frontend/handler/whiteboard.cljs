@@ -7,6 +7,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.modules.editor.undo-redo :as history]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
@@ -44,7 +45,8 @@
 
 (defn- build-shapes
   [page-block blocks]
-  (let [shapes-index (get-in page-block [:block/properties :logseq.tldraw.page :shapes-index])
+  (let [page-metadata (pu/get-property page-block :logseq.tldraw.page)
+        shapes-index (:shapes-index page-metadata)
         shape-id->index (zipmap shapes-index (range 0 (count shapes-index)))]
     (->> blocks
          (map (fn [block]
@@ -107,8 +109,7 @@
         repo (state/get-current-repo)
         deleted-shapes (when (seq deleted-ids)
                          (->> (db/pull-many repo '[*] (mapv (fn [id] [:block/uuid (uuid id)]) deleted-ids))
-                              (map (fn [b]
-                                     (get-in b [:block/properties :logseq.tldraw.shape])))))
+                              (map (fn [b] (pu/get-property b :logseq.tldraw.shape)))))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
         with-timestamps (fn [block]
                           (if (contains? created-ids (str (:block/uuid block)))
@@ -136,7 +137,8 @@
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         page-block (model/get-page page-name)
-        prev-shapes-index (get-in page-block [:block/properties :logseq.tldraw.page :shapes-index])
+        prev-page-metadata (pu/get-property page-block :logseq.tldraw.page)
+        prev-shapes-index (:shapes-index prev-page-metadata)
         shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
         new-id-nonces (set (map-indexed (fn [idx shape]
                                   (let [id (.-id shape)]
@@ -370,14 +372,16 @@
 (defn update-bindings!
   [^js tl-page page-name]
   (when-let [page (db/entity [:block/name page-name])]
-    (let [bindings (get-in page [:block/properties :logseq.tldraw.page :bindings])]
+    (let [page-metadata (pu/get-property page :logseq.tldraw.page)
+          bindings (:bindings page-metadata)]
       (when (seq bindings)
         (.updateBindings tl-page (bean/->js bindings))))))
 
 (defn update-shapes-index!
   [^js tl-page page-name]
   (when-let [page (db/entity [:block/name page-name])]
-    (let [shapes-index (get-in page [:block/properties :logseq.tldraw.page :shapes-index])]
+    (let [page-metadata (pu/get-property page :logseq.tldraw.page)
+          shapes-index (:shapes-index page-metadata)]
       (when (seq shapes-index)
         (.updateShapesIndex tl-page (bean/->js shapes-index))))))
 
@@ -408,7 +412,7 @@
               (when (seq new-shapes)
                 (delete-shapes! api new-shapes))
               (when (seq changed-shapes)
-                (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
+                (let [prev-shapes (map (fn [b] (pu/get-property b :logseq.tldraw.shape))
                                        prev-changed-blocks)]
                   (update-shapes! api prev-shapes))))))))
     (catch :default e

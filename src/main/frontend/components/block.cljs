@@ -48,6 +48,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
@@ -869,8 +871,9 @@
         [:span "Loading..."]
         (let [db-id (:db/id block)
               block (when db-id (db/sub-block db-id))
-              block-type (keyword (get-in block [:block/properties :ls-type]))
-              hl-type (get-in block [:block/properties :hl-type])
+              properties (:block/properties block)
+              block-type (keyword (pu/lookup properties :ls-type))
+              hl-type (pu/lookup properties :hl-type)
               repo (state/get-current-repo)
               stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/content block))
@@ -1371,14 +1374,14 @@
   [name config arguments]
   (if-let [block-uuid (:block/uuid config)]
     (let [format (get-in config [:block :block/format] :markdown)
+          properties (-> (db/entity [:block/uuid block-uuid])
+                         (:block/page)
+                         (:db/id)
+                         (db/entity)
+                         :block/properties)
+          macros (pu/lookup properties :macros)
           macro-content (or
-                         (-> (db/entity [:block/uuid block-uuid])
-                             (:block/page)
-                             (:db/id)
-                             (db/entity)
-                             :block/properties
-                             :macros
-                             (get name))
+                         (get macros name)
                          (get (state/get-macros) name)
                          (get (state/get-macros) (keyword name)))
           macro-content (cond
@@ -1907,7 +1910,9 @@
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
-        block-type (or (keyword (:ls-type properties)) :default)
+        block-type (or (keyword
+                        (pu/lookup properties :ls-type))
+                       :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1917,14 +1922,14 @@
                         (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
-        bg-color (:background-color properties)
+        bg-color (pu/lookup properties :background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
                  (and heading-level
                       (<= heading-level 6)
                       heading-level)
-                 (:heading properties))
+                 (pu/lookup properties :heading))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
@@ -1933,7 +1938,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (:hl-type properties)}
+      {:data-hl-type (pu/lookup properties :hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -1947,7 +1952,7 @@
            :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (:hl-type properties)))
+     (let [area?  (= :area (keyword (pu/lookup properties :hl-type)))
            hl-ref #(when (and (or config/publishing? (util/electron?))
                               (not (#{:default :whiteboard-shape} block-type)))
                      [:div.prefix-link
@@ -1966,10 +1971,13 @@
                              :dune)))}
 
                       [:span.hl-page
-                       [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+                       [:strong.forbid-edit (str "P" (or
+                                                      (pu/lookup properties :hl-page)
+                                                      "?"))]
                        [:label.blank " "]]
 
-                      (when (and area? (:hl-stamp properties))
+                      (when (and area?
+                                 (pu/lookup properties :hl-stamp))
                         (pdf-assets/area-display t))])]
        (remove-nils
         (concat
@@ -2277,7 +2285,9 @@
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
-        block-type (or (:ls-type properties) :default)
+        block-type (or
+                    (pu/lookup properties :ls-type)
+                    :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
@@ -2288,8 +2298,10 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+                (not (string/blank?
+                      (pu/lookup properties :hl-color)))
+                (assoc :data-hl-color
+                       (pu/lookup properties :hl-color))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -2755,7 +2767,7 @@
         {:block.temp/keys [top?]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         blocks-container-id (:blocks-container-id config)
-        heading? (:heading properties)
+        heading? (pu/lookup properties :heading)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond

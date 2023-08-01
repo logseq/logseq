@@ -276,6 +276,7 @@ independent of format as format specific heading characters are stripped"
            second
            string/lower-case))
 
+;; FIXME: replace :heading with id
 (defn get-block-by-page-name-and-block-route-name
   "Returns first block for given page name and block's route name. Block's route
   name must match the content of a page's block header"
@@ -1146,6 +1147,7 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
 
+;; FIXME: replace :template with id
 (defn get-all-templates
   []
   (let [pred (fn [_db properties]
@@ -1445,6 +1447,7 @@ independent of format as format specific heading characters are stripped"
                         (remove nil?))]
     orphaned-pages))
 
+;; FIXME: replace :logseq.macro-name with id
 (defn get-macro-blocks
   [repo macro-name]
   (d/q
@@ -1485,11 +1488,14 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-whiteboard-id-nonces
   [repo page-name]
-  (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
-       (filter #(:logseq.tldraw.shape (:block/properties %)))
-       (map (fn [{:block/keys [uuid properties]}]
-              {:id (str uuid)
-               :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))
+  (let [key (if (react/db-graph?)
+              (:block/uuid (db-utils/entity [:block/name "logseq.tldraw.shape"]))
+              :logseq.tldraw.shape)]
+    (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+         (keep (fn [{:block/keys [uuid properties]}]
+                 (when-let [shape (get properties key)]
+                   {:id (str uuid)
+                    :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
   [repo]

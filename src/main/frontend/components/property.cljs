@@ -18,6 +18,7 @@
             [frontend.components.svg :as svg]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.components.select :as select]
+            [logseq.graph-parser.property :as gp-property]
             [medley.core :as medley]
             [cljs-time.coerce :as tc]))
 
@@ -547,8 +548,12 @@
                                             (:properties (:block/schema e))))))
                               (map (fn [id]
                                      [id nil])))
+        built-in-properties (set (map name (gp-property/full-built-in-properties)))
         properties (->> (concat (seq properties) class-properties)
-                        (util/distinct-by first))]
+                        (util/distinct-by first)
+                        (remove (fn [[k _v]]
+                                  (when (uuid? k)
+                                    (contains? built-in-properties (:block/name (db/entity [:block/uuid k])))))))]
     (when-not (and (empty? properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
@@ -556,9 +561,9 @@
        (when (:selected? opts)
          {:class "select-none"})
        (when (seq properties)
-         (for [[prop-uuid-or-built-in-prop v] properties]
-           (if (uuid? prop-uuid-or-built-in-prop)
-             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid prop-uuid-or-built-in-prop])))]
+         (for [[k v] properties]
+           (when (uuid? k)
+             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
                [:div.property-pair
                 [:div.property-key.col-span-1
                  (property-key block property (select-keys opts [:class-schema?]))]
@@ -566,10 +571,5 @@
                   [:div.property-description.col-span-3.font-light
                    (get-in property [:block/schema :description])]
                   [:div.property-value.col-span-3
-                   (property-value block property v (assoc opts :parsed-value v))])])
-             ;; TODO: built in properties should have UUID and corresponding schema
-             ;; builtin
-             [:div
-              [:a.mr-2 (str prop-uuid-or-built-in-prop)]
-              [:span v]])))
+                   (property-value block property v (assoc opts :parsed-value v))])]))))
        (new-property block edit-input-id properties new-property? opts)])))

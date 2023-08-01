@@ -16,7 +16,9 @@
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.property :as property-handler]))
 
 ;; Util fns
 ;; ========
@@ -65,11 +67,14 @@
   :sort-desc? and :sort-by-column. :sort-by-column is nil if no sorting is to be
   done"
   [current-block]
-  (let [p-desc? (get-in current-block [:block/properties :query-sort-desc])
+  (let [properties (:block/properties current-block)
+        p-desc? (pu/lookup properties :query-sort-desc)
         desc? (if (some? p-desc?) p-desc? true)
-        p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
+        properties (:block/properties current-block)
+        query-sort-by (pu/lookup properties :query-sort-by)
+        p-sort-by (keyword query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (get-in current-block [:block/properties :logseq.query/nlp-date])
+        nlp-date? (pu/lookup properties :logseq.query/nlp-date)
         sort-by-column (or (some-> p-sort-by keyword)
                          (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                            nil
@@ -104,7 +109,9 @@
     keys))
 
 (defn get-columns [current-block result {:keys [page?]}]
-  (let [query-properties (some-> (get-in current-block [:block/properties :query-properties] "")
+  (let [properties (:block/properties current-block)
+        query-properties (or (pu/lookup properties :query-properties) "")
+        query-properties (some-> query-properties
                                  (common-handler/safe-read-string "Parsing query properties failed"))
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)

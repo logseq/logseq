@@ -16,7 +16,8 @@
    [frontend.config :as config]
    [frontend.db.listener :as db-listener]
    [frontend.util.drawer :as drawer]
-   [frontend.handler.file-based.property.util :as property-util]))
+   [frontend.handler.file-based.property.util :as property-util]
+   [frontend.handler.property.util :as pu]))
 
 ;;  Fns
 
@@ -268,7 +269,10 @@
 
 (defn get-idx-of-order-list-block
   [block order-list-type]
-  (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
+  (let [order-block-fn? (fn [block]
+                          (let [properties (:block/properties block)
+                                type (pu/lookup properties :logseq.order-list-type)]
+                            (= type order-list-type)))
         prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
         prev-block      (prev-block-fn block)]
     (letfn [(page-fn? [b] (some-> b :block/name some?))
@@ -295,7 +299,9 @@
 
 (defn attach-order-list-state
   [config block]
-  (let [own-order-list-type  (some-> block :block/properties :logseq.order-list-type str string/lower-case)
+  (let [properties (:block/properties block)
+        type (pu/lookup properties :logseq.order-list-type)
+        own-order-list-type  (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type
                   :own-order-list-index own-order-list-index

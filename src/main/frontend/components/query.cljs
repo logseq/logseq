@@ -14,6 +14,7 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [logseq.graph-parser.util :as gp-util]))
 
 (defn built-in-custom-query?
@@ -157,8 +158,10 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
+        properties (:block/properties current-block)
+        query-table-property (pu/lookup properties :query-table)
         table? (or table-view?
-                   (get-in current-block [:block/properties :query-table])
+                   query-table-property
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))

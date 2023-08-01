@@ -20,6 +20,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -70,7 +71,8 @@
 
 (defn get-block-own-order-list-type
   [block]
-  (some-> block :block/properties :logseq.order-list-type))
+  (let [properties (:block/properties block)]
+    (pu/lookup properties :logseq.order-list-type)))
 
 (defn set-block-own-order-list-type!
   [block type]
@@ -797,7 +799,9 @@
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (let [query-properties (-> (get-in block [:block/properties :query-properties] "")
+    (let [properties (:block/properties block)
+          query-properties (or (pu/lookup properties :query-properties) "")
+          query-properties (-> query-properties
                                (common-handler/safe-read-string "Failed to parse query properties"))
           query-properties (if (seq query-properties)
                              query-properties
@@ -3249,14 +3253,15 @@
   [block]
   (->> (:block/macros (db/entity (:db/id block)))
        (some (fn [macro]
-               (when-let [query-body (and
-                                      (= "query" (get-in macro [:block/properties :logseq.macro-name]))
-                                      (first (:logseq.macro-arguments (:block/properties macro))))]
-                 (seq (:query
-                       (try
-                         (query-dsl/parse-query query-body)
-                         (catch :default _e
-                           nil)))))))))
+               (let [properties (:block/properties macro)
+                     macro-name (pu/lookup properties :logseq.macro-name)
+                     macro-arguments (pu/lookup properties :logseq.macro-arguments)]
+                 (when-let [query-body (and (= "query" macro-name) (first macro-arguments))]
+                  (seq (:query
+                        (try
+                          (query-dsl/parse-query query-body)
+                          (catch :default _e
+                            nil))))))))))
 
 (defn- valid-custom-query-block?
   "Whether block has a valid customl query."

@@ -53,6 +53,7 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
@@ -325,7 +326,9 @@
     (query-properties-settings-inner block shown-properties all-properties close-fn)))
 
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
-  (let [block-properties (some-> (get-in block [:block/properties :query-properties])
+  (let [properties (:block/properties block)
+        query-properties (pu/lookup properties :query-properties)
+        block-properties (some-> query-properties
                                  (common-handler/safe-read-string "Parsing query properties failed"))
         shown-properties (if (seq block-properties)
                            (set block-properties)

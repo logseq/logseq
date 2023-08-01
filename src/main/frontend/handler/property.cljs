@@ -3,21 +3,24 @@
   (:require [frontend.handler.db-based.property :as db-property]
             [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.graph-parser.util :as gp-util]))
 
 (def builtin-schema-types db-property/builtin-schema-types)
-
-(defn set-block-property!
-  [repo block-id key v & opts]
-  (if (config/db-based-graph? repo)
-    (db-property/set-block-property! repo block-id key v opts)
-    (file-property/set-block-property! block-id key v)))
 
 (defn remove-block-property!
   [repo block-id key]
   (if (config/db-based-graph? repo)
     (db-property/remove-block-property! repo block-id key)
     (file-property/remove-block-property! block-id key)))
+
+(defn set-block-property!
+  [repo block-id key v & opts]
+  (if (config/db-based-graph? repo)
+    (if (nil? v)
+      (db-property/remove-block-property! repo block-id key)
+      (db-property/set-block-property! repo block-id key v opts))
+    (file-property/set-block-property! block-id key v)))
 
 (defn update-property!
   [repo property-uuid opts]

@@ -1,17 +1,17 @@
 (ns logseq.graph-parser.whiteboard
-  "Whiteboard related parser utilities" 
+  "Whiteboard related parser utilities"
   (:require [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn block->shape [block]
-  (get-in block [:block/properties :logseq.tldraw.shape] nil))
+  (get-in block [:block/properties :logseq.tldraw.shape]))
 
 (defn page-block->tldr-page [block]
-  (get-in block [:block/properties :logseq.tldraw.page] nil))
+  (get-in block [:block/properties :logseq.tldraw.page]))
 
 (defn shape-block? [block]
-  (= :whiteboard-shape (get-in block [:block/properties :ls-type] nil)))
+  (= :whiteboard-shape (get-in block [:block/properties :ls-type])))
 
 ;; tldraw shape props is now saved into [:block/properties :logseq.tldraw.shape]
 ;; migrate
@@ -19,13 +19,13 @@
   (let [properties (:block/properties block)]
     (and (seq properties)
          (and (= :whiteboard-shape (:ls-type properties))
-              (not (seq (get properties :logseq.tldraw.shape nil)))))))
+              (not (seq (get properties :logseq.tldraw.shape)))))))
 
 (defn page-block-needs-migrate? [block]
   (let [properties (:block/properties block)]
     (and (seq properties)
          (and (= :whiteboard-page (:ls-type properties))
-              (not (seq (get properties :logseq.tldraw.page nil)))))))
+              (not (seq (get properties :logseq.tldraw.page)))))))
 
 (defn migrate-shape-block [block]
   (if (shape-block-needs-migrate? block)

@@ -47,6 +47,7 @@
   "Properties used by logseq that user can edit and that can have linkable property values"
   #{:alias :aliases :tags})
 
+;; file based graphs only
 (def editable-view-and-table-properties
   "Properties used by view and table component"
   #{;; view props
@@ -69,14 +70,20 @@
   "Properties used by logseq that user can't edit or see"
   []
   (set/union
-   #{:id :custom-id :background-color :background_color :heading :collapsed
-     :created-at :updated-at :last-modified-at :created_at :last_modified_at
+   #{:custom-id :background_color :created_at :last_modified_at ; backward compatibility only
+     :id :background-color :heading :collapsed
+     :created-at :updated-at :last-modified-at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
      :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))
+
+(defn full-built-in-properties
+  "All the built-in properties used by logseq"
+  []
+  (set/union (editable-built-in-properties) (hidden-built-in-properties)))
 
 (def built-in-property-types
   "Types for built-in properties. Built-in properties whose values are to be

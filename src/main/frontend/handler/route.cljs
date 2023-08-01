@@ -8,6 +8,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -52,8 +53,9 @@
   (defn- default-page-route [page-name-or-block-uuid]
     ;; Only query if in a block context
     (let [block (when (uuid? page-name-or-block-uuid)
-                  (model/get-block-by-uuid page-name-or-block-uuid))]
-      (if (get-in block [:block/properties :heading])
+                  (model/get-block-by-uuid page-name-or-block-uuid))
+          properties (:block/properties block)]
+      (if (pu/lookup properties :heading)
         {:to :page-block
          :path-params {:name (get-in block [:block/page :block/name])
                        :block-route-name (model/heading-content->route-name (:block/content block))}}
