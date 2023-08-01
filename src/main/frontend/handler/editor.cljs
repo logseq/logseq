@@ -86,7 +86,8 @@
 
 (defn own-order-number-list?
   [block]
-  (= (get-block-own-order-list-type block) "number"))
+  (when-let [block (db/entity (:db/id block))]
+    (= (get-block-own-order-list-type block) "number")))
 
 (defn make-block-as-own-order-list!
   [block]
@@ -717,6 +718,7 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
+   (prn :debug 0)
    (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
@@ -730,8 +732,10 @@
                                          (when-let [block-id (:block/uuid (:data left))]
                                            (let [block (db/entity [:block/uuid block-id])]
                                              (seq (:block/_parent block)))))]
+             (prn :debug 1)
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
+                 (prn :debug 2)
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (if (:embed? config)
                                        (util/get-prev-block-non-collapsed

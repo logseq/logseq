@@ -254,19 +254,23 @@
                 gp-util/remove-nils
                 block-with-timestamps
                 fix-tag-ids)
-          m (if (config/db-based-graph? (state/get-current-repo))
-              (dissoc m* :block/properties :block/properties-order :block/properties-text-values)
+          repo (state/get-current-repo)
+          db-based? (config/db-based-graph? repo)
+          m (if db-based?
+              (dissoc m* :block/properties :block/properties-order)
               m*)
           id (:db/id (:data this))
           block-entity (db/entity id)]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (swap! txs-state (fn [txs]
-                           (vec
-                            (concat txs
-                                    (map (fn [attribute]
-                                           [:db/retract id attribute])
-                                         db-schema/retract-attributes)))))
+        (let [retract-attributes (if db-based?
+                                   (remove #{:block/properties :block/properties-order} db-schema/retract-attributes))]
+          (swap! txs-state (fn [txs]
+                            (vec
+                             (concat txs
+                                     (map (fn [attribute]
+                                            [:db/retract id attribute])
+                                       retract-attributes))))))
 
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m)

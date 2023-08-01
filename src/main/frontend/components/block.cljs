@@ -2741,7 +2741,7 @@
     (nil? (:query-result config))
     (assoc :query-result (atom nil))
 
-    (:ref? config)
+    true
     (block-handler/attach-order-list-state block)))
 
 (defn- build-block [config block* {:keys [navigating-block navigated?]}]
@@ -2878,12 +2878,6 @@
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
-(defn- attach-order-list-state!
-  [cp-state]
-  (let [args (:rum/args cp-state)]
-    (assoc cp-state
-      :rum/args (assoc (vec args) 0 (block-handler/attach-order-list-state (first args) (second args))))))
-
 (defn- block-changed?
   [old-block new-block]
   (let [ks [:block/uuid :block/content :block/collapsed?
@@ -2916,15 +2910,9 @@
 
                :else
                nil)
-             (-> (assoc state
-                   ::control-show? (atom false)
-                   ::navigating-block (atom (:block/uuid block)))
-                 (attach-order-list-state!))))
-
-   :will-remount (fn [_old-state new-state]
-                   (-> new-state
-                       (attach-order-list-state!)))
-
+             (assoc state
+                    ::control-show? (atom false)
+                    ::navigating-block (atom (:block/uuid block)))))
    :should-update (fn [old-state new-state]
                     (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
