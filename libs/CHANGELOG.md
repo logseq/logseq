@@ -61,6 +61,7 @@ All notable changes to this project will be documented in this file.
   `App.registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void`
 - Support hooks for text encoder service. _#Alpha stage_
   `App.registerTextEncoderService<T extends IPluginTextEncoderServiceHooks>(s: T): void`
+  Should have a option record `modelDim`, which receive an integer represents the embedding's dimension
 - Support `focus` option for `App.insertBlock`. Credit
   to [[[tennox](https://github.com/tennox)]] [#PR](https://github.com/logseq/logseq/commit/4217057a44de65e5c64be37857af2fb4e9534b24)
 

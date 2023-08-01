@@ -30,6 +30,7 @@
   [text service]
   (call-service! service "textEncoder:textEncode" {:text text} true))
 
+;; TODO: support selecting text encoder
 (defn text-encode
   "Return a promise of the encoded text
    Or return nil if no matching text encoder available"
