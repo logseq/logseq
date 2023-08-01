@@ -20,7 +20,8 @@
             [frontend.components.select :as select]
             [logseq.graph-parser.property :as gp-property]
             [medley.core :as medley]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [clojure.set :as set]))
 
 (rum/defcs property-config <
   rum/static
@@ -469,9 +470,8 @@
         svg/close])]))
 
 (rum/defcs property-value < rum/reactive
-  [state block property value opts]
+  [state block property v opts]
   (let [k (:block/uuid property)
-        v (or (get (:block/properties block) k) value)
         dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
@@ -515,7 +515,7 @@
 
       :else
       [:div.flex.flex-1.items-center.property-value-content
-       (property-scalar-value block property value
+       (property-scalar-value block property v
                               (merge
                                opts
                                {:editor-args editor-args
@@ -558,7 +558,9 @@
                                             (:properties (:block/schema e))))))
                               (map (fn [id]
                                      [id nil])))
-        built-in-properties (set (map name gp-property/db-built-in-properties-keys))
+        built-in-properties (set/difference
+                             (set (map name gp-property/db-built-in-properties-keys))
+                             #{"tags" "alias"})
         properties (->> (concat (seq alias-and-tags) (seq properties) class-properties)
                         (util/distinct-by first)
                         (remove (fn [[k _v]]

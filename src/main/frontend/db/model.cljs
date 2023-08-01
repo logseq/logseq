@@ -345,9 +345,11 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page-alias-names
   [repo page-name]
-  (let [alias-ids (page-alias-set repo page-name)]
+  (let [alias-ids (->> (page-alias-set repo page-name)
+                       (remove nil?))]
     (when (seq alias-ids)
       (let [names (->> (get-page-names-by-ids repo alias-ids)
+                       (remove nil?)
                        distinct
                        (remove #(= (util/page-name-sanity-lc %) (util/page-name-sanity-lc page-name))))
             lookup-refs (map (fn [name]
