@@ -49,7 +49,7 @@
 
                   :else
                   (let [markdown-top-heading? (and markdown?
-                                                   (= parent page)
+                                                   (= parent page left)
                                                    heading)
                         [prefix spaces-tabs]
                         (cond
