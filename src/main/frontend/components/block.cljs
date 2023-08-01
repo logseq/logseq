@@ -1905,9 +1905,10 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties level]
+  [config {:block/keys [title marker pre-block? properties]
            :as t}]
   (let [config (assoc config :block t)
+        level (:level config)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
         block-type (or (keyword
@@ -1930,7 +1931,6 @@
                       (<= heading-level 6)
                       heading-level)
                  (pu/lookup properties :heading))
-        ;; FIXME: level is missing for db-based graphs
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
@@ -2742,7 +2742,10 @@
     (assoc :query-result (atom nil))
 
     true
-    (block-handler/attach-order-list-state block)))
+    (block-handler/attach-order-list-state block)
+
+    (nil? (:level config))
+    (assoc config :level 0)))
 
 (defn- build-block [config block* {:keys [navigating-block navigated?]}]
   (let [block (if (or (and (:custom-query? config)
@@ -2764,9 +2767,10 @@
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
         block (build-block config* block* {:navigating-block navigating-block :navigated? navigated?})
-        {:block/keys [uuid pre-block? refs level content properties]} block
+        {:block/keys [uuid pre-block? refs content properties]} block
         {:block.temp/keys [top?]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
+        level (:level config)
         blocks-container-id (:blocks-container-id config)
         heading? (pu/lookup properties :heading)
         *control-show? (get state ::control-show?)
@@ -2873,8 +2877,9 @@
         (block-right-menu config block edit?))]
 
      (when-not (:hide-children? config)
-       (let [children (db/sort-by-left (:block/_parent block) block)]
-         (block-children config block children collapsed?)))
+       (let [children (db/sort-by-left (:block/_parent block) block)
+             config' (update config :level inc)]
+         (block-children config' block children collapsed?)))
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
