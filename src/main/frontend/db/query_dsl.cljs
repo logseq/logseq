@@ -613,7 +613,7 @@ Some bindings in this fn:
     col))
 
 (defn get-db-property-value
-  "Fetch a property's value given a block map and proeprty name. Similar to
+  "Fetch a property's value given a block map and property name. Similar to
   query-table/sort-by-fn. We should standardize this soon"
   [m prop]
   (case prop

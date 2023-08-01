@@ -138,7 +138,7 @@ prop-d:: nada"}])
               (dsl-query "(property prop-d)")))
       "Blocks that have a property"))
 
-(deftest ^:focus block-property-queries
+(deftest block-property-queries
   (testing "block property tests with default config"
     (test-helper/with-config {}
       (block-property-queries-test))))
@@ -479,7 +479,8 @@ tags: [[other]]
 
 (deftest between-queries
   (load-test-files [{:file/path "journals/2020_12_26.md"
-                     :file/content "- DONE 26-b1
+                     :file/content "foo::bar
+- DONE 26-b1
 created-at:: 1608968448113
 - LATER 26-b2-modified-later
 created-at:: 1608968448114

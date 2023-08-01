@@ -77,10 +77,14 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
+      - name: Build test asset
+        run: clojure -M:test compile test
+
+      - name: Run some ClojureScript tests against DB version
+        run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
+
       - name: Run ClojureScript tests
-        run: |
-          yarn cljs:test
-          node static/tests.js
+        run: node static/tests.js
 
   lint:
     runs-on: ubuntu-latest

@@ -37,8 +37,9 @@
 (defn- property-lines->properties
   [property-lines]
   (->> property-lines
-       (map #(let [[k v] (string/split % #"::\s*" 2)]
-               [(keyword k) (parse-property-value v)]))
+       (keep #(let [[k v] (string/split % #"::\s*" 2)]
+               (when (string/includes? % "::")
+                 [(keyword k) (parse-property-value v)])))
        (into {})))
 
 (defn- build-block-properties
@@ -51,7 +52,10 @@
           (mapv (fn [s]
                   (let [[content & props] (string/split-lines s)]
                     {:name-or-content content
-                     :properties (property-lines->properties props)}))))}
+                     ;; If no property chars may accidentally parse child blocks
+                     ;; so don't do property parsing
+                     :properties (when (and (string/includes? s ":: ") props)
+                                   (property-lines->properties props))}))))}
     {:page-properties
      (->> file-content
           string/split-lines
@@ -74,22 +78,26 @@
         (build-block-properties (:file/content file))]
     (if page-properties
       (merge file
-             {:file/block-properties [{:name-or-content (file-path->page-name (:file/path file))
-                                       :properties page-properties
-                                       :page-properties? true}]
-              :page-properties? false})
+             {:file/block-properties (vec (keep #(when (seq (:properties %)) %)
+                                                [{:name-or-content (file-path->page-name (:file/path file))
+                                                  :properties page-properties
+                                                  :page-properties? true}]))})
       (merge file
-             {:file/block-properties (cond-> block-properties
+             {:file/block-properties
+              ;; Filter out empty empty properties to avoid needless downstream processing
+              (cond-> (vec (keep #(when (seq (:properties %)) %) block-properties))
                                        ;; Optionally add page properties as a page block
-                                       (re-find #"^\s*[^-]+" (:name-or-content (first block-properties)))
-                                       (conj {:name-or-content (file-path->page-name (:file/path file))
-                                              :properties (->> (:name-or-content (first block-properties))
-                                                               string/split-lines
-                                                               property-lines->properties)
-                                              :page-properties? true}))
-              ;; Rewrite content to strip it of properties which shouldn't be in content
-              :file/content (string/join "\n"
-                                         (map (fn [x] (str "- " (:name-or-content x))) block-properties))}))))
+                (re-find #"^\s*[^-]+" (:name-or-content (first block-properties)))
+                (conj {:name-or-content (file-path->page-name (:file/path file))
+                       :properties (->> (:name-or-content (first block-properties))
+                                        string/split-lines
+                                        property-lines->properties)
+                       :page-properties? true}))}
+             ;; Rewrite content to strip it of properties which shouldn't be in content
+             ;; but only if properties are detected
+             (when (some #(seq (:properties %)) block-properties)
+               {:file/content (string/join "\n"
+                                           (map (fn [x] (str "- " (:name-or-content x))) block-properties))})))))
 
 (defn- load-test-files-for-db-graph
   [files*]

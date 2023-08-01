@@ -37,6 +37,8 @@ logseq.graph-parser/get-blocks-to-delete
 ;; Future use & be unified with markdown colon
 logseq.graph-parser.property/colons-org
 ;; API
+logseq.graph-parser.property/full-built-in-properties
+;; API
 logseq.graph-parser.util.db/resolve-input
 ;; TODO: use fast-remove-nils instead
 logseq.graph-parser.util/remove-nils
