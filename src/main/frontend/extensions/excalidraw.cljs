@@ -1,6 +1,5 @@
 (ns frontend.extensions.excalidraw
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             ;; NOTE: Always use production build of excalidraw
             ;; See-also: https://github.com/excalidraw/excalidraw/pull/3330
             ["@excalidraw/excalidraw/dist/excalidraw.production.min" :refer [Excalidraw serializeAsJSON]]
@@ -108,7 +107,7 @@
                                       (gobj/get app-state "editingElement")
                                       (gobj/get app-state "editingGroupId")
                                       (gobj/get app-state "editingLinearElement"))
-                          (let [elements->clj (bean/->clj elements)]
+                          (let [elements->clj (js->clj elements {:keywordize-keys true})]
                             (when (and (seq elements->clj)
                                        (not= elements->clj @*elements)) ;; not= requires clj collections
                               (reset! *elements elements->clj)

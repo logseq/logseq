@@ -198,8 +198,7 @@ html:not(.is-native-android) {
 
 /* region Reset top elements */
 html {
-  /* FIXME: rewrite revealjs.css ? */
-  height: unset !important;
+  overflow: hidden;
 }
 
 body {
@@ -836,15 +835,6 @@ a.tooltip-priority {
 #head .fade-link {
   font-weight: 600;
   font-size: 13px;
-}
-
-/* excalidraw */
-.Island > div > div > div {
-  width: 44px;
-}
-
-.excalidraw hr {
-  margin: 0;
 }
 
 .text-link {

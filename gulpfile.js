@@ -55,13 +55,17 @@ const common = {
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
       () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
+        'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
         'node_modules/interactjs/dist/interact.min.js',
-        'node_modules/photoswipe/dist/umd/*.js'
+        'node_modules/photoswipe/dist/umd/*.js',
+        'node_modules/reveal.js/dist/reveal.js',
+        'node_modules/shepherd.js/dist/js/shepherd.min.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/tabler-icons.min.css',
-        'node_modules/inter-ui/inter.css'
+        'node_modules/inter-ui/inter.css',
+        'node_modules/reveal.js/dist/theme/fonts/source-sans-pro/**',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
       () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
         .pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
