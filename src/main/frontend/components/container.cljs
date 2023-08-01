@@ -92,7 +92,7 @@
             (if whiteboard-page?
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon.ml-3..justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitiled? "opacity-50")}
       (if untitiled? (t :untitled)
           (pdf-utils/fix-local-asset-pagename original-name))]]))
