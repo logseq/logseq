@@ -183,8 +183,6 @@
   .nav-content-item {
     @apply overflow-hidden;
 
-    transition: all 0.3s;
-
     &:not(:hover) {
       ::-webkit-scrollbar-thumb,
       ::-webkit-scrollbar,
