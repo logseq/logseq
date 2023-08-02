@@ -117,7 +117,11 @@
   }
 
   &-record-dialog-inner {
-    @apply p-10 m-[-30px];
+    @apply py-[28px] m-[-30px] px-[20px];
+
+    h1 {
+      @apply relative top-[-8px];
+    }
 
     &:active, &:focus, &:focus-within {
       outline: burlywood hidden medium;
