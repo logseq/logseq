@@ -12,12 +12,15 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.commands :as commands]
+            [frontend.components.block :as block]
+            [frontend.components.cmdk :as cmdk]
             [frontend.components.command-palette :as command-palette]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
+            [frontend.components.page :as page]
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
@@ -69,7 +72,6 @@
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.shui.core :refer [cmdk]]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -412,8 +414,10 @@
                      :label "ls-modal-search"}))
 
 (defmethod handle :go/cmdk [_]
-  (when-not (= cmdk (:modal/panel-content @state/state))
-    (state/set-modal! cmdk 
+  (when-not (= cmdk/cmdk (:modal/panel-content @state/state))
+    (state/set-modal! ; (partial cmdk {} (make-context {:blocks-container block/blocks-container :page-cp block/page-cp :page page/page})) 
+                      ; cmdk
+                      cmdk/cmdk
                       {:fullscreen? false 
                        :close-btn?  false 
                        :label "ls-modal-cmdk" 

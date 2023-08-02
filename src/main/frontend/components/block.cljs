@@ -541,15 +541,16 @@
   (let [*mouse-down? (::mouse-down? state)
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (model/untitled-page? page-name)
-        gradient-styles (state/sub-color-gradient-text-styles :09)]
+        untitled? (model/untitled-page? page-name)]
+        ; gradient-styles (state/sub-color-gradient-text-styles :09)]
+        
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
                (str " page-property-key block-property")
                untitled? (str " opacity-50"))
-      :style gradient-styles
+      :style {:color "var(--lx-accent-10)"}
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
@@ -758,10 +759,7 @@
        (excalidraw s block-uuid)]
       [:span.page-reference
        {:data-ref s
-        :style {:background-image (colors/linear-gradient :grass "09" 5)
-                :background-clip "text"
-                "-webkit-background-clip" "text"
-                :color "transparent"}}
+        :style {:color "var(--lx-accent-09)"}}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -2286,12 +2284,12 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+               (not (string/blank? (:hl-color properties)))
+               (assoc :data-hl-color (:hl-color properties))
 
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+               (not block-ref?)
+               (assoc mouse-down-key (fn [e]
+                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :class (when selected? "select-none")
@@ -2809,20 +2807,20 @@
        :blockid (str uuid)
        :haschild (str (boolean has-child?))}
 
-       level
-       (assoc :level level)
+      level
+      (assoc :level level)
 
-       (not slide?)
-       (merge attrs)
+      (not slide?)
+      (merge attrs)
 
-       (or reference? embed?)
-       (assoc :data-transclude true)
+      (or reference? embed?)
+      (assoc :data-transclude true)
 
-       embed?
-       (assoc :data-embed true)
+      embed?
+      (assoc :data-embed true)
 
-       custom-query?
-       (assoc :data-query true))
+      custom-query?
+      (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
        (breadcrumb config repo uuid {:show-page? false

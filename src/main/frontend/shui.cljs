@@ -3,7 +3,8 @@
   (:require 
     [frontend.date :refer [int->local-time-2]]
     [frontend.state :as state]
-    [logseq.shui.context :refer [make-context]]))
+    [logseq.shui.context :refer [make-context]]
+    [frontend.handler.search :as search-handler]))
 
 (def default-versions {:logseq.table.version 1})
 
@@ -23,4 +24,5 @@
                  :app-config (state/get-config) 
                  :inline inline 
                  :int->local-time-2 int->local-time-2 
-                 :state state/state}))
+                 :state state/state 
+                 :search search-handler/search}))

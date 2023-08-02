@@ -190,9 +190,9 @@
           '[:find ?path
              ;; ?modified-at
             :where
-            [?file :file/path ?path]
+            [?file :file/path ?path]]
              ;; [?file :file/last-modified-at ?modified-at]
-            ]
+            
           db)
          (seq)
          ;; (sort-by last)
@@ -919,6 +919,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-block-page
   [repo block-uuid]
+  (assert (uuid? block-uuid) "get-block-page requires block-uuid to be of type uuid")
   (when-let [block (db-utils/entity repo [:block/uuid block-uuid])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 

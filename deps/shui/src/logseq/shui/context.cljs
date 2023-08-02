@@ -1,7 +1,10 @@
 (ns logseq.shui.context
   (:require 
-    [frontend.state :as state]
-    [frontend.colors :as colors]))
+    [frontend.colors :as colors]
+    [frontend.db :as db]
+    [frontend.db.utils :as db-utils]
+    [frontend.handler.search :as search-handler]
+    [frontend.state :as state]))
 
 (defn inline->inline-block [inline block-config]
   (fn [_context item]
@@ -12,7 +15,7 @@
     (fn [context col]
       (map #(inline* context %) col))))
 
-(defn make-context [{:keys [block-config app-config inline int->local-time-2]}]
+(defn make-context [{:keys [block-config app-config inline int->local-time-2 blocks-container page-cp page]}]
   {;; Shui needs access to the global configuration of the application
    :config app-config
    ;; Until components are converted over, they need to fallback to the old inline function 
@@ -43,4 +46,15 @@
    :sub-color-gradient-bg-styles state/sub-color-gradient-bg-styles 
    :sub-color-gradient-text-styles state/sub-color-gradient-text-styles
    :linear-gradient colors/linear-gradient
-   :state state/state})
+   :state state/state
+   ;; Add search to context 
+   :search search-handler/search
+   :entity db-utils/entity
+   :blocks-container blocks-container
+   :get-block-and-children db/get-block-and-children
+   :get-block-children db/get-block-children
+   :get-current-repo state/get-current-repo
+   :get-page-blocks-no-cache db/get-page-blocks-no-cache
+   :get-page db/get-page
+   :page-cp page-cp
+   :page page})

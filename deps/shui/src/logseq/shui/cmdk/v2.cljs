@@ -8,7 +8,34 @@
 
 (def state (atom {:current-engine "All"
                   :highlight-index 0 
-                  :button {:text "Open" :theme :gray :shortcut ["return"]}}))
+                  :button {:text "Open" :theme :gray :shortcut ["return"]}
+                  :query ""
+                  :results {:blocks [] :pages [] :files []}}))
+
+; (let [entity (-> @state :context :entity)
+;       block (-> @state :results :blocks first)
+;       preview-uuid (-> @state :preview-uuid)
+;       {:keys [blocks-container get-block-and-children get-current-repo]} (:context @state)]
+;   ; (keys (entity (:block/page block)))
+;   ; blockgc)
+;   ; (blocks-container
+;   ;   (get-block-and-children (get-current-repo) preview-uuid) 
+;   ;   {:id preview-uuid :preview? true}))
+;   ; puuid)
+;   (get-block-and-children (get-current-repo) (keyword preview-uuid)))
+;   ; preview-uuid)
+;   ; (get-current-repo))
+
+; "6492d9e2-7554-4015-a28b-d6acbb6c1a19"
+; "logseq_local_shui-graph"
+  
+
+(defn handle-query-change [e context]
+  (let [query (.. e -target -value)]
+    (swap! state assoc :query query)
+    (when (and (seq query) (seq (str/trim query)))
+      (-> ((:search context) query)
+          (.then #(swap! state assoc :results %))))))
 
 (defn get-results []
   [])
@@ -60,9 +87,16 @@
   (fn []
     (swap! state assoc :button {:text text :theme theme :shortcut (map name shortcut)})))
 
+(defn button-updater-with-preview [preview-uuid text theme & shortcut]
+  (fn [] 
+    (apply button-updater text theme shortcut)
+    (if (string? preview-uuid)
+      (swap! state assoc :preview-uuid (uuid preview-uuid))
+      (swap! state assoc :preview-uuid preview-uuid))))
+
 (rum/defc results < rum/reactive []
   (let [state-value (rum/react state)
-        {:keys [current-engine highlight-index]} state-value
+        {:keys [current-engine highlight-index results]} state-value
         filtered-actions (when (#{"All" "Actions"} current-engine) 
                            [{:icon-theme :color :icon "plus" :text "Quick capture" :info "Add a block to todays journal page" :on-highlight (button-updater "Quick capture" :color :return)}
                             {:icon-theme :gradient :icon "question-mark" :text "Generate short answer" :on-highlight (button-updater "Generate" :gradient :return)} 
@@ -78,12 +112,16 @@
                                {:icon-theme :gradient :icon "messages" :text "Chat" :info "Chat with an AI about any topic" :on-highlight (button-updater "Start chat" :gradient :return)} 
                                {:icon-theme :gradient :icon "question-mark" :text "Generate short answer" :on-highlight (button-updater "Generate" :gradient :return)}])
         filtered-blocks  (when (#{"All" "Blocks"} current-engine) 
-                           [{:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "When working on cmdk, we want to display blocks that appear from search. These can have quite a long body of text, and that body of text should potentially be truncated"} 
-                            {:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "Of course, that truncated text should be truncated in a way that makes sense, and doesn't cut off in the middle of a word, and contains the search query if there is one"} 
-                            {:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "We should play around with displaying the blocks hierarchy, currently it's very noisy, and I'm not sure if it's adding much value. It's possible that the preview will be a sufficient replacement"}])
+                           (->> (:blocks results) 
+                                (map #(hash-map :title (:block/content %) :on-highlight (button-updater-with-preview (:block/uuid %) "Open" :gray :return) :icon-theme :gray :icon "block"))))
+                           ; [{:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "When working on cmdk, we want to display blocks that appear from search. These can have quite a long body of text, and that body of text should potentially be truncated"} 
+                           ;  {:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "Of course, that truncated text should be truncated in a way that makes sense, and doesn't cut off in the middle of a word, and contains the search query if there is one"} 
+                           ;  {:icon-theme :gray :icon "block" :title "Not a real document" :on-highlight (button-updater "Open" :gray :return) :text "We should play around with displaying the blocks hierarchy, currently it's very noisy, and I'm not sure if it's adding much value. It's possible that the preview will be a sufficient replacement"}])
         filtered-pages   (when (#{"All" "Pages"} current-engine)
-                           [{:icon-theme :gray :icon "page" :text "Memo/CMDK" :on-highlight (button-updater "Open" :gray :return)} 
-                            {:icon-theme :gray :icon "page" :text "Logseq Logo Community Contest" :on-highlight (button-updater "Open" :gray :return)}]) 
+                           (->> (:pages results) 
+                                (map #(hash-map :title % :on-highlight (button-updater "Open" :gray :return) :icon-theme :gray :icon "page"))))
+                           ; [{:icon-theme :gray :icon "page" :text "Memo/CMDK" :on-highlight (button-updater "Open" :gray :return)} 
+                           ;  {:icon-theme :gray :icon "page" :text "Logseq Logo Community Contest" :on-highlight (button-updater "Open" :gray :return)}]) 
         grouped-items    (->> [["Actions" filtered-actions] ["Actions" filtered-qc-actions] ["Actions" filtered-ai-actions] ["Blocks" filtered-blocks] ["Pages" filtered-pages]]
                               (filter #(not-empty (second %))))
         item-count       (count (mapcat second grouped-items))
@@ -105,8 +143,34 @@
         (for [item items]
           (result-item (assoc item :highlighted (= item highlight-item) :on-highlight-dep current-engine)))])]))
 
-(rum/defc preview []
-  [:div "Preview"])
+(rum/defc preview < rum/reactive 
+  [_ {:keys [blocks-container get-block-and-children get-current-repo entity get-page page-cp get-page-blocks-no-cache get-block-children page] :as context}]
+  (let [state-value (rum/react state)
+        preview-uuid (:preview-uuid state-value)
+        preview-entity (entity [:block/uuid preview-uuid])
+        preview-page (:block/page preview-entity)
+        preview-page-uuid (:block/uuid preview-page)
+        preview-page-name (:block/name preview-page)]
+    (-> {:preview-uuid preview-uuid :preview-page-uuid preview-page-uuid :preview-page-name preview-page-name} 
+        pr-str 
+        js/console.log)
+    [:div 
+     ;; page 
+     (page {:page-name preview-page-name})]))
+     ; (page-cp {:preview? true
+     ;           :contents-page? (= "contents" (str/lower-case (str preview-page-name))) 
+     ;           :children (get-block-children (get-current-repo) preview-page-uuid)}
+     ;          preview-page)]))
+     ;; block
+     ; (blocks-container
+     ;   (get-block-and-children (get-current-repo) preview-uuid) 
+     ;   ; (get-block-and-children (get-current-repo) preview-page-uuid) 
+     ;   ; (get-page preview-page-uuid) 
+     ;   {:id preview-uuid :preview? true})]))
+
+; (let [preview-uuid (:preview-uuid @state)
+;       entity (-> @state :context :entity)]
+;   (keys (:block/page (entity [:block/uuid preview-uuid]))))
 
 (rum/defc actions < rum/reactive []
   (let [state-value (rum/react state)
@@ -129,10 +193,14 @@
     [:input {:class "w-full border-0 px-6 bg-transparent"
              :type "text"}]]])
 
-(rum/defc search []
-  [:input {:class "w-full border-0 px-6"
-           :type "text" 
-           :placeholder "Search"}])
+(rum/defc search < rum/reactive [context]
+  (let [state-value (rum/react state)
+        query (:query state-value)]
+    [:input {:class "w-full border-0 px-6"
+             :type "text" 
+             :placeholder "Search"
+             :value query
+             :on-change #(handle-query-change % context)}]))
 
 (rum/defc header < rum/reactive 
   [context]
@@ -145,7 +213,7 @@
      (engines context)
      (if (= current-engine "Quick capture")
        (quick-capture)
-       (search))]))
+       (search context))]))
 
 (defn prev-engine [current-engine]
   (->> ["All" "Pages" "Blocks" "Quick capture" "AI" "All"]
@@ -179,25 +247,31 @@
       #(js/window.removeEventListener "keydown" keydown-handler))
     []))
 
+(rum/defc body < rum/reactive [context]
+  (let [state-value (rum/react state)
+        preview-uuid (:preview-uuid state-value)]
+    (if preview-uuid
+      [:div.grid.grid-cols-2
+       (results)
+       (preview preview-uuid context)]
+      [:div.grid.grid-cols-1 
+       (results)])))
+  
+
 (rum/defc root < rum/reactive
   {:did-mount (fn [_] 
                 (js/window.removeEventListener "keydown" keydown-handler)
                 (js/window.addEventListener "keydown" keydown-handler))
    :will-unmount (fn [_] (js/window.removeEventListener "keydown" keydown-handler))}
   [props context]
+  (swap! state assoc :context context)
   ; (use-cmdk-keyboard-bindings!)
-  (let [preview-data (get-preview)] 
-    [:div.-m-8 {:style {:background-color "var(--lx-gray-02)"
-                        :width "75vw" 
-                        :max-width 800}}
-     (header context)
-     (if preview-data
-       [:div.grid.grid-cols-2
-        (results)
-        (preview)]
-       [:div.grid.grid-cols-1 
-        (results)])
-     [:div
-      (actions)]]))
+  [:div.-m-8 {:style {:background-color "var(--lx-gray-02)"
+                      :width "75vw" 
+                      :max-width 800}}
+   (header context)
+   (body context)
+   [:div
+    (actions)]])
    
 

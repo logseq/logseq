@@ -17,65 +17,173 @@
   @apply text-sm py-1 px-3;
 }
 
+.shui__button-tiled {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.shui__button-tiled .shui__button__tile {
+  @apply flex items-center justify-center text-center;
+}
+
+.shui__button-tiled.shui__button-size-md .shui__button__tile {
+  @apply h-6 w-6;       
+}
+
+.shui__button__tile-separator {
+  @apply w-px h-full bg-white/10;
+}
+
 .shui__button-theme-color {
-  background: or(--lx-accent-09, --ls-active-primary-color);
+  background: or(--lx-accent-09, --rx-blue-09);
+}
+
+.shui__button-theme-color:hover {
+  background: or(--lx-accent-10, --rx-blue-10);
+}
+
+.shui__button-theme-color:active {
+  background: or(--lx-accent-08, --rx-blue-08);
 }
 
 .shui__button-theme-gray {
   background: or(--lx-gray-05, --ls-quaternary-background-color);
 }
 
+.shui__button-theme-gray:hover {
+  background: or(--lx-gray-06, --ls-quaternary-background-color);
+}
+
+.shui__button-theme-gray:active {
+  background: or(--lx-gray-04, --ls-quaternary-background-color);
+}
+
 .shui__button-theme-gradient {
-  background: linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC);
+  --depth-shadow-from: rgba(2, 23, 53, 0.70);
+  --depth-shadow-to: rgba(2, 23, 53, 0.00);
 }
 
-.shui__button-depth-1:before {
-  @apply absolute inset-0;
-  border-radius: 0.25rem;
-  content: "";
-  padding: 1px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box,
-                linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+.shui__button-theme-gradient:hover {
+  --depth-shadow-from: rgba(2, 23, 53, 0.30);
+  --depth-shadow-to: rgba(2, 23, 53, 0.00);
 }
 
-.shui__button-depth-1:after {
-  @apply absolute inset-0;
-  border-radius: 0.25rem;
-  content: "";
-  padding: 1px;
-  background: linear-gradient(to top, rgba(0,0,0,0.2), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box,
-                linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+.shui__button-theme-gradient:active {
+  --depth-shadow-from: rgba(0, 0, 0, 0);
+  --depth-shadow-to: rgba(0, 0, 0, 0);
 }
 
-.shui__button-depth-2:before {
-  @apply absolute inset-0;
-  border-radius: 0.25rem;
-  content: "";
-  padding: 1px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.6), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box,
-                linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+.shui__button-theme-gradient.shui__button-color-,
+.shui__button-theme-gradient.shui__button-color-indigo,
+.shui__button-theme-gradient.shui__button-color-blue,
+.shui__button-theme-gradient.shui__button-color-sky,
+.shui__button-theme-gradient.shui__button-color-cyan {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-indigo-09) 0%, var(--rx-blue-09) 33.85%, var(--rx-sky-09) 64.06%, var(--rx-cyan-09) 100%);
 }
 
-.shui__button-depth-2:after {
-  @apply absolute inset-0;
-  border-radius: 0.25rem;
-  content: "";
-  padding: 1px;
-  background: linear-gradient(to top, rgba(0,0,0,0.4), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box,
-                linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+.shui__button-theme-gradient.shui__button-color-tomato,
+.shui__button-theme-gradient.shui__button-color-red,
+.shui__button-theme-gradient.shui__button-color-crimson,
+.shui__button-theme-gradient.shui__button-color-pink,
+.shui__button-theme-gradient.shui__button-color-plum,
+.shui__button-theme-gradient.shui__button-color-purple,
+.shui__button-theme-gradient.shui__button-color-violet {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-tomato-09) 0%, var(--rx-red-09) 16.66%, var(--rx-crimson-09) 33.33%, var(--rx-pink-09) 50%, var(--rx-plum-09) 66.66%, var(--rx-purple-09) 83.33%, var(--rx-violet-09) 100%);
 }
+
+.shui__button-theme-gradient.shui__button-color-green,
+.shui__button-theme-gradient.shui__button-color-mint,
+.shui__button-theme-gradient.shui__button-color-teal {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-teal-09) 0%, var(--rx-mint-09) 50%, var(--rx-green-09) 100%);
+}
+
+.shui__button-theme-gradient.shui__button-color-grass,
+.shui__button-theme-gradient.shui__button-color-lime {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-grass-09) 0%, var(--rx-lime-09) 100%);
+}
+
+.shui__button-theme-gradient.shui__button-color-yellow,
+.shui__button-theme-gradient.shui__button-color-amber,
+.shui__button-theme-gradient.shui__button-color-orange,
+.shui__button-theme-gradient.shui__button-color-brown {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-yellow-09) 0%, var(--rx-amber-09) 33.33%, var(--rx-orange-09) 66.66%, var(--rx-brown-09) 100%);
+}
+
+/* .shui__button-theme-gradient:hover { */
+  /* background: linear-gradient(37deg, rgba(2, 23, 53, 0.30) 0%, rgba(2, 23, 53, 0.00) 100%), linear-gradient(135deg, #8AE8FF 0%, #5373E7 33.85%, #369EFF 64.06%, #00B1CC 100%); */
+/* } */
+
+/* Shadow/xs */
+/* box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05); */
+/* } */
+
+.shui__button-depth-1 {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 
+              inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
+}
+
+.shui__button-depth-1:hover {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 
+              inset 0 -2px 0 0 rgba(0, 0, 0, 0.15);
+}
+
+.shui__button-depth-2 {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), 
+              inset 0 -1px 0 0 rgba(0, 0, 0, 0.2);
+}
+
+/* .shui__button-depth-1:before { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .shui__button-depth-1:after { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to top, rgba(0,0,0,0.2), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .shui__button-depth-2:before { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to bottom, rgba(255,255,255,0.6), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .shui__button-depth-2:after { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to top, rgba(0,0,0,0.4), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
 
 .shui__button-shortcut-key:first-of-type {
   @apply ml-2;

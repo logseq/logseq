@@ -319,21 +319,21 @@
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "contents" :contents))}
+                                                                    (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                         (when-let [page (get-current-page)]
-                                                           (state/sidebar-add-block!
-                                                            repo
-                                                            page
-                                                            :page-graph)))}
+                                                                    (when-let [page (get-current-page)]
+                                                                      (state/sidebar-add-block!
+                                                                       repo
+                                                                       page
+                                                                       :page-graph)))}
           (t :right-side-bar/page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "help" :help))}
+                                                                    (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
         (when config/dev? [:div.text-sm
