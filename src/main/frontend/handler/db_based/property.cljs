@@ -335,7 +335,7 @@
 (defn batch-remove-property!
   [repo block-ids key]
   (when-let [property-uuid (if (uuid? key)
-                             uuid
+                             key
                              (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name key))])))]
     (let [txs (mapcat
                (fn [id]
