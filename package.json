@@ -127,7 +127,7 @@
         "mldoc": "1.5.7",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
-        "pdfjs-dist": "2.14.305",
+        "pdfjs-dist": "^3.9.179",
         "photoswipe": "^5.3.7",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",
