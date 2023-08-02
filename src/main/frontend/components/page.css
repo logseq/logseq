@@ -102,7 +102,7 @@
 
     background-color: var(--color-level-1);
     white-space: nowrap;
-    top: -32px;
+    top: -40px;
     z-index: 1;
 
     @screen md {
