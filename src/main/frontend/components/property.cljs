@@ -5,6 +5,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.config :as config]
@@ -407,7 +408,12 @@
         result
         {:class "search-results"
          :on-chosen (fn [chosen]
-                      (reset! *property-key chosen)
+                      (if (and (contains? gp-property/db-built-in-properties-keys-str chosen)
+                               (not (gp-property/db-user-facing-built-in-properties (keyword chosen))))
+                        (do (notification/show! "Can't add a built-in property" :warning)
+                            (reset! *property-key nil)
+                            (exit-edit-property))
+                        (reset! *property-key chosen))
                       (reset! *search? false))
          :item-render #(search-item-render @*property-key %)}))]))
 

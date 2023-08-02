@@ -108,6 +108,10 @@
    :filters {:schema {:type :map}}
    :exclude-from-graph-view {:schema {:type :checkbox}}})
 
+(def db-user-facing-built-in-properties
+  "These are built-in properties that users can see and use"
+  #{:alias :tags})
+
 (defonce db-built-in-properties-keys
   (set (keys db-built-in-properties)))
 
