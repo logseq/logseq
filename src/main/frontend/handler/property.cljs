@@ -4,10 +4,10 @@
             [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]))
 
 (def builtin-schema-types db-property/builtin-schema-types)
+(def internal-builtin-schema-types db-property/internal-builtin-schema-types)
 
 (defn remove-block-property!
   [repo block-id key]

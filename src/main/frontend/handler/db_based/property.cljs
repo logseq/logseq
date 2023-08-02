@@ -59,6 +59,7 @@
                logseq-object?]
 
    ;; internal usage
+   :keyword  keyword?
    :map      map?
    :coll     coll?
    :any      some?})
