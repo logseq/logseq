@@ -184,6 +184,7 @@
  :page/unfavorite "Unfavorite page"
  :page/show-journals "Show journals"
  :page/show-whiteboards "Show whiteboards"
+ :page/actions "Page actions"
  :block/name "Page name"
  :page/earlier "Earlier"
  :page/copy-page-url "Copy page URL"

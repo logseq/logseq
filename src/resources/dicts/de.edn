@@ -328,7 +328,6 @@
  :page/updated-at "Aktualisiert am"
  :page/version-history "Seitenverlauf anzeigen"
  :page/whiteboard-to-journal-error "Whiteboards können nicht den gleichen Namen wie ein Journal verwenden"
- :page/actions "Page actions"
 
  :paginates/next "Weiter"
  :paginates/pages "Total {1} Seiten"
