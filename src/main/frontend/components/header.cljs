@@ -1,7 +1,6 @@
 (ns frontend.components.header
   (:require [cljs-bean.core :as bean]
             [frontend.components.export :as export]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
@@ -79,67 +78,63 @@
 (rum/defc dropdown-menu < rum/reactive
   < {:key-fn #(identity "repos-dropdown-menu")}
   [{:keys [current-repo t]}]
-  (let [page-menu (page-menu/page-menu nil)
-        page-menu-and-hr (when (seq page-menu)
-                           (concat page-menu [{:hr true}]))]
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:button.button.icon.toolbar-dots-btn
-        {:on-click toggle-fn
-         :title (t :header/more)}
-        (ui/icon "dots" {:size ui/icon-size})])
-     (->>
-      [(when (state/enable-editing?)
-         {:title (t :settings)
-          :options {:on-click state/open-settings!}
-          :icon (ui/icon "settings")})
+  (ui/dropdown-with-links
+   (fn [{:keys [toggle-fn]}]
+     [:button.button.icon.toolbar-dots-btn
+      {:on-click toggle-fn
+       :title (t :header/more)}
+      (ui/icon "dots" {:size ui/icon-size})])
+   (->>
+    [(when (state/enable-editing?)
+       {:title (t :settings)
+        :options {:on-click state/open-settings!}
+        :icon (ui/icon "settings")})
 
-       (when config/lsp-enabled?
-         {:title (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
-          :icon (ui/icon "apps")})
+     (when config/lsp-enabled?
+       {:title (t :plugins)
+        :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
+        :icon (ui/icon "apps")})
 
-       (when config/lsp-enabled?
-         {:title (t :themes)
-          :options {:on-click #(plugins/open-select-theme!)}
-          :icon (ui/icon "palette")})
+     (when config/lsp-enabled?
+       {:title (t :themes)
+        :options {:on-click #(plugins/open-select-theme!)}
+        :icon (ui/icon "palette")})
 
-       (when current-repo
-         {:title (t :export-graph)
-          :options {:on-click #(state/set-modal! export/export)}
-          :icon (ui/icon "database-export")})
+     (when current-repo
+       {:title (t :export-graph)
+        :options {:on-click #(state/set-modal! export/export)}
+        :icon (ui/icon "database-export")})
 
-       (when (and current-repo (state/enable-editing?))
-         {:title (t :import)
-          :options {:href (rfe/href :import)}
-          :icon (ui/icon "file-upload")})
+     (when (and current-repo (state/enable-editing?))
+       {:title (t :import)
+        :options {:href (rfe/href :import)}
+        :icon (ui/icon "file-upload")})
 
-       (when-not config/publishing? 
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :join-community)]]
-          :options {:href "https://discuss.logseq.com"
-                    :title (t :discourse-title)
-                    :target "_blank"}
-          :icon (ui/icon "brand-discord")})
+     (when-not config/publishing?
+       {:title [:div.flex-row.flex.justify-between.items-center
+                [:span (t :join-community)]]
+        :options {:href "https://discuss.logseq.com"
+                  :title (t :discourse-title)
+                  :target "_blank"}
+        :icon (ui/icon "brand-discord")})
 
-       (when-not config/publishing?
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :help/bug)]]
-          :options {:href (rfe/href :bug-report)}
-          :icon (ui/icon "bug")})
+     (when-not config/publishing?
+       {:title [:div.flex-row.flex.justify-between.items-center
+                [:span (t :help/bug)]]
+        :options {:href (rfe/href :bug-report)}
+        :icon (ui/icon "bug")})
 
-       (when config/publishing?
-         {:title (t :toggle-theme)
-          :options {:on-click #(state/toggle-theme!)}
-          :icon (ui/icon "bulb")})
+     (when config/publishing?
+       {:title (t :toggle-theme)
+        :options {:on-click #(state/toggle-theme!)}
+        :icon (ui/icon "bulb")})
 
-       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (t :logout-user (user-handler/email))
-          :options {:on-click #(user-handler/logout)}
-          :icon  (ui/icon "logout")})]
-      (concat page-menu-and-hr)
-      (remove nil?))
-     {})))
+     (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
+       {:title (t :logout-user (user-handler/email))
+        :options {:on-click #(user-handler/logout)}
+        :icon  (ui/icon "logout")})]
+    (remove nil?))
+   {}))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}

@@ -6,6 +6,7 @@
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.hierarchy :as hierarchy]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
@@ -447,8 +448,16 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.ls-page-title.flex-1.flex-row.w-full
-                (page-title page-name icon title format fmt-journal?)])
+               [:div.ls-page-title.flex-1.flex.w-full.items-center.sm:mb-8.mb-8
+                (page-title page-name icon title format fmt-journal?)
+                (ui/dropdown-with-links
+                 (fn [{:keys [toggle-fn]}]
+                   [:button.button.icon.toolbar-dots-btn
+                    {:on-click toggle-fn
+                     :title (t :header/more)}
+                    (ui/icon "dots" {:size ui/icon-size})])
+                 (page-menu/page-menu nil)
+                 {})])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
@@ -733,27 +742,25 @@
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-   (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
-  [:div.sidebar-item.flex-col
-             [:div.flex.items-center.justify-between.mb-0
-              [:span (t :right-side-bar/show-journals)]
-              [:div.mt-1
-               (ui/toggle show-journals-in-page-graph? ;my-val;
-                           (fn []
-                             (let [value (not show-journals-in-page-graph?)]
-                               (reset! *show-journals-in-page-graph? value)
-                               ))
-                          true)]
-              ]
+  (let [show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
+    [:div.sidebar-item.flex-col
+     [:div.flex.items-center.justify-between.mb-0
+      [:span (t :right-side-bar/show-journals)]
+      [:div.mt-1
+       (ui/toggle show-journals-in-page-graph? ;my-val;
+                  (fn []
+                    (let [value (not show-journals-in-page-graph?)]
+                      (reset! *show-journals-in-page-graph? value)))
+                  true)]]
 
-   (graph/graph-2d {:nodes (:nodes graph)
-                    :links (:links graph)
-                    :width 600
-                    :height 600
-                    :dark? dark?
-                    :register-handlers-fn
-                    (fn [graph]
-                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
+     (graph/graph-2d {:nodes (:nodes graph)
+                      :links (:links graph)
+                      :width 600
+                      :height 600
+                      :dark? dark?
+                      :register-handlers-fn
+                      (fn [graph]
+                        (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
@@ -800,8 +807,8 @@
   [:th
    {:class [(name key)]}
    [:a.fade-link {:on-click (fn []
-                    (reset! by-item key)
-                    (swap! desc? not))}
+                              (reset! by-item key)
+                              (swap! desc? not))}
     [:span.flex.items-center
      [:span.mr-1 title]
      (when (= @by-item key)
@@ -845,18 +852,18 @@
 
       [:span.pr-2
        (ui/button
-         (t :cancel)
-         :intent "logseq"
-         :on-click close-fn)]
+        (t :cancel)
+        :intent "logseq"
+        :on-click close-fn)]
 
       (ui/button
-        (t :yes)
-        :on-click (fn []
-                    (close-fn)
-                    (doseq [page-name (map :block/name pages)]
-                      (page-handler/delete! page-name #()))
-                    (notification/show! (t :tips/all-done) :success)
-                    (js/setTimeout #(refresh-fn) 200)))]]))
+       (t :yes)
+       :on-click (fn []
+                   (close-fn)
+                   (doseq [page-name (map :block/name pages)]
+                     (page-handler/delete! page-name #()))
+                   (notification/show! (t :tips/all-done) :success)
+                   (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
   "Pagination component, like `<< <Prev 1/10 Next> >>`.

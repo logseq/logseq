@@ -520,7 +520,6 @@ i.ti {
 
 /* region FIXME: override elements (?) */
 h1.title {
-  margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
@@ -897,10 +896,6 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 }
 
 html.is-mobile {
-  h1.title {
-    margin-bottom: 10px;
-  }
-
   #journals .journal-item:first-child {
     margin-top: 5px;
   }
