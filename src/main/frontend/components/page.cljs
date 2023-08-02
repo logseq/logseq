@@ -438,7 +438,7 @@
          [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
          [:div.relative
           (when (and (not sidebar?) (not block?))
-            [:div.flex.flex-row.space-between
+            [:div.flex.flex-row.overflow-hidden
              (when (or (mobile-util/native-platform?) (util/mobile?))
                [:div.flex.flex-row.pr-2
                 {:style {:margin-left -15}
@@ -448,7 +448,7 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.ls-page-title.flex-1.flex.w-full.items-center.sm:mb-8.mb-8
+               [:div.ls-page-title.flex-1.flex.items-center.sm:mb-8.mb-8
                 (page-title page-name icon title format fmt-journal?)
                 (ui/dropdown-with-links
                  (fn [{:keys [toggle-fn]}]
