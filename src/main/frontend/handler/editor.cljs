@@ -2161,15 +2161,21 @@
 
                          :else
                          true)]
-         (outliner-tx/transact!
-           {:outliner-op :insert-blocks
-            :created-from-journal-template? journal?}
-           (save-current-block!)
-           (let [result (outliner-core/insert-blocks! blocks'
-                                                      target
-                                                      (assoc opts
-                                                             :sibling? sibling?'))]
-             (edit-last-block-after-inserted! result))))))))
+         (try
+           (outliner-tx/transact!
+            {:outliner-op :insert-blocks
+             :created-from-journal-template? journal?}
+            (save-current-block!)
+            (let [result (outliner-core/insert-blocks! blocks'
+                                                       target
+                                                       (assoc opts
+                                                              :sibling? sibling?'))]
+              (edit-last-block-after-inserted! result)))
+           (catch :default ^js/Error e
+             (notification/show!
+              [:p.content
+               (util/format "Template insert error: %s" (.-message e))]
+              :error))))))))
 
 (defn template-on-chosen-handler
   [element-id]
