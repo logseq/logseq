@@ -519,10 +519,10 @@
   resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.2.2.tgz#583bd8c8c66d5ff05ea70906475efaa078e839a3"
   integrity sha512-0WeKNhq8PsjvunOqNEd9aSM4tgiClwhonXgXzrQ4KYj8VoyLaEAyEWWGOAoE7mwR+aqwM+bMB4MxuNFywnUb8A==
 
-"@logseq/logmind@^0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@logseq/logmind/-/logmind-0.1.0.tgz#dda13b967ad0cf7c64b4ad63a24b42790501ff16"
-  integrity sha512-dyoHNDn9/H9r8dlUVnURuBCzPVVnJtUkY/GJiZWYtWkVjbK5LN5ZGN7PCp2BKAKE7Gz+/sHWwIb9yVPNDJP9XQ==
+"@logseq/logmind@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.yarnpkg.com/@logseq/logmind/-/logmind-0.1.2.tgz#026eed5cc225f5df1b7d2cc63f665d46f7209c3a"
+  integrity sha512-JIoWslOW2T94YRVCk8HwwBGRZUD1kQks1v+00MHLwRBni/9nw/BjeSuEmOPhYb2WLBELRmwprqtddyQM2Kvqkw==
   dependencies:
     "@xenova/transformers" "^2.3.0"
     compromise "^14.8.0"

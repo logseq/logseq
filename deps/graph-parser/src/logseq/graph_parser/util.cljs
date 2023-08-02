@@ -64,6 +64,8 @@
     (not (re-find #"[# \t\r\n]+" tag-name))))
 
 (defn safe-subs
+  "Cut substring from start to end, but make sure start and end are within the
+   string. No error will be thrown if start or end is out of range."
   ([s start]
    (let [c (count s)]
      (safe-subs s start c)))
