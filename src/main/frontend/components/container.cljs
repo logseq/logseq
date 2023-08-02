@@ -140,25 +140,26 @@
   [t]
   (let [favorites (->> (:favorites (state/sub-config))
                        (remove string/blank?)
-                       (filter string?))]
+                       (filter string?))
+        favorite-entities (->> favorites
+                               (mapv #(db/entity [:block/name (util/safe-page-name-sanity-lc %)]))
+                               (remove nil?))]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
       [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
      {:class "favorites"
-      :count (count favorites)
+      :count (count favorite-entities)
       :edit-fn
       (fn [e]
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
-     (when (seq favorites)
+     (when (seq favorite-entities)
        [:ul.favorites.text-sm
-        (for [name favorites]
-          (when-not (string/blank? name)
-            (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-              (let [icon (get-page-icon entity)]
-                (favorite-item t name icon)))))]))))
+        (for [entity favorite-entities]
+          (let [icon (get-page-icon entity)]
+            (favorite-item t (:block/name entity) icon)))]))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
