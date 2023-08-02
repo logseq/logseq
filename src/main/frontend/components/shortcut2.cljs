@@ -67,7 +67,7 @@
 
     [:div.keyboard-filter-record
      [:h2
-      [:strong "Keystroke filter"]
+      [:strong (t :shortcut.keymap/keystroke-filter)]
       [:span.flex.space-x-2
        (when keypressed?
          [:a.flex.items-center
@@ -76,7 +76,7 @@
         {:on-click #(do (close-fn) (set-keystroke! ""))} (ui/icon "x" {:size 12})]]]
      [:div.wrap.p-2
       (if-not keypressed?
-        [:small "Press any sequence of keys to filter shortcuts"]
+        [:small (t :shortcut.keymap/keystroke-record-desc)]
         (when-not (string/blank? keystroke)
           (ui/render-keyboard-shortcut keystroke)))]]))
 
@@ -94,7 +94,7 @@
 
      [:span.search-input-wrap
       [:input.form-input.is-small
-       {:placeholder "Search"
+       {:placeholder (t :shortcut.keymap/search)
         :ref         *search-ref
         :value       (or q "")
         :auto-focus  true
@@ -136,13 +136,13 @@
           (when (seq filters)
             (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
 
-       (for [t [:All :Disabled :Unset :Custom]
-             :let [all? (= t :All)
-                   checked? (or (contains? filters t) (and all? (nil? (seq filters))))]]
+       (for [k [:All :Disabled :Unset :Custom]
+             :let [all? (= k :All)
+                   checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
 
-         {:title   (name t)
+         {:title   (t (keyword :shortcut.keymap (string/lower-case (name k))))
           :icon    (ui/icon (if checked? "check" "circle"))
-          :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters t))))}})
+          :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
 
        nil)]))
 
@@ -177,7 +177,7 @@
    (for [[g ks] conflicts-map]
      [:section.relative
       [:h2 (ui/icon "alert-triangle" {:size 15})
-       [:span "Keymap conflicts for"]
+       [:span (t :shortcut.keymap/conflicts-for-label)]
        [:code (shortcut-utils/decorate-binding g)]]
       [:ul
        (for [v (vals ks)
@@ -275,7 +275,10 @@
       :tab-index -1
       :ref       *ref-el}
      [:div.sm:w-lsm
-      [:p.mb-4 "Customize shortcuts for the " [:b action-name] " action."]
+      [:h1.text-2xl.pb-2
+       (t :shortcut.keymap/customize-for-label)]
+
+      [:p.mb-4.text-md [:b action-name]]
 
       [:div.shortcuts-keys-wrap
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
@@ -304,7 +307,7 @@
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
-           [:small.pr-1 "Press any sequence of keys to set a shortcut"] (ui/icon "keyboard" {:size 14})])]]]
+           [:small.pr-1 (t :shortcut.keymap/keystroke-record-setup-label)] (ui/icon "keyboard" {:size 14})])]]]
 
      ;; conflicts results
      (when (seq key-conflicts)
@@ -315,13 +318,13 @@
       (when (sequential? binding)
         [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
          {:on-click #(set-current-binding! binding)}
-         "Restore to system default"
+         (t :shortcut.keymap/restore-to-default)
          (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
            [:code.ml-1 it])])
 
       [:span
        (ui/button
-         "Save"
+         (t :save)
          :background (when dirty? "red")
          :disabled (not dirty?)
          :on-click (fn []
@@ -338,7 +341,7 @@
 
        [:a.reset-btn
         {:on-click (fn [] (set-current-binding! (or user-binding binding)))}
-        "Reset"]]]]))
+        (t :reset)]]]]))
 
 (defn build-categories-map
   []
@@ -385,7 +388,8 @@
     [:div.cp__shortcut-page-x
      [:header.relative
       [:h2.text-xs.opacity-70
-       (str "Total shortcuts "
+       (str (t :shortcut.keymap/total)
+            " "
             (if ready?
               (apply + (map #(count (second %)) result-list-map))
               " ..."))]
@@ -455,9 +459,14 @@
                         (or user-binding (false? user-binding))
                         [:code.dark:bg-green-800.bg-green-300
                          (if unset?
-                           "Unset"
-                           (str "Custom: "
-                                (if disabled? "Disabled" (bean/->js (map #(if (false? %) "Disabled" (shortcut-utils/decorate-binding %)) user-binding)))))]
+                           (t :shortcut.keymap/unset)
+                           (str (t :shortcut.keymap/custom) ": "
+                                (if disabled?
+                                  (t :shortcut.keymap/disabled)
+                                  (bean/->js
+                                    (map #(if (false? %)
+                                            (t :shortcut.keymap/disabled)
+                                            (shortcut-utils/decorate-binding %)) user-binding)))))]
 
                         (not unset?)
                         (for [x binding]
