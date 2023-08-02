@@ -34,7 +34,8 @@
                    state))}
   [state repo property ]
   (let [*property-name (::property-name state)
-        *property-schema (::property-schema state)]
+        *property-schema (::property-schema state)
+        disabled? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))]
     [:div.property-configure
      [:h1.title "Configure property"]
 
@@ -43,6 +44,7 @@
        [:label "Name:"]
        [:input.form-input
         {:on-change #(reset! *property-name (util/evalue %))
+         :disabled disabled?
          :value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
@@ -52,19 +54,21 @@
                                (map (comp string/capitalize name))
                                (map (fn [type]
                                       {:label type
+                                       :disabled disabled?
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
                                                     (:type @*property-schema))})))]
          (ui/select schema-types
-           (fn [_e v]
-             (let [type (keyword (string/lower-case v))]
-               (swap! *property-schema assoc :type type)))))]
+                    (fn [_e v]
+                      (let [type (keyword (string/lower-case v))]
+                        (swap! *property-schema assoc :type type)))))]
 
       (when-not (= (:type @*property-schema) :checkbox)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
+                         :disabled disabled?
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
@@ -74,17 +78,19 @@
         (ui/ls-textarea
          {:on-change (fn [e]
                        (swap! *property-schema assoc :description (util/evalue e)))
+          :disabled disabled?
           :value (:description @*property-schema)})]]
 
       [:div
-       (ui/button
+       (when-not disabled?
+         (ui/button
          "Save"
          :on-click (fn []
                      (property-handler/update-property!
                       repo (:block/uuid property)
                       {:property-name @*property-name
                        :property-schema @*property-schema})
-                     (state/close-modal!)))]
+                     (state/close-modal!))))]
 
       (when config/dev?
         [:div {:style {:max-width 900}}

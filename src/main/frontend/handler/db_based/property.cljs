@@ -64,7 +64,7 @@
    :coll     coll?
    :any      some?})
 
-(def internal-builtin-schema-types #{:map :coll :any})
+(def internal-builtin-schema-types #{:keyword :map :coll :any})
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
