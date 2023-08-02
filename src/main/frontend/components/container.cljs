@@ -533,7 +533,7 @@
         (action-bar/action-bar))
 
       [:div.rounded-xl.cp__sidebar-main-content
-       {:class (when (not= route-name :whiteboards) "color-level")
+       {:class (when-not (contains? #{:whiteboard :whiteboards :graph} route-name) "color-level")
         :data-is-margin-less-pages margin-less-pages?
         :data-is-full-width        (or margin-less-pages?
                                        (contains? #{:all-files :all-pages :my-publishing} route-name))}
