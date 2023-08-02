@@ -2139,7 +2139,7 @@
                     sorted-blocks
                     (drop 1 sorted-blocks))]
        (when element-id
-         (insert-command! element-id "" format {}))
+         (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
        (let [exclude-properties [:id :template :template-including-parent]
              content-update-fn (fn [content]
                                  (->> content
@@ -2696,7 +2696,7 @@
             (delete-concat current-block)))
 
         :else
-        (delete-and-update 
+        (delete-and-update
           input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
 (defn keydown-backspace-handler
