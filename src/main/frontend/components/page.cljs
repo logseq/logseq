@@ -449,14 +449,7 @@
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex.items-center.sm:mb-8.mb-8
                 (page-title page-name icon title format fmt-journal?)
-                (ui/dropdown-with-links
-                 (fn [{:keys [toggle-fn]}]
-                   [:button.button.icon.toolbar-dots-btn
-                    {:on-click toggle-fn
-                     :title (t :header/more)}
-                    (ui/icon "dots" {:size ui/icon-size})])
-                 (page-menu/page-menu nil)
-                 {})])
+                (page-menu/page-actions-dropdown nil)])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

@@ -146,6 +146,7 @@ input.tl-text-input {
   z-index: 2000;
   gap: 4px;
   line-height: 1.4;
+  max-width: 70%;
 }
 
 .whiteboard-page-title {
@@ -155,11 +156,6 @@ input.tl-text-input {
   border-radius: 8px;
   border: 1px solid transparent;
   background: var(--ls-secondary-background-color);
-
-  &-root {
-    max-width: 70%;
-    overflow: hidden;
-  }
 
   .page-title-sizer-wrapper {
     width: calc(100% - 20px);

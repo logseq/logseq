@@ -39,20 +39,13 @@
                                 data-page-tags
                                 (assoc :data-page-tags data-page-tags))
 
-     [:a.flex-1
+     [:.flex-1
       (ui/foldable
        [:div.ls-page-title.flex-1.flex.items-center
         [:a.flex-1
          {:href (rfe/href :page {:name page})}
          (page/page-title (:block/name page-entity) "" title (db/get-page-format page-entity) true)]
-        (ui/dropdown-with-links
-         (fn [{:keys [toggle-fn]}]
-           [:button.button.icon.toolbar-dots-btn
-            {:on-click toggle-fn
-             :title (t :header/more)}
-            (ui/icon "dots" {:size ui/icon-size})])
-         (page-menu/page-menu page)
-         {})]
+        (page-menu/page-actions-dropdown page)]
 
 
        [:.sm:mt-8.mt-8

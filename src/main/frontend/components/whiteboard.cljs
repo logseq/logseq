@@ -4,6 +4,7 @@
             [frontend.components.content :as content]
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
@@ -280,6 +281,8 @@
                         (get-page-display-name page-name)
                         nil
                         false)]
+
+      (page-menu/page-actions-dropdown page-name)
 
       [:div.whiteboard-page-refs
        (references-count page-name

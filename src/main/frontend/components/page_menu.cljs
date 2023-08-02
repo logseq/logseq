@@ -178,3 +178,14 @@
                                       (:block/format page))))}})]
          (flatten)
          (remove nil?))))))
+
+(defn page-actions-dropdown
+  [page-name]
+  (ui/dropdown-with-links
+   (fn [{:keys [toggle-fn]}]
+     [:button.button.icon.toolbar-dots-btn
+      {:on-click toggle-fn
+       :title (t :page/actions)}
+      (ui/icon "dots" {:size ui/icon-size})])
+   (page-menu page-name)
+   {}))
