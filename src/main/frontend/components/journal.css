@@ -6,14 +6,8 @@
   }
 
   .journal-item {
-    border-top: 1px solid;
-    border-top-color: var(--ls-border-color, #738694);
-    padding: 24px 0;
-    min-height: 250px;
 
-    &:first-child {
-      padding-top: 0;
-      border-top: none;
+    &:first-child .journal.page {
       min-height: 500px;
     }
   }

@@ -317,7 +317,6 @@
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
                     (when-not (= (.-nodeName (.-target e)) "INPUT")
-                      (.preventDefault e)
                       (if (gobj/get e "shiftKey")
                         (when-let [page (db/pull repo '[*] [:block/name page-name])]
                           (state/sidebar-add-block!
@@ -438,7 +437,7 @@
          [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
          [:div.relative
           (when (and (not sidebar?) (not block?))
-            [:div.flex.flex-row.overflow-hidden
+            [:div.flex.flex-row
              (when (or (mobile-util/native-platform?) (util/mobile?))
                [:div.flex.flex-row.pr-2
                 {:style {:margin-left -15}

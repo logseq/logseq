@@ -1,15 +1,16 @@
 (ns frontend.components.journal
   (:require [clojure.string :as string]
             [frontend.components.page :as page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -34,34 +35,34 @@
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text-util/build-data-value page-names)))]
-    [:div.flex-1.journal.page (cond-> {}
+    [:div.flex.flex-col.journal.page (cond-> {}
                                 data-page-tags
                                 (assoc :data-page-tags data-page-tags))
 
-     (ui/foldable
-      [:a.initial-color.title.journal-title
-       {:href     (rfe/href :page {:name page})
-        :on-mouse-down (fn [e]
-                         (when (util/right-click? e)
-                           (state/set-state! :page-title/context {:page page})))
-        :on-click (fn [e]
-                    (when (gobj/get e "shiftKey")
-                      (when-let [page page-entity]
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page))
-                      (.preventDefault e)))}
-       [:h1.title
-        (gp-util/capitalize-all title)]]
+     [:a.flex-1
+      (ui/foldable
+       [:div.ls-page-title.flex-1.flex.items-center
+        [:a.flex-1
+         {:href (rfe/href :page {:name page})}
+         (page/page-title (:block/name page-entity) "" title (db/get-page-format page-entity) true)]
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           [:button.button.icon.toolbar-dots-btn
+            {:on-click toggle-fn
+             :title (t :header/more)}
+            (ui/icon "dots" {:size ui/icon-size})])
+         (page-menu/page-menu page)
+         {})]
 
-      (if today?
-        (blocks-cp repo page)
-        (ui/lazy-visible
-         (fn [] (blocks-cp repo page))
-         {:debug-id (str "journal-blocks " page)}))
 
-      {})
+       [:.sm:mt-8.mt-8
+        (if today?
+          (blocks-cp repo page)
+          (ui/lazy-visible
+           (fn [] (blocks-cp repo page))
+           {:debug-id (str "journal-blocks " page)}))]
+
+       {})]
 
      (page/today-queries repo today? false)
 
@@ -78,7 +79,7 @@
    (ui/infinite-list
     "main-content-container"
     (for [{:block/keys [name]} latest-journals]
-      [:div.journal-item.content {:key name}
+      [:div.content.color-level.rounded-xl.p-6.sm:p-12.mb-4.journal-item {:key name}
        (journal-cp name)])
     {:has-more (page-handler/has-more-journals?)
      :more-class "text-4xl"
