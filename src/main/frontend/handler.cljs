@@ -45,6 +45,7 @@
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
             [frontend.db.listener :as db-listener]
+            [frontend.db.rtc.core :as rtc-core]
             [cljs-bean.core :as bean]))
 
 (defn- set-global-error-notification!
@@ -87,6 +88,7 @@
     (-> (db-restore/restore-graph! repo)
         (p/then
          (fn []
+           (rtc-core/init-rtc-op-db repo)
            (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)

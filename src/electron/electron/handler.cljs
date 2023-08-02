@@ -33,7 +33,8 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [electron.rtc-handler]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))

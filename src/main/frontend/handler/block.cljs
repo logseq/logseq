@@ -60,9 +60,12 @@
 
 (defn indent-outdent-block!
   [block direction]
-  (let [opts {:outliner-op :move-blocks}]
+  (let [repo (state/get-current-repo)
+        opts (cond-> {:outliner-op :move-blocks}
+               (config/db-based-graph? repo)
+               (assoc :persist-op? true :repo repo))]
     (outliner-tx/transact! opts
-      (outliner-core/indent-outdent-blocks! [block] (= direction :right)))))
+                           (outliner-core/indent-outdent-blocks! [block] (= direction :right)))))
 
 (defn select-block!
   [block-uuid]

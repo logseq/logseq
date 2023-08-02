@@ -36,7 +36,8 @@
             [logseq.common.config :as common-config]
             [frontend.db.react :as react]
             [frontend.db.listener :as db-listener]
-            [frontend.modules.outliner.core :as outliner-core]))
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.db.rtc.core :as rtc-core]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -409,6 +410,7 @@
   (p/do!
    (state/set-db-restoring! true)
    (db-restore/restore-graph! repo)
+   (rtc-core/init-rtc-op-db repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))

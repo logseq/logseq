@@ -11,10 +11,10 @@
   (let [stmt (sqlite-db/prepare db "CREATE TABLE IF NOT EXISTS rtc_ops (
                          id   INTEGER PRIMARY KEY AUTOINCREMENT,
                          v    TEXT NOT NULL)"
-                                (str db-name))
-        init-stmt (sqlite-db/prepare db "INSERT INTO rtc_ops (v) VALUES (@v)" (str db-name))]
+                                (str db-name))]
     (.run ^object stmt)
-    (.run ^object init-stmt (clj->js (ds-op->sqlite-op {:local-tx 0})))))
+    (let [init-stmt (sqlite-db/prepare db "INSERT INTO rtc_ops (v) VALUES (@v)" (str db-name))]
+      (.run ^object init-stmt (clj->js (ds-op->sqlite-op {:local-tx 0}))))))
 
 (defn init!
   [graphs-dir repo]

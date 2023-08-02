@@ -15,7 +15,9 @@
             {:graph \"Which graph will be transacted to\"
              :outliner-op \"For example, :save-block, :insert-blocks, etc. \"
              :additional-tx \"Additional tx data that can be bundled together
-                              with the body in this macro.\"}
+                              with the body in this macro.\"
+             :persist-op? \"Boolean, store ops into db (sqlite)\"
+             :repo \"Needed when :persist-op? is true\"}
   `Example`:
   (transact! {:graph \"test\"}
     (insert-blocks! ...)
@@ -23,9 +25,10 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  (assert (or (map? opts) (symbol? opts)) (str "opts is not a map or symbol, type: " (type opts)))
+
   `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
          transaction-opts# frontend.modules.outliner.core/*transaction-opts*
+         _# (assert (or (map? ~opts) (symbol? ~opts)) (str "opts is not a map or symbol, type: " (type ~opts)))
          opts# (if transact-data#
                  (assoc ~opts :nested-transaction? true)
                  ~opts)
@@ -37,7 +40,7 @@
          ~@body)
        (binding [frontend.modules.outliner.core/*transaction-data* (transient [])
                  frontend.modules.outliner.core/*transaction-opts* (transient [])]
-         (conj! frontend.modules.outliner.core/*transaction-opts* transaction-opts# opts#)
+         (conj! frontend.modules.outliner.core/*transaction-opts* opts#)
          ~@body
          (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
                tx# (mapcat :tx-data r#)

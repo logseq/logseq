@@ -4,7 +4,8 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
-                                               poll! timeout]]))
+                                               poll! timeout]]
+            [electron.ipc :as ipc]))
 
 (def ws-addr config/RTC-WS-URL)
 
@@ -31,3 +32,9 @@
                                      (>! data-from-ws-chan data))))
 
   (set! (.-onclose (:ws @*ws)) (fn [_e] (println :ws-stopped))))
+
+
+(defn init-rtc-op-db
+  [repo]
+  (when (config/db-based-graph? repo)
+    (ipc/ipc :rtc/init repo)))
