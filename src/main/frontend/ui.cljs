@@ -163,7 +163,7 @@
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
-                       (string/split  #" |\+"))
+                       (string/split  #" "))
                    sequence)]
     [:span.keyboard-shortcut
      (map-indexed (fn [i key]

@@ -185,7 +185,7 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))
-           :shortcut ["⇧" "click"]}
+           :shortcut ["⇧+click"]}
           (t :content/open-in-sidebar))
 
          [:hr.menu-separator]
@@ -306,7 +306,7 @@
                     (state/get-current-repo)
                     block-ref-id
                     :block-ref))
-       :shortcut ["⇧" "click"]}
+       :shortcut ["⇧+click"]}
       (t :content/open-in-sidebar))
      (ui/menu-link
       {:key "copy"
