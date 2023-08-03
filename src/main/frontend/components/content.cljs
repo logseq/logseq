@@ -28,7 +28,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            ))
+            [logseq.graph-parser.property :as gp-property]))
 
 ;; TODO i18n support
 
@@ -365,14 +365,16 @@
 
 (rum/defc property-custom-context-menu-content
   [block property {:keys [class-schema?]}]
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/name property))]
     [:.menu-links-wrapper
-    (ui/menu-link
-     {:key "Configure this property"
-      :on-click (fn []
-                  (state/set-modal! #(property/property-config repo property)))}
-     (t :context-menu/configure-property)
-     nil)
+     (when-not built-in-property?
+       (ui/menu-link
+        {:key "Configure this property"
+         :on-click (fn []
+                     (state/set-modal! #(property/property-config repo property)))}
+        (t :context-menu/configure-property)
+        nil))
     (ui/menu-link
      {:key "Delete this property"
       :on-click (fn []

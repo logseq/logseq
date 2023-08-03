@@ -40,7 +40,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn- get-page-name
   [state]
@@ -318,7 +319,11 @@
                            repo
                            (:db/id page)
                            :page))
-                        (when (and (not hls-page?) (not fmt-journal?) (not config/publishing?))
+                        (when (and (not hls-page?)
+                                   (not fmt-journal?)
+                                   (not config/publishing?)
+                                   (not (and (= "property" (:block/type page))
+                                             (contains? gp-property/db-built-in-properties-keys-str page-name))))
                           (reset! *input-value (if untitled? "" old-name))
                           (reset! *edit? true)))))}
        (when (not= icon "") [:span.page-icon icon])

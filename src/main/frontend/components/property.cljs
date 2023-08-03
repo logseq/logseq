@@ -36,16 +36,19 @@
   [state repo property ]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
-        disabled? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))]
+        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))]
     [:div.property-configure
-     [:h1.title "Configure property"]
+     [:h1.title
+      (if built-in-property?
+        "Built-in property"
+        "Configure property")]
 
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label "Name:"]
        [:input.form-input
         {:on-change #(reset! *property-name (util/evalue %))
-         :disabled disabled?
+         :disabled built-in-property?
          :value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
@@ -55,7 +58,7 @@
                                (map (comp string/capitalize name))
                                (map (fn [type]
                                       {:label type
-                                       :disabled disabled?
+                                       :disabled built-in-property?
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
                                                     (:type @*property-schema))})))]
@@ -69,7 +72,7 @@
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
-                         :disabled disabled?
+                         :disabled built-in-property?
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
@@ -79,11 +82,11 @@
         (ui/ls-textarea
          {:on-change (fn [e]
                        (swap! *property-schema assoc :description (util/evalue e)))
-          :disabled disabled?
+          :disabled built-in-property?
           :value (:description @*property-schema)})]]
 
       [:div
-       (when-not disabled?
+       (when-not built-in-property?
          (ui/button
          "Save"
          :on-click (fn []

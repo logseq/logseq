@@ -18,7 +18,8 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn- delete-page!
   [page-name]
@@ -78,11 +79,14 @@
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
-                                    (file-sync-handler/get-current-graph-uuid))]
+                                    (file-sync-handler/get-current-graph-uuid))
+          built-in-property? (and (= "property" (:block/type page))
+                                  (contains? gp-property/db-built-in-properties-keys-str page-name))]
       (when (and page (not block?))
         (->>
          [(when (and (not config/publishing?)
-                     (config/db-based-graph? repo))
+                     (config/db-based-graph? repo)
+                     (not built-in-property?))
             {:title (t :page/configure)
              :options {:on-click
                        (fn []
@@ -118,7 +122,9 @@
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not (or contents?
-                        config/publishing?)
+                        config/publishing?
+                        (and (config/db-based-graph? repo)
+                             built-in-property?))
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
