@@ -67,7 +67,7 @@
 
     [:div.keyboard-filter-record
      [:h2
-      [:strong (t :shortcut.keymap/keystroke-filter)]
+      [:strong (t :keymap/keystroke-filter)]
       [:span.flex.space-x-2
        (when keypressed?
          [:a.flex.items-center
@@ -76,7 +76,7 @@
         {:on-click #(do (close-fn) (set-keystroke! ""))} (ui/icon "x" {:size 12})]]]
      [:div.wrap.p-2
       (if-not keypressed?
-        [:small (t :shortcut.keymap/keystroke-record-desc)]
+        [:small (t :keymap/keystroke-record-desc)]
         (when-not (string/blank? keystroke)
           (ui/render-keyboard-shortcut keystroke)))]]))
 
@@ -94,7 +94,7 @@
 
      [:span.search-input-wrap
       [:input.form-input.is-small
-       {:placeholder (t :shortcut.keymap/search)
+       {:placeholder (t :keymap/search)
         :ref         *search-ref
         :value       (or q "")
         :auto-focus  true
@@ -140,7 +140,7 @@
              :let [all? (= k :All)
                    checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
 
-         {:title   (t (keyword :shortcut.keymap (string/lower-case (name k))))
+         {:title   (if all? (t :keymap/all) (t (keyword :keymap (string/lower-case (name k)))))
           :icon    (ui/icon (if checked? "check" "circle"))
           :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
 
@@ -177,7 +177,7 @@
    (for [[g ks] conflicts-map]
      [:section.relative
       [:h2 (ui/icon "alert-triangle" {:size 15})
-       [:span (t :shortcut.keymap/conflicts-for-label)]
+       [:span (t :keymap/conflicts-for-label)]
        [:code (shortcut-utils/decorate-binding g)]]
       [:ul
        (for [v (vals ks)
@@ -276,7 +276,7 @@
       :ref       *ref-el}
      [:div.sm:w-lsm
       [:h1.text-2xl.pb-2
-       (t :shortcut.keymap/customize-for-label)]
+       (t :keymap/customize-for-label)]
 
       [:p.mb-4.text-md [:b action-name]]
 
@@ -307,7 +307,7 @@
             (ui/icon "x" {:size 14})]]
 
           [:code.flex.items-center
-           [:small.pr-1 (t :shortcut.keymap/keystroke-record-setup-label)] (ui/icon "keyboard" {:size 14})])]]]
+           [:small.pr-1 (t :keymap/keystroke-record-setup-label)] (ui/icon "keyboard" {:size 14})])]]]
 
      ;; conflicts results
      (when (seq key-conflicts)
@@ -318,7 +318,7 @@
       (when (sequential? binding)
         [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
          {:on-click #(set-current-binding! binding)}
-         (t :shortcut.keymap/restore-to-default)
+         (t :keymap/restore-to-default)
          (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
            [:code.ml-1 it])])
 
@@ -388,7 +388,7 @@
     [:div.cp__shortcut-page-x
      [:header.relative
       [:h2.text-xs.opacity-70
-       (str (t :shortcut.keymap/total)
+       (str (t :keymap/total)
             " "
             (if ready?
               (apply + (map #(count (second %)) result-list-map))
@@ -459,13 +459,13 @@
                         (or user-binding (false? user-binding))
                         [:code.dark:bg-green-800.bg-green-300
                          (if unset?
-                           (t :shortcut.keymap/unset)
-                           (str (t :shortcut.keymap/custom) ": "
+                           (t :keymap/unset)
+                           (str (t :keymap/custom) ": "
                                 (if disabled?
-                                  (t :shortcut.keymap/disabled)
+                                  (t :keymap/disabled)
                                   (bean/->js
                                     (map #(if (false? %)
-                                            (t :shortcut.keymap/disabled)
+                                            (t :keymap/disabled)
                                             (shortcut-utils/decorate-binding %)) user-binding)))))]
 
                         (not unset?)

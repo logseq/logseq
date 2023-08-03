@@ -155,7 +155,7 @@
                 (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl+a"
                 (and util/mac? (= k :editor/end-of-block)) "system default: ctrl+e"
                 (and util/mac? (= k :editor/backward-kill-word)) "system default: opt+delete"
-                :else (t :shortcut.keymap/disabled))
+                :else (t :keymap/disabled))
 
               (string? binding)
               (shortcut-utils/decorate-binding binding)
