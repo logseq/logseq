@@ -229,8 +229,9 @@
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
             [:div.flex.flex-col.w-full.relative
-             [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level
-              {:draggable true
+             [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
+              {:class (when collapsed? "rounded-b-md")
+               :draggable true
                :on-drag-start (fn [event]
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
                                 (reset! *drag-from idx))
