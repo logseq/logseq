@@ -37,7 +37,7 @@
       @apply pr-1 relative;
 
       a.x {
-        @apply flex items-center absolute right-1 top-0 py-[8px] px-1 opacity-60
+        @apply flex items-center absolute right-1 top-0 py-[7px] px-1 opacity-60
         hover:opacity-90;
       }
     }
@@ -155,6 +155,12 @@
     &.keypressed {
       .shortcut-record-control {
         @apply pt-0
+      }
+    }
+
+    .action-btns {
+      .keyboard-shortcut code {
+        @apply rounded-[3px];
       }
     }
 

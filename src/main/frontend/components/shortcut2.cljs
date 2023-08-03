@@ -85,11 +85,13 @@
   (let [*search-ref (rum/use-ref nil)]
     [:div.cp__shortcut-page-x-pane-controls
      [:a.flex.items-center.icon-link
-      {:on-click toggle-categories-fn}
+      {:on-click toggle-categories-fn
+       :title "Toggle categories pane"}
       (ui/icon "fold")]
 
      [:a.flex.items-center.icon-link
-      {:on-click refresh-shortcuts-list!}
+      {:on-click refresh-shortcuts-list!
+       :title "Refresh all"}
       (ui/icon "refresh")]
 
      [:span.search-input-wrap
@@ -320,12 +322,11 @@
          {:on-click #(set-current-binding! binding)}
          (t :keymap/restore-to-default)
          (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
-           [:code.ml-1 it])])
+           [:span.keyboard-shortcut.ml-1 [:code it]])])
 
       [:span
        (ui/button
          (t :save)
-         :background (when dirty? "red")
          :disabled (not dirty?)
          :on-click (fn []
                      ;; TODO: check conflicts for the single same leader key
