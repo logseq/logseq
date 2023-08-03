@@ -418,7 +418,7 @@
                 (ui/icon (if folded? "chevron-left" "chevron-down"))]])
 
             ;; binding row
-            (when (or in-query? (not folded?))
+            (when (or in-query? in-filters? (not folded?))
               (for [[id {:keys [binding user-binding] :as m}] binding-map
                     :let [binding (to-vector binding)
                           user-binding (and user-binding (to-vector user-binding))
