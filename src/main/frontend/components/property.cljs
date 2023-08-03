@@ -338,7 +338,7 @@
           (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
             (set-editing! property editor-id "" ""))))
       ;; new property
-      (if (gp-property/valid-property-name? (str ":" property-name))
+      (if (gp-property/db-valid-property-name? property-name)
         (if (= "class" (:block/type entity))
           (add-property! entity property-name "" {:class-schema? class-schema?})
           (do
@@ -346,7 +346,7 @@
             ;; configure new property
             (when-let [property (get-property-from-db property-name)]
               (state/set-sub-modal! #(property-config repo property)))))
-        (do (notification/show! "This is an invalid property name. A property name cannot start with non-alphanumeric characters e.g. '#' or '[['." :error)
+        (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (exit-edit-property))))))
 
 (rum/defcs property-input < rum/reactive

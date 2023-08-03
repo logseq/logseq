@@ -21,14 +21,6 @@
        (map #(str (name (key %)) (str colons " ") (val %)))
        (string/join "\n")))
 
-(defn valid-property-name?
-  [s]
-  {:pre [(string? s)]}
-  (and (gp-util/valid-edn-keyword? s)
-       (not (re-find #"[\"|^|(|)|{|}]+" s))
-       ;; Disallow tags as property names
-       (not (re-find #"^:#" s))))
-
 (defn properties-ast?
   [block]
   (and
@@ -38,6 +30,14 @@
 
 ;; Configuration and fns for older, file graph properties
 ;; =============
+
+(defn valid-property-name?
+  [s]
+  {:pre [(string? s)]}
+  (and (gp-util/valid-edn-keyword? s)
+       (not (re-find #"[\"|^|(|)|{|}]+" s))
+       ;; Disallow tags as property names
+       (not (re-find #"^:#" s))))
 
 ;; Built-in properties are properties that logseq uses for its features. Most of
 ;; these properties are hidden from the user but a few like the editable ones
@@ -207,3 +207,9 @@
 
 (defonce db-built-in-properties-keys-str
   (set (map name (keys db-built-in-properties))))
+
+(defn db-valid-property-name?
+  [s]
+  {:pre [(string? s)]}
+  ;; Disallow tags or page refs as they would create unreferenceable page names
+  (not (re-find #"^(#|\[\[)" s)))
