@@ -78,7 +78,7 @@
       (if-not keypressed?
         [:small (t :keymap/keystroke-record-desc)]
         (when-not (string/blank? keystroke)
-          (ui/render-keyboard-shortcut keystroke)))]]))
+          (ui/render-keyboard-shortcut [keystroke])))]]))
 
 (rum/defc pane-controls
   [q set-q! filters set-filters! keystroke set-keystroke! toggle-categories-fn]
@@ -297,7 +297,7 @@
         (if keypressed?
           [:<>
            (when-not (string/blank? keystroke)
-             (ui/render-keyboard-shortcut keystroke))
+             (ui/render-keyboard-shortcut [keystroke]))
 
            [:a.flex.items-center.active:opacity-90.submit
             {:on-click save-keystroke-fn!}
