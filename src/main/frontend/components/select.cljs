@@ -13,7 +13,8 @@
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [clojure.string :as string]))
 
 (rum/defc render-item < rum/reactive
   [result chosen? multiple-choices? *selected-choices]
@@ -47,7 +48,7 @@
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply _selected-choices
-                 dropdown?]
+                 dropdown? show-new-when-not-exact-match?]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
@@ -55,9 +56,17 @@
                extract-fn :value}}]
   (let [input (::input state)
         *selected-choices (::selected-choices state)
-        search-result (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
-                        (fn? transform-fn)
-                        (transform-fn @input))
+        search-result' (->>
+                        (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
+                          (fn? transform-fn)
+                          (transform-fn @input))
+                        (remove nil?))
+        exact-match? (contains? (set (map (comp string/lower-case extract-fn) search-result'))
+                                (string/lower-case @input))
+        search-result (if (and show-new-when-not-exact-match? (not exact-match?)
+                               (not (string/blank? @input)))
+                        (cons {:value @input} search-result')
+                        search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container [:div.input-wrap
                          [:input.cp__select-input.w-full

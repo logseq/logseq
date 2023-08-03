@@ -3,6 +3,7 @@
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.property :as db-property]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.notification :as notification]
@@ -22,7 +23,8 @@
             [logseq.graph-parser.property :as gp-property]
             [medley.core :as medley]
             [cljs-time.coerce :as tc]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defcs property-config <
   rum/static
@@ -102,11 +104,6 @@
          [:p "Debug data:"]
          [:pre (util/pp-str property)]])]]))
 
-(rum/defc search-item-render
-  [search-q content]
-  [:div.font-medium
-   (highlight/highlight-exact-query content search-q)])
-
 (defn- exit-edit-property
   []
   (property-handler/set-editing-new-property! nil)
@@ -169,24 +166,14 @@
     (select/select {:items pages
                     :dropdown? true
                     :on-chosen (fn [chosen]
-                                 (let [page (:value chosen)
+                                 (let [page (string/trim (:value chosen))
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                   (add-property! block (:block/original-name property) id)))
-                    :input-opts (fn [not-matched?]
-                                  {:on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Enter"
-                                       (when not-matched?
-                                         (let [page (string/trim (util/evalue e))]
-                                           (when-not (string/blank? page)
-                                             (page-handler/create! page {:redirect? false
-                                                                         :create-first-block? false})
-                                             (let [id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                               (add-property! block (:block/original-name property) id)))))
-                                       "Escape"
-                                       (exit-edit-property)
-                                       nil))})})))
+                                   (when (nil? id)
+                                     (page-handler/create! page {:redirect? false
+                                                                 :create-first-block? false}))
+                                   (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
+                                     (add-property! block (:block/original-name property) id'))))
+                    :show-new-when-not-exact-match? true})))
 
 (defn- select-block
   [block property]
@@ -236,25 +223,16 @@
     (select/select {:items items
                     :dropdown? true
                     :on-chosen (fn [chosen] (add-property-f (:value chosen)))
-                    :input-opts (fn [not-matched?]
-                                  {:on-key-down (fn [e]
-                                                 (case (util/ekey e)
-                                                   "Enter"
-                                                   (when not-matched?
-                                                     (add-property-f (util/evalue e)))
+                    :show-new-when-not-exact-match? true})))
 
-                                                   "Escape"
-                                                   (exit-edit-property)
-
-                                                   nil))})})))
-
-(rum/defc property-scalar-value < rum/reactive
+(rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id
                                 editor-box editor-args
                                 new-item? editing?
                                 blocks-container-id]}]
-  (let [multiple-values? (= :many (:cardinality (:block/schema property)))
+  (let [property (model/sub-block (:db/id property))
+        multiple-values? (= :many (:cardinality (:block/schema property)))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
         repo (state/get-current-repo)
@@ -343,82 +321,48 @@
 
                (inline-text {} :markdown (str value)))))])))))
 
-(rum/defcs property-key-input <
-  (rum/local false ::key-down-triggered?)
-  [state block *property-key *property-value *search? {:keys [blocks-container-id class-schema?]}]
-  (let [*key-down-triggered? (::key-down-triggered? state)]
-    [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
-     {:placeholder "Add a property"
-      :tabindex "0"
-      :value @*property-key
-      :auto-focus true
-      :on-change (fn [e]
-                   (reset! *property-key (util/evalue e))
-                   (reset! *search? true))
-      :on-key-down (fn [_e]
-                     (reset! *key-down-triggered? true))
-      :on-key-up (fn [e]
-                   (when @*key-down-triggered?
-                     (case (util/ekey e)
-                       "Escape"
-                       (exit-edit-property)
-
-                       (list "Tab" "Enter")
-                       (let [k (util/evalue e)]
-                         (when (= (util/ekey e) "Tab")
-                           (util/stop e))
-                         (reset! *property-key k)
-                         (reset! *search? false)
-                         ;; new property
-                         (let [property (db/entity [:block/name (util/page-name-sanity-lc k)])
-                               value (when-not (contains? #{:date :checkbox :number :url} (:type (:block/schema property)))
-                                       "")]
-                           (reset! *property-value value)
-                           (add-property! block @*property-key @*property-value {:exit-edit? (some? value)
-                                                                                 :class-schema? class-schema?})
-                           (when property
-                             (let [editor-id (str "ls-property-" blocks-container-id (:db/id block) "-" (:db/id property))]
-                               (set-editing! property editor-id "" "")))))
-
-                       nil)
-                     (reset! *key-down-triggered? false)))}]))
-
 (rum/defcs property-input < rum/reactive
-  (rum/local true ::search?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value opts]
-  (let [*search? (::search? state)
-        entity-properties (->> (keys (:block/properties entity))
+  [state entity *property-key *property-value {:keys [blocks-container-id class-schema?]
+                                               :as opts}]
+  (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
-        result (when-not (string/blank? @*property-key)
-                 (->> (search/property-search @*property-key)
-                      (remove entity-properties)))
-        property (when @*property-key
-                   (db/entity [:block/name (util/page-name-sanity-lc @*property-key)]))]
-    [:div
-     [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
-      (property-key-input entity *property-key *property-value *search? (select-keys opts [:blocks-container-id :class-schema?]))
-      [:div.col-span-3.flex.flex-row
-       (when (and property
-                  (not (:class-schema? opts))
-                  (not @*search?))
-         (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
-       [:a.close {:on-mouse-down exit-edit-property}
-        svg/close]]]
-     (when @*search?
-       (ui/auto-complete
-        result
-        {:class "search-results"
-         :on-chosen (fn [chosen]
-                      (if (and (contains? gp-property/db-built-in-properties-keys-str chosen)
-                               (not (gp-property/db-user-facing-built-in-properties (keyword chosen))))
-                        (do (notification/show! "Can't add a built-in property" :warning)
-                            (reset! *property-key nil)
-                            (exit-edit-property))
-                        (reset! *property-key chosen))
-                      (reset! *search? false))
-         :item-render #(search-item-render @*property-key %)}))]))
+        properties (->> (search/get-all-properties)
+                        (remove entity-properties)
+                        (remove (->> (set/difference gp-property/db-built-in-properties-keys
+                                                     gp-property/db-user-facing-built-in-properties)
+                                     (map name)
+                                     set)))
+        get-property-f (fn [name]
+                         (when-not (string/blank? name)
+                           (db/entity [:block/name (util/page-name-sanity-lc name)])))
+        repo (state/get-current-repo)]
+    (if @*property-key
+      (let [property (get-property-f @*property-key)]
+        [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
+         [:div.col-span-1 @*property-key]
+         [:div.col-span-3.flex.flex-row
+          (when (and property (not class-schema?))
+            (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
+          [:a.close {:on-mouse-down exit-edit-property}
+           svg/close]]])
+
+      [:div.ls-property-add.h-6
+       (select/select {:items (map (fn [x] {:value x}) properties)
+                       :dropdown? true
+                       :show-new-when-not-exact-match? true
+                       :input-default-placeholder "Add a property"
+                       :on-chosen (fn [{:keys [value] :as opts}]
+                                    (reset! *property-key value)
+                                    (if-let [property (get-property-f value)]
+                                      (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
+                                        (set-editing! property editor-id "" ""))
+                                      (do
+                                        (db-property/upsert-property! repo value {:type :default} {})
+                                        ;; configure new property
+                                        (when-let [property (get-property-f value)]
+                                          (state/set-sub-modal! #(property-config repo property))))))})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
