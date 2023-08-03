@@ -150,9 +150,8 @@
 
 (rum/defc shortcut-desc-label
   [id binding-map]
-  (when-let [id' (and id binding-map
-                      (some-> (str id) (string/replace "plugin." "")))]
-    [:span {:title (str id' "#" (name (:handler-id binding-map)))}
+  (when-let [id' (and id binding-map (some-> (str id) (string/replace "plugin." "")))]
+    [:span {:title (str id' "#" (some-> (:handler-id binding-map) (name)))}
      [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
      [:small.pl-1 [:code.text-xs (str id')]]]))
 
@@ -189,6 +188,7 @@
                :let [m (dh/shortcut-item id')]
                :when (not (nil? m))]
            [:li
+            {:key (str id')}
             [:a.select-none.hover:underline
              {:on-click #(open-customize-shortcut-dialog! id')
               :title (str handler-id)}
