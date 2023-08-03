@@ -19,7 +19,3 @@
                          updated-pages
                          (cons new-page-name updated-pages))]
     (db/set-key-value repo :recent/pages updated-pages*)))
-
-(defn clear-recent!
-  [repo]
-  (db/set-key-value repo :recent/pages {}))

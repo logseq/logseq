@@ -21,7 +21,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -188,14 +187,7 @@
             :draggable true
             :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
             :data-ref name}
-           (page-name name (get-page-icon entity) true)]))
-
-      (when-not (empty? pages)
-        [:li.recent-item.select-none
-         [:a.flex.items-center
-          {:on-click #(recent-handler/clear-recent! (state/get-current-repo))}
-          [:span.page-icon.ml-3.opacity-50.justify-center (ui/icon "trash-x")]
-          [:span.page-title.opacity-50 (t :left-side-bar/clear-recent)]]])])))
+           (page-name name (get-page-icon entity) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
