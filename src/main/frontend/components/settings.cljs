@@ -1092,7 +1092,7 @@
                 [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
-               [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "command")]
+               [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])

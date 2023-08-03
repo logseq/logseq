@@ -7,11 +7,12 @@
 
       > ul > li {
         > a {
+          @apply mb-2;
+
           > strong {
             font-size: 14px;
             font-weight: normal;
             padding-left: 5px;
-            margin-top: 2px;
             opacity: .9;
           }
         }
