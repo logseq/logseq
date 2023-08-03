@@ -320,9 +320,38 @@
 
                (inline-text {} :markdown (str value)))))])))))
 
+(defn- get-property-from-db [name]
+  (when-not (string/blank? name)
+    (db/entity [:block/name (util/page-name-sanity-lc name)])))
+
+(defn- add-property-from-dropdown
+  "Adds an existing or new property from dropdown. Used from a block or page context.
+   For pages, used to add both schema properties or properties for a page"
+  [entity property-name {:keys [class-schema? blocks-container-id]}]
+  (let [repo (state/get-current-repo)]
+    (if-let [property (get-property-from-db property-name)]
+      (if (contains? gp-property/db-hidden-built-in-properties (keyword property-name))
+        (do (notification/show! "This is a built-in property that can't be used." :error)
+            (exit-edit-property))
+        (if (= "class" (:block/type entity))
+          (add-property! entity property-name "" {:class-schema? class-schema?})
+          (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
+            (set-editing! property editor-id "" ""))))
+      ;; new property
+      (if (gp-property/valid-property-name? (str ":" property-name))
+        (if (= "class" (:block/type entity))
+          (add-property! entity property-name "" {:class-schema? class-schema?})
+          (do
+            (db-property/upsert-property! repo property-name {:type :default} {})
+            ;; configure new property
+            (when-let [property (get-property-from-db property-name)]
+              (state/set-sub-modal! #(property-config repo property)))))
+        (do (notification/show! "This is an invalid property name. A property name cannot start with non-alphanumeric characters e.g. '#' or '[['." :error)
+            (exit-edit-property))))))
+
 (rum/defcs property-input < rum/reactive
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [blocks-container-id class-schema?]
+  [state entity *property-key *property-value {:keys [class-schema?]
                                                :as opts}]
   (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
@@ -331,13 +360,9 @@
                         (remove entity-properties)
                         (remove (->> gp-property/db-hidden-built-in-properties
                                      (map name)
-                                     set)))
-        get-property-f (fn [name]
-                         (when-not (string/blank? name)
-                           (db/entity [:block/name (util/page-name-sanity-lc name)])))
-        repo (state/get-current-repo)]
+                                     set)))]
     (if @*property-key
-      (let [property (get-property-f @*property-key)]
+      (let [property (get-property-from-db @*property-key)]
         [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
          [:div.col-span-1 @*property-key]
          [:div.col-span-3.flex.flex-row
@@ -353,22 +378,8 @@
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
-                                    (if-let [property (get-property-f value)]
-                                      (if (contains? gp-property/db-hidden-built-in-properties (keyword value))
-                                        (do (notification/show! "This is a built-in property that can't be used." :error)
-                                            (reset! *property-key nil)
-                                            (exit-edit-property))
-                                        (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
-                                          (set-editing! property editor-id "" "")))
-                                      (if (gp-property/valid-property-name? (str ":" value))
-                                        (do
-                                          (db-property/upsert-property! repo value {:type :default} {})
-                                          ;; configure new property
-                                          (when-let [property (get-property-f value)]
-                                            (state/set-sub-modal! #(property-config repo property))))
-                                        (do (notification/show! "This is an invalid property name. A property name cannot start with non-alphanumeric characters e.g. '#' or '[['." :error)
-                                            (reset! *property-key nil)
-                                            (exit-edit-property)))))})])))
+                                    ;; property already exists?
+                                    (add-property-from-dropdown entity value opts))})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
