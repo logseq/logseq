@@ -360,11 +360,15 @@
                                             (exit-edit-property))
                                         (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
                                           (set-editing! property editor-id "" "")))
-                                      (do
-                                        (db-property/upsert-property! repo value {:type :default} {})
-                                        ;; configure new property
-                                        (when-let [property (get-property-f value)]
-                                          (state/set-sub-modal! #(property-config repo property))))))})])))
+                                      (if (gp-property/valid-property-name? (str ":" value))
+                                        (do
+                                          (db-property/upsert-property! repo value {:type :default} {})
+                                          ;; configure new property
+                                          (when-let [property (get-property-f value)]
+                                            (state/set-sub-modal! #(property-config repo property))))
+                                        (do (notification/show! "This is an invalid property name. A property name cannot start with non-alphanumeric characters e.g. '#' or '[['." :error)
+                                            (reset! *property-key nil)
+                                            (exit-edit-property)))))})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
