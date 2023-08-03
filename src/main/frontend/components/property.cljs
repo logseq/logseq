@@ -16,7 +16,6 @@
             [clojure.string :as string]
             [goog.dom :as gdom]
             [frontend.search :as search]
-            [frontend.components.search.highlight :as highlight]
             [frontend.components.svg :as svg]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.components.select :as select]
@@ -330,8 +329,7 @@
                                (set))
         properties (->> (search/get-all-properties)
                         (remove entity-properties)
-                        (remove (->> (set/difference gp-property/db-built-in-properties-keys
-                                                     gp-property/db-user-facing-built-in-properties)
+                        (remove (->> gp-property/db-hidden-built-in-properties
                                      (map name)
                                      set)))
         get-property-f (fn [name]
@@ -353,11 +351,15 @@
                        :dropdown? true
                        :show-new-when-not-exact-match? true
                        :input-default-placeholder "Add a property"
-                       :on-chosen (fn [{:keys [value] :as opts}]
+                       :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
                                     (if-let [property (get-property-f value)]
-                                      (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
-                                        (set-editing! property editor-id "" ""))
+                                      (if (contains? gp-property/db-hidden-built-in-properties (keyword value))
+                                        (do (notification/show! "This is a built-in property that can't be used." :error)
+                                            (reset! *property-key nil)
+                                            (exit-edit-property))
+                                        (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
+                                          (set-editing! property editor-id "" "")))
                                       (do
                                         (db-property/upsert-property! repo value {:type :default} {})
                                         ;; configure new property

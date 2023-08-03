@@ -6,6 +6,8 @@
             [goog.string :as gstring]
             [goog.string.format]))
 
+;; Graph agnostic fns
+;; ==================
 (def colons "Property delimiter for markdown mode" "::")
 (defn colons-org
   "Property delimiter for org mode"
@@ -33,6 +35,9 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
+
+;; Configuration and fns for older, file graph properties
+;; =============
 
 ;; Built-in properties are properties that logseq uses for its features. Most of
 ;; these properties are hidden from the user but a few like the editable ones
@@ -79,44 +84,6 @@
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))
-
-;; FIXME: no support for built-in-extended-properties
-(def db-built-in-properties
-  {:alias {:schema {:type :page
-                    :cardinality :many}}
-   :tags {:schema {:type :page
-                   :cardinality :many}}
-   :background-color {:schema {:type :default}}
-   :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
-   :query-table {:schema {:type :checkbox}}
-   :query-properties {:schema {:type :coll}}
-   :query-sort-by {:schema {:type :checkbox}}
-   :query-sort-desc {:schema {:type :checkbox}}
-   :logseq.query/nlp-date {:schema {:type :checkbox}}
-   :ls-type {:schema {:type :keyword}}
-   :hl-type {:schema {:type :keyword}}
-   :hl-page {:schema {:type :number}}
-   :hl-stamp {:schema {:type :number}}
-   :hl-color {:schema {:type :default}}
-   :logseq.macro-name {:schema {:type :default}}
-   :logseq.macro-arguments {:schema {:type :default}}
-   :logseq.order-list-type {:schema {:type :checkbox}}
-   :logseq.tldraw.page {:schema {:type :map}}
-   :logseq.tldraw.shape {:schema {:type :map}}
-   :icon {:schema {:type :default}}
-   :public {:schema {:type :checkbox}}
-   :filters {:schema {:type :map}}
-   :exclude-from-graph-view {:schema {:type :checkbox}}})
-
-(def db-user-facing-built-in-properties
-  "These are built-in properties that users can see and use"
-  #{:alias :tags})
-
-(defonce db-built-in-properties-keys
-  (set (keys db-built-in-properties)))
-
-(defonce db-built-in-properties-keys-str
-  (set (map name (keys db-built-in-properties))))
 
 (def built-in-property-types
   "Types for built-in properties. Built-in properties whose values are to be
@@ -196,3 +163,47 @@
           (string/join "\n" lines))
         content))
     content))
+
+;; Configuration for db graph properties
+;; =============
+
+;; FIXME: no support for built-in-extended-properties
+(def db-built-in-properties
+  {:alias {:schema {:type :page
+                    :cardinality :many}}
+   :tags {:schema {:type :page
+                   :cardinality :many}}
+   :background-color {:schema {:type :default}}
+   :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
+   :query-table {:schema {:type :checkbox}}
+   :query-properties {:schema {:type :coll}}
+   :query-sort-by {:schema {:type :checkbox}}
+   :query-sort-desc {:schema {:type :checkbox}}
+   :logseq.query/nlp-date {:schema {:type :checkbox}}
+   :ls-type {:schema {:type :keyword}}
+   :hl-type {:schema {:type :keyword}}
+   :hl-page {:schema {:type :number}}
+   :hl-stamp {:schema {:type :number}}
+   :hl-color {:schema {:type :default}}
+   :logseq.macro-name {:schema {:type :default}}
+   :logseq.macro-arguments {:schema {:type :default}}
+   :logseq.order-list-type {:schema {:type :checkbox}}
+   :logseq.tldraw.page {:schema {:type :map}}
+   :logseq.tldraw.shape {:schema {:type :map}}
+   :icon {:schema {:type :default}}
+   :public {:schema {:type :checkbox}}
+   :filters {:schema {:type :map}}
+   :exclude-from-graph-view {:schema {:type :checkbox}}})
+
+(def db-user-facing-built-in-properties
+  "These are built-in properties that users can see and use"
+  #{:alias :tags})
+
+(defonce db-built-in-properties-keys
+  (set (keys db-built-in-properties)))
+
+(def db-hidden-built-in-properties
+  (set/difference db-built-in-properties-keys db-user-facing-built-in-properties))
+
+(defonce db-built-in-properties-keys-str
+  (set (map name (keys db-built-in-properties))))
