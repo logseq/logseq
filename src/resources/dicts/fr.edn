@@ -436,4 +436,22 @@
  :shortcut.category/others  "Autres"
  :shortcut.category/toggle  "Basculer"
  :command.editor/select-parent "Sélectionnez le bloc parent"
- :command.sidebar/close-top "Ferme l'élément supérieur dans la barre latérale droite"}
+ :command.sidebar/close-top "Ferme l'élément supérieur dans la barre latérale droite"
+ 
+ 
+ :export-copied-to-clipboard "Copié dans le presse-papier"
+ :code "Code"
+ :loading "Chargement..."
+ :export-copy-to-clipboard "Copier dans le presse-papier"
+ :export-save-to-file "Enregistrer le fichier"
+ :export-transparent-background "Arrière-plan transparent"
+ :home "Accueil"
+ :logout-user "Déconnecter \"{1}\""
+ :new-page "Nouvelle page:"
+ :new-whiteboard "Nouveau tableau blanc:"
+ :remove-orphaned-pages "Supprimer les pages orphelines?"
+ :toggle-theme "Changer le thème"
+ 
+ 
+ 
+ }
