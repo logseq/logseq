@@ -95,7 +95,7 @@
 
         &.th {
           @apply rounded mb-2 sticky top-0 cursor-pointer
-          select-none active:opacity-80 px-2 py-1;
+          select-none active:opacity-80 px-2 py-1 z-[1];
 
           background-color: var(--ls-tertiary-background-color);
         }
