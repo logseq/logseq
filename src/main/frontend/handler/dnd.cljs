@@ -7,8 +7,7 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.config :as config]))
+            [frontend.db :as db]))
 
 (defn move-blocks
   [^js event blocks target-block move-to]
@@ -18,8 +17,7 @@
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
         current-format (:block/format first-block)
-        target-format (:block/format target-block)
-        repo (state/get-current-repo)]
+        target-format (:block/format target-block)]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
@@ -41,9 +39,7 @@
       (every? map? (conj blocks' target-block))
       (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
-         (cond-> {:outliner-op :move-blocks}
-           (config/db-based-graph? repo)
-           (assoc :persist-op? true :repo repo))
+         {:outliner-op :move-blocks}
          (editor-handler/save-current-block!)
          (if top?
            (let [first-child?

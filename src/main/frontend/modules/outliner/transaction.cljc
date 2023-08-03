@@ -16,8 +16,8 @@
              :outliner-op \"For example, :save-block, :insert-blocks, etc. \"
              :additional-tx \"Additional tx data that can be bundled together
                               with the body in this macro.\"
-             :persist-op? \"Boolean, store ops into db (sqlite)\"
-             :repo \"Needed when :persist-op? is true\"}
+             :persist-op? \"Boolean, store ops into db (sqlite), by default,
+                            its value depends on (config/db-based-graph? repo)\"}
   `Example`:
   (transact! {:graph \"test\"}
     (insert-blocks! ...)
@@ -25,35 +25,41 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-
   `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
          transaction-opts# frontend.modules.outliner.core/*transaction-opts*
-         _# (assert (or (map? ~opts) (symbol? ~opts)) (str "opts is not a map or symbol, type: " (type ~opts)))
+         opts*# ~opts
+         _# (assert (or (map? opts*#) (symbol? opts*#)) (str "opts is not a map or symbol, type: " (type opts*#)))
          opts# (if transact-data#
-                 (assoc ~opts :nested-transaction? true)
-                 ~opts)
+                 (assoc opts*# :nested-transaction? true)
+                 opts*#)
          before-editor-cursor# (frontend.state/get-current-edit-block-and-position)]
      (if transact-data#
        (do
          (when transaction-opts#
            (conj! transaction-opts# opts#))
          ~@body)
-       (binding [frontend.modules.outliner.core/*transaction-data* (transient [])
-                 frontend.modules.outliner.core/*transaction-opts* (transient [])]
-         (conj! frontend.modules.outliner.core/*transaction-opts* opts#)
-         ~@body
-         (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
-               tx# (mapcat :tx-data r#)
-               ;; FIXME: should we merge all the tx-meta?
-               tx-meta# (first (map :tx-meta r#))
-               all-tx# (concat tx# (:additional-tx opts#))
-               o# (persistent! frontend.modules.outliner.core/*transaction-opts*)
-               full-opts# (apply merge (reverse o#))
-               opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
+       (let [repo# (frontend.state/get-current-repo)
+             transaction-args# (cond-> {:repo repo#}
+                                 (and (frontend.config/db-based-graph? repo#)
+                                      (get opts*# :persist-op? true))
+                                 (assoc :persist-op? true))]
+         (binding [frontend.modules.outliner.core/*transaction-data* (transient [])
+                   frontend.modules.outliner.core/*transaction-opts* (transient [])
+                   frontend.modules.outliner.core/*transaction-args* transaction-args#]
+           (conj! frontend.modules.outliner.core/*transaction-opts* opts#)
+           ~@body
+           (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
+                 tx# (mapcat :tx-data r#)
+                 ;; FIXME: should we merge all the tx-meta?
+                 tx-meta# (first (map :tx-meta r#))
+                 all-tx# (concat tx# (:additional-tx opts#))
+                 o# (persistent! frontend.modules.outliner.core/*transaction-opts*)
+                 full-opts# (apply merge (reverse o#))
+                 opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
 
-           (when (seq all-tx#) ;; If it's empty, do nothing
-             (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
-               (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts## before-editor-cursor#)]
-                 {:tx-report result#
-                  :tx-data all-tx#
-                  :tx-meta tx-meta#}))))))))
+             (when (seq all-tx#) ;; If it's empty, do nothing
+               (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
+                 (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts## before-editor-cursor#)]
+                   {:tx-report result#
+                    :tx-data all-tx#
+                    :tx-meta tx-meta#})))))))))

@@ -965,6 +965,10 @@
   see also `frontend.modules.outliner.transaction/transact!`"
   nil)
 
+(def ^:private ^:dynamic *transaction-args*
+  "Stores transaction args which can be fetched in all op-transact functions."
+  nil)
+
 (defn- op-transact!
   [fn-var & args]
   {:pre [(var? fn-var)]}
@@ -976,8 +980,8 @@
 
 (defn save-block!
   [block]
-  (let [repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+  (let [repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<update-block-op! repo (:block/uuid block) (select-keys block [:block/content]))))
   (op-transact! #'save-block block))
@@ -985,8 +989,8 @@
 (defn insert-blocks!
   [blocks target-block opts]
   (let [r (op-transact! #'insert-blocks blocks target-block opts)
-        repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+        repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (async/go
         (rtc-op/<move-block-op! repo (keep :block/uuid (:blocks r)))
@@ -996,32 +1000,32 @@
 
 (defn delete-blocks!
   [blocks opts]
-  (let [repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+  (let [repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<remove-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'delete-blocks blocks opts))
 
 (defn move-blocks!
   [blocks target-block sibling?]
-  (let [repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+  (let [repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks blocks target-block {:sibling? sibling?}))
 
 (defn move-blocks-up-down!
   [blocks up?]
-  (let [repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+  (let [repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks-up-down blocks up?))
 
 (defn indent-outdent-blocks!
   [blocks indent?]
-  (let [repo (:repo (*transaction-opts* 0))
-        persist-op? (:persist-op? (*transaction-opts* 0))]
+  (let [repo (:repo *transaction-args*)
+        persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
   (op-transact! #'indent-outdent-blocks blocks indent?))
