@@ -81,7 +81,9 @@
 (rum/defc keyboard-shortcut
   [props]
   (let [shortcut (ui/keyboard-shortcut-from-config (keyword (gobj/get props "action")))]
-    (ui/render-keyboard-shortcut shortcut)))
+    (cond
+      (string? shortcut) (ui/render-keyboard-shortcut shortcut)
+      :else (interpose " | " (map ui/render-keyboard-shortcut shortcut)))))
 
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp

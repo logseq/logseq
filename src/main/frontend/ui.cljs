@@ -568,9 +568,8 @@
 
 (defn keyboard-shortcut-from-config [shortcut-name]
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
-        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
-        binding         (or custom-binding default-binding)]
-    (shortcut-helper/decorate-binding binding)))
+        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))]
+    (or custom-binding default-binding)))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]
