@@ -642,8 +642,6 @@ html[data-theme='dark'] {
     @apply relative;
     flex: 1 1;
     min-height: 100px;
-    border: 1px solid transparent;
-    transition: border-color 0.1s;
 
     .sidebar-item-header {
       white-space: nowrap;
