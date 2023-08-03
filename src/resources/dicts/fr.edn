@@ -17,7 +17,6 @@
     :help/reference-autocomplete "Autocomplétion des références à une Page"
     :help/block-reference "Référence à un Bloc"
     :help/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
-
     :help/context-menu "Menu contextuel"
     :help/markdown-syntax "Syntaxe Markdown"
     :help/org-mode-syntax "Syntaxe Org mode"
@@ -296,7 +295,6 @@
     :updater/new-version-install "Une nouvelle version a été téléchargée."
     :updater/quit-and-install "Relancez pour installer"
     :whiteboard/link-whiteboard-or-block "Lier un tablau blanc/page/bloc"
-
     :file/validate-existing-file-error "La page existe déjà avec un autre fichier: {1}, fichier actuel: {2}. Veuillez n'en garder qu'un et réindexer votre graphe."
     :notification/clear-all "Tout effacer"
     :on-boarding/tour-whiteboard-home "{1} Commencez pour vos tableaux blancs"
@@ -309,7 +307,6 @@
     :on-boarding/welcome-whiteboard-modal-title "Un nouveau cadre pour vos pensées."
     :settings-page/clear-cache-warning "Vider le cache supprimera les graphiques ouverts. Vous perdrez les modifications non enregistrées."
     :settings-page/disable-sentry-desc "Logseq ne collectera jamais votre base de données de graphes locale ni ne vendra vos données."
-
     :command.editor/indent                  "Indenter un Bloc vers la droite"
     :command.editor/outdent                 "Indenter un Bloc vers la gauche"
     :command.editor/move-block-up           "Déplacer un bloc au-dessus"
@@ -438,8 +435,6 @@
     :shortcut.category/toggle  "Basculer"
     :command.editor/select-parent "Sélectionnez le bloc parent"
     :command.sidebar/close-top "Ferme l'élément supérieur dans la barre latérale droite"
-    
-    
     :export-copied-to-clipboard "Copié dans le presse-papier"
     :code "Code"
     :loading "Chargement..."
