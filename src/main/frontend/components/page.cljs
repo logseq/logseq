@@ -447,7 +447,7 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.ls-page-title.flex-1.flex.items-center.sm:mb-8.mb-8
+               [:div.flex-1.flex.items-center.sm:mb-8.mb-8.w-full.ls-page-title.
                 (page-title page-name icon title format fmt-journal?)
                 (page-menu/page-actions-dropdown nil)])
              (when (not config/publishing?)
