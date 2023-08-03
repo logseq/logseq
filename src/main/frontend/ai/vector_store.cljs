@@ -42,12 +42,27 @@
   ([store embed key data]
    (.add store embed key data)))
 
+;; (defn addmany
+;;   "Add multiple records to the vector store
+;;    - store: store handler (conn)
+;;    - embed: the vector to be added
+;;    - key: identifier for the record
+;;    - data: attached metadata for the record (notice: IPC required, so don't send big objects)
+   
+;;    Returns a promise of the vector store addition
+;;    or throw an error if the store doesn't exist"
+;;   ([store embeds key]
+;;    (.addmany store embeds key))
+;;   ([store embeds key data]
+;;    (.addmany store embeds key data)))
+
 (defn rm
   "Remove a record from the vector store
    - store: store handler (conn)
    - key: identifier for the record
    
    Returns a promise of the vector store removal
+   true for success, false for failure
    or throw an error if the store doesn't exist"
     [store key]
     (.remove store key))
