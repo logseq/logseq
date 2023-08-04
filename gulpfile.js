@@ -60,8 +60,20 @@ const common = {
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
         'node_modules/reveal.js/dist/reveal.js',
-        'node_modules/shepherd.js/dist/js/shepherd.min.js'
+        'node_modules/shepherd.js/dist/js/shepherd.min.js',
+        'node_modules/marked/marked.min.js',
+        'node_modules/@highlightjs/cdn-assets/highlight.min.js',
+        'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
+        'packages/amplify/dist/amplify.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src([
+        'node_modules/pdfjs-dist/build/pdf.js',
+        'node_modules/pdfjs-dist/build/pdf.worker.js',
+        'node_modules/pdfjs-dist/web/pdf_viewer.js'
+      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
+      () => gulp.src([
+        'node_modules/pdfjs-dist/cmaps/*.*',
+      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs', 'cmaps'))),
       () => gulp.src([
         'node_modules/@tabler/icons/iconfont/tabler-icons.min.css',
         'node_modules/inter-ui/inter.css',

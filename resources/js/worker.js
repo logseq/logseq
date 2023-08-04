@@ -1,6 +1,6 @@
 importScripts(
   // Batched optimization
-  "./lightning-fs.min.js?v=0.0.2.3",
+  "./lightning-fs.min.js",
   // Fixed a bug
   "./magic_portal.js"
 );

@@ -41,7 +41,7 @@
   [s]
   (try
     (if (string? s)
-      (js/window.marked s) s)
+      (js/window.marked.parse s) s)
     (catch js/Error e
       (js/console.error e) s)))
 
