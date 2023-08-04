@@ -217,25 +217,31 @@
           (map (fn [k]
                  (when-let [k' (shortcut-utils/undecorate-binding k)]
                    (let [k (shortcut-utils/safe-parse-string-binding k')
-                         k (bean/->clj k)]
+                         k (bean/->clj k)
+
+                         same-leading-key?
+                         (fn [[k' _]]
+                           (when (sequential? k)
+                             (or (= k k')
+                                 (and (> (count k') (count k))
+                                      (= (first k) (first k'))))))
+
+                         into-conflict-refs
+                         (fn [[k o]]
+                           (when-let [{:keys [key refs]} o]
+                             [k [key (reduce-kv (fn [r id handler-id']
+                                                  (if (and
+                                                        (not (contains? exclude-ids id))
+                                                        (or (= handler-ids #{handler-id'})
+                                                            (and (set? handler-ids) (contains? handler-ids handler-id'))
+                                                            (and global? (contains? global-handlers handler-id'))))
+                                                    (assoc r id handler-id')
+                                                    r)
+                                                  ) {} refs)]]))]
 
                      [k' (->> ks-bindings
-                              (filterv (fn [[k' _]]
-                                         (when (sequential? k)
-                                           (or (= k k')
-                                               (and (> (count k') (count k))
-                                                    (= (first k) (first k')))))))
-                              (mapv (fn [[k o]]
-                                      (when-let [{:keys [key refs]} o]
-                                        [k [key (reduce-kv (fn [r id handler-id']
-                                                             (if (and
-                                                                   (not (contains? exclude-ids id))
-                                                                   (or (= handler-ids #{handler-id'})
-                                                                       (and (set? handler-ids) (contains? handler-ids handler-id'))
-                                                                       (and global? (contains? global-handlers handler-id'))))
-                                                               (assoc r id handler-id')
-                                                               r)
-                                                             ) {} refs)]])))
+                              (filterv same-leading-key?)
+                              (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
                               (into {}))]
                      ))))
