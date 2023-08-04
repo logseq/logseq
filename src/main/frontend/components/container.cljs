@@ -551,7 +551,11 @@
 
          :else
          [:div
-          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto"))}
+          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto.pb-24"))
+           :style {:margin-bottom  (cond
+                                     margin-less-pages? 0
+                                     onboarding-and-home? 0
+                                     :else 120)}}
           main-content])
 
        (when onboarding-and-home?
