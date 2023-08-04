@@ -249,8 +249,7 @@
                                 editor-id dom-id row?
                                 editor-box editor-args
                                 editing? editing-atom
-                                blocks-container-id]
-                         :as opts}]
+                                blocks-container-id]}]
   (let [property (model/sub-block (:db/id property))
         multiple-values? (= :many (:cardinality (:block/schema property)))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
@@ -347,20 +346,24 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-name {:keys [class-schema? blocks-container-id]}]
+  [entity property-name {:keys [class-schema? blocks-container-id page-configure?]}]
   (let [repo (state/get-current-repo)]
+    ;; existing property selected or entered
     (if-let [property (get-property-from-db property-name)]
       (if (contains? gp-property/db-hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (exit-edit-property))
         (if (= "class" (:block/type entity))
-          (add-property! entity property-name "" {:class-schema? class-schema?})
+          (add-property! entity property-name "" {:class-schema? class-schema?
+                                                  ;; Only enter property names from sub-modal as inputting
+                                                  ;; property values is buggy in sub-modal
+                                                  :exit-edit? page-configure?})
           (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
             (set-editing! property editor-id "" ""))))
-      ;; new property
+      ;; new property entered
       (if (gp-property/db-valid-property-name? property-name)
         (if (= "class" (:block/type entity))
-          (add-property! entity property-name "" {:class-schema? class-schema?})
+          (add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property/upsert-property! repo property-name {:type :default} {})
             ;; configure new property
@@ -371,7 +374,7 @@
 
 (rum/defcs property-input < rum/reactive
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema?]
+  [state entity *property-key *property-value {:keys [class-schema? page-configure?]
                                                :as opts}]
   (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
@@ -400,10 +403,10 @@
                        :dropdown? true
                        :show-new-when-not-exact-match? true
                        :exact-match-exclude-items exclude-properties
+                       :sub-modal? page-configure?
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
-                                    ;; property already exists?
                                     (add-property-from-dropdown entity value opts))})])))
 
 (rum/defcs new-property < rum/reactive
