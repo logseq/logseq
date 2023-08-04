@@ -356,11 +356,19 @@
   (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
+        existing-tag-alias (cond-> #{}
+                             (seq (:block/tags entity))
+                             (conj "tags")
+                             (seq (:block/alias entity))
+                             (conj "alias"))
+        exclude-properties (set/union
+                            entity-properties
+                            existing-tag-alias
+                            (->> gp-property/db-hidden-built-in-properties
+                                 (map name)
+                                 set))
         properties (->> (search/get-all-properties)
-                        (remove entity-properties)
-                        (remove (->> gp-property/db-hidden-built-in-properties
-                                     (map name)
-                                     set)))]
+                        (remove exclude-properties))]
     (if @*property-key
       (let [property (get-property-from-db @*property-key)]
         [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
@@ -375,6 +383,7 @@
        (select/select {:items (map (fn [x] {:value x}) properties)
                        :dropdown? true
                        :show-new-when-not-exact-match? true
+                       :exact-match-exclude-items exclude-properties
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)

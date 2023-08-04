@@ -48,12 +48,13 @@
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply _selected-choices
-                 dropdown? show-new-when-not-exact-match?]
+                 dropdown? show-new-when-not-exact-match? exact-match-exclude-items]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
                close-modal? true
-               extract-fn :value}}]
+               extract-fn :value
+               exact-match-exclude-items #{}}}]
   (let [input (::input state)
         *selected-choices (::selected-choices state)
         search-result' (->>
@@ -63,8 +64,10 @@
                         (remove nil?))
         exact-match? (contains? (set (map (comp string/lower-case extract-fn) search-result'))
                                 (string/lower-case @input))
-        search-result (if (and show-new-when-not-exact-match? (not exact-match?)
-                               (not (string/blank? @input)))
+        search-result (if (and show-new-when-not-exact-match?
+                               (not exact-match?)
+                               (not (string/blank? @input))
+                               (not (exact-match-exclude-items @input)))
                         (cons {:value @input} search-result')
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
