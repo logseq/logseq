@@ -19,14 +19,30 @@
 (defrecord Semantic [repo]
   protocol/Engine
   (query [_this q option]
-    nil)
+    ;; {:block/uuid uuid 
+    ;;  :block/content content
+    ;;  :block/page page}
+    (let [encoder      (state/get-semsearch-encoder)
+          encoder-name (:name encoder)
+          encoder-dim  (get-in encoder [:opts :modelDim])
+          store-conn   (if encoder-dim
+                         (vector-store/create (idstr-template-string repo) encoder-dim)
+                         (throw (js/Error. (str "record modelDim is not found in options of registrated encoder " encoder-name))))
+          ret-k        (or (:limit option)
+                           10)]
+      (p/let [embed (nth (text-encoder/text-encode q encoder-name) 0)]
+        (vector-store/search store-conn embed ret-k))))
   (query-page [_this _q _opt]
-    nil)
+    (prn "query full page search")
+    (prn _q)
+    (prn _opt))
   (rebuild-blocks-indice! [_this]
     ;; Step 1: reset vector store
-    ;; Step 2: Pull full block and page data
-    ;; Step 3: Don't do anything (wait transact-pages! or transact-blocks! being called)
-    nil)
+    ;; Step 2: Don't do anything (wait transact-pages! or transact-blocks! being called) 
+    (-> repo
+        (idstr-template-string)
+        (vector-store/reset))
+    (.clean taskQueue))
 
   (transact-blocks! [_this {:keys [blocks-to-remove-set
                                    blocks-to-add]}]

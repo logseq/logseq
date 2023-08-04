@@ -29,24 +29,30 @@
 
   (query [_this q opts]
     (println "D:Search > Query blocks:" repo q opts)
-    (let [[e1 e2] (get-registered-engines repo)]
+    (let [[e1 e2 e3] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/query e q opts))
-      (protocol/query e1 q opts)))
+      (protocol/query e1 q opts)
+      (when e3
+        (protocol/query e3 q opts))))
 
   (query-page [_this q opts]
     (println "D:Search > Query-page contents:" repo q opts)
-    (let [[e1 e2] (get-registered-engines repo)]
+    (let [[e1 e2 e3] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/query-page e q opts))
-      (protocol/query-page e1 q opts)))
+      (protocol/query-page e1 q opts)
+      (when e3
+        (protocol/query-page e3 q opts))))
 
   (rebuild-blocks-indice! [_this]
     (println "D:Search > Initial blocks indice!:" repo)
-    (let [[e1 e2] (get-registered-engines repo)]
+    (let [[e1 e2 e3] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/rebuild-blocks-indice! e))
-      (protocol/rebuild-blocks-indice! e1)))
+      (protocol/rebuild-blocks-indice! e1)
+      (when e3
+        (protocol/rebuild-blocks-indice! e3))))
 
   (transact-blocks! [_this data]
     (doseq [e (get-flatten-registered-engines repo)]
