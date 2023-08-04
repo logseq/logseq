@@ -78,9 +78,10 @@
              frontend.handler.notification notification
              frontend.handler.page page-handler
              frontend.handler.file-based.property file-property
-             frontend.handler.file-based.property.util property
+             frontend.handler.file-based.property.util property-util
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
+             frontend.handler.property.util pu
              frontend.handler.query.builder query-builder
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler

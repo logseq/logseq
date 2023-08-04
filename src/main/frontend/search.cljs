@@ -16,7 +16,9 @@
             [promesa.core :as p]
             [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.config :as config]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn get-engine
   [repo]
@@ -183,13 +185,10 @@
 
 (defn get-all-properties
   []
-  (->> (db-model/get-all-properties)
-       (remove (property-util/hidden-properties))
-       ;; Complete full keyword except the ':'
-       (map (fn [property]
-              (if (keyword? property)
-                (subs (str property) 1)
-                property)))))
+  (let [hidden-props (if (config/db-based-graph? (state/get-current-repo))
+                       (set (map name gp-property/db-hidden-built-in-properties))
+                       (set (map name (property-util/hidden-properties))))]
+    (remove hidden-props (db-model/get-all-properties))))
 
 (defn property-search
   ([q]

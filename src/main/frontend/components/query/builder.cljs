@@ -39,7 +39,7 @@
    (component-select/select (merge
                              {:items items
                               :on-chosen on-chosen
-                              :extract-fn nil}
+                              :extract-fn identity}
                              options))))
 
 (defn append-tree!

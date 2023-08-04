@@ -1191,10 +1191,11 @@ independent of format as format specific heading characters are stripped"
     (map #(:block/original-name (db-utils/entity %)) ids)))
 
 (defn get-all-properties
+  "Returns a seq of property name strings"
   []
   (if (react/db-graph?)
     (db-based-get-all-properties)
-    (file-based-get-all-properties)))
+    (map name (file-based-get-all-properties))))
 
 (defn- property-value-for-refs-and-text
   "Given a property value's refs and full text, determines the value to
