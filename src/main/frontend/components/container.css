@@ -505,11 +505,7 @@ html[data-theme='dark'] {
 }
 
 .cp__sidebar-main-content {
-  @apply w-full h-fit p-6 sm:p-12;
-
-  body[data-page=whiteboard] & {
-    @apply h-auto p-0;
-  }
+  @apply w-full h-fit;
 
   max-width: var(--ls-main-content-max-width);
   flex: 1;

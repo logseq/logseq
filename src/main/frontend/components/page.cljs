@@ -424,7 +424,7 @@
           *all-collapsed? (::all-collapsed? state)
           *current-block-page (::current-page state)
           block-or-whiteboard? (or block? whiteboard?)]
-      [:div.flex-1.page.relative
+      [:div.flex-1.relative.p-6.sm:p-12.rounded-xl.color-level.page
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                   {:data-page-tags (text-util/build-data-value page-names)})
@@ -946,7 +946,7 @@
                          (reset! *pages nil)
                          (reset! *current-page 1))]
 
-    [:div.flex-1.cp__all_pages
+    [:div.flex-1.cp__all_pages.relative.p-6.sm:p-12.rounded-xl.color-level.page
      [:h1.title (t :all-pages)]
 
      [:div.text-sm.opacity-70 (t :paginates/pages total-items)]
