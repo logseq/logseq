@@ -177,7 +177,7 @@
          :on-click util/stop-propagation}
         (ui/checkbox {:checked checked
                       :on-change (fn [] (on-checked-change (not checked)))})]]]
-     [:div.cursor-pointer
+     [:div.cursor-pointer.overflow-hidden
       {:on-click redirect-to-whiteboard}
       (ui/lazy-visible
        (fn [] [:div.p-4.h-64.flex.justify-center
