@@ -213,7 +213,7 @@
           [checked-page-names set-checked-page-names] (rum/use-state #{})
           has-checked? (not-empty checked-page-names)]
       [:.p-6.sm:p-12
-       [:h1.select-none.flex.items-center.whiteboard-dashboard-title.title
+       [:h1.select-none.flex.items-center.mb-6.whiteboard-dashboard-title.title
         [:div (t :all-whiteboards)
          [:span.opacity-50
           (str " · " total-whiteboards)]]
