@@ -83,7 +83,7 @@
  :asset/show-in-folder "Bild im Ordner anzeigen"
 
  :block/name "Seitenname"
-
+ 
  :bug-report/main-title "Bug melden"
  :bug-report/clipboard-inspector-title "Untersuchung der Zwischenablage"
  :bug-report/main-desc "Können Sie uns mit einer Fehlermeldung helfen? Wir werden es schnellstmöglich beheben."
@@ -192,7 +192,7 @@
  :graph/save "Speichern..."
  :graph/save-error "Speichern fehlgeschlagen"
  :graph/save-success "Erfolgreich gespeichert"
-
+ 
  :header/go-back "Zurück"
  :header/go-forward "Vorwärts"
  :header/more "Weitere Optionen"
@@ -388,7 +388,7 @@
  :plugin.install-from-file/title "Plugins aus plugins.edn installieren"
  :plugin.install-from-file/notice "Die folgenden Plugins werden Ihre Plugins ersetzen:"
  :plugin.install-from-file/success "Alle Plugins installiert!"
-
+ 
  :query/config-property-settings "Einstellungen für diese Query:"
 
  :right-side-bar/all-pages "Alle Seiten"
@@ -408,9 +408,9 @@
  :right-side-bar/show-journals "Zeige Journale"
  :right-side-bar/switch-theme "Zu {1} Thema wechseln"
  :right-side-bar/toggle-right-sidebar "Rechte Seitenleiste umschalten"
-
+ 
  :select/default-select-multiple "Ein oder mehrere auswählen"
-
+ 
  :settings-page/app-updated "Ihre Version ist aktuell 🎉"
  :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
  :settings-page/auto-expand-block-refs-tip "Diese Option steuert, ob Blockreferenzen beim Heranzoomen automatisch ausgeklappt werden."
@@ -439,9 +439,9 @@
  :settings-page/update-available "Neue Version gefunden: "
  :settings-page/update-error-1 "⚠️ Ups, Etwas ist schiefgelaufen!"
  :settings-page/update-error-2 " Überprüfen Sie den "
-
+ 
  :settings-permission/start-granting "Erlauben"
-
+ 
  :tips/all-done "Alles erledigt!"
 
  :tutorial/text #resource "tutorials/tutorial-de.md"
@@ -536,7 +536,7 @@
  :whiteboard/zoom-in "Heranzoomen"
  :whiteboard/zoom-out "Herauszoomen"
  :whiteboard/zoom-to-fit "Zoom an Zeichnung anpassen"
-
+ 
  :window/minimize "Minimieren"
  :window/maximize "Maximieren"
  :window/restore "Wiederherstellen"
