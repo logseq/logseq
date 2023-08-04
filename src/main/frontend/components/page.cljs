@@ -310,7 +310,7 @@
                     (date/journal-title->custom-format title)
                     title))
           old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+      [:h1.page-title.flex.cursor-pointer.gap-1.w-full.overflow-hidden
        {:class (when-not whiteboard-page? "title")
         :on-mouse-down (fn [e]
                          (when (util/right-click? e)
@@ -447,7 +447,7 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex.items-center.sm:mb-8.mb-8.w-full.overflow-hidden.ls-page-title
+               [:div.flex-1.flex.items-center.sm:mb-8.mb-8.w-full.ls-page-title
                 (page-title page-name icon title format fmt-journal?)
                 (page-menu/page-actions-dropdown nil)])
              (when (not config/publishing?)
