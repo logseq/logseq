@@ -12,7 +12,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
