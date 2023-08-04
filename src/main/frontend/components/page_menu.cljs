@@ -136,7 +136,7 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (or (state/get-current-page) whiteboard?)
+          (when (or (state/get-current-page) (and whiteboard? (not (state/whiteboard-dashboard?))))
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
                                    (fn []

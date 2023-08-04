@@ -18,7 +18,7 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .dashboard-card {
-  @apply rounded-lg flex flex-col gap-1 overflow-hidden font-medium;
+  @apply rounded-lg flex flex-col gap-1 font-medium;
   height: 300px;
 
   .dashboard-card-checkbox {
@@ -27,7 +27,7 @@ h1.title.whiteboard-dashboard-title {
     visibility: hidden;
     width: 24px;
     height: 24px;
-    transform: translateX(4px);
+    margin-right: 3px;
 
     &:focus-within {
       border-color: var(--ls-border-color);
