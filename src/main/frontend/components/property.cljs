@@ -226,7 +226,7 @@
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
-                                editor-id dom-id
+                                editor-id dom-id row?
                                 editor-box editor-args
                                 new-item? editing?
                                 blocks-container-id]}]
@@ -285,40 +285,39 @@
              (editor-box editor-args editor-id (cond-> config
                                                  multiple-values?
                                                  (assoc :property-value value)))))]
-         [:div.flex.flex-1
-          (cond->
-              {:id (or dom-id (random-uuid))
-               :style {:min-height 24}
-               :on-click (fn []
-                           (let [page-or-block? (contains? #{:page :block} type)]
-                             (when (or (not page-or-block?)
-                                       (and (string/blank? value) page-or-block?))
-                              (set-editing! property editor-id dom-id value))))}
-            multiple-values?
-            (assoc :class "property-value-content"))
-          (let [type (if (and (= type :default) (uuid? value))
-                       (if-let [e (db/entity [:block/uuid value])]
-                         (if (:block/name e) :page :block)
-                         type)
-                       type)]
-            (when-not (string/blank? value)
-             (case type
-               :page
-               (when-let [page (db/entity [:block/uuid value])]
-                 (page-cp {} page))
+         (let [class (str (when-not row? "flex flex-1 ")
+                          (when multiple-values? "property-value-content"))]
+           [:div {:id (or dom-id (random-uuid))
+                  :class class
+                  :style {:min-height 24}
+                  :on-click (fn []
+                              (let [page-or-block? (contains? #{:page :block} type)]
+                                (when (or (not page-or-block?)
+                                          (and (string/blank? value) page-or-block?))
+                                  (set-editing! property editor-id dom-id value))))}
+            (let [type (if (and (= type :default) (uuid? value))
+                         (if-let [e (db/entity [:block/uuid value])]
+                           (if (:block/name e) :page :block)
+                           type)
+                         type)]
+              (when-not (string/blank? value)
+                (case type
+                  :page
+                  (when-let [page (db/entity [:block/uuid value])]
+                    (page-cp {} page))
 
-               :block
-               (if-let [block (db/entity [:block/uuid value])]
-                 [:div.property-block-container.w-full
-                  (block-cp [block] {:id (str value)
-                                     :editor-box editor-box})]
-                 (if multiple-values?
-                   (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                   (property-handler/remove-block-property! repo
-                                                            (:block/uuid block)
-                                                            (:block/uuid property))))
+                  :block
+                  (if-let [block (db/entity [:block/uuid value])]
+                    [:div.property-block-container.w-full
+                     (block-cp [block] {:id (str value)
+                                        :editor-box editor-box})]
+                    (if multiple-values?
+                      (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                      (property-handler/remove-block-property! repo
+                                                               (:block/uuid block)
+                                                               (:block/uuid property))))
 
-               (inline-text {} :markdown (str value)))))])))))
+                  (inline-text {} :markdown (str value)))))]))))))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -356,14 +355,10 @@
   (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
-        existing-tag-alias (cond-> #{}
-                             (seq (:block/tags entity))
-                             (conj "tags")
-                             (seq (:block/alias entity))
-                             (conj "alias"))
+        alias (if (seq (:block/alias entity)) #{"alias"} #{})
         exclude-properties (set/union
                             entity-properties
-                            existing-tag-alias
+                            alias
                             (->> gp-property/db-hidden-built-in-properties
                                  (map name)
                                  set))
@@ -434,25 +429,31 @@
      (:block/original-name property)]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property items item {:keys [editor-id new-item?]
+  [state entity property items item {:keys [editor-id new-item? row?]
                                      :as opts}]
   (let [*show-close? (::show-close? state)
         editing? (state/sub [:editor/editing? editor-id])]
-    [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
-                                :on-mouse-out  #(reset! *show-close? false)}
+    [:div (cond->
+              {:on-mouse-over #(reset! *show-close? true)
+               :on-mouse-out  #(reset! *show-close? false)}
+            (not row?)
+            (assoc :class "relative flex flex-1")
+            row?
+            (assoc :class "relative pr-4"))
      (property-scalar-value entity property item (assoc opts :editing? editing?))
      (when (and (or (not new-item?) editing?)
                 @*show-close?
                 (seq items))
        [:a.close.fade-in
-        {:title "Delete this value"
+        {:class "absolute top-0 right-0"
+         :title "Delete this value"
          :on-mouse-down
          (fn []
            (property-handler/delete-property-value! (state/get-current-repo)
                                                     entity
                                                     (:block/uuid property)
                                                     item))}
-        svg/close])]))
+        (ui/icon "x")])]))
 
 (rum/defcs property-value < rum/reactive
   [state block property v opts]
@@ -461,6 +462,7 @@
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
+        row? (and multiple-values? (contains? #{:page} (:type schema)))
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
@@ -470,7 +472,7 @@
             v' (if (seq items) items [""])
             v' (conj v' ::new-value-placeholder) ; new one
             ]
-        [:div.grid.gap-1
+        [:div {:class (if row? "flex flex-1 flex-row items-center flex-wrap" "grid gap-1")}
          (for [[idx item] (medley/indexed v')]
            (let [dom-id' (str dom-id "-" idx)
                  editor-id' (str editor-id idx)]
@@ -481,7 +483,8 @@
                                      {:dom-id dom-id'
                                       :editor-id editor-id'
                                       :editor-args editor-args
-                                      :new-item? (= item ::new-value-placeholder)}))
+                                      :new-item? (= item ::new-value-placeholder)
+                                      :row? row?}))
                dom-id')))
 
          (let [fv (first v')]
@@ -529,12 +532,8 @@
                        (map (fn [k] [k nil]) properties))
                      (:block/properties block))
         alias (set (map :block/uuid (:block/alias block)))
-        tags (set (map :block/uuid (:block/tags block)))
-        alias-and-tags (cond-> []
-                         (seq alias)
-                         (conj [(:block/uuid (db/entity [:block/name "alias"])) alias])
-                         (seq tags)
-                         (conj [(:block/uuid (db/entity [:block/name "tags"])) tags]))
+        alias-properties (when (seq alias)
+                           [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
@@ -545,8 +544,8 @@
                                      [id nil])))
         built-in-properties (set/difference
                              (set (map name gp-property/db-built-in-properties-keys))
-                             #{"tags" "alias"})
-        properties (->> (concat (seq alias-and-tags)
+                             #{"alias"})
+        properties (->> (concat (seq alias-properties)
                                 (seq properties)
                                 class-properties)
                         (util/distinct-by first)

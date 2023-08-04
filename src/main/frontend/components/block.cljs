@@ -2670,7 +2670,7 @@
 (defn- block-mouse-over
   [e *control-show? block-id doc-mode?]
   (when-not @*dragging?
-    (util/stop e)
+    (.preventDefault e)
     (reset! *control-show? true)
     (when-let [parent (gdom/getElement block-id)]
       (let [node (.querySelector parent ".bullet-container")]

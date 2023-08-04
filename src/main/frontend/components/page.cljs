@@ -1167,16 +1167,6 @@
        [:h1.title "Configure page"]
 
        [:div.grid.gap-4.p-1
-        (when-not journal?
-          [:div.grid.grid-cols-2.gap-2.leading-8.items-center
-           [:label.cols-1 "Is this page a structured page?"]
-           (ui/checkbox {:checked class?
-                         :on-change (fn []
-                                      (db/transact! [{:db/id page-id
-                                                      :block/type (if class? ; class->normal page
-                                                                    "page"
-                                                                    "class")}]))})])
-
         (case type
           "class"
           [:div
@@ -1192,16 +1182,18 @@
                 {:selected? false
                  :page-configure? true
                  :class-schema? true}))]]
-           [:div
-            [:h2.text-lg.font-medium.mb-2 "Page properties:"]
-            [:div.grid.gap-1
-             (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-               (component-block/db-properties-cp
-                {:editor-box editor/box}
-                page
-                edit-input-id
-                {:selected? false
-                 :page-configure? true}))]]]
+
+           (when (seq (:block/properties page))
+             [:div.my-4
+              [:h2.text-lg.font-medium.mb-2 "Page properties:"]
+              [:div.grid.gap-1
+               (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+                 (component-block/db-properties-cp
+                  {:editor-box editor/box}
+                  page
+                  edit-input-id
+                  {:selected? false
+                   :page-configure? true}))]])]
 
           [:div
            [:h2.text-lg.font-medium.mb-2 "Properties:"]

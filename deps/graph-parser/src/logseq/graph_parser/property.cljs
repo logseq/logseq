@@ -197,7 +197,7 @@
 
 (def db-user-facing-built-in-properties
   "These are built-in properties that users can see and use"
-  #{:alias :tags})
+  #{:alias})
 
 (defonce db-built-in-properties-keys
   (set (keys db-built-in-properties)))
