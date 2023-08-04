@@ -1000,11 +1000,6 @@ html.is-system-window {
 }
 
 .annotationLayer {
-  position: absolute;
-  top: 0;
-
-  z-index: 3;
-
   .highlightAnnotation, .underlineAnnotation {
     display: none;
   }

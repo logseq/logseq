@@ -41,7 +41,10 @@
         nil
 
         (..  el -classList (contains "block-content"))
-        (let [width (.-clientWidth el)]
+        (let [client-width (.-clientWidth el)
+              width (if (zero? client-width)
+                      (.-width (.-getBoundingClientRect el))
+                      client-width)]
           (reset! (::draw-width state) width))
 
         :else
