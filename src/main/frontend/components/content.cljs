@@ -399,8 +399,9 @@
                       (let [target (gobj/get e "target")
                             block-el (.closest target ".bullet-container[blockid]")
                             block-id (some-> block-el (.getAttribute "blockid"))
-                            property-id (some-> target (.getAttribute "data-propertyid"))
-                            property-block-id (some-> target (.getAttribute "data-blockid"))
+                            property-el (.closest target ".property-k")
+                            property-id (some-> property-el (.getAttribute "data-propertyid"))
+                            property-block-id (some-> property-el (.getAttribute "data-blockid"))
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         (cond

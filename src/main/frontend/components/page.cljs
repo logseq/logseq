@@ -468,12 +468,13 @@
                   (or (seq (:block/properties page))
                       (seq (:block/alias page))
                       (seq (:block/tags page))))
-             (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
-               (component-block/db-properties-cp
-                {:editor-box editor/box}
-                page
-                edit-input-id
-                {:selected? false})))
+             [:div.page-properties.p-2.mb-4
+              (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
+                (component-block/db-properties-cp
+                 {:editor-box editor/box}
+                 page
+                 edit-input-id
+                 {:selected? false}))])
 
            ;; blocks
            (let [page (if block?

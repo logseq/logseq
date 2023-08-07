@@ -65,12 +65,12 @@
         built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
         property (db/sub-block (:db/id property))]
     [:div.property-configure
-     [:h1.title
+     [:p.font-bold.text-xl
       (if built-in-property?
         "Built-in property"
         "Configure property")]
 
-     [:div.grid.gap-2.p-1
+     [:div.grid.gap-2.p-1.mt-4
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label "Name:"]
        [:input.form-input
@@ -455,41 +455,48 @@
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
-     new-property?
-     [:div#edit-new-property
-      (property-input block *property-key *property-value opts)]
+      new-property?
+      [:div#edit-new-property
+       (property-input block *property-key *property-value opts)]
 
-     (or (seq properties)
-         (:page-configure? opts))
-     [:a {:title "Add another property"
-          :on-click (fn []
-                      (property-handler/set-editing-new-property! edit-input-id)
-                      (reset! *property-key nil)
-                      (reset! *property-value nil))}
-      [:div.block {:style {:height      20
-                           :width       20}}
-       [:a.add-button-link.block.mt-1 {:style {:margin-left -4}}
-        (ui/icon "circle-plus")]]])))
+      (or (seq properties)
+          (:page-configure? opts))
+      [:a {:style {:margin-left 3}
+           :title "Add another property"
+           :on-click (fn []
+                       (property-handler/set-editing-new-property! edit-input-id)
+                       (reset! *property-key nil)
+                       (reset! *property-value nil))}
+       [:div.block {:style {:height      20
+                            :width       20}}
+        [:a.add-button-link.block.mt-1 {:style {:margin-left -4}}
+         (ui/icon "circle-plus")]]])))
 
 (rum/defcs property-key
   [state block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)
         icon (pu/get-property property :icon)]
-    [:a
-     {:data-propertyid (:block/uuid property)
-      :data-blockid (:block/uuid block)
-      :data-class-schema (boolean class-schema?)
-      :title (str "Configure property: " (:block/original-name property))
-      :on-click (fn []
-                  (state/set-sub-modal! #(property-config repo property)))}
-     [:div.flex.flex-row.items-center
-      (or
-       (when-let [id (:id icon)]
-         (when (= :emoji (:type icon))
-           [:em-emoji {:id id}]))
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       [:a.property-k
+        {:data-propertyid (:block/uuid property)
+         :data-blockid (:block/uuid block)
+         :data-class-schema (boolean class-schema?)
+         :title (str "Configure property: " (:block/original-name property))
+         :on-click toggle-fn}
+        [:div.flex.flex-row.items-center
+         (or
+          (when-let [id (:id icon)]
+            (when (= :emoji (:type icon))
+              [:em-emoji {:id id}]))
        ;; default property icon
-       (ui/icon "circle-dotted" {:size 16}))
-      [:div.ml-1 (:block/original-name property)]]]))
+          (ui/icon "circle-dotted" {:size 16}))
+         [:div.ml-1 (:block/original-name property)]]])
+     (fn [{:keys [toggle-fn]}]
+       [:div.p-8
+        (property-config repo property)])
+     {:modal-class (util/hiccup->class
+                    "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")})))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row?]
