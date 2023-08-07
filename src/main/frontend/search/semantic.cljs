@@ -30,8 +30,16 @@
                          (throw (js/Error. (str "record modelDim is not found in options of registrated encoder " encoder-name))))
           ret-k        (or (:limit option)
                            10)]
-      (p/let [embed (nth (text-encoder/text-encode q encoder-name) 0)]
-        (vector-store/search store-conn embed ret-k))))
+      (p/let [embeds (text-encoder/text-encode q encoder-name)
+              embed  (nth embeds 0)
+              rets   (vector-store/search store-conn embed ret-k)]
+        (let [clj-ret (bean/->clj rets)
+              transform-fn (fn [{:keys [data]}]
+                             (let [{:keys [uuid page snippet]} data]
+                               {:block/uuid uuid
+                                :block/content snippet
+                                :block/page page}))]
+          (mapv transform-fn clj-ret)))))
   (query-page [_this _q _opt]
     (prn "query full page search")
     (prn _q)
