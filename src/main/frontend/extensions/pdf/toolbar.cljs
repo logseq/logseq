@@ -218,8 +218,8 @@
           :on-key-up   (fn [^js e]
                          (case (.-which e)
                            13                               ;; enter
-                           (do
-                             (do-find! :again)
+                           (let [shift? (.-shiftKey e)]
+                             (do-find! {:type :again :prev? shift?})
                              (set-entered-active? true))
 
                            27                               ;; esc
