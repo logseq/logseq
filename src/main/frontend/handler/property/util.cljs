@@ -4,7 +4,8 @@
             [frontend.config :as config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [clojure.set :as set]))
 
 (defn lookup
   "Get the value of coll's (a map) `key`"
@@ -32,3 +33,16 @@
 
 (defn shape-block? [block]
   (= :whiteboard-shape (get-property block :ls-type)))
+
+(defonce *db-built-in-properties (atom {}))
+
+(defn all-built-in-properties?
+  [properties]
+  (let [repo (state/get-current-repo)]
+    (when (empty? @*db-built-in-properties)
+      (let [built-in-properties (set (map
+                                      (fn [p]
+                                        (:block/uuid (db/entity [:block/name (name p)])))
+                                      gp-property/db-built-in-properties-keys))]
+        (swap! *db-built-in-properties assoc repo built-in-properties)))
+    (set/subset? (set properties) (get @*db-built-in-properties repo))))

@@ -3353,18 +3353,20 @@
   ([block-id {:keys [semantic?]
               :or {semantic? false}}]
    (when block-id
-     (if-let [block (db-model/query-block-by-uuid block-id)]
-       (or (db-model/has-children? block-id)
-           (valid-dsl-query-block? block)
-           (valid-custom-query-block? block)
-           (seq (:block/properties block))
-           (seq (:block/alias block))
-           (and
-            (:outliner/block-title-collapse-enabled? (state/get-config))
-            (block-with-title? (:block/format block)
-                               (:block/content block)
-                               semantic?)))
-       false))))
+     (let [repo (state/get-current-repo)]
+       (if-let [block (db/entity [:block/uuid block-id])]
+         (or (db-model/has-children? block-id)
+             (valid-dsl-query-block? block)
+             (valid-custom-query-block? block)
+             (and (config/db-based-graph? repo)
+                  (seq (:block/properties block))
+                  (not (pu/all-built-in-properties? (keys (:block/properties block)))))
+             (and
+              (:outliner/block-title-collapse-enabled? (state/get-config))
+              (block-with-title? (:block/format block)
+                                 (:block/content block)
+                                 semantic?)))
+         false)))))
 
 (defn all-blocks-with-level
   "Return all blocks associated with correct level

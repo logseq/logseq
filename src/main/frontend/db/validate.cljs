@@ -38,7 +38,9 @@
                          (get-in b [:block/left :db/id])])
         page (d/entity db page-id)
         blocks (:block/_page page)
-        parent-left->es (group-by parent-left-f blocks)
+        parent-left->es (->> (group-by parent-left-f blocks)
+                             (remove (fn [[k _v]] (= k [nil nil])))
+                             (into {}))
         conflicted (filter #(> (count (second %)) 1) parent-left->es)]
     (if (seq conflicted)
       [:conflict-parent-left conflicted]

@@ -69,12 +69,18 @@
   [conn]
   (let [txs (keep
              (fn [[k-keyword {:keys [schema original-name]}]]
-               (let [k-name (name k-keyword)]
-                 (let [property (d/entity @conn [:block/name k-name])]
-                   (when-not (= {:schema schema
-                                 :original-name original-name}
-                                {:schema (:block/schema property)
-                                 :original-name (:block/original-name property)})
+               (let [k-name (name k-keyword)
+                     property (d/entity @conn [:block/name k-name])]
+                 (when-not (= {:schema schema
+                               :original-name (or original-name k-name)}
+                              {:schema (:block/schema property)
+                               :original-name (:block/original-name property)})
+                   (if property
+                     {:block/schema schema
+                      :block/original-name (or original-name k-name)
+                      :block/name (util/page-name-sanity-lc k-name)
+                      :block/uuid (:block/uuid property)
+                      :block/type "property"}
                      (outliner-core/block-with-timestamps
                       {:block/schema schema
                        :block/original-name (or original-name k-name)

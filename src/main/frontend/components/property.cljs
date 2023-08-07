@@ -463,7 +463,8 @@
       [:div#edit-new-property
        (property-input block *property-key *property-value opts)]
 
-      (or (seq properties)
+      (or (and (seq properties)
+               (not (pu/all-built-in-properties? (keys (:block/properties block)))))
           (:page-configure? opts))
       [:a {:style {:margin-left 2}
            :title "Add another property"
