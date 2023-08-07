@@ -537,14 +537,21 @@
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         row? (and multiple-values? (contains? #{:page} (:type schema)))
+        block? (= (:type schema) :block)
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
     (cond
       multiple-values?
       (let [items (if (coll? v) v (when v [v]))]
-        [:div {:class (if row? "flex flex-1 flex-row items-center flex-wrap" "grid gap-1")}
-         (for [[idx item] (medley/indexed v)]
+        [:div {:class (cond
+                        row?
+                        "flex flex-1 flex-row items-center flex-wrap"
+                        block?
+                        "grid"
+                        :else
+                        "grid gap-1")}
+         (for [[idx item] (medley/indexed items)]
            (let [dom-id' (str dom-id "-" idx)
                  editor-id' (str editor-id idx)]
              (rum/with-key
