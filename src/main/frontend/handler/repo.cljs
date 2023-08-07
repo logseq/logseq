@@ -548,7 +548,7 @@
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
-              {:skip-persist? true})
+                          {:skip-persist? true})
           initial-files [{:block/uuid (db/new-block-id)
                           :file/path (str "logseq/" "config.edn")
                           :file/content config/config-default-content}
@@ -559,15 +559,15 @@
                           :file/path (str "logseq/" "custom.js")
                           :file/content ""}]
           default-properties (map
-                               (fn [[k-keyword {:keys [schema]}]]
-                                 (let [k-name (name k-keyword)]
-                                   (outliner-core/block-with-timestamps
-                                    {:block/schema schema
-                                     :block/original-name k-name
-                                     :block/name (util/page-name-sanity-lc k-name)
-                                     :block/uuid (db/new-block-id)
-                                     :block/type "property"})))
-                               gp-property/db-built-in-properties)
+                              (fn [[k-keyword {:keys [schema original-name]}]]
+                                (let [k-name (name k-keyword)]
+                                  (outliner-core/block-with-timestamps
+                                   {:block/schema schema
+                                    :block/original-name (or original-name k-name)
+                                    :block/name (util/page-name-sanity-lc k-name)
+                                    :block/uuid (db/new-block-id)
+                                    :block/type "property"})))
+                              gp-property/db-built-in-properties)
           initial-data (concat initial-files default-properties)
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)

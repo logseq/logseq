@@ -2867,7 +2867,7 @@
                hide-block-refs-count? (and (:embed? config)
                                            (= (:block/uuid block) (:embed-id config)))]
            (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))
-         (when (config/db-based-graph? repo)
+         (when (and (config/db-based-graph? repo) (not collapsed?))
            (db-properties-cp config
                              block
                              edit-input-id

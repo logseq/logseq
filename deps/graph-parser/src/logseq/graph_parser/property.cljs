@@ -169,9 +169,11 @@
 
 ;; FIXME: no support for built-in-extended-properties
 (def db-built-in-properties
-  {:alias {:schema {:type :page
+  {:alias {:original-name "Alias"
+           :schema {:type :page
                     :cardinality :many}}
-   :tags {:schema {:type :page
+   :tags {:original-name "Tags"
+          :schema {:type :page
                    :cardinality :many}}
    :background-color {:schema {:type :default}}
    :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
@@ -190,7 +192,8 @@
    :logseq.order-list-type {:schema {:type :checkbox}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
-   :icon {:schema {:type :map}}
+   :icon {:original-name "Icon"
+          :schema {:type :map}}
    :public {:schema {:type :checkbox}}
    :filters {:schema {:type :map}}
    :exclude-from-graph-view {:schema {:type :checkbox}}})

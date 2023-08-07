@@ -465,7 +465,7 @@
 
       (or (seq properties)
           (:page-configure? opts))
-      [:a {:style {:margin-left 3}
+      [:a {:style {:margin-left 2}
            :title "Add another property"
            :on-click (fn []
                        (property-handler/set-editing-new-property! edit-input-id)

@@ -3352,6 +3352,8 @@
        (or (db-model/has-children? block-id)
            (valid-dsl-query-block? block)
            (valid-custom-query-block? block)
+           (seq (:block/properties block))
+           (seq (:block/alias block))
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)
