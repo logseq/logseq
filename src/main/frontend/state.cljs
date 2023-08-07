@@ -1038,7 +1038,7 @@ Similar to re-frame subscriptions"
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction :down)
   (set-state! :selection/start-block nil)
-  (set-state! :selection/selected-all false))
+  (set-state! :selection/selected-all? false))
 
 (defn get-selection-blocks
   []
