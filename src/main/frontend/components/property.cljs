@@ -275,13 +275,13 @@
         [:div.flex.flex-1
          (case type
            (list :number :url)
-           [:div.h-8 (select block property select-opts)]
+           [:div.h-6 (select block property select-opts)]
 
            :page
-           [:div.h-8 (select-page block property select-opts)]
+           [:div.h-6 (select-page block property select-opts)]
 
            :block
-           [:div.h-8 (select-block block property select-opts)]
+           [:div.h-6 (select-block block property select-opts)]
 
            (let [config {:editor-opts
                          {:on-key-down

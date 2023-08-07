@@ -56,7 +56,7 @@
     }
 
     .cp__select-input {
-        padding: 0.25em;
+        padding: 0;
     }
 
     .ls-block, .editor-wrapper {
@@ -78,7 +78,7 @@
 }
 
 .block-main-container .ls-properties-area {
-    margin-top: 0.5em;
+    margin-top: 0.25em;
 
     gap: 0;
 
