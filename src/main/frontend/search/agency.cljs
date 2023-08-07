@@ -16,7 +16,7 @@
    (when state/lsp-enabled?
      (for [s (state/get-all-plugin-services-with-type :search)]
        (search-plugin/->Plugin s repo)))
-   (when state/semsearch-enabled?
+   (when (state/semsearch-enabled?)
      (search-semantic/->Semantic repo))])
 
 (defn- get-flatten-registered-engines

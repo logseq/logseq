@@ -11,7 +11,7 @@
   (rebuild-blocks-indice! [this])
   (transact-blocks! [this data])
 
-  ;; Reseting the index to empty
+  ;; Resetting the index to empty
   ;; TODO: rename to truncate-indice! 
   (truncate-blocks! [this])
   (transact-pages! [this data])

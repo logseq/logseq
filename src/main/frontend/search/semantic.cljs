@@ -41,9 +41,7 @@
                                 :block/page page}))]
           (mapv transform-fn clj-ret)))))
   (query-page [_this _q _opt]
-    (prn "query full page search")
-    (prn _q)
-    (prn _opt))
+    (prn "query full page search"))
   (rebuild-blocks-indice! [_this]
     ;; Step 1: reset vector store
     ;; Step 2: Don't do anything (wait transact-pages! or transact-blocks! being called) 

@@ -69,7 +69,7 @@
   "Remove all records from the vector store
    - id-str: identifier for the vector store
    
-   Returns a promise of the vector store reseting
+   Returns a promise of the vector store resetting
    or throw an error if the store doesn't exist"
     [id-str]
     (let [store (@*stores id-str)]
