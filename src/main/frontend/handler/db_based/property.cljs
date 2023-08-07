@@ -29,8 +29,7 @@
 (defn- logseq-block?
   [id]
   (and (uuid? id)
-       (when-let [e (db/entity [:block/uuid id])]
-         (some? (:block/page e)))))
+       (some? (db/entity [:block/uuid id]))))
 
 (defn- logseq-object?
   [id]

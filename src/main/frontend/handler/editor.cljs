@@ -59,7 +59,8 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.db-based.property :as db-property]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -481,7 +482,8 @@
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (util/page-name-sanity-lc page)])
-                  (db/entity [:block/uuid block-uuid]))]
+                  (db/entity [:block/uuid block-uuid]))
+          db-based? (config/db-based-graph? repo)]
       (when block
         (let [last-block (when (not sibling?)
                            (let [children (:block/_parent block)
@@ -507,6 +509,9 @@
               new-block (-> new-block
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
+              new-block (if (and db-based? (seq properties))
+                          (assoc new-block :block/properties (db-property/replace-key-with-id! properties))
+                          new-block)
               [block-m sibling?] (cond
                                    before?
                                    (let [first-child? (->> [:block/parent :block/left]

@@ -24,7 +24,8 @@
             [cljs-time.coerce :as tc]
             [clojure.set :as set]
             [frontend.db-mixins :as db-mixins]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.modules.outliner.core :as outliner-core]))
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
@@ -232,23 +233,19 @@
                                      (case (util/ekey e)
                                        "Enter"
                                        (when not-matched?
-                                         (let [content (string/trim (util/evalue e))]
+                                         (let [repo (state/get-current-repo)
+                                               content (string/trim (util/evalue e))]
                                            (when-not (string/blank? content)
-                                             (let [property-page config/property-page]
-                                               (when-not (db/entity [:block/name property-page])
-                                                 (let [id (db/new-block-id)]
-                                                   (db/transact! [{:block/uuid id
-                                                                   :block/name property-page
-                                                                   :block/original-name property-page
-                                                                   :block/type "page"
-                                                                   :block/created-at (util/time-ms)
-                                                                   :block/updated-at (util/time-ms)}])))
-                                               (let [new-block (editor-handler/api-insert-new-block! content
-                                                                                                     {:page property-page
-                                                                                                      :replace-empty-target? false})]
-                                                 (when-let [id (:block/uuid new-block)]
-                                                   (add-property! block (:block/original-name property) id))
-                                                 (when-let [f (:on-chosen opts)] (f)))))))
+                                             (let [new-block (-> (editor-handler/wrap-parse-block {:block/format :markdown
+                                                                                                   :block/content content})
+                                                                 (outliner-core/block-with-timestamps)
+                                                                 (assoc :block/page {:db/id
+                                                                                     (or (:db/id (:block/page block))
+                                                                                         (:db/id block))}))
+                                                   id (:block/uuid new-block)]
+                                               (db/transact! repo [new-block] {:outliner-op :insert-blocks})
+                                               (add-property! block (:block/original-name property) id)
+                                               (when-let [f (:on-chosen opts)] (f))))))
                                        "Escape"
                                        (do (exit-edit-property)
                                            (when-let [f (:on-chosen opts)] (f)))

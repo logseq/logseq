@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.db.migrate :as db-migrate]
             [frontend.db.persist :as db-persist]
@@ -15,7 +16,9 @@
             [logseq.db.sqlite.restore :as sqlite-restore]
             [promesa.core :as p]
             [frontend.util :as util]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -62,6 +65,26 @@
        (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
      (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids)))))
 
+(defn- update-built-in-properties!
+  [conn]
+  (let [txs (keep
+             (fn [[k-keyword {:keys [schema original-name]}]]
+               (let [k-name (name k-keyword)]
+                 (let [property (d/entity @conn [:block/name k-name])]
+                   (when-not (= {:schema schema
+                                 :original-name original-name}
+                                {:schema (:block/schema property)
+                                 :original-name (:block/original-name property)})
+                     (outliner-core/block-with-timestamps
+                      {:block/schema schema
+                       :block/original-name (or original-name k-name)
+                       :block/name (util/page-name-sanity-lc k-name)
+                       :block/uuid (db/new-block-id)
+                       :block/type "property"})))))
+             gp-property/db-built-in-properties)]
+    (when (seq txs)
+      (d/transact! conn txs))))
+
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
   (let [start (util/time-ms)
@@ -73,6 +96,8 @@
         new-db (sqlite-restore/restore-other-data conn data uuid->db-id-map {:init-db-fn profiled-init-db})]
 
     (reset! conn new-db)
+
+    (update-built-in-properties! conn)
 
     (let [end (util/time-ms)]
       (println "[debug] load others from SQLite: " (int (- end start)) " ms."))

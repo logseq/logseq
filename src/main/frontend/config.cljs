@@ -369,7 +369,6 @@
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
 (defonce db-version-prefix "logseq_db_")
-(defonce property-page "$$property")
 
 (defn local-file-based-graph?
   [s]
