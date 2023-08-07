@@ -168,6 +168,7 @@
 ;; =============
 
 ;; FIXME: no support for built-in-extended-properties
+;; TODO: add description
 (def db-built-in-properties
   {:alias {:original-name "Alias"
            :schema {:type :page
@@ -196,7 +197,8 @@
           :schema {:type :map}}
    :public {:schema {:type :checkbox}}
    :filters {:schema {:type :map}}
-   :exclude-from-graph-view {:schema {:type :checkbox}}})
+   :exclude-from-graph-view {:schema {:type :checkbox}}
+   :created-in-property {:schema {:type :checkbox}}})
 
 (def db-user-facing-built-in-properties
   "These are built-in properties that users can see and use"

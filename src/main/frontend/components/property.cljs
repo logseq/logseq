@@ -236,12 +236,14 @@
                                          (let [repo (state/get-current-repo)
                                                content (string/trim (util/evalue e))]
                                            (when-not (string/blank? content)
-                                             (let [new-block (-> (editor-handler/wrap-parse-block {:block/format :markdown
+                                             (let [pid (:block/uuid (db/entity [:block/name "created-in-property"]))
+                                                   new-block (-> (editor-handler/wrap-parse-block {:block/format :markdown
                                                                                                    :block/content content})
                                                                  (outliner-core/block-with-timestamps)
-                                                                 (assoc :block/page {:db/id
-                                                                                     (or (:db/id (:block/page block))
-                                                                                         (:db/id block))}))
+                                                                 (merge {:block/page {:db/id
+                                                                                      (or (:db/id (:block/page block))
+                                                                                          (:db/id block))}
+                                                                         :block/properties {pid true}}))
                                                    id (:block/uuid new-block)]
                                                (db/transact! repo [new-block] {:outliner-op :insert-blocks})
                                                (add-property! block (:block/original-name property) id)

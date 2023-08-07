@@ -2370,8 +2370,9 @@
 
 (rum/defc block-refs-count < rum/static
   [block *hide-block-refs?]
-  (let [block-refs-count (count (:block/_refs block))]
-    (when (> block-refs-count 0)
+  (let [created-in-property? (pu/get-property block :created-in-property)
+        block-refs-count (count (:block/_refs block))]
+    (when (and (not created-in-property?) (> block-refs-count 0))
       [:div
        [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
         {:title "Open block references"
