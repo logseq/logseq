@@ -217,7 +217,8 @@
         {:outliner-op :save-block}))))
 
 (defn update-property!
-  [repo property-uuid {:keys [property-name property-schema]}]
+  [repo property-uuid {:keys [property-name property-schema
+                              properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
     (when (and (= :many (:cardinality property-schema))
@@ -229,9 +230,12 @@
                                    {:block/original-name property-name
                                     :block/name (gp-util/page-name-sanity-lc property-name)})
                     property-schema (assoc :block/schema property-schema)
+                    properties (assoc :block/properties
+                                      (merge (:block/properties property)
+                                             properties))
                     true outliner-core/block-with-updated-at)]
       (db/transact! repo [tx-data]
-        {:outliner-op :save-block}))))
+                    {:outliner-op :save-block}))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"

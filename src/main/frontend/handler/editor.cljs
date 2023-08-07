@@ -3335,11 +3335,12 @@
   [block]
   (let [entity (db/entity (:db/id block))
         content (:block/content entity)]
-    (when (and (string/includes? content "#+BEGIN_QUERY")
-               (string/includes? content "#+END_QUERY"))
-      (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config (or (:block/format entity) :markdown)))
-            q (mldoc/extract-first-query-from-ast ast)]
-        (some? (:query (gp-util/safe-read-string q)))))))
+    (when content
+      (when (and (string/includes? content "#+BEGIN_QUERY")
+                 (string/includes? content "#+END_QUERY"))
+        (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config (or (:block/format entity) :markdown)))
+              q (mldoc/extract-first-query-from-ast ast)]
+          (some? (:query (gp-util/safe-read-string q))))))))
 
 (defn collapsable?
   ([block-id]

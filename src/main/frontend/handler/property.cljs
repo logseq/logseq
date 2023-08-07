@@ -27,7 +27,7 @@
   [repo property-uuid opts]
   {:pre [(uuid? property-uuid)]}
   #_:clj-kondo/ignore
-  (if (config/db-based-graph? repo)
+  (when (config/db-based-graph? repo)
     (db-property/update-property! repo property-uuid opts)))
 
 (defn delete-property-value!

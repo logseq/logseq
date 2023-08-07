@@ -23,10 +23,35 @@
             [medley.core :as medley]
             [cljs-time.coerce :as tc]
             [clojure.set :as set]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [frontend.handler.property.util :as pu]))
+
+(rum/defc icon
+  [block {:keys [_type id]}]            ; only :emoji supported yet
+  (let [value (or id "Pick an Icon")
+        repo (state/get-current-repo)
+        icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       (if id
+         [:a {:on-click toggle-fn}
+          [:em-emoji {:id id}]]
+         (ui/button value
+                    :small? true
+                    :intent "border-link"
+                    :on-click toggle-fn)))
+     (fn [{:keys [toggle-fn]}]
+       (ui/emoji-picker
+        {:auto-focus true
+         :on-emoji-select (fn [icon]
+                            (when-let [id (.-id icon)]
+                              (property-handler/update-property! repo (:block/uuid block) {:properties {icon-property-id {:type :emoji
+                                                                                                                          :id id}}}))
+                            (toggle-fn))})))))
+
 
 (rum/defcs property-config <
-  rum/static
+  rum/reactive
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
@@ -34,10 +59,11 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property ]
+  [state repo property]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
-        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))]
+        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
+        property (db/sub-block (:db/id property))]
     [:div.property-configure
      [:h1.title
       (if built-in-property?
@@ -51,6 +77,11 @@
         {:on-change #(reset! *property-name (util/evalue %))
          :disabled built-in-property?
          :value @*property-name}]]
+
+      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+       [:label "Icon:"]
+       (let [icon-value (pu/get-property property :icon)]
+         (icon property icon-value))]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
        [:label "Schema type:"]
@@ -89,13 +120,13 @@
       [:div
        (when-not built-in-property?
          (ui/button
-         "Save"
-         :on-click (fn []
-                     (property-handler/update-property!
-                      repo (:block/uuid property)
-                      {:property-name @*property-name
-                       :property-schema @*property-schema})
-                     (state/close-modal!))))]
+          "Save"
+          :on-click (fn []
+                      (property-handler/update-property!
+                       repo (:block/uuid property)
+                       {:property-name @*property-name
+                        :property-schema @*property-schema})
+                      (state/close-modal!))))]
 
       (when config/dev?
         [:div {:style {:max-width 900}}
@@ -442,7 +473,8 @@
 
 (rum/defcs property-key
   [state block property {:keys [class-schema?]}]
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        icon (pu/get-property property :icon)]
     [:a
      {:data-propertyid (:block/uuid property)
       :data-blockid (:block/uuid block)
@@ -450,7 +482,14 @@
       :title (str "Configure property: " (:block/original-name property))
       :on-click (fn []
                   (state/set-sub-modal! #(property-config repo property)))}
-     (:block/original-name property)]))
+     [:div.flex.flex-row.items-center
+      (or
+       (when-let [id (:id icon)]
+         (when (= :emoji (:type icon))
+           [:em-emoji {:id id}]))
+       ;; default property icon
+       (ui/icon "circle-dotted" {:size 16}))
+      [:div.ml-1 (:block/original-name property)]]]))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row?]

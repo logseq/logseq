@@ -190,7 +190,7 @@
    :logseq.order-list-type {:schema {:type :checkbox}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
-   :icon {:schema {:type :default}}
+   :icon {:schema {:type :map}}
    :public {:schema {:type :checkbox}}
    :filters {:schema {:type :map}}
    :exclude-from-graph-view {:schema {:type :checkbox}}})

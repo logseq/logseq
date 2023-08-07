@@ -6,6 +6,9 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            ["@emoji-mart/data" :as emoji-data]
+            ["@emoji-mart/react" :as Picker]
+            ["emoji-mart" :as emoji-mart]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -46,6 +49,8 @@
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
+(defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
+(def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
 (defn reset-ios-whole-page-offset!
   []
@@ -1013,16 +1018,16 @@
 
 (rum/defc icon
   ([name] (icon name nil))
-  ([name {:keys [extension? font? class] :as opts}]
+  ([name {:keys [extension? font? class size] :as opts}]
    (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
                                  (util/format
-                                   (str "%s-" name
-                                        (when (:class opts)
-                                          (str " " (string/trim (:class opts)))))
-                                   (if extension? "tie tie" "ti ti"))}
+                                  (str "%s-" name
+                                       (when (:class opts)
+                                         (str " " (string/trim (:class opts)))))
+                                  (if extension? "tie tie" "ti ti"))}
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
@@ -1030,7 +1035,7 @@
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" name " " class)}
-              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
+              (f (merge {:size (or size 18)} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (rum/defc button
   [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
@@ -1210,3 +1215,7 @@
       :on-click rm-heading-fn
       :intent "link"
       :small? true)]]))
+
+(rum/defc emoji-picker
+  [opts]
+  (EmojiPicker. (assoc opts :data emoji-data)))
