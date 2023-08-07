@@ -218,6 +218,7 @@
 (defn- select-block
   [block property opts]
   (let [blocks (->> (model/get-all-block-contents)
+                    (remove (fn [b] (= (:db/id block) (:db/id b))))
                     (map (fn [b]
                            (assoc b :value (:block/content b)))))]
     (select/select {:items blocks
@@ -463,19 +464,17 @@
       [:div#edit-new-property
        (property-input block *property-key *property-value opts)]
 
-      (or (and (seq properties)
-               (not (pu/all-built-in-properties? (keys (:block/properties block)))))
-          (:page-configure? opts))
-      [:a {:style {:margin-left 2}
-           :title "Add another property"
-           :on-click (fn []
-                       (property-handler/set-editing-new-property! edit-input-id)
-                       (reset! *property-key nil)
-                       (reset! *property-value nil))}
-       [:div.block {:style {:height      20
-                            :width       20}}
-        [:a.add-button-link.block.mt-1 {:style {:margin-left -4}}
-         (ui/icon "circle-plus")]]])))
+      (or (:page-configure? opts)
+          (and (seq properties)
+               (not (pu/all-built-in-properties? (keys (:block/properties block))))))
+      [:div
+       [:a.add-button-link
+        {:title "Add another property"
+         :on-click (fn []
+                     (property-handler/set-editing-new-property! edit-input-id)
+                     (reset! *property-key nil)
+                     (reset! *property-value nil))}
+        (ui/icon "circle-plus" {:size 15})]])))
 
 (rum/defcs property-key
   [state block property {:keys [class-schema?]}]
@@ -572,11 +571,9 @@
            :else
            [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *editing? true))}
             [:div.flex.flex-row
-             [:div.block {:style {:height      20
-                                  :width       20}}
-              [:a.add-button-link.block {:title "Add another value"
-                                         :style {:margin-left -4}}
-               (ui/icon "circle-plus")]]]])])
+             [:a.add-button-link.inline-flex {:title "Add another value"
+                                              :style {:margin-left -3}}
+              (ui/icon "circle-plus")]]])])
 
       :else
       [:div.flex.flex-1.items-center.property-value-content
@@ -645,6 +642,6 @@
                 (if (:class-schema? opts)
                   [:div.property-description.col-span-3.font-light
                    (get-in property [:block/schema :description])]
-                  [:div.property-value.col-span-3
+                  [:div.property-value.col-span-3.inline-grid
                    (property-value block property v opts)])]))))
        (new-property block edit-input-id properties new-property? opts)])))

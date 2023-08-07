@@ -3361,6 +3361,8 @@
              (and (config/db-based-graph? repo)
                   (seq (:block/properties block))
                   (not (pu/all-built-in-properties? (keys (:block/properties block)))))
+             (and (config/db-based-graph? repo)
+                  (seq (:block/tags block)))
              (and
               (:outliner/block-title-collapse-enabled? (state/get-config))
               (block-with-title? (:block/format block)

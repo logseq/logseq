@@ -80,8 +80,6 @@
 .block-main-container .ls-properties-area {
     margin-top: 0.25em;
 
-    gap: 0;
-
     .property-pair {
         gap: 0;
     }
