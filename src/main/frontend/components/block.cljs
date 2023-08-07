@@ -2410,7 +2410,7 @@
                  current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
                  embed-self? (and (:embed? config)
                                   (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (if (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)) false true)]
+                 default-hide? (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))]
              (assoc state ::hide-block-refs? (atom default-hide?))))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count? selected?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
@@ -2472,7 +2472,8 @@
 
              (block-refs-count block *hide-block-refs?)])]
 
-         (when (and (not hide-block-refs?) (> refs-count 0))
+         (when (and (not hide-block-refs?) (> refs-count 0)
+                    (not (:in-property? config)))
            (let [refs-cp (state/get-component :block/linked-references)]
              (refs-cp uuid)))]))))
 
