@@ -206,7 +206,8 @@
                                    (when-let [f (:on-chosen opts)] (f))))
                     :show-new-when-not-exact-match? true
                     :input-opts (fn [_]
-                                  {:on-key-down
+                                  {:on-blur (or (:on-chosen opts) identity)
+                                   :on-key-down
                                    (fn [e]
                                      (case (util/ekey e)
                                        "Escape"
@@ -216,8 +217,8 @@
 (defn- select-block
   [block property opts]
   (let [blocks (->> (model/get-all-block-contents)
-                   (map (fn [b]
-                          (assoc b :value (:block/content b)))))]
+                    (map (fn [b]
+                           (assoc b :value (:block/content b)))))]
     (select/select {:items blocks
                     :dropdown? true
                     :on-chosen (fn [chosen]
@@ -225,7 +226,8 @@
                                    (add-property! block (:block/original-name property) id)
                                    (when-let [f (:on-chosen opts)] (f))))
                     :input-opts (fn [not-matched?]
-                                  {:on-key-down
+                                  {:on-blur (or (:on-chosen opts) identity)
+                                   :on-key-down
                                    (fn [e]
                                      (case (util/ekey e)
                                        "Enter"
@@ -236,11 +238,11 @@
                                                (when-not (db/entity [:block/name property-page])
                                                  (let [id (db/new-block-id)]
                                                    (db/transact! [{:block/uuid id
-                                                                  :block/name property-page
-                                                                  :block/original-name property-page
-                                                                  :block/type "page"
-                                                                  :block/created-at (util/time-ms)
-                                                                  :block/updated-at (util/time-ms)}])))
+                                                                   :block/name property-page
+                                                                   :block/original-name property-page
+                                                                   :block/type "page"
+                                                                   :block/created-at (util/time-ms)
+                                                                   :block/updated-at (util/time-ms)}])))
                                                (let [new-block (editor-handler/api-insert-new-block! content
                                                                                                      {:page property-page
                                                                                                       :replace-empty-target? false})]
@@ -268,7 +270,8 @@
                                  (when-let [f (:on-chosen opts)] (f)))
                     :show-new-when-not-exact-match? true
                     :input-opts (fn [_]
-                                  {:on-key-down
+                                  {:on-blur (or (:on-chosen opts) identity)
+                                   :on-key-down
                                    (fn [e]
                                      (case (util/ekey e)
                                        "Escape"
@@ -438,7 +441,8 @@
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
-                                    (add-property-from-dropdown entity value opts))})])))
+                                    (add-property-from-dropdown entity value opts))
+                       :input-opts {:on-blur exit-edit-property}})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
@@ -492,11 +496,11 @@
        ;; default property icon
           (ui/icon "circle-dotted" {:size 16}))
          [:div.ml-1 (:block/original-name property)]]])
-     (fn [{:keys [toggle-fn]}]
+     (fn [{:keys [_toggle-fn]}]
        [:div.p-8
         (property-config repo property)])
      {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")})))
+                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row?]
