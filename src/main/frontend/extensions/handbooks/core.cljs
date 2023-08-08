@@ -428,7 +428,7 @@
    :settings     [pane-settings]})
 
 
-(defonce discord-endpoint "https://discord.com/api/v9/invites/VNfUaTtdFb?with_counts=true&with_expiration=true")
+(defonce discord-endpoint "https://plugins.logseq.io/ds")
 
 (rum/defc footer-link-cards
   []
