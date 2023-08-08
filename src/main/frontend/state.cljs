@@ -1944,10 +1944,17 @@ Similar to re-frame subscriptions"
       second ;; Return the encoder, without the encoder key
       ))
 
-(defn semsearch-enabled?
+(defn sub-semsearch-enabled?
   "Conditions to enable semantic search"
   []
   (-> (sub :ai/text-encoders)
+      (not-empty)
+      (boolean)))
+
+(defn semsearch-enabled?
+  "Conditions to enable semantic search"
+  []
+  (-> (:ai/text-encoders state)
       (not-empty)
       (boolean)))
 

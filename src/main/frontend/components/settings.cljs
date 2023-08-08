@@ -974,7 +974,7 @@
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-semsearch? (state/semsearch-enabled?)
+        enable-semsearch? (state/sub-semsearch-enabled?)
         enable-sync? (state/enable-sync?)
         enable-sync-diff-merge? (state/enable-sync-diff-merge?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
