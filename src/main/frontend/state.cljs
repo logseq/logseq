@@ -1186,6 +1186,7 @@ Similar to re-frame subscriptions"
   (swap! state merge {:editor/editing? nil
                       :cursor-range    nil
                       :editor/last-saved-cursor nil})
+  (set-state! :editor/content {})
   (set-state! :editor/block nil))
 
 (defn into-code-editor-mode!

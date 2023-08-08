@@ -739,7 +739,6 @@
    (delete-block! repo true))
   ([repo delete-children?]
    (state/set-editor-op! :delete)
-   (prn :debug 0)
    (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
      (when block-id
        (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
@@ -753,10 +752,8 @@
                                          (when-let [block-id (:block/uuid (:data left))]
                                            (let [block (db/entity [:block/uuid block-id])]
                                              (seq (:block/_parent block)))))]
-             (prn :debug 1)
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
-                 (prn :debug 2)
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (if (:embed? config)
                                        (util/get-prev-block-non-collapsed
@@ -795,7 +792,6 @@
           opts (cond-> {:outliner-op :delete-blocks}
                  (config/db-based-graph? repo)
                  (assoc :persist-op? true :repo repo))]
-      (prn {:blocks blocks})
       (outliner-tx/transact!
        opts
        (outliner-core/delete-blocks! blocks {}))

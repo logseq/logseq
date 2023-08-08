@@ -320,25 +320,18 @@
            (let [config {:editor-opts
                          {:on-key-down
                           (fn [e]
-                            (let [enter? (= (util/ekey e) "Enter")]
-                              (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
-                                         (not (state/get-editor-action)))
-                                (util/stop e)
-                                (property-handler/set-block-property! repo (:block/uuid block)
-                                                                      (:block/original-name property)
-                                                                      (util/evalue e)
-                                                                      :old-value value)
-                                (exit-edit-property)
-
-                                (when (and enter? multiple-values?)
-                                  (let [values-count (-> (:block/properties (db/entity (:db/id block)))
-                                                         (get (:block/uuid property))
-                                                         (count))
-                                        editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property) "-" values-count)]
-                                    (set-editing! property editor-id nil ""))))))}}]
-             (editor-box editor-args editor-id (cond-> config
-                                                 multiple-values?
-                                                 (assoc :property-value value)))))]
+                            (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
+                                       (not (state/get-editor-action)))
+                              (util/stop e)
+                              (property-handler/set-block-property! repo (:block/uuid block)
+                                                                    (:block/original-name property)
+                                                                    (util/evalue e)
+                                                                    :old-value value)
+                              (when editing-atom (reset! editing-atom false))
+                              (exit-edit-property)))}}]
+             [:div.pl-1 (editor-box editor-args editor-id (cond-> config
+                                                            multiple-values?
+                                                            (assoc :property-value value)))]))]
         (let [class (str (when-not row? "flex flex-1 ")
                          (when multiple-values? "property-value-content"))]
           [:div {:id (or dom-id (random-uuid))
@@ -566,7 +559,7 @@
 
          (cond
            @*editing?
-           (property-scalar-value block property v
+           (property-scalar-value block property ""
                                   (merge
                                    opts
                                    {:editor-args editor-args
