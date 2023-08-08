@@ -7,7 +7,6 @@
 ;; Create a vector store atom, which is a map handling all vecs
 
 (defonce *stores (atom {}))
-(defonce js-vector-store-class VectorStorage)
 
 (defn create
   "Get a vector store handler in the app runtime state
