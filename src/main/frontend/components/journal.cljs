@@ -27,50 +27,9 @@
   [title]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
-        repo (state/sub :git/current-repo)
-        today? (= (string/lower-case title)
-                  (string/lower-case (date/journal-name)))
-        page-entity (db/pull [:block/name (util/page-name-sanity-lc title)])
-        data-page-tags (when (seq (:block/tags page-entity))
-                         (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                           (text-util/build-data-value page-names)))]
-    [:div.flex-1.journal.page (cond-> {}
-                                data-page-tags
-                                (assoc :data-page-tags data-page-tags))
-
-     (ui/foldable
-      [:a.initial-color.title.journal-title
-       {:href     (rfe/href :page {:name page})
-        :on-mouse-down (fn [e]
-                         (when (util/right-click? e)
-                           (state/set-state! :page-title/context {:page page})))
-        :on-click (fn [e]
-                    (when (gobj/get e "shiftKey")
-                      (when-let [page page-entity]
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page))
-                      (.preventDefault e)))}
-       [:h1.title
-        (gp-util/capitalize-all title)]]
-
-      (if today?
-        (blocks-cp repo page)
-        (ui/lazy-visible
-         (fn [] (blocks-cp repo page))
-         {:debug-id (str "journal-blocks " page)}))
-
-      {})
-
-     (page/today-queries repo today? false)
-
-     (when today?
-       (scheduled/scheduled-and-deadlines page))
-
-     (rum/with-key
-       (reference/references title)
-       (str title "-refs"))]))
+        repo (state/sub :git/current-repo)]
+    (page/page {:repo repo
+                :page-name page})))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

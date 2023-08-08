@@ -982,9 +982,6 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :page/configure [[_ page]]
-  (state/set-modal! #(page/configure page)))
-
 (defn run!
   []
   (let [chan (state/get-events-chan)]

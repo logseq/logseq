@@ -84,14 +84,7 @@
                                   (contains? gp-property/db-built-in-properties-keys-str page-name))]
       (when (and page (not block?))
         (->>
-         [(when (and (not config/publishing?)
-                     (config/db-based-graph? repo)
-                     (not built-in-property?))
-            {:title (t :page/configure)
-             :options {:on-click
-                       (fn []
-                         (state/pub-event! [:page/configure page]))}})
-          (when-not config/publishing?
+         [(when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))

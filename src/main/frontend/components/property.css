@@ -1,3 +1,8 @@
+.property-configure {
+    min-width: 600px;
+    max-width: 800px;
+}
+
 .property-value-content {
     @apply px-1 rounded-sm;
     cursor: text;

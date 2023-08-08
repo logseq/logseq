@@ -9,14 +9,12 @@
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.config :as config]
             [rum.core :as rum]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [frontend.search :as search]
-            [frontend.components.svg :as svg]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.components.select :as select]
             [logseq.graph-parser.property :as gp-property]
@@ -60,7 +58,7 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property]
+  [state repo property {:keys [toggle-fn]}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
@@ -122,18 +120,14 @@
        (when-not built-in-property?
          (ui/button
           "Save"
-          :on-click (fn []
+          :on-click (fn [e]
+                      (util/stop e)
                       (property-handler/update-property!
                        repo (:block/uuid property)
                        {:property-name @*property-name
                         :property-schema @*property-schema})
-                      (state/close-modal!))))]
-
-      (when config/dev?
-        [:div {:style {:max-width 900}}
-         [:hr]
-         [:p "Debug data:"]
-         [:pre (util/pp-str property)]])]]))
+                      (state/close-modal!)
+                      (when toggle-fn (toggle-fn)))))]]]))
 
 (defn- exit-edit-property
   []
@@ -282,7 +276,7 @@
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id row?
                                 editor-box editor-args
-                                editing? editing-atom
+                                editing? editing-atom *configure-show?
                                 blocks-container-id]}]
   (let [property (model/sub-block (:db/id property))
         multiple-values? (= :many (:cardinality (:block/schema property)))
@@ -290,7 +284,9 @@
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
         repo (state/get-current-repo)
         type (:type (:block/schema property))
-        select-opts {:on-chosen (fn [] (when editing-atom (reset! editing-atom false)))}]
+        select-opts {:on-chosen (fn []
+                                  (when *configure-show? (reset! *configure-show? false))
+                                  (when editing-atom (reset! editing-atom false)))}]
     (case type
       :date
       (date-picker block property value)
@@ -396,7 +392,7 @@
             (db-property/upsert-property! repo property-name {:type :default} {})
             ;; configure new property
             (when-let [property (get-property-from-db property-name)]
-              (state/set-sub-modal! #(property-config repo property)))))
+              (state/set-sub-modal! #(property-config repo property {})))))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (exit-edit-property))))))
 
@@ -422,9 +418,7 @@
          [:div.col-span-1 @*property-key]
          [:div.col-span-3.flex.flex-row
           (when (and property (not class-schema?))
-            (property-scalar-value entity property @*property-value (assoc opts :editing? true)))
-          [:a.close {:on-mouse-down exit-edit-property}
-           svg/close]]])
+            (property-scalar-value entity property @*property-value (assoc opts :editing? true)))]])
 
       [:div.ls-property-add.h-6
        (select/select {:items (map (fn [x] {:value x}) properties)
@@ -489,9 +483,9 @@
        ;; default property icon
           (ui/icon "circle-dotted" {:size 16}))
          [:div.ml-1 (:block/original-name property)]]])
-     (fn [{:keys [_toggle-fn]}]
+     (fn [{:keys [toggle-fn]}]
        [:div.p-8
-        (property-config repo property)])
+        (property-config repo property {:toggle-fn toggle-fn})])
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
 
@@ -608,7 +602,6 @@
         alias (set (map :block/uuid (:block/alias block)))
         alias-properties (when (seq alias)
                            [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
-        new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
                                         (when (= "class" (:block/type tag))
@@ -618,14 +611,19 @@
                                      [id nil])))
         built-in-properties (set/difference
                              (set (map name gp-property/db-built-in-properties-keys))
-                             #{"alias"})
+                             #{"alias" "tags"})
         properties (->> (concat (seq alias-properties)
                                 (seq properties)
                                 class-properties)
                         (util/distinct-by first)
                         (remove (fn [[k _v]]
                                   (when (uuid? k)
-                                    (contains? built-in-properties (:block/name (db/entity [:block/uuid k])))))))]
+                                    (contains? built-in-properties (:block/name (db/entity [:block/uuid k])))))))
+        new-property? (or
+                       (and (:*configure-show? opts)
+                            @(:*configure-show? opts)
+                            (empty? properties))
+                       (= edit-input-id (state/sub :ui/new-property-input-id)))]
     (when-not (and (empty? properties)
                    (not new-property?)
                    (not (:page-configure? opts)))

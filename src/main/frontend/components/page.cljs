@@ -287,11 +287,13 @@
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
+  (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title _format fmt-journal?]
+  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
+          *hover? (::hover? state)
           *title-value (get state ::title-value)
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
@@ -304,50 +306,70 @@
                   (if fmt-journal?
                     (date/journal-title->custom-format title)
                     title))
-          old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
-       {:class (when-not whiteboard-page? "title")
-        :on-mouse-down (fn [e]
-                         (when (util/right-click? e)
-                           (state/set-state! :page-title/context {:page page-name})))
-        :on-click (fn [e]
-                    (when-not (= (.-nodeName (.-target e)) "INPUT")
-                      (.preventDefault e)
-                      (if (gobj/get e "shiftKey")
-                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                          (state/sidebar-add-block!
-                           repo
-                           (:db/id page)
-                           :page))
-                        (when (and (not hls-page?)
-                                   (not fmt-journal?)
-                                   (not config/publishing?)
-                                   (not (and (= "property" (:block/type page))
-                                             (contains? gp-property/db-built-in-properties-keys-str page-name))))
-                          (reset! *input-value (if untitled? "" old-name))
-                          (reset! *edit? true)))))}
-       (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative
-        (when @*edit?
-          (page-title-editor {:*title-value *title-value
-                              :*edit? *edit?
-                              :*input-value *input-value
-                              :title title
-                              :page-name page-name
-                              :old-name old-name
-                              :untitled? untitled?
-                              :whiteboard-page? whiteboard-page?}))
-        [:span.title.block
-         {:data-value @*input-value
-          :data-ref   page-name
-          :style      {:opacity (when @*edit? 0)}}
-         (let [nested? (and (string/includes? title page-ref/left-brackets)
-                            (string/includes? title page-ref/right-brackets))]
-           (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                 untitled? [:span.opacity-50 (t :untitled)]
-                 nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
-                                                                                     (:block/format page))))
-                 :else title))]]])))
+          old-name (or title page-name)
+          db-based? (config/db-based-graph? repo)]
+      [:div.ls-page-title.flex-1.flex-row.w-full.relative
+       {:on-mouse-over #(reset! *hover? true)
+        :on-mouse-out #(reset! *hover? false)}
+       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+        {:class (when-not whiteboard-page? "title")
+         :on-mouse-down (fn [e]
+                          (when (util/right-click? e)
+                            (state/set-state! :page-title/context {:page page-name})))
+         :on-click (fn [e]
+                     (when-not (= (.-nodeName (.-target e)) "INPUT")
+                       (.preventDefault e)
+                       (if (gobj/get e "shiftKey")
+                         (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                           (state/sidebar-add-block!
+                            repo
+                            (:db/id page)
+                            :page))
+                         (when (and (not hls-page?)
+                                    (not fmt-journal?)
+                                    (not config/publishing?)
+                                    (not (and (= "property" (:block/type page))
+                                              (contains? gp-property/db-built-in-properties-keys-str page-name))))
+                           (reset! *input-value (if untitled? "" old-name))
+                           (reset! *edit? true)))))}
+        (when (not= icon "") [:span.page-icon icon])
+        [:div.page-title-sizer-wrapper.relative
+         (when @*edit?
+           (page-title-editor {:*title-value *title-value
+                               :*edit? *edit?
+                               :*input-value *input-value
+                               :title title
+                               :page-name page-name
+                               :old-name old-name
+                               :untitled? untitled?
+                               :whiteboard-page? whiteboard-page?}))
+         [:span.title.block
+          {:on-click (fn []
+                       (when (state/home?)
+                         (route-handler/redirect-to-page! page-name)))
+           :data-value @*input-value
+           :data-ref   page-name
+           :style      {:opacity (when @*edit? 0)}}
+          (let [nested? (and (string/includes? title page-ref/left-brackets)
+                             (string/includes? title page-ref/right-brackets))]
+            (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                  untitled? [:span.opacity-50 (t :untitled)]
+                  nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                      (:block/format page))))
+                  :else title))]]]
+       (when (and @*hover?
+                  db-based?
+                  (not built-in-property?)
+                  (not @*edit?)
+                  (not (seq (:block/properties page)))
+                  (not (seq (:block/alias page)))
+                  (not (seq (:block/tags page))))
+         [:div.absolute.bottom-2.left-0
+          [:div.flex.flex-row.items-center.flex-wrap.ml-2
+           [:a.fade-link.flex.flex-row.items-center
+            {:on-click #(reset! *configure-show? true)}
+            (ui/icon "plus" {:size 14})
+            [:div.ml-1.text-sm "Add property"]]]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -378,11 +400,56 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
+(rum/defcs configure < rum/reactive
+  [state page opts]
+  (let [page-id (:db/id page)
+        page (when page-id (db/sub-block page-id))
+        type (:block/type page)
+        properties-opts (merge {:selected? false
+                                :page-configure? true}
+                               opts)]
+    (when page
+      [:div.property-configure
+       [:div.grid.gap-4.p-1
+        (case type
+          "class"
+          [:div
+           [:div.structured-schema
+           ;; properties
+            [:h2.text-lg.font-medium.mb-2 "Schema:"]
+            [:div.grid.gap-1
+             (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
+               (component-block/db-properties-cp
+                {:editor-box editor/box}
+                page
+                edit-input-id
+                (assoc properties-opts :class-schema? true)))]]
+
+           (when (seq (:block/properties page))
+             [:div.my-4
+              [:div.grid.gap-1
+               (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+                 (component-block/db-properties-cp
+                  {:editor-box editor/box}
+                  page
+                  edit-input-id
+                  properties-opts))]])]
+
+          [:div
+           (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+             [:div
+              (component-block/db-properties-cp
+               {:editor-box editor/box}
+               page
+               edit-input-id
+               properties-opts)])])]])))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
+  (rum/local false ::configure-show?)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-block-uuid-by-block-route-name state)
@@ -391,14 +458,14 @@
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
+          *configure-show? (::configure-show? state)
           page-name (util/page-name-sanity-lc path-page-name)
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          format (let [page (if block-id
-                              (:block/name (:block/page (db/entity [:block/uuid block-id])))
-                              page-name)]
-                   (db/get-page-format page))
           journal? (db/journal-page? page-name)
+          db-based? (config/db-based-graph? repo)
+          built-in-property? (and (= "property" (:block/type page))
+                                  (contains? gp-property/db-built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
@@ -447,13 +514,18 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.ls-page-title.flex-1.flex-row.w-full
-                (page-title page-name icon title format fmt-journal?)])
+               (page-title page-name icon title {:fmt-journal? fmt-journal?
+                                                 :*configure-show? *configure-show?
+                                                 :built-in-property? built-in-property?}))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
+
+          (when (and @*configure-show? db-based? (not built-in-property?))
+            (configure page {:*configure-show? *configure-show?}))
+
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"
@@ -468,7 +540,7 @@
                   (or (seq (:block/properties page))
                       (seq (:block/alias page))
                       (seq (:block/tags page))))
-             [:div.page-properties.p-2.mb-4
+             [:div.p-2.mb-4
               (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
                 (component-block/db-properties-cp
                  {:editor-box editor/box}
@@ -1155,60 +1227,3 @@
                      :total total-items
                      :per-page per-page-num
                      :on-change #(to-page %))]])]))
-
-(rum/defcs configure < rum/reactive
-  [state page]
-  (let [page-id (:db/id page)
-        page (when page-id (db/sub-block page-id))
-        type (:block/type page)
-        class? (= "class" type)
-        journal? (:block/journal? page)]
-    (when page
-      [:div.page-configure
-       [:h1.title "Configure page"]
-
-       [:div.grid.gap-4.p-1
-        (case type
-          "class"
-          [:div
-           [:div.structured-schema
-           ;; properties
-            [:h2.text-lg.font-medium.mb-2 "Schema properties:"]
-            [:div.grid.gap-1
-             (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
-               (component-block/db-properties-cp
-                {:editor-box editor/box}
-                page
-                edit-input-id
-                {:selected? false
-                 :page-configure? true
-                 :class-schema? true}))]]
-
-           (when (seq (:block/properties page))
-             [:div.my-4
-              [:h2.text-lg.font-medium.mb-2 "Page properties:"]
-              [:div.grid.gap-1
-               (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-                 (component-block/db-properties-cp
-                  {:editor-box editor/box}
-                  page
-                  edit-input-id
-                  {:selected? false
-                   :page-configure? true}))]])]
-
-          [:div
-           [:h2.text-lg.font-medium.mb-2 "Properties:"]
-           (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-             [:div
-              (component-block/db-properties-cp
-               {:editor-box editor/box}
-               page
-               edit-input-id
-               {:selected? false
-                :page-configure? true})])])]
-
-       (when config/dev?
-         [:div {:style {:max-width 900}}
-          [:hr]
-          [:p "Debug data:"]
-          [:pre (util/pp-str page)]])])))

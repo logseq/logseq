@@ -169,7 +169,6 @@
  :page/open-backup-directory "Open page backups directory"
  :page/make-private "Make it private"
  :page/delete "Delete page"
- :page/configure "Configure page"
  :page/add-to-favorites "Add to Favorites"
  :page/unfavorite "Unfavorite page"
  :page/show-journals "Show journals"
