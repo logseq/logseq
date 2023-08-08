@@ -16,7 +16,7 @@
   (str "logseq-semsearch-vs-" url))
 
 ;; See protocol for full documentation
-(defrecord Semantic [repo]
+(defrecord ^:large-vars/data-var Semantic [repo]
   protocol/Engine
   (query [_this q option]
     ;; {:block/uuid uuid 
