@@ -48,8 +48,10 @@
                     (str content "\n"))
 
                   :else
-                  (let [markdown-top-heading? (and markdown?
-                                                   (= parent page)
+                  (let [
+                        ;; first block is a heading, Markdown users prefer to remove the `-` before the content
+                        markdown-top-heading? (and markdown?
+                                                   (= parent page left)
                                                    heading)
                         [prefix spaces-tabs]
                         (cond

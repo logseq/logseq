@@ -1092,9 +1092,21 @@ Similar to re-frame subscriptions"
                                        (->> (remove #(= (second %) db-id) blocks)
                                             (cons [repo db-id block-type])
                                             (distinct))))
+      (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
+
+(defn sidebar-move-block!
+  [from to]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (let [to (if (> from to) (inc to) to)]
+                                     (if (not= to from)
+                                       (let [item (nth blocks from)
+                                             blocks (keep-indexed #(when (not= %1 from) %2) blocks)
+                                             [l r] (split-at to blocks)]
+                                         (concat l [item] r))
+                                       blocks)))))
 
 (defn sidebar-remove-block!
   [idx]
@@ -1104,6 +1116,12 @@ Similar to re-frame subscriptions"
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-remove-rest!
+  [db-id]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (remove #(not= (second %) db-id) blocks)))
+  (set-state! [:ui/sidebar-collapsed-blocks db-id] false))
 
 (defn sidebar-replace-block!
   [old-sidebar-key new-sidebar-key]
@@ -1124,6 +1142,17 @@ Similar to re-frame subscriptions"
   [db-id]
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
+
+(defn sidebar-block-collapse-rest!
+  [db-id]
+  (let [items (disj (set (map second (:sidebar/blocks @state))) db-id)]
+    (doseq [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
+
+(defn sidebar-block-set-collapsed-all!
+  [collapsed?]
+  (let [items (map second (:sidebar/blocks @state))]
+    (doseq [item items]
+      (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
 (defn get-edit-block
   []

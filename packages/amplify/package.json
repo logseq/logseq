@@ -6,7 +6,8 @@
   "scripts": {
     "dev:amplify": "parcel watch ./src/amplify.ts --dist-dir ../src/main/frontend/ --no-hmr --no-source-maps",
     "dev:examples": "parcel serve ./examples/index.html",
-    "build:amplify": "parcel build ./src/amplify.ts --dist-dir ../../resources/js --no-source-maps && mv ../../resources/js/amplify.css ../../resources/css/"
+    "build:amplify": "parcel build ./src/amplify.ts --no-source-maps",
+    "postinstall": "yarn build:amplify"
   },
   "devDependencies": {
     "buffer": "^5.5.0",
