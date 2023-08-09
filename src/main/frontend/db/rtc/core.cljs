@@ -34,6 +34,7 @@
 
 (def state-schema
   "
+  | :user-uuid             | string                                                       |
   | :data-from-ws-chan     | channel for receive messages from server websocket           |
   | :data-from-ws-pub      | pub of :data-from-ws-chan, dispatch by :req-id               |
   | :client-op-update-chan | channel to notify that there're some new operations          |
@@ -42,6 +43,7 @@
   | :ws                    | websocket                                                    |
 "
   [:map
+   [:user-uuid :string]
    [:data-from-ws-chan :any]
    [:data-from-ws-pub :any]
    [:client-op-update-chan :any]
@@ -177,23 +179,30 @@
         nil))))
 
 (defn init-state
-  [ws data-from-ws-chan]
+  [ws data-from-ws-chan user-uuid]
   (m/parse state-schema
-           {:data-from-ws-chan data-from-ws-chan
+           {:user-uuid user-uuid
+            :data-from-ws-chan data-from-ws-chan
             :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
             :client-op-update-chan (chan)
             :upload-graph-chan (chan)
             :download-graph-chan (chan)
             :ws ws}))
 
+(defn ensure-ws-connected
+  [state]
+
+  )
+
 (defn <init
   []
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
-          ws (ws-listen! "f92bb5b3-0f72-4a74-9ad8-1793e655c309" data-from-ws-chan ws-opened-ch)]
+          user-uuid "f92bb5b3-0f72-4a74-9ad8-1793e655c309"
+          ws (ws-listen! user-uuid data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (init-state ws data-from-ws-chan))))
+      (init-state ws data-from-ws-chan user-uuid))))
 
 (comment
   (go
