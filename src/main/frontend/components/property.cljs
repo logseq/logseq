@@ -535,19 +535,19 @@
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property item {:keys [editor-id row?]
+  [state entity property item {:keys [editor-id row? editing-atom]
                                :as opts}]
   (let [*show-close? (::show-close? state)
         editing? (state/sub [:editor/editing? editor-id])]
     [:div (cond->
-              {:on-mouse-over #(reset! *show-close? true)
-               :on-mouse-out  #(reset! *show-close? false)}
+           {:on-mouse-over #(reset! *show-close? true)
+            :on-mouse-out  #(reset! *show-close? false)}
             (not row?)
             (assoc :class "relative flex flex-1")
             row?
             (assoc :class "relative pr-4"))
      (property-scalar-value entity property item (assoc opts :editing? editing?))
-     (when @*show-close?
+     (when (and @*show-close? (not editing?) (not @editing-atom))
        [:a.close.fade-in
         {:class "absolute top-0 right-0"
          :title "Delete this value"
@@ -577,13 +577,14 @@
     (cond
       multiple-values?
       (let [items (if (coll? v) v (when v [v]))]
-        [:div {:class (cond
-                        row?
-                        "flex flex-1 flex-row items-center flex-wrap"
-                        block?
-                        "grid"
-                        :else
-                        "grid gap-1")}
+        [:div.relative
+         {:class (cond
+                   row?
+                   "flex flex-1 flex-row items-center flex-wrap"
+                   block?
+                   "grid"
+                   :else
+                   "grid gap-1")}
          (for [[idx item] (medley/indexed items)]
            (let [dom-id' (str dom-id "-" idx)
                  editor-id' (str editor-id idx)]
