@@ -1,13 +1,15 @@
 (ns frontend.persist-db
-  (:require [frontend.persist-db.in-browser :as in-browser]
+  "Backend of DB based graph"
+  (:require [frontend.persist-db.browser :as browser]
             [frontend.persist-db.node :as node]
             [frontend.persist-db.protocol :as protocol]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 
 (defonce electron-ipc-sqlite-db (node/->ElectronIPC))
 
-(defonce opfs-db (in-browser/->InBrowser))
+(defonce opfs-db (browser/->InBrowser))
 
 (defn- get-impl
   "Get the actual implementation of PersistentDB"
@@ -17,28 +19,40 @@
     electron-ipc-sqlite-db
 
     :else
-    opfs-db
-    ;(throw (js/Error. "No implementation found"))
-    ))
+    opfs-db))
 
 
 
-(defn new [repo-name]
-  (protocol/new (get-impl) repo-name))
+(defn <new [repo]
+  (protocol/<new (get-impl) repo))
 
-(defn transact-data [repo-name added-blocks deleted-block-uuids]
-  (protocol/transact-data (get-impl) repo-name added-blocks deleted-block-uuids))
+(defn <transact-data [repo added-blocks deleted-block-uuids]
+  (protocol/<transact-data (get-impl) repo added-blocks deleted-block-uuids))
 
-(defn fetch-initital
-  ([repo-name]
-   (protocol/fetch-initital (get-impl) repo-name {}))
-  ([repo-name opts]
-   (protocol/fetch-initital (get-impl) repo-name opts)))
+(defn <fetch-init-data
+  ([repo]
+   (<fetch-init-data repo {}))
+  ([repo opts]
+   (p/let [ret (protocol/<fetch-initital-data (get-impl) repo opts)]
+     (js/console.log "fetch-initital" ret)
+     ret)))
 
-(defn fetch-by-exclude
-  ([repo-name exclude-uuids]
-   (protocol/fetch-by-exclude (get-impl) repo-name exclude-uuids {}))
-  ([repo-name exclude-uuids opts]
-   (protocol/fetch-by-exclude (get-impl) repo-name exclude-uuids opts)))
+(defn <fetch-blocks-excluding
+  ([repo exclude-uuids]
+   (<fetch-blocks-excluding repo exclude-uuids {}))
+  ([repo exclude-uuids opts]
+   (p/let [ret (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)]
+     (js/console.log "fetch-by-exclude" ret)
+     ret)))
 
+(defn <rtc-init [repo]
+  (protocol/<rtc-init (get-impl) repo))
 
+(defn <rtc-clean-ops [repo]
+  (protocol/<rtc-clean-ops (get-impl) repo))
+
+(defn <rtc-get-ops [repo]
+  (protocol/<rtc-get-ops (get-impl) repo))
+
+(defn <rtc-add-ops [repo raw-ops]
+  (protocol/<rtc-add-ops (get-impl) repo raw-ops))

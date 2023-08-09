@@ -434,7 +434,7 @@
 
     :else
     (do
-      (js/console.error "BUG: This should be unreachable! get-repo-dir" repo-url)
+      (js/console.error "DB graph:" repo-url)
       (str "/"
            (->> (take-last 2 (string/split repo-url #"/"))
                 (string/join "_"))))))

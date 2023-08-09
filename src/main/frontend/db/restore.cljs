@@ -120,7 +120,7 @@
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
           ; data (ipc/ipc :get-initial-data repo)
-          data (persist-db/fetch-initital repo)
+          data (persist-db/<fetch-init-data repo)
           {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
           (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
                                                      (fn profiled-d-conn [& args]
@@ -141,7 +141,7 @@
     (js/setTimeout
      (fn []
        (p/let [;other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))
-               other-data (persist-db/fetch-by-exclude repo (map :uuid journal-blocks))
+               other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
                _ (set-unloaded-block-ids! repo other-data)
                _ (p/delay 10)]
          (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))

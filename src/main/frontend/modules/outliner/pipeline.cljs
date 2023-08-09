@@ -158,7 +158,7 @@
                                    (map (fn [b]
                                           (let [uuid (or (:block/uuid b) (random-uuid))]
                                             (assoc b :block/uuid uuid)))))]
-            (p/let [_transact-result (persist-db/transact-data repo upsert-blocks deleted-block-uuids)
+            (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
                     _ipc-result (comment ipc/ipc :db-transact-data repo
                                          (pr-str
                                           {:blocks upsert-blocks

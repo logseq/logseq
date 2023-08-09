@@ -5,22 +5,31 @@
 
 (defrecord ElectronIPC []
   protocol/PersistentDB
-  (new [_this repo-name]
-    (prn ::new repo-name)
+  (<new [_this repo]
+    (prn ::new repo)
     ;; FIXME: electron ipc use `:remove-db` for removing search index, which is misleading
-    (ipc/ipc :db-new repo-name))
-  (transact-data [_this repo-name added-blocks deleted-block-uuids]
-    (prn ::transact-data repo-name added-blocks deleted-block-uuids)
+    (ipc/ipc :db-new repo))
+  (<transact-data [_this repo added-blocks deleted-block-uuids]
+    (prn ::transact-data repo added-blocks deleted-block-uuids)
     (prn (pr-str deleted-block-uuids))
-    ; ( repo-name added-blocks deleted-block-uuids)
-    (ipc/ipc :db-transact-data repo-name
+    ; ( repo added-blocks deleted-block-uuids)
+    (ipc/ipc :db-transact-data repo
              (pr-str
               {:blocks added-blocks
                :deleted-block-uuids deleted-block-uuids})))
-  (fetch-initital [_this repo-name _opts]
-    (prn ::fetch-initial repo-name)
-    (ipc/ipc :get-initial-data repo-name))
-  (fetch-by-exclude [_this repo-name exclude-uuids _opts]
-    (prn ::fetch-by-exclude repo-name exclude-uuids)
-    (ipc/ipc :get-other-data repo-name exclude-uuids)))
+  (<fetch-initital-data [_this repo _opts]
+    (prn ::fetch-initial repo)
+    (ipc/ipc :get-initial-data repo))
+  (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
+    (prn ::fetch-by-exclude repo exclude-uuids)
+    (ipc/ipc :get-other-data repo exclude-uuids))
+
+  (<rtc-init [_this repo]
+    (ipc/ipc :rtc/init repo))
+  (<rtc-add-ops [_this repo raw-ops]
+    (ipc/ipc :rtc/add-ops repo raw-ops))
+  (<rtc-clean-ops [_this repo]
+    (ipc/ipc :rtc/clean-ops repo))
+  (<rtc-get-ops [_this repo]
+    (ipc/ipc :rtc/get-ops&local-tx repo)))
 
