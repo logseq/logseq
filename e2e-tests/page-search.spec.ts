@@ -36,11 +36,9 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
   await block.enterNext()
   await block.mustType('[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2', { delay: 10 })
   await page.keyboard.press(hotkeyBack)
-  await page.waitForTimeout(1000) // wait longer for db update
 
   // check if diacritics are indexed
   const results = await searchPage(page, 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
-  await page.pause();
   await expect(results.length).toEqual(5) // 1 page + 2 block + 2 page content
   await closeSearchBox(page)
 })
