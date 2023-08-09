@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { test } from './fixtures'
+import { test, traceAll } from './fixtures'
 import {
   createRandomPage,
   escapeToCodeEditor,
@@ -318,3 +318,5 @@ test('Select codeblock language while surrounded by text', async ({ page }) => {
     'ABC \n```clojure\n```\nXYZ'
   )
 })
+
+traceAll()
