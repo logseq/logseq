@@ -64,13 +64,10 @@
    :any      some?})
 
 (def internal-builtin-schema-types #{:keyword :map :coll :any})
+(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :block :object])
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
-
-;; TODO: Enable or delete if unused
-#_(def builtin-schema->type
-    (set/map-invert builtin-schema-types))
 
 (defn- infer-schema-from-input-string
   [v-str]

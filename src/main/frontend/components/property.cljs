@@ -84,7 +84,7 @@
 
       [:div.grid.grid-cols-4.gap-1.leading-8
        [:label "Schema type:"]
-       (let [schema-types (->> (keys property-handler/builtin-schema-types)
+       (let [schema-types (->> property-handler/user-face-builtin-schema-types
                                (remove property-handler/internal-builtin-schema-types)
                                (map (comp string/capitalize name))
                                (map (fn [type]
@@ -330,17 +330,25 @@
                           :on-key-down
                           (fn [e]
                             (let [new-value (util/evalue e)
-                                  blank? (string/blank? new-value)]
-                              (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
+                                  blank? (string/blank? new-value)
+                                  enter? (= (util/ekey e) "Enter")
+                                  esc? (= (util/ekey e) "Escape")
+                                  meta? (util/meta-key? e)
+                                  create-another-one? (and meta? enter?)]
+                              (when (and (or enter? esc? create-another-one?)
                                          (not (state/get-editor-action)))
                                 (util/stop e)
                                 (when-not blank?
-                                  (property-handler/set-block-property! repo (:block/uuid block)
-                                                                        (:block/original-name property)
-                                                                        new-value
-                                                                        :old-value value))
+                                  (when (not= (string/trim new-value) (string/trim value))
+                                    (property-handler/set-block-property! repo (:block/uuid block)
+                                                                          (:block/original-name property)
+                                                                          new-value
+                                                                          :old-value value)))
                                 (exit-edit-property)
                                 (cond
+                                  esc?
+                                  (reset! editing-atom false)
+
                                   (or blank?
                                       (and editing-atom
                                            (not= type :default)))
@@ -348,7 +356,10 @@
 
                                   (and editing-atom @editing-atom)
                                   (some-> (gdom/getElement editor-id)
-                                          (util/set-change-value ""))))))}}]
+                                          (util/set-change-value ""))
+
+                                  (and (or enter? create-another-one?) editing-atom (not blank?))
+                                  (reset! editing-atom true)))))}}]
              [:div.pl-1
               (editor-box editor-args editor-id (cond-> config
                                                   multiple-values?
@@ -376,10 +387,19 @@
 
                  :block
                  (if-let [block (db/entity [:block/uuid value])]
-                   [:div.property-block-container.w-full
-                    (block-cp [block] {:id (str value)
-                                       :editor-box editor-box
-                                       :in-property? true})]
+                   (let [editor-opts {:on-key-down
+                                      (fn [e]
+                                        (let [meta? (util/meta-key? e)
+                                              enter? (= (util/ekey e) "Enter")
+                                              create-another-one? (and meta? enter?)]
+                                          (when create-another-one?
+                                            (util/stop e)
+                                            (reset! editing-atom true))))}]
+                     [:div.property-block-container.w-full
+                      (block-cp [block] {:id (str value)
+                                         :editor-box editor-box
+                                         :editor-opts editor-opts
+                                         :in-property? true})])
                    (if multiple-values?
                      (property-handler/delete-property-value! repo block (:block/uuid property) value)
                      (property-handler/remove-block-property! repo
@@ -550,6 +570,7 @@
         multiple-values? (= :many (:cardinality schema))
         row? (and multiple-values? (contains? #{:page} (:type schema)))
         block? (= (:type schema) :block)
+        default? (= (:type schema) :default)
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
@@ -573,7 +594,8 @@
                                      {:dom-id dom-id'
                                       :editor-id editor-id'
                                       :editor-args editor-args
-                                      :row? row?}))
+                                      :row? row?
+                                      :editing-atom *editing?}))
                dom-id')))
 
          (cond
@@ -587,12 +609,17 @@
                                     :editing? @*editing?
                                     :editing-atom *editing?}))
 
+           (and (or default? block?) (seq items))
+           nil
+
            :else
            [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *editing? true))}
-            [:div.flex.flex-row
-             [:a.add-button-link.inline-flex {:title "Add another value"
-                                              :style {:margin-left -3}}
-              (ui/icon "circle-plus")]]])])
+            (if (or default? block?)
+              [:div.opacity-50.text-sm "Input something"]
+              [:div.flex.flex-row
+               [:a.add-button-link.inline-flex {:title "Add another value"
+                                                :style {:margin-left -3}}
+                (ui/icon "circle-plus")]])])])
 
       :else
       [:div.flex.flex-1.items-center.property-value-content

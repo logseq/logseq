@@ -6,7 +6,7 @@
             [frontend.state :as state]
             [frontend.db :as db]))
 
-(def builtin-schema-types db-property/builtin-schema-types)
+(def user-face-builtin-schema-types db-property/user-face-builtin-schema-types)
 (def internal-builtin-schema-types db-property/internal-builtin-schema-types)
 
 (defn remove-block-property!
