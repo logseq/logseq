@@ -3417,7 +3417,9 @@
                          (:db/id parent)))))
                  {:debug-id page})])))))]
 
-     (and (:ref? config) (:group-by-page? config))
+     (and (:ref? config)
+          (:group-by-page? config)
+          (vector? (first blocks)))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page page-blocks] blocks]

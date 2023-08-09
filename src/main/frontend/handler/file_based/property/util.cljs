@@ -363,21 +363,22 @@
 ;; The future plan is to separate those properties from the block' content.
 (defn remove-built-in-properties
   [format content]
-  (let [trim-content (string/trim content)]
-    (if (or
-         (and (= format :markdown)
-              (string/starts-with? trim-content "```")
-              (string/ends-with? trim-content "```"))
-         (and (= format :org)
-              (string/starts-with? trim-content "#+BEGIN_SRC")
-              (string/ends-with? trim-content "#+END_SRC")))
-      content
-      (let [built-in-properties* (built-in-properties)
-            content (reduce (fn [content key]
-                              (remove-property format key content)) content built-in-properties*)]
-        (if (= format :org)
-          (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
-          content)))))
+  (when content
+    (let [trim-content (string/trim content)]
+     (if (or
+          (and (= format :markdown)
+               (string/starts-with? trim-content "```")
+               (string/ends-with? trim-content "```"))
+          (and (= format :org)
+               (string/starts-with? trim-content "#+BEGIN_SRC")
+               (string/ends-with? trim-content "#+END_SRC")))
+       content
+       (let [built-in-properties* (built-in-properties)
+             content (reduce (fn [content key]
+                               (remove-property format key content)) content built-in-properties*)]
+         (if (= format :org)
+           (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
+           content))))))
 
 (defn add-page-properties
   [page-format properties-content properties]
