@@ -4,14 +4,13 @@
 }
 
 .property-value-content {
-    @apply px-1 rounded-sm;
     cursor: text;
     min-height: 24px;
 }
 
-.property-value-content:hover {
-    background: var(--ls-secondary-background-color);
-}
+/* .property-value-content:hover { */
+/*     background: var(--ls-secondary-background-color); */
+/* } */
 
 .ls-properties-area {
     @apply grid gap-1;

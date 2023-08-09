@@ -221,7 +221,7 @@
             esc?
             blank?
             (and *add-new-item? (not= type :default)))
-           (reset! *add-new-item? false)
+           (when *add-new-item? (reset! *add-new-item? false))
 
            (and *add-new-item? @*add-new-item?)
            (some-> (gdom/getElement editor-id)
@@ -286,7 +286,7 @@
            [:div.h-6 (select-block block property select-opts)]
 
            (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
-             [:div.pl-1
+             [:div
               (editor-box editor-args editor-id (cond-> config
                                                   multiple-values?
                                                   (assoc :property-value value)))]))]
