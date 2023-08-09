@@ -1,29 +1,22 @@
 (ns frontend.components.property
   "Block properties management."
-  (:require [frontend.ui :as ui]
-            [frontend.util :as util]
-            [frontend.handler.property :as property-handler]
-            [frontend.handler.db-based.property :as db-property]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.mixins :as mixins]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [goog.dom :as gdom]
-            [frontend.search :as search]
-            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
-            [logseq.graph-parser.property :as gp-property]
-            [medley.core :as medley]
-            [cljs-time.coerce :as tc]
-            [clojure.set :as set]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db :as db]
+            [frontend.handler.db-based.property :as db-property]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.modules.outliner.core :as outliner-core]))
+            [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.search :as search]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [logseq.graph-parser.property :as gp-property]
+            [rum.core :as rum]))
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
@@ -129,285 +122,6 @@
                       (state/close-modal!)
                       (when toggle-fn (toggle-fn)))))]]]))
 
-(defn- exit-edit-property
-  []
-  (property-handler/set-editing-new-property! nil)
-  (state/clear-edit!))
-
-(defn- add-property!
-  "If a class and in a class schema context, add the property to its schema.
-  Otherwise, add a block's property and its value"
-  ([block property-key property-value] (add-property! block property-key property-value {}))
-  ([block property-key property-value {:keys [exit-edit? class-schema?]
-                                       :or {exit-edit? true}}]
-   (let [repo (state/get-current-repo)
-         class? (= (:block/type block) "class")]
-     (when property-key
-       (if (and class? class-schema?)
-         (property-handler/class-add-property! repo (:block/uuid block) property-key)
-         (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
-     (when exit-edit?
-       (exit-edit-property)))))
-
-(rum/defc date-picker
-  [block property value]
-  (let [value' (when-not (string/blank? value)
-                 (tc/to-local-date value))
-        text (if value'
-               (str value')
-               "Pick a date")
-        open-modal! (fn []
-                      (state/set-modal!
-                       #(ui/datepicker value' {:on-change (fn [_e date]
-                                                            (let [repo (state/get-current-repo)]
-                                                              (property-handler/set-block-property! repo (:block/uuid block)
-                                                                                              (:block/name property)
-                                                                                              date)
-                                                              (exit-edit-property)
-                                                              (state/close-modal!)))})))]
-    [:a
-     {:tabIndex "0"
-      :on-click open-modal!
-      :on-key-down (fn [e]
-                     (when (= (util/ekey e) "Enter")
-                       (open-modal!)))}
-     [:span.inline-flex.items-center
-      (ui/icon "calendar")
-      [:span.ml-1 text]]]))
-
-(defn- set-editing!
-  [property editor-id dom-id v]
-  (let [v (str v)
-        cursor-range (if dom-id
-                       (some-> (gdom/getElement dom-id) util/caret-range)
-                       "")]
-    (state/set-editing! editor-id v property cursor-range)))
-
-(defn- select-page
-  [block property opts]
-  (let [repo (state/get-current-repo)
-        pages (->> (model/get-all-page-original-names repo)
-                   (map (fn [p] {:value p})))]
-    (select/select {:items pages
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (let [page (string/trim (:value chosen))
-                                       id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
-                                   (when (nil? id)
-                                     (page-handler/create! page {:redirect? false
-                                                                 :create-first-block? false}))
-                                   (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
-                                     (add-property! block (:block/original-name property) id'))
-                                   (when-let [f (:on-chosen opts)] (f))))
-                    :show-new-when-not-exact-match? true
-                    :input-opts (fn [_]
-                                  {:on-blur (or (:on-chosen opts) identity)
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Escape"
-                                       (when-let [f (:on-chosen opts)] (f))
-                                       nil))})})))
-
-(defn- select-block
-  [block property opts]
-  (let [blocks (->> (model/get-all-block-contents)
-                    (remove (fn [b] (= (:db/id block) (:db/id b))))
-                    (map (fn [b]
-                           (assoc b :value (:block/content b)))))]
-    (select/select {:items blocks
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (let [id (:block/uuid chosen)]
-                                   (add-property! block (:block/original-name property) id)
-                                   (when-let [f (:on-chosen opts)] (f))))
-                    :input-opts (fn [not-matched?]
-                                  {:on-blur (or (:on-chosen opts) identity)
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Enter"
-                                       (when not-matched?
-                                         (let [repo (state/get-current-repo)
-                                               content (string/trim (util/evalue e))]
-                                           (when-not (string/blank? content)
-                                             (let [pid (:block/uuid (db/entity [:block/name "created-in-property"]))
-                                                   new-block (-> (editor-handler/wrap-parse-block {:block/format :markdown
-                                                                                                   :block/content content})
-                                                                 (outliner-core/block-with-timestamps)
-                                                                 (merge {:block/page {:db/id
-                                                                                      (or (:db/id (:block/page block))
-                                                                                          (:db/id block))}
-                                                                         :block/properties {pid true}}))
-                                                   id (:block/uuid new-block)]
-                                               (db/transact! repo [new-block] {:outliner-op :insert-blocks})
-                                               (add-property! block (:block/original-name property) id)
-                                               (when-let [f (:on-chosen opts)] (f))))))
-                                       "Escape"
-                                       (do (exit-edit-property)
-                                           (when-let [f (:on-chosen opts)] (f)))
-                                       nil))})})))
-
-(defn- select
-  [block property opts]
-  (let [items (->> (model/get-block-property-values (:block/uuid property))
-                   (mapcat (fn [[_id value]]
-                             (if (coll? value)
-                               (map (fn [v] {:value v}) value)
-                               [{:value value}])))
-                   (distinct))
-        add-property-f #(add-property! block (:block/original-name property) %)]
-    (select/select {:items items
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (add-property-f (:value chosen))
-                                 (when-let [f (:on-chosen opts)] (f)))
-                    :show-new-when-not-exact-match? true
-                    :input-opts (fn [_]
-                                  {:on-blur (or (:on-chosen opts) identity)
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Escape"
-                                       (when-let [f (:on-chosen opts)] (f))
-                                       nil))})})))
-
-(rum/defc property-scalar-value < rum/reactive db-mixins/query
-  [block property value {:keys [inline-text page-cp block-cp
-                                editor-id dom-id row?
-                                editor-box editor-args
-                                editing? editing-atom *configure-show?
-                                blocks-container-id]}]
-  (let [property (model/sub-block (:db/id property))
-        multiple-values? (= :many (:cardinality (:block/schema property)))
-        editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
-        editing? (or editing? (state/sub [:editor/editing? editor-id]))
-        repo (state/get-current-repo)
-        type (:type (:block/schema property))
-        select-opts {:on-chosen (fn []
-                                  (when *configure-show? (reset! *configure-show? false))
-                                  (when editing-atom (reset! editing-atom false)))}]
-    (case type
-      :date
-      (date-picker block property value)
-
-      :checkbox
-      (let [add-property! (fn []
-                            (add-property! block (:block/original-name property) (boolean (not value))))]
-        (ui/checkbox {:tabIndex "0"
-                      :checked value
-                      :on-change (fn [_e] (add-property!))
-                      :on-key-down (fn [e]
-                                     (when (= (util/ekey e) "Enter")
-                                       (add-property!)))}))
-      ;; :others
-      (if editing?
-        [:div.flex.flex-1
-         (case type
-           (list :number :url)
-           [:div.h-6 (select block property select-opts)]
-
-           :page
-           [:div.h-6 (select-page block property select-opts)]
-
-           :block
-           [:div.h-6 (select-block block property select-opts)]
-
-           (let [config {:editor-opts
-                         {:on-blur
-                          (fn [e]
-                            (let [new-value (util/evalue e)
-                                  blank? (string/blank? new-value)]
-                              (when (not (state/get-editor-action))
-                                (util/stop e)
-                                (when-not blank?
-                                  (property-handler/set-block-property! repo (:block/uuid block)
-                                                                        (:block/original-name property)
-                                                                        new-value
-                                                                        :old-value value))
-                                (exit-edit-property)
-                                (when editing-atom (reset! editing-atom false)))))
-                          :on-key-down
-                          (fn [e]
-                            (let [new-value (util/evalue e)
-                                  blank? (string/blank? new-value)
-                                  enter? (= (util/ekey e) "Enter")
-                                  esc? (= (util/ekey e) "Escape")
-                                  meta? (util/meta-key? e)
-                                  create-another-one? (and meta? enter?)]
-                              (when (and (or enter? esc? create-another-one?)
-                                         (not (state/get-editor-action)))
-                                (util/stop e)
-                                (when-not blank?
-                                  (when (not= (string/trim new-value) (string/trim value))
-                                    (property-handler/set-block-property! repo (:block/uuid block)
-                                                                          (:block/original-name property)
-                                                                          new-value
-                                                                          :old-value value)))
-                                (exit-edit-property)
-                                (cond
-                                  esc?
-                                  (reset! editing-atom false)
-
-                                  (or blank?
-                                      (and editing-atom
-                                           (not= type :default)))
-                                  (reset! editing-atom false)
-
-                                  (and editing-atom @editing-atom)
-                                  (some-> (gdom/getElement editor-id)
-                                          (util/set-change-value ""))
-
-                                  (and (or enter? create-another-one?) editing-atom (not blank?))
-                                  (reset! editing-atom true)))))}}]
-             [:div.pl-1
-              (editor-box editor-args editor-id (cond-> config
-                                                  multiple-values?
-                                                  (assoc :property-value value)))]))]
-        (let [class (str (when-not row? "flex flex-1 ")
-                         (when multiple-values? "property-value-content"))]
-          [:div {:id (or dom-id (random-uuid))
-                 :class class
-                 :style {:min-height 24}
-                 :on-click (fn []
-                             (let [page-or-block? (contains? #{:page :block} type)]
-                               (when (or (not page-or-block?)
-                                         (and (string/blank? value) page-or-block?))
-                                 (set-editing! property editor-id dom-id value))))}
-           (let [type (if (and (= type :default) (uuid? value))
-                        (if-let [e (db/entity [:block/uuid value])]
-                          (if (:block/name e) :page :block)
-                          type)
-                        type)]
-             (when-not (string/blank? value)
-               (case type
-                 :page
-                 (when-let [page (db/entity [:block/uuid value])]
-                   (page-cp {} page))
-
-                 :block
-                 (if-let [block (db/entity [:block/uuid value])]
-                   (let [editor-opts {:on-key-down
-                                      (fn [e]
-                                        (let [meta? (util/meta-key? e)
-                                              enter? (= (util/ekey e) "Enter")
-                                              create-another-one? (and meta? enter?)]
-                                          (when create-another-one?
-                                            (util/stop e)
-                                            (reset! editing-atom true))))}]
-                     [:div.property-block-container.w-full
-                      (block-cp [block] {:id (str value)
-                                         :editor-box editor-box
-                                         :editor-opts editor-opts
-                                         :in-property? true})])
-                   (if multiple-values?
-                     (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                     (property-handler/remove-block-property! repo
-                                                              (:block/uuid block)
-                                                              (:block/uuid property))))
-
-                 (inline-text {} :markdown (str value)))))])))))
-
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
     (db/entity [:block/name (util/page-name-sanity-lc name)])))
@@ -421,25 +135,25 @@
     (if-let [property (get-property-from-db property-name)]
       (if (contains? gp-property/db-hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
-            (exit-edit-property))
+            (pv/exit-edit-property))
         (if (= "class" (:block/type entity))
-          (add-property! entity property-name "" {:class-schema? class-schema?
+          (pv/add-property! entity property-name "" {:class-schema? class-schema?
                                                   ;; Only enter property names from sub-modal as inputting
                                                   ;; property values is buggy in sub-modal
                                                   :exit-edit? page-configure?})
           (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
-            (set-editing! property editor-id "" ""))))
+            (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
       (if (gp-property/db-valid-property-name? property-name)
         (if (= "class" (:block/type entity))
-          (add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
+          (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property/upsert-property! repo property-name {:type :default} {})
             ;; configure new property
             (when-let [property (get-property-from-db property-name)]
               (state/set-sub-modal! #(property-config repo property {})))))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
-            (exit-edit-property))))))
+            (pv/exit-edit-property))))))
 
 (rum/defcs property-input < rum/reactive
   shortcut/disable-all-shortcuts
@@ -463,7 +177,7 @@
          [:div.col-span-1 @*property-key]
          [:div.col-span-3.flex.flex-row
           (when (and property (not class-schema?))
-            (property-scalar-value entity property @*property-value (assoc opts :editing? true)))]])
+            (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))]])
 
       [:div.ls-property-add.h-6
        (select/select {:items (map (fn [x] {:value x}) properties)
@@ -475,7 +189,7 @@
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
                                     (add-property-from-dropdown entity value opts))
-                       :input-opts {:on-blur exit-edit-property}})])))
+                       :input-opts {:on-blur pv/exit-edit-property}})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
@@ -534,102 +248,9 @@
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
 
-(rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property item {:keys [editor-id row? editing-atom]
-                               :as opts}]
-  (let [*show-close? (::show-close? state)
-        editing? (state/sub [:editor/editing? editor-id])]
-    [:div (cond->
-           {:on-mouse-over #(reset! *show-close? true)
-            :on-mouse-out  #(reset! *show-close? false)}
-            (not row?)
-            (assoc :class "relative flex flex-1")
-            row?
-            (assoc :class "relative pr-4"))
-     (property-scalar-value entity property item (assoc opts :editing? editing?))
-     (when (and @*show-close? (not editing?) (not @editing-atom))
-       [:a.close.fade-in
-        {:class "absolute top-0 right-0"
-         :title "Delete this value"
-         :on-mouse-down
-         (fn []
-           (property-handler/delete-property-value! (state/get-current-repo)
-                                                    entity
-                                                    (:block/uuid property)
-                                                    item))}
-        (ui/icon "x")])]))
 
-(rum/defcs property-value < rum/reactive
-  (rum/local false ::editing?)
-  [state block property v opts]
-  (let [*editing? (::editing? state)
-        k (:block/uuid property)
-        dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
-        editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
-        schema (:block/schema property)
-        multiple-values? (= :many (:cardinality schema))
-        row? (and multiple-values? (contains? #{:page} (:type schema)))
-        block? (= (:type schema) :block)
-        default? (= (:type schema) :default)
-        editor-args {:block property
-                     :parent-block block
-                     :format :markdown}]
-    (cond
-      multiple-values?
-      (let [items (if (coll? v) v (when v [v]))]
-        [:div.relative
-         {:class (cond
-                   row?
-                   "flex flex-1 flex-row items-center flex-wrap"
-                   block?
-                   "grid"
-                   :else
-                   "grid gap-1")}
-         (for [[idx item] (medley/indexed items)]
-           (let [dom-id' (str dom-id "-" idx)
-                 editor-id' (str editor-id idx)]
-             (rum/with-key
-               (multiple-value-item block property item
-                                    (merge
-                                     opts
-                                     {:dom-id dom-id'
-                                      :editor-id editor-id'
-                                      :editor-args editor-args
-                                      :row? row?
-                                      :editing-atom *editing?}))
-               dom-id')))
 
-         (cond
-           @*editing?
-           (property-scalar-value block property ""
-                                  (merge
-                                   opts
-                                   {:editor-args editor-args
-                                    :editor-id editor-id
-                                    :dom-id dom-id
-                                    :editing? @*editing?
-                                    :editing-atom *editing?}))
 
-           (and (or default? block?) (seq items))
-           nil
-
-           :else
-           [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *editing? true))}
-            (if (or default? block?)
-              [:div.opacity-50.text-sm "Input something"]
-              [:div.flex.flex-row
-               [:a.add-button-link.inline-flex {:title "Add another value"
-                                                :style {:margin-left -3}}
-                (ui/icon "circle-plus")]])])])
-
-      :else
-      [:div.flex.flex-1.items-center.property-value-content
-       (property-scalar-value block property v
-                              (merge
-                               opts
-                               {:editor-args editor-args
-                                :editor-id editor-id
-                                :dom-id dom-id}))])))
 
 (defn- resolve-instance-page-if-exists
   "Properties will be updated for the instance page instead of the refed block.
@@ -694,5 +315,5 @@
                   [:div.property-description.col-span-3.font-light
                    (get-in property [:block/schema :description])]
                   [:div.property-value.col-span-3.inline-grid
-                   (property-value block property v opts)])]))))
+                   (pv/property-value block property v opts)])]))))
        (new-property block edit-input-id properties new-property? opts)])))
