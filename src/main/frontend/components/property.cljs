@@ -314,20 +314,45 @@
            [:div.h-6 (select-block block property select-opts)]
 
            (let [config {:editor-opts
-                         {:on-key-down
+                         {:on-blur
                           (fn [e]
-                            (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
-                                       (not (state/get-editor-action)))
-                              (util/stop e)
-                              (property-handler/set-block-property! repo (:block/uuid block)
-                                                                    (:block/original-name property)
-                                                                    (util/evalue e)
-                                                                    :old-value value)
-                              (when editing-atom (reset! editing-atom false))
-                              (exit-edit-property)))}}]
-             [:div.pl-1 (editor-box editor-args editor-id (cond-> config
-                                                            multiple-values?
-                                                            (assoc :property-value value)))]))]
+                            (let [new-value (util/evalue e)
+                                  blank? (string/blank? new-value)]
+                              (when (not (state/get-editor-action))
+                                (util/stop e)
+                                (when-not blank?
+                                  (property-handler/set-block-property! repo (:block/uuid block)
+                                                                        (:block/original-name property)
+                                                                        new-value
+                                                                        :old-value value))
+                                (exit-edit-property)
+                                (when editing-atom (reset! editing-atom false)))))
+                          :on-key-down
+                          (fn [e]
+                            (let [new-value (util/evalue e)
+                                  blank? (string/blank? new-value)]
+                              (when (and (contains? #{"Enter" "Escape"} (util/ekey e))
+                                         (not (state/get-editor-action)))
+                                (util/stop e)
+                                (when-not blank?
+                                  (property-handler/set-block-property! repo (:block/uuid block)
+                                                                        (:block/original-name property)
+                                                                        new-value
+                                                                        :old-value value))
+                                (exit-edit-property)
+                                (cond
+                                  (or blank?
+                                      (and editing-atom
+                                           (not= type :default)))
+                                  (reset! editing-atom false)
+
+                                  (and editing-atom @editing-atom)
+                                  (some-> (gdom/getElement editor-id)
+                                          (util/set-change-value ""))))))}}]
+             [:div.pl-1
+              (editor-box editor-args editor-id (cond-> config
+                                                  multiple-values?
+                                                  (assoc :property-value value)))]))]
         (let [class (str (when-not row? "flex flex-1 ")
                          (when multiple-values? "property-value-content"))]
           [:div {:id (or dom-id (random-uuid))
