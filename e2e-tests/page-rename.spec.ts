@@ -90,6 +90,7 @@ test('page title property test', async ({ page }) => {
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name + "     ")
   await page.press(':nth-match(textarea, 1)', 'Enter') // DWIM property mode creates new line
   await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.waitForTimeout(200); // Ensure UI to update
   expect(await page.innerText('.page-title .title')).toBe(new_name)
 
   // Edit Title Property and Esc (ETPE)
