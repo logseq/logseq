@@ -159,8 +159,21 @@
                                        (when-let [f (:on-chosen opts)] (f))
                                        nil))})})))
 
+(defn- move-cursor
+  [up? opts]
+  (let [f (if up? dec inc)
+        id (str (:parent-dom-id opts) "-" (f (:idx opts)))
+        editor-id (str (:parent-dom-id opts) "-editor" "-" (f (:idx opts)))
+        sibling (gdom/getElement id)
+        editor (gdom/getElement editor-id)]
+    (when sibling
+      (.click sibling)
+      (state/set-state! :editor/property-triggered-by-click? {editor-id true}))
+    (when editor
+      (.focus editor))))
+
 (defn- new-text-editor-opts
-  [repo block property value type editor-id *add-new-item?]
+  [repo block property value type editor-id *add-new-item? opts]
   {:on-blur
    (fn [e]
      (let [new-value (util/evalue e)
@@ -172,7 +185,8 @@
                                                  (:block/original-name property)
                                                  new-value
                                                  :old-value value))
-         (exit-edit-property)
+         (when (= js/document.activeElement (gdom/getElement editor-id))
+           (exit-edit-property))
          (when *add-new-item? (reset! *add-new-item? false)))))
    :on-key-down
    (fn [e]
@@ -181,8 +195,10 @@
            enter? (= (util/ekey e) "Enter")
            esc? (= (util/ekey e) "Escape")
            meta? (util/meta-key? e)
-           create-another-one? (and meta? enter?)]
-       (when (and (or enter? esc? create-another-one?)
+           create-another-one? (and meta? enter?)
+           down? (= (util/ekey e) "ArrowDown")
+           up? (= (util/ekey e) "ArrowUp")]
+       (when (and (or enter? esc? create-another-one? down? up?)
                   (not (state/get-editor-action)))
          (util/stop e)
          (when-not blank?
@@ -191,9 +207,16 @@
                                                    (:block/original-name property)
                                                    new-value
                                                    :old-value value)))
+
          (exit-edit-property)
 
          (cond
+           down?
+           (move-cursor false opts)
+
+           up?
+           (move-cursor true opts)
+
            (or
             esc?
             blank?
@@ -225,7 +248,8 @@
                                 editor-id dom-id row?
                                 editor-box editor-args
                                 editing? *add-new-item? *configure-show?
-                                blocks-container-id]}]
+                                blocks-container-id]
+                         :as opts}]
   (let [property (model/sub-block (:db/id property))
         multiple-values? (= :many (:cardinality (:block/schema property)))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
@@ -261,7 +285,7 @@
            :block
            [:div.h-6 (select-block block property select-opts)]
 
-           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item?)}]
+           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
              [:div.pl-1
               (editor-box editor-args editor-id (cond-> config
                                                   multiple-values?
@@ -351,12 +375,14 @@
 
      (for [[idx item] (medley/indexed items)]
        (let [dom-id' (str dom-id "-" idx)
-             editor-id' (str editor-id idx)]
+             editor-id' (str editor-id "-" idx)]
          (rum/with-key
            (multiple-value-item block property item
                                 (merge
                                  opts
-                                 {:dom-id dom-id'
+                                 {:parent-dom-id dom-id
+                                  :idx idx
+                                  :dom-id dom-id'
                                   :editor-id editor-id'
                                   :editor-args editor-args
                                   :row? row?
@@ -394,9 +420,8 @@
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
-  (let [k (:block/uuid property)
-        dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
-        editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
+  (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id property))
+        editor-id (str dom-id "-editor")
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         editor-args {:block property

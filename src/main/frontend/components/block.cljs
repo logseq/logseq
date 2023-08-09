@@ -96,7 +96,6 @@
 
 ;; TODO: dynamic
 (defonce max-depth-of-links 5)
-(defonce *blocks-container-id (atom 0))
 
 ;; TODO:
 ;; add `key`
@@ -2489,7 +2488,7 @@
         block (db/sub-block block-id)
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
-                              (let [id' (swap! *blocks-container-id inc)]
+                              (let [id' (state/next-blocks-container-id)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
         block-el-id (str "ls-block-" blocks-container-id "-" uuid)
@@ -3343,7 +3342,7 @@
   (let [*init-blocks-container-id (::init-blocks-container-id state)
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
-                              (let [id' (swap! *blocks-container-id inc)]
+                              (let [id' (state/next-blocks-container-id)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
         config (assoc config :blocks-container-id blocks-container-id)

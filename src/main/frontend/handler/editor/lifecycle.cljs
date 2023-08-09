@@ -1,12 +1,13 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
-  (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
+  (:require [dommy.core :as d]
+            [frontend.db :as db]
+            [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state :refer [sub]]
             [frontend.util :as util]
-            [goog.dom :as gdom]
-            [dommy.core :as d]
-            [frontend.db :as db]))
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]))
 
 (defn did-mount!
   [state]
@@ -14,8 +15,14 @@
         content (get @(get @state/state :editor/content) id)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    (when content
-      (editor-handler/restore-cursor-pos! id content))
+    ;; FIXME: remove ugly :editor/property-triggered-by-click?
+    (if (get-in @state/state [:editor/property-triggered-by-click? id])
+      (do
+        (when-let [input (gdom/getElement (str id))]
+          (cursor/move-cursor-to-end input))
+        (state/set-state! :editor/property-triggered-by-click? {}))
+      (when content
+        (editor-handler/restore-cursor-pos! id content)))
 
     ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
     ;; which will hide the editor so no way for editing.

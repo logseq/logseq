@@ -292,7 +292,10 @@
                        (and (:*configure-show? opts)
                             @(:*configure-show? opts)
                             (empty? properties))
-                       (= edit-input-id (state/sub :ui/new-property-input-id)))]
+                       (= edit-input-id (state/sub :ui/new-property-input-id)))
+        opts (if (:blocks-container-id opts)
+               opts
+               (assoc opts :blocks-container-id (state/next-blocks-container-id)))]
     (when-not (and (empty? properties)
                    (not new-property?)
                    (not (:page-configure? opts)))

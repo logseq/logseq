@@ -103,6 +103,7 @@
                                                true)
       :ui/scrolling?                         (atom false)
       :ui/new-property-input-id              nil
+      :ui/blocks-container-id                (atom 0)
       :document/mode?                        document-mode?
 
       :config                                {}
@@ -2189,3 +2190,7 @@ Similar to re-frame subscriptions"
    (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
      (fn [s]
        (contains? s (str block-uuid))))))
+
+(defn next-blocks-container-id
+  []
+  (swap! (:ui/blocks-container-id @state) inc))
