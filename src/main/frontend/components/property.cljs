@@ -41,7 +41,6 @@
                                                                                                                           :id id}}}))
                             (toggle-fn))})))))
 
-
 (rum/defcs property-config <
   rum/reactive
   (rum/local nil ::property-name)
@@ -247,10 +246,6 @@
         (property-config repo property {:toggle-fn toggle-fn})])
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
-
-
-
-
 
 (defn- resolve-instance-page-if-exists
   "Properties will be updated for the instance page instead of the refed block.

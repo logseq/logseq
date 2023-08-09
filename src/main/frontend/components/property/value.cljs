@@ -16,12 +16,12 @@
             [medley.core :as medley]
             [rum.core :as rum]))
 
-(defn- exit-edit-property
+(defn exit-edit-property
   []
   (property-handler/set-editing-new-property! nil)
   (state/clear-edit!))
 
-(defn- set-editing!
+(defn set-editing!
   [property editor-id dom-id v]
   (let [v (str v)
         cursor-range (if dom-id
@@ -29,7 +29,7 @@
                        "")]
     (state/set-editing! editor-id v property cursor-range)))
 
-(defn- add-property!
+(defn add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
   ([block property-key property-value] (add-property! block property-key property-value {}))
@@ -160,7 +160,7 @@
                                        nil))})})))
 
 (defn- new-text-editor-opts
-  [repo block property value editor-id editing-atom]
+  [repo block property value type editor-id *editing?]
   {:on-blur
    (fn [e]
      (let [new-value (util/evalue e)
@@ -173,7 +173,7 @@
                                                  new-value
                                                  :old-value value))
          (exit-edit-property)
-         (when editing-atom (reset! editing-atom false)))))
+         (when *editing? (reset! *editing? false)))))
    :on-key-down
    (fn [e]
      (let [new-value (util/evalue e)
@@ -192,24 +192,25 @@
                                                    new-value
                                                    :old-value value)))
          (exit-edit-property)
+
          (cond
-           esc?
-           (reset! editing-atom false)
+           (or
+            esc?
+            blank?
+            (and *editing? (not= type :default)))
+           (reset! *editing? false)
 
-           (or blank?
-               (and editing-atom
-                    (not= type :default)))
-           (reset! editing-atom false)
-
-           (and editing-atom @editing-atom)
+           (and *editing? @*editing?)
            (some-> (gdom/getElement editor-id)
                    (util/set-change-value ""))
 
-           (and (or enter? create-another-one?) editing-atom (not blank?))
-           (reset! editing-atom true)))))})
+           (and (or enter? create-another-one?)
+                *editing?
+                (not blank?))
+           (reset! *editing? true)))))})
 
 (defn- new-block-editor-opts
-  [editing-atom]
+  [*editing?]
   {:on-key-down
    (fn [e]
      (let [meta? (util/meta-key? e)
@@ -217,13 +218,13 @@
            create-another-one? (and meta? enter?)]
        (when create-another-one?
          (util/stop e)
-         (reset! editing-atom true))))})
+         (reset! *editing? true))))})
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id row?
                                 editor-box editor-args
-                                editing? editing-atom *configure-show?
+                                editing? *editing? *configure-show?
                                 blocks-container-id]}]
   (let [property (model/sub-block (:db/id property))
         multiple-values? (= :many (:cardinality (:block/schema property)))
@@ -233,7 +234,7 @@
         type (:type (:block/schema property))
         select-opts {:on-chosen (fn []
                                   (when *configure-show? (reset! *configure-show? false))
-                                  (when editing-atom (reset! editing-atom false)))}]
+                                  (when *editing? (reset! *editing? false)))}]
     (case type
       :date
       (date-picker block property value)
@@ -260,7 +261,7 @@
            :block
            [:div.h-6 (select-block block property select-opts)]
 
-           (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id editing-atom)}]
+           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *editing?)}]
              [:div.pl-1
               (editor-box editor-args editor-id (cond-> config
                                                   multiple-values?
@@ -288,7 +289,7 @@
 
                  :block
                  (if-let [block (db/entity [:block/uuid value])]
-                   (let [editor-opts (new-block-editor-opts editing-atom)]
+                   (let [editor-opts (new-block-editor-opts *editing?)]
                      [:div.property-block-container.w-full
                       (block-cp [block] {:id (str value)
                                          :editor-box editor-box
@@ -303,7 +304,7 @@
                  (inline-text {} :markdown (str value)))))])))))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
-  [state entity property item {:keys [editor-id row? editing-atom]
+  [state entity property item {:keys [editor-id row? *editing?]
                                :as opts}]
   (let [*show-close? (::show-close? state)
         editing? (state/sub [:editor/editing? editor-id])]
@@ -315,7 +316,7 @@
             row?
             (assoc :class "relative pr-4"))
      (property-scalar-value entity property item (assoc opts :editing? editing?))
-     (when (and @*show-close? (not editing?) (not @editing-atom))
+     (when (and @*show-close? (not editing?) (not @*editing?))
        [:a.close.fade-in
         {:class "absolute top-0 right-0"
          :title "Delete this value"
@@ -327,70 +328,81 @@
                                                     item))}
         (ui/icon "x")])]))
 
+(rum/defcs multiple-values < (rum/local false ::show-add?)
+  [self-state block property v opts dom-id state schema editor-id editor-args]
+  (let [*show-add? (::show-add? self-state)
+        *editing? (::editing? state)
+        block? (= (:type schema) :block)
+        default? (= (:type schema) :default)
+        row? (contains? #{:page} (:type schema))
+        items (if (coll? v) v (when v [v]))]
+    [:div.relative
+     {:class (cond
+               row?
+               "flex flex-1 flex-row items-center flex-wrap"
+               block?
+               "grid"
+               :else
+               "grid gap-1")
+      :on-mouse-over #(reset! *show-add? true)
+      :on-mouse-out  #(reset! *show-add? false)}
+
+     (for [[idx item] (medley/indexed items)]
+       (let [dom-id' (str dom-id "-" idx)
+             editor-id' (str editor-id idx)]
+         (rum/with-key
+           (multiple-value-item block property item
+                                (merge
+                                 opts
+                                 {:dom-id dom-id'
+                                  :editor-id editor-id'
+                                  :editor-args editor-args
+                                  :row? row?
+                                  :*editing? *editing?}))
+           dom-id')))
+
+     (cond
+       @*editing?
+       (property-scalar-value block property ""
+                              (merge
+                               opts
+                               {:editor-args editor-args
+                                :editor-id editor-id
+                                :dom-id dom-id
+                                :editing? @*editing?
+                                :*editing? *editing?}))
+
+       (and (or default? block?) (empty? items))
+       [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *editing? true))}
+        [:div.opacity-50.text-sm "Input something"]]
+
+       (and @*show-add? block?)
+       [:div.absolute {:style {:left "-1.5rem"
+                               :bottom " -0.125rem"}
+                       :on-click (fn [] (reset! *editing? true))}
+        (ui/tippy {:html [:span.text-sm
+                          [:span.mr-1 "Add another block (click or "]
+                          (ui/render-keyboard-shortcut "mod+enter")
+                          [:span.ml-1 ")"]]
+                   :interactive     true
+                   :delay           [100, 100]
+                   :position        "bottom"}
+                  [:a.add-button-link.flex.p-2
+                   (ui/icon "circle-plus")])])]))
+
 (rum/defcs property-value < rum/reactive
   (rum/local false ::editing?)
   [state block property v opts]
-  (let [*editing? (::editing? state)
-        k (:block/uuid property)
+  (let [k (:block/uuid property)
         dom-id (str "ls-property-" (:blocks-container-id opts) "-" k)
         editor-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
-        row? (and multiple-values? (contains? #{:page} (:type schema)))
-        block? (= (:type schema) :block)
-        default? (= (:type schema) :default)
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
-    (cond
-      multiple-values?
-      (let [items (if (coll? v) v (when v [v]))]
-        [:div.relative
-         {:class (cond
-                   row?
-                   "flex flex-1 flex-row items-center flex-wrap"
-                   block?
-                   "grid"
-                   :else
-                   "grid gap-1")}
-         (for [[idx item] (medley/indexed items)]
-           (let [dom-id' (str dom-id "-" idx)
-                 editor-id' (str editor-id idx)]
-             (rum/with-key
-               (multiple-value-item block property item
-                                    (merge
-                                     opts
-                                     {:dom-id dom-id'
-                                      :editor-id editor-id'
-                                      :editor-args editor-args
-                                      :row? row?
-                                      :editing-atom *editing?}))
-               dom-id')))
-
-         (cond
-           @*editing?
-           (property-scalar-value block property ""
-                                  (merge
-                                   opts
-                                   {:editor-args editor-args
-                                    :editor-id editor-id
-                                    :dom-id dom-id
-                                    :editing? @*editing?
-                                    :editing-atom *editing?}))
-
-           (and (or default? block?) (seq items))
-           nil
-
-           :else
-           [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *editing? true))}
-            (if (or default? block?)
-              [:div.opacity-50.text-sm "Input something"]
-              [:div.flex.flex-row
-               [:a.add-button-link.inline-flex {:title "Add another value"
-                                                :style {:margin-left -3}}
-                (ui/icon "circle-plus")]])])])
-
-      :else
+    (if multiple-values?
+      (multiple-values block property v opts dom-id state schema editor-id editor-args)
       [:div.flex.flex-1.items-center.property-value-content
        (property-scalar-value block property v
                               (merge
