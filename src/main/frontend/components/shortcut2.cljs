@@ -143,7 +143,7 @@
                    checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
 
          {:title   (if all? (t :keymap/all) (t (keyword :keymap (string/lower-case (name k)))))
-          :icon    (ui/icon (if checked? "check" "circle"))
+          :icon    (ui/icon (if checked? "checkbox" "square"))
           :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
 
        nil)]))
