@@ -333,11 +333,14 @@
                                          :editor-box editor-box
                                          :editor-opts editor-opts
                                          :in-property? true})])
-                   (if multiple-values?
-                     (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                     (property-handler/remove-block-property! repo
-                                                              (:block/uuid block)
-                                                              (:block/uuid property))))
+                   (do
+                     (if multiple-values?
+                       (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                       (property-handler/remove-block-property! repo
+                                                                (:block/uuid block)
+                                                                (:block/uuid property)))
+                     (exit-edit-property)
+                     nil))
 
                  (inline-text {} :markdown (str value)))))])))))
 

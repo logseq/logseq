@@ -92,17 +92,22 @@
                                        (let [id (:db/id ref)
                                              block-content (property-util/remove-properties
                                                             (:block/format block) (:block/content block))
-                                             new-content (-> (:block/content ref)
-                                                             (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
-                                                                             block-content)
-                                                             (string/replace (block-ref/->block-ref (str (:block/uuid block)))
-                                                                             block-content))]
-                                         {:tx [[:db/retract (:db/id ref) :block/refs (:db/id block)]
-                                               [:db/retract (:db/id ref) :block/path-refs (:db/id block)]
-                                               [:db/add id :block/content new-content]]
-                                          :revert-tx [[:db/add (:db/id ref) :block/refs (:db/id block)]
-                                                      [:db/add (:db/id ref) :block/path-refs (:db/id block)]
-                                                      [:db/add id :block/content (:block/content ref)]]})) refs)))
+                                             new-content (some-> (:block/content ref)
+                                                                 (string/replace (re-pattern (util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                                                                 block-content)
+                                                                 (string/replace (block-ref/->block-ref (str (:block/uuid block)))
+                                                                                 block-content))
+                                             tx (cond->
+                                                 [[:db/retract (:db/id ref) :block/refs (:db/id block)]
+                                                  [:db/retract (:db/id ref) :block/path-refs (:db/id block)]]
+                                                  new-content
+                                                  (conj [:db/add id :block/content new-content]))
+                                             revert-tx (cond->
+                                                        [[:db/add (:db/id ref) :block/refs (:db/id block)]
+                                                         [:db/add (:db/id ref) :block/path-refs (:db/id block)]]
+                                                         (:block/content ref)
+                                                         (conj [:db/add id :block/content (:block/content ref)]))]
+                                         {:tx tx :revert-tx revert-tx})) refs)))
                             (apply concat))
           retracted-tx' (mapcat :tx retracted-tx)
           revert-tx (mapcat :revert-tx retracted-tx)]
