@@ -174,7 +174,8 @@
 
 (defn- new-text-editor-opts
   [repo block property value type editor-id *add-new-item? opts]
-  {:on-blur
+  {:placeholder "Input something"
+   :on-blur
    (fn [e]
      (let [new-value (util/evalue e)
            blank? (string/blank? new-value)]
