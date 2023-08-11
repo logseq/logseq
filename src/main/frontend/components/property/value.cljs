@@ -388,14 +388,18 @@
   [state block property v opts dom-id schema editor-id editor-args]
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
-        block? (= (:type schema) :block)
-        default? (= (:type schema) :default)
-        row? (contains? #{:page} (:type schema))
+        type (:type schema)
+        block? (= type :block)
+        page? (= type :page)
+        default? (= type :default)
+        row? (contains? #{:page} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
      {:class (cond
                row?
-               "flex flex-1 flex-row items-center flex-wrap"
+               (cond-> "flex flex-1 flex-row items-center flex-wrap"
+                 page?
+                 (str " gap-2"))
                block?
                "grid"
                :else
@@ -434,6 +438,11 @@
        (and (or default? block?) (empty? items))
        [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *add-new-item? true))}
         [:div.opacity-50.text-sm "Input something"]]
+
+       (and @*show-add? page?)
+       [:a.add-button-link.flex
+        {:on-click (fn [] (reset! *add-new-item? true))}
+        (ui/icon "circle-plus")]
 
        (and @*show-add? block?)
        [:div.absolute {:style {:left "-1.5rem"
