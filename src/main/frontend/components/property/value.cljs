@@ -247,15 +247,28 @@
            (reset! *add-new-item? true)))))})
 
 (defn- new-block-editor-opts
-  [*add-new-item?]
+  [repo block property value *add-new-item?]
   {:on-key-down
    (fn [e]
-     (let [meta? (util/meta-key? e)
+     (let [new-value (util/evalue e)
+           meta? (util/meta-key? e)
            enter? (= (util/ekey e) "Enter")
-           create-another-one? (and meta? enter?)]
-       (when create-another-one?
-         (util/stop e)
-         (reset! *add-new-item? true))))})
+           create-another-one? (and meta? enter?)
+           backspace? (= (util/ekey e) "Backspace")
+           current-block (db/entity [:block/uuid value])]
+       (cond
+         create-another-one?
+         (do
+           (util/stop e)
+           (reset! *add-new-item? true))
+
+         (and backspace?
+              (= new-value "")
+              ;; no children block
+              (empty? (:block/_parent current-block)))
+         (do
+           (exit-edit-property)
+           (property-handler/delete-property-value! repo block (:block/uuid property) value)))))})
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
@@ -326,13 +339,13 @@
                    (page-cp {} page))
 
                  :block
-                 (if-let [block (db/entity [:block/uuid value])]
-                   (let [editor-opts (new-block-editor-opts *add-new-item?)]
+                 (if-let [item-block (db/entity [:block/uuid value])]
+                   (let [editor-opts (new-block-editor-opts repo block property value *add-new-item?)]
                      [:div.property-block-container.w-full
-                      (block-cp [block] {:id (str value)
-                                         :editor-box editor-box
-                                         :editor-opts editor-opts
-                                         :in-property? true})])
+                      (block-cp [item-block] {:id (str value)
+                                              :editor-box editor-box
+                                              :editor-opts editor-opts
+                                              :in-property? true})])
                    (do
                      (if multiple-values?
                        (property-handler/delete-property-value! repo block (:block/uuid property) value)
