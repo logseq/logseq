@@ -152,17 +152,17 @@
                  (catch :default e
                    (notification/show! (str e) :error false)
                    nil))
-            tags-or-alias? (and (contains? #{"tags" "alias"} k-name) (uuid? v*))]
+            tags-or-alias? (and (contains? #{"tags" "alias"} (string/lower-case k-name)) (uuid? v*))]
         (if tags-or-alias?
           (let [property-value-id (:db/id (db/entity [:block/uuid v*]))
-                attribute (case k-name
+                attribute (case (string/lower-case k-name)
                             "alias"
                             :block/alias
                             "tags"
                             :block/tags)]
             (db/transact! repo
-              [[:db/add (:db/id block) attribute property-value-id]]
-              {:outliner-op :save-block}))
+                          [[:db/add (:db/id block) attribute property-value-id]]
+                          {:outliner-op :save-block}))
           (when-not (contains? (if (set? value) value #{value}) v*)
             (if-let [msg (me/humanize (mu/explain-data schema v*))]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
@@ -193,11 +193,11 @@
                       refs (outliner-core/rebuild-block-refs block block-properties)]
                   ;; TODO: fix block/properties-order
                   (db/transact! repo
-                    [[:db/retract (:db/id block) :block/refs]
-                     {:block/uuid (:block/uuid block)
-                      :block/properties block-properties
-                      :block/refs refs}]
-                    {:outliner-op :save-block}))))))))))
+                                [[:db/retract (:db/id block) :block/refs]
+                                 {:block/uuid (:block/uuid block)
+                                  :block/properties block-properties
+                                  :block/refs refs}]
+                                {:outliner-op :save-block}))))))))))
 
 (defn- fix-cardinality-many-values!
   [repo property-uuid]

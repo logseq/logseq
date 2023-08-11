@@ -272,8 +272,11 @@
                        (map (fn [k] [k nil]) properties))
                      (:block/properties block))
         alias (set (map :block/uuid (:block/alias block)))
+        tags (set (map :block/uuid (:block/tags block)))
         alias-properties (when (seq alias)
                            [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
+        tags-properties (when (seq tags)
+                          [[(:block/uuid (db/entity [:block/name "tags"])) tags]])
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
                                         (when (= "class" (:block/type tag))
@@ -284,7 +287,8 @@
         built-in-properties (set/difference
                              (set (map name gp-property/db-built-in-properties-keys))
                              #{"alias" "tags"})
-        properties (->> (concat (seq alias-properties)
+        properties (->> (concat (seq tags-properties)
+                                (seq alias-properties)
                                 (seq properties)
                                 class-properties)
                         (util/distinct-by first)
