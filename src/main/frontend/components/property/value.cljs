@@ -332,7 +332,8 @@
                           (if (:block/name e) :page :block)
                           type)
                         type)]
-             (when-not (string/blank? value)
+             (if (string/blank? value)
+               [:div.opacity-50.text-sm "Input something"]
                (case type
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
@@ -436,7 +437,7 @@
                                 :*add-new-item? *add-new-item?}))
 
        (and (or default? block?) (empty? items))
-       [:div.rounded-sm.ml-1 {:on-click (fn [] (reset! *add-new-item? true))}
+       [:div.rounded-sm {:on-click (fn [] (reset! *add-new-item? true))}
         [:div.opacity-50.text-sm "Input something"]]
 
        (and @*show-add? page?)
