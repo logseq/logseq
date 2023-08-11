@@ -203,7 +203,7 @@
                   (not (state/get-editor-action)))
          (when-not (or down? up? backspace?) (util/stop e))
          (when (and (not blank?) (or enter? esc?))
-           (when (not= (string/trim new-value) (string/trim value))
+           (when (not= (string/trim new-value) (and value (string/trim value)))
              (property-handler/set-block-property! repo (:block/uuid block)
                                                    (:block/original-name property)
                                                    new-value
