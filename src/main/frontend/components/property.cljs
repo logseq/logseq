@@ -262,6 +262,9 @@
     (db/sub-block (:db/id block))))
 
 (rum/defcs properties-area < rum/reactive
+  {:init (fn [state]
+           (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
+                                                  (state/next-blocks-container-id))))}
   [state target-block edit-input-id opts]
   (let [block (resolve-instance-page-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
@@ -293,9 +296,7 @@
                             @(:*configure-show? opts)
                             (empty? properties))
                        (= edit-input-id (state/sub :ui/new-property-input-id)))
-        opts (if (:blocks-container-id opts)
-               opts
-               (assoc opts :blocks-container-id (state/next-blocks-container-id)))]
+        opts (assoc opts :blocks-container-id (::blocks-container-id state))]
     (when-not (and (empty? properties)
                    (not new-property?)
                    (not (:page-configure? opts)))

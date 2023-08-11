@@ -265,8 +265,7 @@
                    {:block/uuid (:block/uuid block)
                     :block/properties properties'
                     :block/refs refs}]
-                  {:outliner-op :save-block}))))
-          (state/clear-edit!))))))
+                  {:outliner-op :save-block})))))))))
 
 (defn class-add-property!
   [repo class k-name]

@@ -197,11 +197,12 @@
            meta? (util/meta-key? e)
            create-another-one? (and meta? enter?)
            down? (= (util/ekey e) "ArrowDown")
-           up? (= (util/ekey e) "ArrowUp")]
-       (when (and (or enter? esc? create-another-one? down? up?)
+           up? (= (util/ekey e) "ArrowUp")
+           backspace? (= (util/ekey e) "Backspace")]
+       (when (and (or enter? esc? create-another-one? down? up? backspace?)
                   (not (state/get-editor-action)))
-         (util/stop e)
-         (when-not blank?
+         (when-not (or down? up? backspace?) (util/stop e))
+         (when (and (not blank?) (or enter? esc?))
            (when (not= (string/trim new-value) (string/trim value))
              (property-handler/set-block-property! repo (:block/uuid block)
                                                    (:block/original-name property)
@@ -211,6 +212,19 @@
          (exit-edit-property)
 
          (cond
+           (and backspace? (= new-value "") (not @*add-new-item?)) ; delete item
+           (do
+             (move-cursor true opts)
+             (property-handler/delete-property-value! repo block (:block/uuid property) value))
+
+           (and backspace? (= new-value "") @*add-new-item?)
+           (do
+             (move-cursor true opts)
+             (reset! *add-new-item? false))
+
+           backspace?
+           nil
+
            down?
            (move-cursor false opts)
 
@@ -396,6 +410,7 @@
                                opts
                                {:editor-args editor-args
                                 :editor-id editor-id
+                                :idx (count items)
                                 :dom-id dom-id
                                 :editing? true
                                 :*add-new-item? *add-new-item?}))
