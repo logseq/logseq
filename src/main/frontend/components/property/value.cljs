@@ -279,11 +279,11 @@
                                 blocks-container-id]
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
+        repo (state/get-current-repo)
+        type (:type (:block/schema property))
         multiple-values? (= :many (:cardinality (:block/schema property)))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
-        repo (state/get-current-repo)
-        type (:type (:block/schema property))
         select-opts {:on-chosen (fn []
                                   (when *configure-show? (reset! *configure-show? false))
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
@@ -345,6 +345,7 @@
                    (let [editor-opts (new-block-editor-opts repo block property value *add-new-item? opts)]
                      [:div.property-block-container.w-full
                       (block-cp [item-block] {:id (str value)
+                                              :blocks-container-id (:blocks-container-id opts)
                                               :editor-box editor-box
                                               :editor-opts editor-opts
                                               :in-property? true})])
@@ -359,7 +360,41 @@
 
                  (inline-text {} :markdown (str value)))))])))))
 
-(rum/defcs multiple-value-item < (rum/local false ::show-close?)
+(rum/defc multiple-blocks-add-button < rum/reactive
+  [block property opts]
+  (let [editing? (state/sub :editor/editing?)]
+    (when-not editing?
+      [:div.absolute {:style {:left "-1.75rem"
+                              :bottom " -0.125rem"}
+                      :on-click (fn []
+                                  (create-new-block! block property opts))}
+       (ui/tippy {:html [:span.text-sm
+                         [:span.mr-1 "Add another block (click or "]
+                         (ui/render-keyboard-shortcut "mod+enter")
+                         [:span.ml-1 ")"]]
+                  :interactive     true
+                  :delay           [100, 100]
+                  :position        "bottom"}
+                 [:a.add-button-link.flex.p-2
+                  (ui/icon "circle-plus")])])))
+
+(rum/defc delete-value-button < rum/reactive
+  [entity property item]
+  (let [editing? (state/sub :editor/editing?)]
+    (when-not editing?
+      [:a.close.fade-in
+       {:class "absolute top-0 right-0"
+        :title "Delete this value"
+        :on-mouse-down
+        (fn []
+          (property-handler/delete-property-value! (state/get-current-repo)
+                                                   entity
+                                                   (:block/uuid property)
+                                                   item))}
+       (ui/icon "x")])))
+
+(rum/defcs multiple-value-item < rum/static rum/reactive
+  (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row? *add-new-item?]
                                :as opts}]
   (let [*show-close? (::show-close? state)
@@ -373,16 +408,7 @@
             (assoc :class "relative pr-4"))
      (property-scalar-value entity property item (assoc opts :editing? editing?))
      (when (and @*show-close? (not editing?) (not @*add-new-item?))
-       [:a.close.fade-in
-        {:class "absolute top-0 right-0"
-         :title "Delete this value"
-         :on-mouse-down
-         (fn []
-           (property-handler/delete-property-value! (state/get-current-repo)
-                                                    entity
-                                                    (:block/uuid property)
-                                                    item))}
-        (ui/icon "x")])]))
+       (delete-value-button entity property item))]))
 
 (rum/defcs multiple-values <
   (rum/local false ::add-new-item?)
@@ -447,19 +473,7 @@
         (ui/icon "circle-plus")]
 
        (and @*show-add? block?)
-       [:div.absolute {:style {:left "-1.5rem"
-                               :bottom " -0.125rem"}
-                       :on-click (fn []
-                                   (create-new-block! block property opts))}
-        (ui/tippy {:html [:span.text-sm
-                          [:span.mr-1 "Add another block (click or "]
-                          (ui/render-keyboard-shortcut "mod+enter")
-                          [:span.ml-1 ")"]]
-                   :interactive     true
-                   :delay           [100, 100]
-                   :position        "bottom"}
-                  [:a.add-button-link.flex.p-2
-                   (ui/icon "circle-plus")])])]))
+       (multiple-blocks-add-button block property opts))]))
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
