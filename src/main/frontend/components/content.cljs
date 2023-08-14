@@ -413,7 +413,7 @@
                                e
                                (property-custom-context-menu-content block
                                                                      property
-                                                                     {:class-schema? (some-> target (.getAttribute "data-class-schema") (= "true"))}))))
+                                                                     {:class-schema? (some-> property-el (.getAttribute "data-class-schema") (= "true"))}))))
 
                           page
                           (do
