@@ -983,7 +983,7 @@
   (let [repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
-      (rtc-op/<update-block-op! repo (:block/uuid block) (select-keys block [:block/content]))))
+      (rtc-op/<update-block-op! repo (:block/uuid block))))
   (op-transact! #'save-block block))
 
 (defn insert-blocks!

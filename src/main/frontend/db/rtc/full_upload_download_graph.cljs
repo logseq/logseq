@@ -1,8 +1,10 @@
 (ns frontend.db.rtc.full-upload-download-graph
+  "- upload local graph to remote
+  - download remote graph"
   (:require-macros [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.db.rtc.ws :refer [send]]
+            [frontend.db.rtc.ws :refer [<send!]]
             [frontend.state :as state]
             [cljs.core.async :as async :refer [chan go <!]]
             [cljs.core.async.interop :refer [p->c]]
@@ -26,34 +28,23 @@
                     {:db/id (:e (first datoms))}
                     datoms)))))))
 
-(defn- <upload-graph
+(defn <upload-graph
+  "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
   [state]
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
-            (send (:ws state) {:req-id (get-req-id) :action "presign-put-temp-s3-obj" :graph-uuid "not-yet"})
+            (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj" :graph-uuid "not-yet"}))
             (let [all-blocks (export-as-blocks (state/get-current-repo))
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
       (with-sub-data-from-ws state
-        (send (:ws state) {:req-id (get-req-id) :action "full-upload-graph" :graph-uuid "not-yet" :s3-key key})
-        (println (<! (get-result-ch)))))))
-
-
-(defn- <download-graph
-  [state graph-uuid]
-  (go
-    (let [{:keys [url]}
-          (with-sub-data-from-ws state
-            (send (:ws state) {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
-            (<! (get-result-ch)))
-          {:keys [status body] :as r} (<! (http/get url))]
-      (if (not= 200 status)
-        (ex-info "<download-graph failed" r)
-        (let [reader (transit/reader :json)
-              all-blocks (transit/read reader body)]
-          all-blocks)))))
+        (<! (<send! state {:req-id (get-req-id) :action "full-upload-graph" :graph-uuid "not-yet" :s3-key key}))
+        (let [r (<! (get-result-ch))]
+          (if-not (:graph-uuid r)
+            (ex-info "upload graph failed" r)
+            r))))))
 
 
 (defn- replace-db-id-with-temp-id
@@ -111,3 +102,18 @@
             repo (str "rtc-" graph-uuid)]
         (<! (p->c (ipc/ipc :db-new repo)))
         (<! (p->c (ipc/ipc :db-transact-data repo (pr-str {:blocks blocks**}))))))))
+
+
+(defn <download-graph
+  [state graph-uuid]
+  (go
+    (let [{:keys [url]}
+          (with-sub-data-from-ws state
+            (<send! state {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
+            (<! (get-result-ch)))
+          {:keys [status body] :as r} (<! (http/get url))]
+      (if (not= 200 status)
+        (ex-info "<download-graph failed" r)
+        (let [reader (transit/reader :json)
+              all-blocks (transit/read reader body)]
+          (<! (<transact-remote-all-blocks-to-sqlite all-blocks graph-uuid)))))))

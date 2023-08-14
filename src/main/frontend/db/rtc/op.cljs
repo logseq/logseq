@@ -13,9 +13,7 @@
     [:value [:map [:block-uuids [:sequential :string]]]]]
    [:catn
     [:op [:= "update"]]
-    [:value [:map
-             [:block-uuid :string]
-             [:content {:optional true} :string]]]]])
+    [:value [:map [:block-uuid :string]]]]])
 
 (def op-validator (m/validator op-schema))
 
@@ -33,9 +31,8 @@
     (p->c (ipc/ipc :rtc/add-ops repo (pr-str [op])))))
 
 (defn <update-block-op!
-  [repo block-uuid attrs-map]
-  (let [op ["update" (merge {:block-uuid (str block-uuid)}
-                            (select-keys attrs-map [:content]))]]
+  [repo block-uuid]
+  (let [op ["update" {:block-uuid (str block-uuid)}]]
     (assert (op-validator op) "illegal op")
     (p->c (ipc/ipc :rtc/add-ops repo (pr-str [op])))))
 
