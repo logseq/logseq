@@ -369,7 +369,7 @@
            [:a.fade-link.flex.flex-row.items-center
             {:on-click #(reset! *configure-show? true)}
             (ui/icon "plus" {:size 14})
-            [:div.ml-1.text-sm "Add property"]]]])])))
+            [:div.ml-1.text-sm (if (= "class" (:block/type page)) "Configure page" "Add property")]]]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
