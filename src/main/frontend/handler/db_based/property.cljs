@@ -15,11 +15,6 @@
 ;; TODO:
 ;; Validate && list fixes for non-validated values when updating property schema
 
-(defn- date-str?
-  [value]
-  (when-let [d (js/Date. value)]
-    (not= (str d) "Invalid Date")))
-
 (defn- logseq-page?
   [id]
   (and (uuid? id)
@@ -41,8 +36,8 @@
   {:default  string?                     ; refs/tags will not be extracted
    :number   number?
    :date     [:fn
-              {:error/message "should be a date"}
-              date-str?]
+              {:error/message "should be a journal date"}
+              logseq-page?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
@@ -77,7 +72,6 @@
       (parse-double v-str) :number
       (util/uuid-string? v-str) :object
       (gp-util/url? v-str) :url
-      (date-str? v-str) :date
       (contains? #{"true" "false"} (string/lower-case v-str)) :boolean
       :else :default)
     (catch :default _e
@@ -107,7 +101,7 @@
       (uuid v-str)
 
       :date
-      (js/Date. v-str)                  ; inst
+      v-str                  ; uuid
 
       :url
       v-str)))

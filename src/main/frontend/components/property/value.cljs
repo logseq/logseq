@@ -14,7 +14,8 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.date :as date]))
 
 (defn exit-edit-property
   []
@@ -46,18 +47,25 @@
 
 (rum/defc date-picker
   [block property value]
-  (let [value' (when-not (string/blank? value)
+  (let [title (when (uuid? value)
+                (:block/original-name (db/entity [:block/uuid value])))
+        value (if title
+                (js/Date. (date/journal-title->long title))
+                value)
+        value' (when-not (string/blank? value)
                  (tc/to-local-date value))
-        text (if value'
-               (str value')
-               "Pick a date")
         open-modal! (fn []
                       (state/set-modal!
                        #(ui/datepicker value' {:on-change (fn [_e date]
-                                                            (let [repo (state/get-current-repo)]
-                                                              (property-handler/set-block-property! repo (:block/uuid block)
-                                                                                              (:block/name property)
-                                                                                              date)
+                                                            (let [repo (state/get-current-repo)
+                                                                  journal (date/js-date->journal-title date)]
+                                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                                                (page-handler/create! journal {:redirect? false
+                                                                                               :create-first-block? false}))
+                                                              (when-let [page (db/entity [:block/name (util/page-name-sanity-lc journal)])]
+                                                                (property-handler/set-block-property! repo (:block/uuid block)
+                                                                                                      (:block/name property)
+                                                                                                      (:block/uuid page)))
                                                               (exit-edit-property)
                                                               (state/close-modal!)))})))]
     [:a
@@ -68,7 +76,7 @@
                        (open-modal!)))}
      [:span.inline-flex.items-center
       (ui/icon "calendar")
-      [:span.ml-1 text]]]))
+      [:span.ml-1 (or title "Pick a date")]]]))
 
 (defn- select-page
   [block property opts]

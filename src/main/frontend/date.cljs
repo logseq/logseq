@@ -215,6 +215,10 @@
 (defn parse-iso [string]
   (tf/parse iso-parser string))
 
+(defn js-date->journal-title
+  [date]
+  (journal-name (tc/to-local-date date)))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))
@@ -229,4 +233,4 @@
               :LemonRenewsAt "2024-04-11T07:28:00.000000Z",
               :LemonEndsAt nil,
               :LemonStatus "active"}]
-    (->> info :LemonRenewsAt (tf/parse iso-parser) (< (js/Date.))))) 
+    (->> info :LemonRenewsAt (tf/parse iso-parser) (< (js/Date.)))))
