@@ -937,7 +937,7 @@ export class TLApp<
 
     if ('clientX' in e) {
       this.inputs.onPointerDown(
-        [...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5],
+        [...this.viewport.getPagePoint([e.clientX, e.clientY]), e.pressure],
         e as K['pointer']
       )
     }
@@ -953,7 +953,7 @@ export class TLApp<
 
     if ('clientX' in e) {
       this.inputs.onPointerUp(
-        [...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5],
+        [...this.viewport.getPagePoint([e.clientX, e.clientY]), e.pressure],
         e as K['pointer']
       )
     }
@@ -961,7 +961,7 @@ export class TLApp<
 
   readonly onPointerMove: TLEvents<S, K>['pointer'] = (info, e) => {
     if ('clientX' in e) {
-      this.inputs.onPointerMove([...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5], e)
+      this.inputs.onPointerMove([...this.viewport.getPagePoint([e.clientX, e.clientY]), e.pressure], e)
     }
   }
 
