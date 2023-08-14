@@ -18,7 +18,8 @@
 
 (rum/defc render-item < rum/reactive
   [result chosen? multiple-choices? *selected-choices]
-  (let [value (if (map? result) (:value result) result)
+  (let [value (if (map? result) (or (:label result)
+                                    (:value result)) result)
         selected-choices (rum/react *selected-choices)]
     [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
      [:span
@@ -77,7 +78,13 @@
                                (not exact-match?)
                                (not (string/blank? @input))
                                (not (exact-match-exclude-items @input)))
-                        (cons {:value @input} search-result')
+                        (->>
+                         (cons
+                          (first search-result')
+                          (cons {:value @input
+                                 :label (str "+ New option: " @input)}
+                                (rest search-result')))
+                         (remove nil?))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container [:div.input-wrap

@@ -107,69 +107,6 @@
                                        (when-let [f (:on-chosen opts)] (f))
                                        nil))})})))
 
-(defn- select-block
-  [block property opts]
-  (let [blocks (->> (model/get-all-block-contents)
-                    (remove (fn [b] (= (:db/id block) (:db/id b))))
-                    (map (fn [b]
-                           (assoc b :value (:block/content b)))))]
-    (select/select {:items blocks
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (let [id (:block/uuid chosen)]
-                                   (add-property! block (:block/original-name property) id)
-                                   (when-let [f (:on-chosen opts)] (f))))
-                    :input-opts (fn [not-matched?]
-                                  {:on-blur (or (:on-chosen opts) identity)
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Enter"
-                                       (when not-matched?
-                                         (let [repo (state/get-current-repo)
-                                               content (string/trim (util/evalue e))]
-                                           (when-not (string/blank? content)
-                                             (let [pid (:block/uuid (db/entity [:block/name "created-in-property"]))
-                                                   new-block (-> (editor-handler/wrap-parse-block {:block/format :markdown
-                                                                                                   :block/content content})
-                                                                 (outliner-core/block-with-timestamps)
-                                                                 (merge {:block/page {:db/id
-                                                                                      (or (:db/id (:block/page block))
-                                                                                          (:db/id block))}
-                                                                         :block/properties {pid true}}))
-                                                   id (:block/uuid new-block)]
-                                               (db/transact! repo [new-block] {:outliner-op :insert-blocks})
-                                               (add-property! block (:block/original-name property) id)
-                                               (when-let [f (:on-chosen opts)] (f))))))
-                                       "Escape"
-                                       (do (exit-edit-property)
-                                           (when-let [f (:on-chosen opts)] (f)))
-                                       nil))})})))
-
-(defn- select
-  [block property opts]
-  (let [items (->> (model/get-block-property-values (:block/uuid property))
-                   (mapcat (fn [[_id value]]
-                             (if (coll? value)
-                               (map (fn [v] {:value v}) value)
-                               [{:value value}])))
-                   (distinct))
-        add-property-f #(add-property! block (:block/original-name property) %)]
-    (select/select {:items items
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (add-property-f (:value chosen))
-                                 (when-let [f (:on-chosen opts)] (f)))
-                    :show-new-when-not-exact-match? true
-                    :input-opts (fn [_]
-                                  {:on-blur (or (:on-chosen opts) identity)
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Escape"
-                                       (when-let [f (:on-chosen opts)] (f))
-                                       nil))})})))
-
 (defn- move-cursor
   [up? opts]
   (let [f (if up? dec inc)
@@ -258,8 +195,50 @@
                 (not blank?))
            (reset! *add-new-item? true)))))})
 
+(defn- select
+  [block property opts]
+  (let [items (->> (model/get-block-property-values (:block/uuid property))
+                   (mapcat (fn [[_id value]]
+                             (if (coll? value)
+                               (map (fn [v] {:value v}) value)
+                               [{:value value}])))
+                   (distinct))
+        add-property-f #(add-property! block (:block/original-name property) %)]
+    (select/select {:items items
+                    :dropdown? true
+                    :on-chosen (fn [chosen]
+                                 (add-property-f (:value chosen))
+                                 (when-let [f (:on-chosen opts)] (f)))
+                    :show-new-when-not-exact-match? true
+                    :input-opts (fn [_]
+                                  {:on-blur (or (:on-chosen opts) identity)
+                                   :on-key-down
+                                   (fn [e]
+                                     (case (util/ekey e)
+                                       "Escape"
+                                       (when-let [f (:on-chosen opts)] (f))
+                                       nil))})})))
+
+(defn- create-new-block!
+  [block property {:keys [*add-new-item?]}]
+  (let [repo (state/get-current-repo)
+        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
+        new-block (-> {:block/uuid (db/new-block-id)
+                       :block/format :markdown
+                       :block/content ""
+                       :block/page {:db/id
+                                    (or (:db/id (:block/page block))
+                                        (:db/id block))}
+                       :block/properties {pid true}}
+                      outliner-core/block-with-timestamps)
+        id (:block/uuid new-block)]
+    (db/transact! repo [new-block] {:outliner-op :insert-blocks})
+    (add-property! block (:block/original-name property) id)
+    (when *add-new-item? (reset! *add-new-item? false))
+    (editor-handler/edit-block! (db/entity [:block/uuid id]) 0 id)))
+
 (defn- new-block-editor-opts
-  [repo block property value *add-new-item?]
+  [repo block property value *add-new-item? opts]
   {:on-key-down
    (fn [e]
      (let [new-value (util/evalue e)
@@ -272,7 +251,8 @@
          create-another-one?
          (do
            (util/stop e)
-           (reset! *add-new-item? true))
+           (reset! *add-new-item? true)
+           (create-new-block! block property opts))
 
          (and backspace?
               (= new-value "")
@@ -298,77 +278,82 @@
         select-opts {:on-chosen (fn []
                                   (when *configure-show? (reset! *configure-show? false))
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
-    (case type
-      :date
-      (date-picker block property value)
+    (if (and (= type :block)
+             (not (uuid? value))
+             (empty? (get-in block [:block/properties (:block/uuid property)])))
+      ;; create a block to be ready for input
+      (create-new-block! block property opts)
+      (case type
+        :date
+        (date-picker block property value)
 
-      :checkbox
-      (let [add-property! (fn []
-                            (add-property! block (:block/original-name property) (boolean (not value))))]
-        (ui/checkbox {:tabIndex "0"
-                      :checked value
-                      :on-change (fn [_e] (add-property!))
-                      :on-key-down (fn [e]
-                                     (when (= (util/ekey e) "Enter")
-                                       (add-property!)))}))
+        :checkbox
+        (let [add-property! (fn []
+                              (add-property! block (:block/original-name property) (boolean (not value))))]
+          (ui/checkbox {:tabIndex "0"
+                        :checked value
+                        :on-change (fn [_e] (add-property!))
+                        :on-key-down (fn [e]
+                                       (when (= (util/ekey e) "Enter")
+                                         (add-property!)))}))
       ;; :others
-      (if editing?
-        [:div.flex.flex-1
-         (case type
-           (list :number :url)
-           [:div.h-6 (select block property select-opts)]
+        (if editing?
+          [:div.flex.flex-1
+           (case type
+             (list :number :url)
+             [:div.h-6 (select block property select-opts)]
 
-           :page
-           [:div.h-6 (select-page block property select-opts)]
+             :page
+             [:div.h-6 (select-page block property select-opts)]
 
-           :block
-           [:div.h-6 (select-block block property select-opts)]
+             :block
+             nil
 
-           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
-             [:div
-              (editor-box editor-args editor-id (cond-> config
-                                                  multiple-values?
-                                                  (assoc :property-value value)))]))]
-        (let [class (str (when-not row? "flex flex-1 ")
-                         (when multiple-values? "property-value-content"))]
-          [:div {:id (or dom-id (random-uuid))
-                 :class class
-                 :style {:min-height 24}
-                 :on-click (fn []
-                             (let [page-or-block? (contains? #{:page :block} type)]
-                               (when (or (not page-or-block?)
-                                         (and (string/blank? value) page-or-block?))
-                                 (set-editing! property editor-id dom-id value))))}
-           (let [type (if (and (= type :default) (uuid? value))
-                        (if-let [e (db/entity [:block/uuid value])]
-                          (if (:block/name e) :page :block)
-                          type)
-                        type)]
-             (if (string/blank? value)
-               [:div.opacity-50.text-sm "Input something"]
-               (case type
-                 :page
-                 (when-let [page (db/entity [:block/uuid value])]
-                   (page-cp {} page))
+             (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
+               [:div
+                (editor-box editor-args editor-id (cond-> config
+                                                    multiple-values?
+                                                    (assoc :property-value value)))]))]
+          (let [class (str (when-not row? "flex flex-1 ")
+                           (when multiple-values? "property-value-content"))]
+            [:div {:id (or dom-id (random-uuid))
+                   :class class
+                   :style {:min-height 24}
+                   :on-click (fn []
+                               (let [page-or-block? (contains? #{:page :block} type)]
+                                 (when (or (not page-or-block?)
+                                           (and (string/blank? value) page-or-block?))
+                                   (set-editing! property editor-id dom-id value))))}
+             (let [type (if (and (= type :default) (uuid? value))
+                          (if-let [e (db/entity [:block/uuid value])]
+                            (if (:block/name e) :page :block)
+                            type)
+                          type)]
+               (if (string/blank? value)
+                 [:div.opacity-50.text-sm "Input something"]
+                 (case type
+                   :page
+                   (when-let [page (db/entity [:block/uuid value])]
+                     (page-cp {} page))
 
-                 :block
-                 (if-let [item-block (db/entity [:block/uuid value])]
-                   (let [editor-opts (new-block-editor-opts repo block property value *add-new-item?)]
-                     [:div.property-block-container.w-full
-                      (block-cp [item-block] {:id (str value)
-                                              :editor-box editor-box
-                                              :editor-opts editor-opts
-                                              :in-property? true})])
-                   (do
-                     (if multiple-values?
-                       (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                       (property-handler/remove-block-property! repo
-                                                                (:block/uuid block)
-                                                                (:block/uuid property)))
-                     (exit-edit-property)
-                     nil))
+                   :block
+                   (if-let [item-block (db/entity [:block/uuid value])]
+                     (let [editor-opts (new-block-editor-opts repo block property value *add-new-item? opts)]
+                       [:div.property-block-container.w-full
+                        (block-cp [item-block] {:id (str value)
+                                                :editor-box editor-box
+                                                :editor-opts editor-opts
+                                                :in-property? true})])
+                     (do
+                       (if multiple-values?
+                         (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                         (property-handler/remove-block-property! repo
+                                                                  (:block/uuid block)
+                                                                  (:block/uuid property)))
+                       (exit-edit-property)
+                       nil))
 
-                 (inline-text {} :markdown (str value)))))])))))
+                   (inline-text {} :markdown (str value)))))]))))))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row? *add-new-item?]
@@ -460,7 +445,8 @@
        (and @*show-add? block?)
        [:div.absolute {:style {:left "-1.5rem"
                                :bottom " -0.125rem"}
-                       :on-click (fn [] (reset! *add-new-item? true))}
+                       :on-click (fn []
+                                   (create-new-block! block property opts))}
         (ui/tippy {:html [:span.text-sm
                           [:span.mr-1 "Add another block (click or "]
                           (ui/render-keyboard-shortcut "mod+enter")
