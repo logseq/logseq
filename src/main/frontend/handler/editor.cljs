@@ -2460,7 +2460,7 @@
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundary-up-down
-  [direction]
+  [direction move-opts]
   (let [input (state/get-input)
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
@@ -2480,11 +2480,12 @@
               new-uuid (cljs.core/uuid sibling-block-id)
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
-                       [direction line-pos]
+                       (or (:pos move-opts)
+                        [direction line-pos])
                        new-id))))))
 
 (defn keydown-up-down-handler
-  [direction]
+  [direction {:keys [_pos] :as move-opts}]
   (let [input (state/get-input)
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
@@ -2498,7 +2499,7 @@
 
       (or (and up? (cursor/textarea-cursor-first-row? input))
           (and down? (cursor/textarea-cursor-last-row? input)))
-      (move-cross-boundary-up-down direction)
+      (move-cross-boundary-up-down direction move-opts)
 
       :else
       (if up?
@@ -3146,7 +3147,7 @@
       (util/stop e)
       (cond
         (state/editing?)
-        (keydown-up-down-handler direction)
+        (keydown-up-down-handler direction {})
 
         (state/selection?)
         (select-up-down direction)

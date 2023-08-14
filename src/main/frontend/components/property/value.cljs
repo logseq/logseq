@@ -2,6 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [frontend.components.select :as select]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
@@ -14,8 +15,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [medley.core :as medley]
-            [rum.core :as rum]
-            [frontend.date :as date]))
+            [rum.core :as rum]))
 
 (defn exit-edit-property
   []
@@ -237,7 +237,7 @@
     (when *add-new-item? (reset! *add-new-item? false))
     (editor-handler/edit-block! (db/entity [:block/uuid id]) 0 id)))
 
-(defn- new-block-editor-opts
+(defn- block-editor-opts
   [repo block property value *add-new-item? opts]
   {:on-key-down
    (fn [e]
@@ -259,7 +259,7 @@
               ;; no children block
               (empty? (:block/_parent current-block)))
          (do
-           (exit-edit-property)
+           (editor-handler/keydown-up-down-handler :up {:pos :max})
            (property-handler/delete-property-value! repo block (:block/uuid property) value)))))})
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
@@ -342,7 +342,7 @@
 
                  :block
                  (if-let [item-block (db/entity [:block/uuid value])]
-                   (let [editor-opts (new-block-editor-opts repo block property value *add-new-item? opts)]
+                   (let [editor-opts (block-editor-opts repo block property value *add-new-item? opts)]
                      [:div.property-block-container.w-full
                       (block-cp [item-block] {:id (str value)
                                               :blocks-container-id (:blocks-container-id opts)
@@ -364,10 +364,11 @@
   [block property opts]
   (let [editing? (state/sub :editor/editing?)]
     (when-not editing?
-      [:div.absolute {:style {:left "-1.75rem"
-                              :bottom " -0.125rem"}
-                      :on-click (fn []
-                                  (create-new-block! block property opts))}
+      [:div.absolute.fade-in
+       {:style {:left "-1.75rem"
+                :bottom " -0.125rem"}
+        :on-click (fn []
+                    (create-new-block! block property opts))}
        (ui/tippy {:html [:span.text-sm
                          [:span.mr-1 "Add another block (click or "]
                          (ui/render-keyboard-shortcut "mod+enter")
