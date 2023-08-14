@@ -82,11 +82,15 @@
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
 
 (defn- select-page
-  [block property opts]
+  [block property {:keys [class] :as opts}]
   (let [repo (state/get-current-repo)
-        pages (->> (model/get-all-page-original-names repo)
-                   (map (fn [p] {:value p})))]
-    (select/select {:items pages
+        pages (if class
+                (some->> (:block/name (db/entity [:block/uuid (uuid class)]))
+                         (db/get-tag-pages repo)
+                         (map first))
+                (model/get-all-page-original-names repo))
+        options (map (fn [p] {:value p}) pages)]
+    (select/select {:items options
                     :dropdown? true
                     :on-chosen (fn [chosen]
                                  (let [page (string/trim (:value chosen))
@@ -282,8 +286,9 @@
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
         repo (state/get-current-repo)
-        type (:type (:block/schema property))
-        multiple-values? (= :many (:cardinality (:block/schema property)))
+        schema (:block/schema property)
+        type (:type schema)
+        multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
         select-opts {:on-chosen (fn []
@@ -309,6 +314,9 @@
            (list :number :url)
            [:div.h-6 (select block property select-opts)]
 
+           :object
+           [:div.h-6 (select-page block property (assoc select-opts :class (:class schema)))]
+
            :page
            [:div.h-6 (select-page block property select-opts)]
 
@@ -326,9 +334,9 @@
                  :class class
                  :style {:min-height 24}
                  :on-click (fn []
-                             (let [page-or-block? (contains? #{:page :block} type)]
-                               (when (or (not page-or-block?)
-                                         (and (string/blank? value) page-or-block?))
+                             (let [ref? (contains? #{:page :block :object} type)]
+                               (when (or (not ref?)
+                                         (and (string/blank? value) ref?))
                                  (set-editing! property editor-id dom-id value))))}
            (let [type (if (and (= type :default) (uuid? value))
                         (if-let [e (db/entity [:block/uuid value])]
@@ -338,6 +346,10 @@
              (if (string/blank? value)
                [:div.opacity-50.text-sm "Input something"]
                (case type
+                 :object
+                 (when-let [object (db/entity [:block/uuid value])]
+                   (page-cp {} object))
+
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
                    (page-cp {} page))
@@ -421,15 +433,14 @@
         *add-new-item? (::add-new-item? state)
         type (:type schema)
         block? (= type :block)
-        page? (= type :page)
         default? (= type :default)
-        row? (contains? #{:page} type)
+        row? (contains? #{:page :object} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
      {:class (cond
                row?
                (cond-> "flex flex-1 flex-row items-center flex-wrap"
-                 page?
+                 row?
                  (str " gap-2"))
                block?
                "grid"
@@ -470,7 +481,7 @@
        [:div.rounded-sm {:on-click (fn [] (reset! *add-new-item? true))}
         [:div.opacity-50.text-sm "Input something"]]
 
-       (and @*show-add? page?)
+       (and @*show-add? row?)
        [:a.add-button-link.flex
         {:on-click (fn [] (reset! *add-new-item? true))}
         (ui/icon "circle-plus")]

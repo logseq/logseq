@@ -30,7 +30,7 @@
   [id]
   (and (uuid? id)
        (when-let [e (db/entity [:block/uuid id])]
-         (seq (:block/class e)))))
+         (seq (:block/tags e)))))
 
 (def builtin-schema-types
   {:default  string?                     ; refs/tags will not be extracted

@@ -4,7 +4,8 @@
             [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.modules.outliner.core :as outliner-core]))
 
 (def user-face-builtin-schema-types db-property/user-face-builtin-schema-types)
 (def internal-builtin-schema-types db-property/internal-builtin-schema-types)

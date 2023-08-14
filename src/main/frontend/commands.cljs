@@ -721,7 +721,7 @@
   (state/clear-edit!))
 
 (defmethod handle-step :editor/new-property [[_]]
-  (property-handler/editing-new-property!))
+  (state/pub-event! [:editor/new-property]))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))

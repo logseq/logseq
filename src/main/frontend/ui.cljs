@@ -896,10 +896,10 @@
       [:option (cond->
                 {:key   label
                  :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
-                disabled
-                (assoc :disabled disabled)
-                selected
-                (assoc :selected selected))
+                 disabled
+                 (assoc :disabled disabled)
+                 selected
+                 (assoc :selected selected))
        label])]))
 
 (rum/defc radio-list

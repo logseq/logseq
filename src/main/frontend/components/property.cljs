@@ -5,6 +5,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -39,6 +40,17 @@
                               (property-handler/update-property! repo (:block/uuid block) {:properties {icon-property-id {:type :emoji
                                                                                                                           :id id}}}))
                             (toggle-fn))})))))
+
+(rum/defc class-select
+  [*property-schema class]
+  (let [classes (db-model/get-all-classes (state/get-current-repo))
+        options (map (fn [[name id]] {:label name
+                                      :value id
+                                      :selected (= class id)})
+                     classes)]
+    (ui/select options
+               (fn [_e value]
+                 (swap! *property-schema assoc :class (str value))))))
 
 (rum/defcs property-config <
   rum/reactive
@@ -88,6 +100,11 @@
                     (fn [_e v]
                       (let [type (keyword (string/lower-case v))]
                         (swap! *property-schema assoc :type type)))))]
+
+      (when (= :object (:type @*property-schema))
+        [:div.grid.grid-cols-4.gap-1.leading-8
+         [:label "Choose class:"]
+         (class-select *property-schema (:class @*property-schema))])
 
       (when-not (= (:type @*property-schema) :checkbox)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8

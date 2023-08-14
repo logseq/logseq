@@ -25,7 +25,6 @@
             [frontend.components.user.login :as login]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.repo :as repo]
-            [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -54,6 +53,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
@@ -981,6 +981,16 @@
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
+
+(defmethod handle :editor/new-property [[_]]
+  (when-let [edit-block (state/get-edit-block)]
+    (when-let [block-id (:block/uuid edit-block)]
+      (let [block (db/entity [:block/uuid block-id])
+            collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
+                           (:block/collapsed? block))]
+        (when collapsed?
+          (editor-handler/set-blocks-collapsed! [block-id] false)))))
+  (property-handler/editing-new-property!))
 
 (defn run!
   []

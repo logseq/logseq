@@ -3383,7 +3383,7 @@
   (let [config (last (state/get-editor-args))]
     (:ref? config)))
 
-(defn- set-blocks-collapsed!
+(defn set-blocks-collapsed!
   [block-ids value]
   (let [block-ids (map (fn [block-id] (if (string? block-id) (uuid block-id) block-id)) block-ids)
         repo (state/get-current-repo)
