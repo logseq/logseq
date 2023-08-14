@@ -158,15 +158,15 @@
                                                    new-value
                                                    :old-value value)))
 
-         (exit-edit-property)
+         (when-not backspace? (exit-edit-property))
 
          (cond
-           (and backspace? (= new-value "") (not @*add-new-item?)) ; delete item
+           (and backspace? (= new-value "") *add-new-item?  (not @*add-new-item?)) ; delete item
            (do
              (move-cursor true opts)
              (property-handler/delete-property-value! repo block (:block/uuid property) value))
 
-           (and backspace? (= new-value "") @*add-new-item?)
+           (and backspace? (= new-value "") *add-new-item? @*add-new-item?)
            (do
              (move-cursor true opts)
              (reset! *add-new-item? false))
@@ -263,6 +263,15 @@
            (property-handler/delete-property-value! repo block (:block/uuid property) value)))))})
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [[block property value opts] (:rum/args state)
+                 type (:type (:block/schema property))]
+             (when (and (= type :block)
+                        (not (uuid? value))
+                        (empty? (get-in block [:block/properties (:block/uuid property)])))
+               ;; create a block to be ready for input
+               (create-new-block! block property opts))
+             state))}
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id row?
                                 editor-box editor-args
@@ -278,82 +287,77 @@
         select-opts {:on-chosen (fn []
                                   (when *configure-show? (reset! *configure-show? false))
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
-    (if (and (= type :block)
-             (not (uuid? value))
-             (empty? (get-in block [:block/properties (:block/uuid property)])))
-      ;; create a block to be ready for input
-      (create-new-block! block property opts)
-      (case type
-        :date
-        (date-picker block property value)
+    (case type
+      :date
+      (date-picker block property value)
 
-        :checkbox
-        (let [add-property! (fn []
-                              (add-property! block (:block/original-name property) (boolean (not value))))]
-          (ui/checkbox {:tabIndex "0"
-                        :checked value
-                        :on-change (fn [_e] (add-property!))
-                        :on-key-down (fn [e]
-                                       (when (= (util/ekey e) "Enter")
-                                         (add-property!)))}))
+      :checkbox
+      (let [add-property! (fn []
+                            (add-property! block (:block/original-name property) (boolean (not value))))]
+        (ui/checkbox {:tabIndex "0"
+                      :checked value
+                      :on-change (fn [_e] (add-property!))
+                      :on-key-down (fn [e]
+                                     (when (= (util/ekey e) "Enter")
+                                       (add-property!)))}))
       ;; :others
-        (if editing?
-          [:div.flex.flex-1
-           (case type
-             (list :number :url)
-             [:div.h-6 (select block property select-opts)]
+      (if editing?
+        [:div.flex.flex-1
+         (case type
+           (list :number :url)
+           [:div.h-6 (select block property select-opts)]
 
-             :page
-             [:div.h-6 (select-page block property select-opts)]
+           :page
+           [:div.h-6 (select-page block property select-opts)]
 
-             :block
-             nil
+           :block
+           nil
 
-             (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
-               [:div
-                (editor-box editor-args editor-id (cond-> config
-                                                    multiple-values?
-                                                    (assoc :property-value value)))]))]
-          (let [class (str (when-not row? "flex flex-1 ")
-                           (when multiple-values? "property-value-content"))]
-            [:div {:id (or dom-id (random-uuid))
-                   :class class
-                   :style {:min-height 24}
-                   :on-click (fn []
-                               (let [page-or-block? (contains? #{:page :block} type)]
-                                 (when (or (not page-or-block?)
-                                           (and (string/blank? value) page-or-block?))
-                                   (set-editing! property editor-id dom-id value))))}
-             (let [type (if (and (= type :default) (uuid? value))
-                          (if-let [e (db/entity [:block/uuid value])]
-                            (if (:block/name e) :page :block)
-                            type)
-                          type)]
-               (if (string/blank? value)
-                 [:div.opacity-50.text-sm "Input something"]
-                 (case type
-                   :page
-                   (when-let [page (db/entity [:block/uuid value])]
-                     (page-cp {} page))
+           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
+             [:div
+              (editor-box editor-args editor-id (cond-> config
+                                                  multiple-values?
+                                                  (assoc :property-value value)))]))]
+        (let [class (str (when-not row? "flex flex-1 ")
+                         (when multiple-values? "property-value-content"))]
+          [:div {:id (or dom-id (random-uuid))
+                 :class class
+                 :style {:min-height 24}
+                 :on-click (fn []
+                             (let [page-or-block? (contains? #{:page :block} type)]
+                               (when (or (not page-or-block?)
+                                         (and (string/blank? value) page-or-block?))
+                                 (set-editing! property editor-id dom-id value))))}
+           (let [type (if (and (= type :default) (uuid? value))
+                        (if-let [e (db/entity [:block/uuid value])]
+                          (if (:block/name e) :page :block)
+                          type)
+                        type)]
+             (if (string/blank? value)
+               [:div.opacity-50.text-sm "Input something"]
+               (case type
+                 :page
+                 (when-let [page (db/entity [:block/uuid value])]
+                   (page-cp {} page))
 
-                   :block
-                   (if-let [item-block (db/entity [:block/uuid value])]
-                     (let [editor-opts (new-block-editor-opts repo block property value *add-new-item? opts)]
-                       [:div.property-block-container.w-full
-                        (block-cp [item-block] {:id (str value)
-                                                :editor-box editor-box
-                                                :editor-opts editor-opts
-                                                :in-property? true})])
-                     (do
-                       (if multiple-values?
-                         (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                         (property-handler/remove-block-property! repo
-                                                                  (:block/uuid block)
-                                                                  (:block/uuid property)))
-                       (exit-edit-property)
-                       nil))
+                 :block
+                 (if-let [item-block (db/entity [:block/uuid value])]
+                   (let [editor-opts (new-block-editor-opts repo block property value *add-new-item? opts)]
+                     [:div.property-block-container.w-full
+                      (block-cp [item-block] {:id (str value)
+                                              :editor-box editor-box
+                                              :editor-opts editor-opts
+                                              :in-property? true})])
+                   (do
+                     (if multiple-values?
+                       (property-handler/delete-property-value! repo block (:block/uuid property) value)
+                       (property-handler/remove-block-property! repo
+                                                                (:block/uuid block)
+                                                                (:block/uuid property)))
+                     (exit-edit-property)
+                     nil))
 
-                   (inline-text {} :markdown (str value)))))]))))))
+                 (inline-text {} :markdown (str value)))))])))))
 
 (rum/defcs multiple-value-item < (rum/local false ::show-close?)
   [state entity property item {:keys [editor-id row? *add-new-item?]

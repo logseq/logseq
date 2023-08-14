@@ -173,7 +173,7 @@
       (let [property (get-property-from-db @*property-key)]
         [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
          [:div.col-span-1 @*property-key]
-         [:div.col-span-3.flex.flex-row
+         [:div.col-span-3.flex.flex-row.pl-6
           (when (and property (not class-schema?))
             (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))]])
 
@@ -339,12 +339,14 @@
          (for [[k v] properties]
            (when (uuid? k)
              (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-               [:div.property-pair
-                [:div.property-key.col-span-1
-                 (property-key block property (select-keys opts [:class-schema?]))]
-                (if (:class-schema? opts)
-                  [:div.property-description.col-span-3.font-light
-                   (get-in property [:block/schema :description])]
-                  [:div.property-value.col-span-3.inline-grid
-                   (pv/property-value block property v opts)])]))))
+               (let [block? (= :block (get-in property [:block/schema :type]))]
+                 [:div.property-pair
+                  [:div.property-key.col-span-1
+                   (property-key block property (select-keys opts [:class-schema?]))]
+                  (if (:class-schema? opts)
+                    [:div.property-description.col-span-3.font-light
+                     (get-in property [:block/schema :description])]
+                    [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
+                                                                       {:style {:margin-left -20}})
+                     (pv/property-value block property v opts)])])))))
        (new-property block edit-input-id properties new-property? opts)])))

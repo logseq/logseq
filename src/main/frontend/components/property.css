@@ -83,10 +83,6 @@
 
 .block-main-container .ls-properties-area {
     margin-top: 0.25em;
-
-    .property-pair {
-        gap: 0;
-    }
 }
 
 input.simple-input {
