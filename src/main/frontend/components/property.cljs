@@ -20,18 +20,17 @@
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
-  (let [value (or id "Pick an Icon")
-        repo (state/get-current-repo)
+  (let [repo (state/get-current-repo)
         icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
        (if id
          [:a {:on-click toggle-fn}
           [:em-emoji {:id id}]]
-         (ui/button value
-                    :small? true
-                    :intent "border-link"
-                    :on-click toggle-fn)))
+         [:a {:on-click toggle-fn}
+          [:div.flex.flex-row.items-center
+           (ui/icon "letter-p" {:size 16})
+           [:div.ml-1.text-sm "Pick another icon"]]]))
      (fn [{:keys [toggle-fn]}]
        (ui/emoji-picker
         {:auto-focus true
@@ -222,8 +221,9 @@
        (property-input block *property-key *property-value opts)]
 
       (or (:page-configure? opts)
-          (and (seq properties)
-               (not (pu/all-built-in-properties? (keys (:block/properties block))))))
+          (and (or (seq properties)
+                   (seq (:block/alias block))
+                   (seq (:block/tags block)))))
       [:div
        [:a.add-button-link
         {:title "Add another property"
