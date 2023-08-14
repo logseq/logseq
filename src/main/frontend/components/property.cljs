@@ -225,27 +225,43 @@
   [state block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)
         icon (pu/get-property property :icon)]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       [:a.property-k
-        {:data-propertyid (:block/uuid property)
-         :data-blockid (:block/uuid block)
-         :data-class-schema (boolean class-schema?)
-         :title (str "Configure property: " (:block/original-name property))
-         :on-click toggle-fn}
-        [:div.flex.flex-row.items-center
+    [:div.flex.flex-row.items-center
+     (ui/dropdown
+      (fn [{:keys [toggle-fn]}]
+        [:a.flex {:on-click toggle-fn}
          (or
           (when-let [id (:id icon)]
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
-       ;; default property icon
-          (ui/icon "circle-dotted" {:size 16}))
-         [:div.ml-1 (:block/original-name property)]]])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-8
-        (property-config repo property {:toggle-fn toggle-fn})])
-     {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})))
+          ;; default property icon
+          (ui/icon "circle-dotted" {:size 16}))])
+      (fn [{:keys [toggle-fn]}]
+        (ui/emoji-picker
+         {:auto-focus true
+          :on-emoji-select (fn [icon]
+                             (when-let [id (.-id icon)]
+                               (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+                                 (property-handler/update-property! repo
+                                                                    (:block/uuid property)
+                                                                    {:properties {icon-property-id {:type :emoji
+                                                                                                    :id id}}})))
+                             (toggle-fn))}))
+      {:modal-class (util/hiccup->class
+                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+     (ui/dropdown
+      (fn [{:keys [toggle-fn]}]
+        [:a.property-k
+         {:data-propertyid (:block/uuid property)
+          :data-blockid (:block/uuid block)
+          :data-class-schema (boolean class-schema?)
+          :title (str "Configure property: " (:block/original-name property))
+          :on-click toggle-fn}
+         [:div.ml-1 (:block/original-name property)]])
+      (fn [{:keys [toggle-fn]}]
+        [:div.p-8
+         (property-config repo property {:toggle-fn toggle-fn})])
+      {:modal-class (util/hiccup->class
+                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 
 (defn- resolve-instance-page-if-exists
   "Properties will be updated for the instance page instead of the refed block.
