@@ -138,7 +138,7 @@
           (pv/add-property! entity property-name "" {:class-schema? class-schema?
                                                   ;; Only enter property names from sub-modal as inputting
                                                   ;; property values is buggy in sub-modal
-                                                  :exit-edit? page-configure?})
+                                                     :exit-edit? page-configure?})
           (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
             (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
@@ -147,17 +147,18 @@
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property/upsert-property! repo property-name {:type :default} {})
-            ;; configure new property
-            (when-let [property (get-property-from-db property-name)]
-              (state/set-sub-modal! #(property-config repo property {})))))
+            ))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
 (rum/defcs property-input < rum/reactive
+  (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? page-configure? *configure-show?]
                                                :as opts}]
-  (let [entity-properties (->> (keys (:block/properties entity))
+  (let [repo (state/get-current-repo)
+        *show-new-property-config? (::show-new-property-config? state)
+        entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
         alias (if (seq (:block/alias entity)) #{"alias"} #{})
@@ -170,12 +171,22 @@
         properties (->> (search/get-all-properties)
                         (remove exclude-properties))]
     (if @*property-key
-      (let [property (get-property-from-db @*property-key)]
+      (when-let [property (get-property-from-db @*property-key)]
         [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
          [:div.col-span-1 @*property-key]
          [:div.col-span-3.flex.flex-row.pl-6
-          (when (and property (not class-schema?))
-            (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))]])
+          (when (not class-schema?)
+            (if @*show-new-property-config?
+              (ui/dropdown
+               (fn [_toggle-fn]
+                 (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
+               (fn [toggle-fn]
+                 [:div.p-6
+                  (property-config repo property toggle-fn)])
+               {:initial-open? true
+                :modal-class (util/hiccup->class
+                              "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+              (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true))))]])
 
       [:div.ls-property-add.h-6
        (select/select {:items (map (fn [x] {:value x}) properties)
@@ -186,6 +197,7 @@
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
+                                    (reset! *show-new-property-config? true)
                                     (add-property-from-dropdown entity value opts))
                        :input-opts {:on-blur (fn []
                                                (when *configure-show?
