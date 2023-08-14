@@ -156,7 +156,7 @@
 
 (rum/defcs property-input < rum/reactive
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? page-configure?]
+  [state entity *property-key *property-value {:keys [class-schema? page-configure? *configure-show?]
                                                :as opts}]
   (let [entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
@@ -188,7 +188,19 @@
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
                                     (add-property-from-dropdown entity value opts))
-                       :input-opts {:on-blur pv/exit-edit-property}})])))
+                       :input-opts {:on-blur (fn []
+                                               (when *configure-show?
+                                                 (reset! *configure-show? false))
+                                               (pv/exit-edit-property))
+                                    :on-key-down
+                                    (fn [e]
+                                      (case (util/ekey e)
+                                        "Escape"
+                                        (do
+                                          (when *configure-show?
+                                            (reset! *configure-show? false))
+                                          (pv/exit-edit-property))
+                                        nil))}})])))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)

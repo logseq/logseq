@@ -53,30 +53,33 @@
                 (js/Date. (date/journal-title->long title))
                 value)
         value' (when-not (string/blank? value)
-                 (tc/to-local-date value))
-        open-modal! (fn []
-                      (state/set-modal!
-                       #(ui/datepicker value' {:on-change (fn [_e date]
-                                                            (let [repo (state/get-current-repo)
-                                                                  journal (date/js-date->journal-title date)]
-                                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                                                                (page-handler/create! journal {:redirect? false
-                                                                                               :create-first-block? false}))
-                                                              (when-let [page (db/entity [:block/name (util/page-name-sanity-lc journal)])]
-                                                                (property-handler/set-block-property! repo (:block/uuid block)
-                                                                                                      (:block/name property)
-                                                                                                      (:block/uuid page)))
-                                                              (exit-edit-property)
-                                                              (state/close-modal!)))})))]
-    [:a
-     {:tabIndex "0"
-      :on-click open-modal!
-      :on-key-down (fn [e]
-                     (when (= (util/ekey e) "Enter")
-                       (open-modal!)))}
-     [:span.inline-flex.items-center
-      (ui/icon "calendar")
-      [:span.ml-1 (or title "Pick a date")]]]))
+                 (tc/to-local-date value))]
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       [:a
+        {:tabIndex "0"
+         :on-click toggle-fn
+         :on-key-down (fn [e]
+                        (when (= (util/ekey e) "Enter")
+                          toggle-fn))}
+        [:span.inline-flex.items-center
+         (ui/icon "calendar")
+         [:span.ml-1 (or title "Pick a date")]]])
+     (fn [{:keys [toggle-fn]}]
+       (ui/datepicker value' {:on-change (fn [_e date]
+                                           (let [repo (state/get-current-repo)
+                                                 journal (date/js-date->journal-title date)]
+                                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                               (page-handler/create! journal {:redirect? false
+                                                                              :create-first-block? false}))
+                                             (when-let [page (db/entity [:block/name (util/page-name-sanity-lc journal)])]
+                                               (property-handler/set-block-property! repo (:block/uuid block)
+                                                                                     (:block/name property)
+                                                                                     (:block/uuid page)))
+                                             (exit-edit-property)
+                                             (toggle-fn)))}))
+     {:modal-class (util/hiccup->class
+                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
 
 (defn- select-page
   [block property opts]
