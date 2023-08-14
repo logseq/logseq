@@ -234,7 +234,7 @@
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
           ;; default property icon
-          (ui/icon "circle-dotted" {:size 16}))])
+          (ui/icon "letter-p" {:size 16}))])
       (fn [{:keys [toggle-fn]}]
         (ui/emoji-picker
          {:auto-focus true
