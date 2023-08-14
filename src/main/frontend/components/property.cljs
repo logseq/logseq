@@ -49,7 +49,7 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property {:keys [toggle-fn]}]
+  [state repo property {:keys [toggle-fn block]}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
@@ -112,13 +112,16 @@
          (ui/button
           "Save"
           :on-click (fn [e]
-                      (util/stop e)
-                      (property-handler/update-property!
-                       repo (:block/uuid property)
-                       {:property-name @*property-name
-                        :property-schema @*property-schema})
-                      (state/close-modal!)
-                      (when toggle-fn (toggle-fn)))))]]]))
+                      (let [block? (= :block (:type @*property-schema))]
+                        (util/stop e)
+                        (property-handler/update-property!
+                         repo (:block/uuid property)
+                         {:property-name @*property-name
+                          :property-schema @*property-schema})
+                        (state/close-modal!)
+                        (when toggle-fn (toggle-fn))
+                        (when (and block? block)
+                          (pv/create-new-block! block property nil))))))]]]))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -127,7 +130,8 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-name {:keys [class-schema? blocks-container-id page-configure?]}]
+  [entity property-name {:keys [class-schema? blocks-container-id page-configure?
+                                *show-new-property-config?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
     (if-let [property (get-property-from-db property-name)]
@@ -147,7 +151,8 @@
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property/upsert-property! repo property-name {:type :default} {})
-            ))
+            (when *show-new-property-config?
+              (reset! *show-new-property-config? true))))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
@@ -178,11 +183,12 @@
           (when (not class-schema?)
             (if @*show-new-property-config?
               (ui/dropdown
-               (fn [_toggle-fn]
+               (fn [_opts]
                  (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
-               (fn [toggle-fn]
+               (fn [{:keys [toggle-fn]}]
                  [:div.p-6
-                  (property-config repo property toggle-fn)])
+                  (property-config repo property {:toggle-fn toggle-fn
+                                                  :block entity})])
                {:initial-open? true
                 :modal-class (util/hiccup->class
                               "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
@@ -197,8 +203,7 @@
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
-                                    (reset! *show-new-property-config? true)
-                                    (add-property-from-dropdown entity value opts))
+                                    (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
                        :input-opts {:on-blur (fn []
                                                (when *configure-show?
                                                  (reset! *configure-show? false))

@@ -221,7 +221,7 @@
                                        (when-let [f (:on-chosen opts)] (f))
                                        nil))})})))
 
-(defn- create-new-block!
+(defn create-new-block!
   [block property {:keys [*add-new-item?]}]
   (let [repo (state/get-current-repo)
         pid (:block/uuid (db/entity [:block/name "created-in-property"]))
