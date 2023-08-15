@@ -26,7 +26,7 @@
 (defn <remove-blocks-op!
   [repo block-uuids]
   (let [op ["remove" {:block-uuids (mapv str block-uuids)}]]
-    (assert (op-validator op) op)
+    (assert (op-validator op) "illegal op")
     (op-store/<add-op! repo op)))
 
 (defn <update-block-op!

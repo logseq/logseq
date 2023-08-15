@@ -21,6 +21,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
+            [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
@@ -542,7 +543,8 @@
   (ipc/ipc "graphReady" graph))
 
 (defn- create-db [full-graph-name]
-  (p/let [_ (ipc/ipc :db-new full-graph-name)
+  (p/let [; _ (ipc/ipc :db-new full-graph-name)
+          _ (persist-db/<new full-graph-name)
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
