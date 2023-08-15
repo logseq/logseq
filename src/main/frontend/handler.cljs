@@ -88,7 +88,6 @@
     (-> (db-restore/restore-graph! repo)
         (p/then
          (fn []
-           (rtc-core/init-rtc-op-db repo)
            (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)

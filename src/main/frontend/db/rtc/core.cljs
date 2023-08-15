@@ -18,10 +18,6 @@
             [frontend.db.rtc.op :as op]))
 
 
-(defn init-rtc-op-db
-  [repo]
-  (when (config/db-based-graph? repo)
-    (ipc/ipc :rtc/init repo)))
 
 
 (def state-schema

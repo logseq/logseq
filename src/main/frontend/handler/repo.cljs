@@ -410,7 +410,6 @@
   (p/do!
    (state/set-db-restoring! true)
    (db-restore/restore-graph! repo)
-   (rtc-core/init-rtc-op-db repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))

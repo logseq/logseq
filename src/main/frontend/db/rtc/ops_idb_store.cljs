@@ -4,35 +4,58 @@
             [promesa.core :as p]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [cljs.core.async.interop :refer [p->c]]
-            [cljs.core.async :as async :refer [poll!]]))
+            [cljs.core.async :as async]
+            [cljs.core.async.interop :refer [p->c]]))
 
 
 (def stores (atom {}))
 
 (defn- ensure-store
-  [graph-uuid]
-  {:pre [(some? graph-uuid)]}
-  (swap! stores assoc graph-uuid (Store. "rtc-ops" graph-uuid))
-  (@stores graph-uuid))
+  [repo]
+  {:pre [(some? repo)]}
+  (swap! stores assoc repo (Store. (str "rtc-ops-" repo) "ops"))
+  (@stores repo))
 
 (defn <update-local-tx!
-  [graph-uuid tx]
-  (idb-keyval/set "local-state" (clj->js {:local-tx tx}) (ensure-store graph-uuid)))
+  [repo tx]
+  (idb-keyval/set "local-tx" (clj->js {:local-tx tx}) (ensure-store repo)))
+
+(defn <update-graph-uuid!
+  [repo graph-uuid]
+  {:pre [(some? graph-uuid)]}
+  (idb-keyval/set "graph-uuid" graph-uuid (ensure-store repo)))
+
+(defn- <add-op*!
+  [repo op]
+  (let [store (ensure-store repo)]
+    (p/loop [key* (tc/to-long (t/now))]
+      (p/let [old-v (idb-keyval/get key* store)]
+        (if old-v
+          (p/recur (inc key*))
+          (idb-keyval/set key* (clj->js op) store))))))
+
+
+(def ^:private add-op-ch (async/chan 100))
+(async/go-loop []
+  (if-let [[repo op] (async/<! add-op-ch)]
+    (do (prn :add-op op)
+        (async/<! (p->c (<add-op*! repo op)))
+        (recur))
+    (recur)))
 
 (defn <add-op!
-  [graph-uuid op]
-  (p/let [store (ensure-store graph-uuid)
-          now (tc/to-long (t/now))
-          old-v (idb-keyval/get now store)
-          key (if old-v (inc now) now)]
-    (idb-keyval/set key (clj->js op) store)))
+  [repo op]
+  (async/go (async/>! add-op-ch [repo op])))
 
+(defn <clear-ops!
+  [repo keys]
+  (let [store (ensure-store repo)]
+    (doseq [k keys]
+      (idb-keyval/del k store))))
 
 (defn <get-all-ops
-  [graph-uuid]
-  (p/let [store (ensure-store graph-uuid)
+  [repo]
+  (p/let [store (ensure-store repo)
           keys (idb-keyval/keys store)]
-    (prn keys)
     (-> (p/all (mapv (fn [k] (p/chain (idb-keyval/get k store) (partial vector k))) keys))
         (p/then (fn [items] (mapv #(js->clj % :keywordize-keys true) items))))))

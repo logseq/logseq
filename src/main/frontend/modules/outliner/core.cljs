@@ -991,10 +991,7 @@
         repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
-      (async/go
-        (rtc-op/<move-block-op! repo (keep :block/uuid (:blocks r)))
-        ;; (rtc-op/<update-block-op! repo (:block/uuid))
-        ))
+      (rtc-op/<move-blocks-op! repo (keep :block/uuid (:blocks r))))
     r))
 
 (defn delete-blocks!
@@ -1010,7 +1007,7 @@
   (let [repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
-      (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
+      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks blocks target-block {:sibling? sibling?}))
 
 (defn move-blocks-up-down!
@@ -1018,7 +1015,7 @@
   (let [repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
-      (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
+      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks-up-down blocks up?))
 
 (defn indent-outdent-blocks!
@@ -1026,5 +1023,5 @@
   (let [repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
-      (rtc-op/<move-block-op! repo (keep :block/uuid blocks))))
+      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'indent-outdent-blocks blocks indent?))
