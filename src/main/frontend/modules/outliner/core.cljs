@@ -616,17 +616,23 @@
                  blocks)))
 
 (defn- get-target-block
-  [target-block sibling?]
+  [target-block sibling? outliner-op]
   (when-let [block (if (:db/id target-block)
                      (db/entity (:db/id target-block))
                      (when (:block/uuid target-block)
                        (db/entity [:block/uuid (:block/uuid target-block)])))]
-    (if-let [linked (:block/link block)]
-      (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id linked))
-                               db/entity)
-            target (or last-child linked)]
-        [target (if last-child true false)])
-      [block sibling?])))
+    (let [linked (:block/link block)]
+      (cond
+        (contains? #{:insert-blocks} outliner-op)
+        [block sibling?]
+
+        linked
+        (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id linked))
+                                 db/entity)
+              target (or last-child linked)]
+          [target (if last-child true false)])
+        :else
+        [block sibling?]))))
 
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -645,7 +651,7 @@
   [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [[target-block' sibling?] (get-target-block target-block sibling?)
+  (let [[target-block' sibling?] (get-target-block target-block sibling? outliner-op)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -829,7 +835,7 @@
   [blocks target-block {:keys [sibling? outliner-op]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [[target-block sibling?] (get-target-block target-block sibling?)
+  (let [[target-block sibling?] (get-target-block target-block sibling? outliner-op)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
@@ -996,7 +1002,7 @@
 
 (defn insert-blocks!
   [blocks target-block opts]
-  (let [r (op-transact! #'insert-blocks blocks target-block opts)
+  (let [r (op-transact! #'insert-blocks blocks target-block (assoc opts :outliner-op :insert-blocks))
         repo (:repo *transaction-args*)
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
@@ -1009,7 +1015,7 @@
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<remove-blocks-op! repo (keep :block/uuid blocks))))
-  (op-transact! #'delete-blocks blocks opts))
+  (op-transact! #'delete-blocks blocks (assoc opts :outliner-op :delete-blocks)))
 
 (defn move-blocks!
   [blocks target-block sibling?]
@@ -1017,7 +1023,8 @@
         persist-op? (:persist-op? *transaction-args*)]
     (when (and persist-op? repo)
       (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
-  (op-transact! #'move-blocks blocks target-block {:sibling? sibling?}))
+  (op-transact! #'move-blocks blocks target-block {:sibling? sibling?
+                                                   :outliner-op :move-blocks}))
 
 (defn move-blocks-up-down!
   [blocks up?]
