@@ -118,7 +118,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [row column {:keys [page? ->elem map-inline config comma-separated-property?]}]
+  [row column {:keys [page? ->elem map-inline comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
