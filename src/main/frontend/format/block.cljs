@@ -90,6 +90,7 @@ and handles unexpected failure."
                                                    :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
+           format (or format :markdown)
            ast (format/to-edn content format nil)
            blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)

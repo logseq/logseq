@@ -9,7 +9,7 @@
     (prn ::new repo)
     (ipc/ipc :db-new repo))
   (<transact-data [_this repo added-blocks deleted-block-uuids]
-    (prn ::transact-data repo added-blocks deleted-block-uuids)
+    ;; (prn ::transact-data repo added-blocks deleted-block-uuids)
     (ipc/ipc :db-transact-data repo
              (pr-str
               {:blocks added-blocks
@@ -20,4 +20,3 @@
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
     (prn ::fetch-by-exclude repo exclude-uuids)
     (ipc/ipc :get-other-data repo exclude-uuids)))
-

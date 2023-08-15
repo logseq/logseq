@@ -2198,7 +2198,7 @@
                (do
                  (editor-handler/clear-selection!)
                  (editor-handler/unhighlight-blocks!)
-                 (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                 (let [f #(let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)
                                 cursor-range (some-> (gdom/getElement block-id)
                                                      (dom/by-class "block-content-wrapper")
                                                      first

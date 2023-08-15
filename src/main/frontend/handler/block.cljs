@@ -342,7 +342,7 @@
    (when-not (> retry-times 2)
      (when-not config/publishing?
        (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/pull [:block/uuid block-id]) block)
+         (let [block (or (db/entity [:block/uuid block-id]) block)
                edit-input-id (if (uuid? id)
                                (get-edit-input-id-with-block-id id)
                                (-> (str (subs id 0 (- (count id) 36)) block-id)

@@ -11,6 +11,10 @@
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
    (cond
+     (and (contains? #{:block/raw-content :block/content} k) (config/db-based-graph? (state/get-current-repo))
+          (:block/name e))
+     (:block/original-name e)
+
      (and (= k :block/raw-content) (config/db-based-graph? (state/get-current-repo)))
      (lookup-entity e :block/content default-value)
 
