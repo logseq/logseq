@@ -81,12 +81,12 @@
                        repo (state/get-current-repo)
                        repo-dir (config/get-repo-dir repo)
                        [dir path] (cond
-                                    ;; assume local file, relative path
-                                    (not (string/starts-with? path "/"))
-                                    [repo-dir path]
+                                    (path/absolute? path)
+                                    [nil path]
 
-                                    :else ;; global file on native platform
-                                    [nil path])]
+                                    ;; assume local file, relative path
+                                    :else
+                                    [repo-dir path])]
                    (when (and format (contains? (gp-config/text-formats) format))
                      (p/let [content (if (and (config/db-based-graph? repo)
                                               ;; not global

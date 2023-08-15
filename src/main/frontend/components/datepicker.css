@@ -1,0 +1,233 @@
+/*----------------------------------------------------------------------------------------
+ Stylesheet for re-com.date Date Picker variants inline-picker & dropdown-picker
+ Day8 variation loosely based on:
+ Copyright 2013 Dan Grossman ( http://www.dangrossman.info )
+ Licensed under the Apache License v2.0
+ http://www.apache.org/licenses/LICENSE-2.0
+ Built for http://www.improvely.com
+ http://eternicode.github.io/bootstrap-datepicker
+----------------------------------------------------------------------------------------*/
+
+.noselect {
+  user-select: none;
+}
+
+.datepicker.single .calendar {
+  float: none;
+}
+
+.datepicker .calendar {
+  display: none;
+  max-width: 200px;
+}
+
+.datepicker .calendar.single .calendar-date {
+  border: none;
+}
+
+.datepicker .calendar th,
+.datepicker .calendar td {
+  white-space: nowrap;
+  text-align: center;
+  min-width: 32px;
+}
+
+.datepicker .calendar-date {
+  border: 1px solid #ddd;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.datepicker .calendar-time {
+  text-align: center;
+  margin: 8px auto 0 auto;
+  line-height: 30px;
+}
+
+.datepicker {
+  position: absolute;
+  top: 100px;
+  left: 20px;
+  padding: 10px;
+  margin-top: 1px;
+  line-height: 16px;
+  border-radius: 4px;
+  background: #efefef;
+}
+
+.datepicker table {
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent;
+  border: none;
+}
+
+.datepicker td,
+.datepicker th {
+  text-align: center;
+  width: 27px;
+  height: 26px;
+  max-width: 27px;
+  max-height: 26px;
+  min-width: 27px;
+  min-height: 26px;
+  padding: 4px;
+  cursor: default;
+  white-space: nowrap;
+  font-weight: normal;
+}
+
+.datepicker td.off {
+  padding: 4px;
+  color: #999;
+}
+
+.datepicker td.disabled {
+  color: #999;
+}
+
+.datepicker th.disabled {
+  color: #999;
+}
+
+.datepicker td.available:hover,
+.datepicker th.available:hover {
+  background: #357ebd;
+  cursor: pointer;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.datepicker td.in-range {
+  background: #ebf4f8;
+  border-radius: 0;
+}
+
+.datepicker td.start-date {
+  border-radius: 4px 0 0 4px;
+}
+
+.datepicker td.end-date {
+  border-radius: 0 4px 4px 0;
+}
+
+.datepicker td.start-date.end-date {
+  border-radius: 4px;
+}
+
+.datepicker td.active,
+.datepicker td.active:hover {
+  background-color: #357ebd;
+  border-color: #3071a9;
+  color: #fff;
+}
+
+/* Introduced by Day8 from http://eternicode.github.io/bootstrap-datepicker */
+.datepicker td.today,
+.datepicker td.today:hover {
+  background-color: #ffcd70;
+  border-color: #f59e00;
+  border-radius: 18px;
+  color: #fff;
+}
+
+.datepicker th.day-enabled,
+label.day-enabled {
+  font-weight: normal;
+  font-size: 10px;
+  color: #333;
+}
+
+.datepicker th.selectable {
+  font-weight: normal;
+  color: #357ebd;
+}
+
+.datepicker th.day-disabled {
+  font-weight: normal;
+  font-size: 10px;
+  color: #999;
+}
+
+.datepicker td.week,
+.datepicker th.week {
+  font-size: 80%;
+  color: #ccc;
+}
+
+.datepicker th.month {
+  width: auto;
+  font-size: 14px;
+  color: var(--ls-title-text-color);
+}
+
+.dropdown-button {
+  cursor: pointer;
+  height: 32px;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+.dropdown-button.activator {
+  width: 40px;
+  color: #777;
+  /* background-color: #F7F7F7 */
+}
+
+.table-condensed > thead > tr > th,
+.table-condensed > tbody > tr > th,
+.table-condensed > tfoot > tr > th,
+.table-condensed > thead > tr > td,
+.table-condensed > tbody > tr > td,
+.table-condensed > tfoot > tr > td {
+  padding: 5px;
+}
+
+.dark-theme .datepicker {
+  background: var(--ls-secondary-background-color);
+}
+
+.dark-theme .datepicker th.day-disabled,
+.dark-theme .datepicker th.disabled,
+.dark-theme .datepicker td.disabled,
+.dark-theme .datepicker td.off {
+  color: #666;
+}
+
+.dark-theme .datepicker th.day-enabled,
+.dark-theme label.day-enabled {
+  color: currentColor;
+}
+
+.dark-theme .datepicker td.active,
+.dark-theme .datepicker td.active:hover {
+  background-color: var(--ls-block-properties-background-color);
+  border-color: var(--ls-block-properties-background-color);
+}
+
+.dark-theme .datepicker th.selectable {
+  color: var(--ls-primary-text-color);
+}
+
+.dark-theme .datepicker td.available:hover,
+.dark-theme .datepicker th.available:hover {
+  background: var(--ls-block-properties-background-color);
+}
+
+.datepicker tr:nth-child(odd),
+.datepicker tr:nth-child(even),
+.dark-theme .datepicker tr:nth-child(odd),
+.dark-theme .datepicker tr:nth-child(even) {
+  background: transparent;
+}
+
+.datepicker th,
+.datepicker tr,
+.datepicker td,
+.dark-theme .datepicker th,
+.dark-theme .datepicker tr,
+.dark-theme .datepicker td {
+  border-bottom: none;
+}

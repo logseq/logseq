@@ -365,60 +365,20 @@
   [format content]
   (when content
     (let [trim-content (string/trim content)]
-     (if (or
-          (and (= format :markdown)
-               (string/starts-with? trim-content "```")
-               (string/ends-with? trim-content "```"))
-          (and (= format :org)
-               (string/starts-with? trim-content "#+BEGIN_SRC")
-               (string/ends-with? trim-content "#+END_SRC")))
-       content
-       (let [built-in-properties* (built-in-properties)
-             content (reduce (fn [content key]
-                               (remove-property format key content)) content built-in-properties*)]
-         (if (= format :org)
-           (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
-           content))))))
-
-(defn add-page-properties
-  [page-format properties-content properties]
-  (let [properties (update-keys properties name)
-        lines (string/split-lines properties-content)
-        front-matter-format? (contains? #{:markdown} page-format)
-        lines (if front-matter-format?
-                (remove (fn [line]
-                          (contains? #{"---" ""} (string/trim line))) lines)
-                lines)
-        property-keys (keys properties)
-        prefix-f (case page-format
-                   :org (fn [k]
-                          (str "#+" (string/upper-case k) ": "))
-                   :markdown (fn [k]
-                               (str (string/lower-case k) ": "))
-                   identity)
-        exists? (atom #{})
-        lines (doall
-               (mapv (fn [line]
-                       (let [result (filter #(and % (util/starts-with? line (prefix-f %)))
-                                            property-keys)]
-                         (if (seq result)
-                           (let [k (first result)]
-                             (swap! exists? conj k)
-                             (str (prefix-f k) (get properties k)))
-                           line))) lines))
-        lines (concat
-               lines
-               (let [not-exists (remove
-                                 (fn [[k _]]
-                                   (contains? @exists? k))
-                                 properties)]
-                 (when (seq not-exists)
-                   (mapv
-                    (fn [[k v]] (str (prefix-f k) v))
-                    not-exists))))]
-    (util/format
-     (config/properties-wrapper-pattern page-format)
-     (string/join "\n" lines))))
+      (if (or
+           (and (= format :markdown)
+                (string/starts-with? trim-content "```")
+                (string/ends-with? trim-content "```"))
+           (and (= format :org)
+                (string/starts-with? trim-content "#+BEGIN_SRC")
+                (string/ends-with? trim-content "#+END_SRC")))
+        content
+        (let [built-in-properties* (built-in-properties)
+              content (reduce (fn [content key]
+                                (remove-property format key content)) content built-in-properties*)]
+          (if (= format :org)
+            (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
+            content))))))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"
