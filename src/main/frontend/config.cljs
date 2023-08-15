@@ -432,9 +432,13 @@
     (= repo-url "test-db")
     "/test-db"
 
+    ;; no dir for db-based-graph
+    (string/starts-with? repo-url "logseq_db")
+    nil
+
     :else
     (do
-      (js/console.error "DB graph:" repo-url)
+      (js/console.error "Unknown Repo URL type:" repo-url)
       (str "/"
            (->> (take-last 2 (string/split repo-url #"/"))
                 (string/join "_"))))))
