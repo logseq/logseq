@@ -1733,6 +1733,7 @@
         (for [child children]
           (when (map? child)
             (let [child  (dissoc child :block/meta)
+                  child (or (:block/link child) child)
                   config (cond->
                            (-> config
                                (assoc :block/uuid (:block/uuid child))

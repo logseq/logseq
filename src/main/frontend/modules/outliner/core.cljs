@@ -132,10 +132,14 @@
 
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m]
-  (let [linked-page (some-> (:block/content m) mldoc/extract-plain)
+  (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
         sanity-linked-page (util/page-name-sanity-lc linked-page)]
     (when-not (string/blank? sanity-linked-page)
-      (let [page-m (block/page-name->map linked-page true)]
+      (let [existing-ref-id (some (fn [r]
+                                    (when (= sanity-linked-page (:block/name r))
+                                      (:block/uuid r)))
+                                  (:block/refs m))
+            page-m (block/page-name->map linked-page (or existing-ref-id true))]
         (swap! txs-state (fn [txs]
                            (concat txs
                                    [(assoc page-m :block/tags (:block/tags m))
