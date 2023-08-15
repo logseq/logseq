@@ -4,6 +4,7 @@
             [logseq.publishing :as publishing]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.restore :as sqlite-restore]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             ["fs" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -22,20 +23,10 @@
                        output-path
                        {:repo-config repo-config})))
 
-(defn- read-db-graph [db-name]
-  (let [{:keys [uuid->db-id-map conn]}
-        (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data db-name)))
-        new-db (sqlite-restore/restore-other-data
-                conn
-                (sqlite-db/get-other-data db-name [])
-                uuid->db-id-map)]
-
-    (d/conn-from-db new-db)))
-
 (defn- publish-db-graph [static-dir graph-dir output-path]
   (let [db-name (node-path/basename graph-dir)
         _ (sqlite-db/open-db! (node-path/dirname graph-dir) db-name)
-        conn (read-db-graph db-name)
+        conn (sqlite-cli/read-graph db-name)
         repo-config (-> (d/q '[:find ?content
                                :where [?b :file/path "logseq/config.edn"] [?b :file/content ?content]]
                              @conn)
@@ -55,6 +46,6 @@
   (let [[static-dir graph-dir output-path]
         ;; Offset relative paths since they are run in a different directory than user is in
         (map #(if (node-path/isAbsolute %) % (node-path/resolve ".." %)) args)]
-    (if (fs/existsSync (node-path/join graph-dir "db.sqlite"))
+    (if (sqlite-cli/db-graph-directory? graph-dir)
       (publish-db-graph static-dir graph-dir output-path)
       (publish-file-graph static-dir graph-dir output-path))))

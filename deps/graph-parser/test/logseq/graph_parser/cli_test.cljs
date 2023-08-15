@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.sqlite.restore :as sqlite-restore]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
             [logseq.db :as ldb]
@@ -136,13 +136,7 @@
                        (assoc % :datoms (sqlite-util/block-map->datoms-str frontend-blocks %)))
                      frontend-blocks)
         _ (sqlite-db/upsert-blocks! db-name (bean/->js blocks))
-        {:keys [uuid->db-id-map conn]}
-        (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data db-name)))
-        new-db (sqlite-restore/restore-other-data
-                conn
-                (sqlite-db/get-other-data db-name [])
-                uuid->db-id-map)
-        conn (d/conn-from-db new-db)]
+        conn (sqlite-cli/read-graph db-name)]
     (ldb/create-default-pages! conn)
     @conn))
 

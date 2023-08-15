@@ -4,9 +4,8 @@
      $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/content]) :where [?b :block/created-at]]'"
     (:require [datascript.core :as d]
               [clojure.edn :as edn]
-              [cljs-bean.core :as bean]
               [logseq.db.sqlite.db :as sqlite-db]
-              [logseq.db.sqlite.restore :as sqlite-restore]
+              [logseq.db.sqlite.cli :as sqlite-cli]
               [logseq.db.rules :as rules]
               [nbb.core :as nbb]
               ["path" :as path]
@@ -15,12 +14,9 @@
 (defn read-graph
   "The db graph bare version of gp-cli/parse-graph"
   [graph-name]
-  (let [graphs-dir (path/join (os/homedir) "logseq/graphs")
-        _ (sqlite-db/open-db! graphs-dir graph-name)
-        {:keys [uuid->db-id-map conn]}
-        (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data graph-name)))
-        db (sqlite-restore/restore-other-data conn (sqlite-db/get-other-data graph-name []) uuid->db-id-map)]
-    (d/conn-from-db db)))
+  (let [graphs-dir (path/join (os/homedir) "logseq/graphs")]
+    (sqlite-db/open-db! graphs-dir graph-name)
+    (sqlite-cli/read-graph graph-name)))
 
 (defn -main [args]
   (when (not= 2 (count args))
