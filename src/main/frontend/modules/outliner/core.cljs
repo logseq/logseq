@@ -623,7 +623,7 @@
                        (db/entity [:block/uuid (:block/uuid target-block)])))]
     (let [linked (:block/link block)]
       (cond
-        (contains? #{:insert-blocks} outliner-op)
+        (contains? #{:insert-blocks :move-blocks-up-down} outliner-op)
         [block sibling?]
 
         linked

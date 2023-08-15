@@ -3342,13 +3342,17 @@
 
 (defn- block-item
   [config blocks idx item]
-  (let [item (or (:block/link item) item)
+  (let [original-block item
+        linked-block (:block/link item)
+        item (or linked-block item)
         item (cond-> (dissoc item :block/meta)
                (not (:block-children? config))
                (assoc :block.temp/top? (zero? idx)
                       :block.temp/bottom? (= (count blocks) (inc idx))))
-        config (assoc config :block/uuid (:block/uuid item))]
-    (rum/with-key (block-container config item)
+        config' (cond-> (assoc config :block/uuid (:block/uuid item))
+                  linked-block
+                  (assoc :original-block original-block))]
+    (rum/with-key (block-container config' item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))
 
 (defn- block-list
