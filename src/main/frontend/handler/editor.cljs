@@ -1264,10 +1264,12 @@
 
 (defn- clean-content!
   [repo format content]
-  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
-       (drawer/remove-logbook)
-       (file-property/remove-properties-when-file-based repo format)
-       string/trim))
+  (if (config/db-based-graph? repo)
+    content
+    (some->> (text/remove-level-spaces content format (config/get-block-pattern format))
+             (drawer/remove-logbook)
+             (file-property/remove-properties-when-file-based repo format)
+             string/trim)))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
