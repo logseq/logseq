@@ -10,7 +10,6 @@
     (ipc/ipc :db-new repo))
   (<transact-data [_this repo added-blocks deleted-block-uuids]
     (prn ::transact-data repo added-blocks deleted-block-uuids)
-    ; ( repo added-blocks deleted-block-uuids)
     (ipc/ipc :db-transact-data repo
              (pr-str
               {:blocks added-blocks

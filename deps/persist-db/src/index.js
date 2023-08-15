@@ -288,7 +288,7 @@ const SQLiteDB = {
             await this.newDB(dbName);
             db = dbMap[dbName];
         }
-        const sql = sqlite3.str_new(db, "SELECT * FROM blocks WHERE uuid NOT IN (");
+        const sql = sqlite3.str_new(db, "SELECT * FROM blocks WHERE TYPE = 1 AND uuid NOT IN (");
         sqlite3.str_appendall(sql, excludeUUIDs.map(_ => "?").join(","));
         sqlite3.str_appendall(sql, ")");
         const prepared = await sqlite3.prepare_v2(db, sqlite3.str_value(sql));
