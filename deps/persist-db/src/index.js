@@ -1,4 +1,3 @@
-//import SQLiteModuleFactory from 'wa-sqlite/dist/wa-sqlite-async.mjs';
 import SQLiteModuleFactory from 'wa-sqlite/dist/wa-sqlite-async.mjs';
 import * as SQLite from 'wa-sqlite/src/sqlite-api.js';
 // import { OriginPrivateFileSystemVFS } from 'wa-sqlite/src/examples/OriginPrivateFileSystemVFS.js';
@@ -7,10 +6,7 @@ import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
 import * as Comlink from 'comlink';
 
 
-const DB_NAME = 'file:///benchmark?foo=bar';
-
 let sqlite3;
-
 let dbMap = {};
 
 
