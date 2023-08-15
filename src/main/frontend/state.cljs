@@ -1573,6 +1573,8 @@ Similar to re-frame subscriptions"
   (:search/engines @state))
 
 (defn update-plugin-search-engine
+  "Put search engine results into the :result of state under :search/engines.
+   Then subscribed by the search modal to display results."
   [pid name f]
   (when-let [pid (keyword pid)]
     (set-state! :search/engines
@@ -1954,7 +1956,7 @@ Similar to re-frame subscriptions"
 (defn semsearch-enabled?
   "Conditions to enable semantic search"
   []
-  (-> (:ai/text-encoders state)
+  (-> (:ai/text-encoders @state)
       (not-empty)
       (boolean)))
 

@@ -318,5 +318,3 @@ test('Select codeblock language while surrounded by text', async ({ page }) => {
     'ABC \n```clojure\n```\nXYZ'
   )
 })
-
-traceAll()

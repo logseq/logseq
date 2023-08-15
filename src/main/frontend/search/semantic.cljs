@@ -32,14 +32,15 @@
                            10)]
       (p/let [embeds (text-encoder/text-encode q encoder-name)
               embed  (nth embeds 0)
-              rets   (vector-store/search store-conn embed ret-k)]
-        (let [clj-ret (bean/->clj rets)
+              rets   (vector-store/search store-conn embed ret-k)
+              clj-ret (bean/->clj rets)
               transform-fn (fn [{:keys [data]}]
                              (let [{:keys [uuid page snippet]} data]
                                {:block/uuid uuid
                                 :block/content snippet
-                                :block/page page}))]
-          (mapv transform-fn clj-ret)))))
+                                :block/page page}))
+              blocks (mapv transform-fn clj-ret)]
+        blocks)))
   (query-page [_this _q _opt]
     (prn "query full page search"))
   (rebuild-blocks-indice! [_this]
@@ -80,6 +81,9 @@
                                                                :id      (:id block)
                                                                :uuid    (:uuid block)}
                                                     embeds    (text-encoder/text-encode (:content block) encoder-name)
+                                                    _ (prn "debug block embeds -> vs")
+                                                    _ (prn (:content block))
+                                                    _ (prn embeds) ;; TODO Junyi
                                                     _         (vector-store/rm store-conn (str (:id block)))
                                                     emb-add->vs   (fn [embed]
                                                                     (vector-store/add store-conn embed (str (:id block)) (bean/->js metadata)))]

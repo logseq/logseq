@@ -30,9 +30,9 @@
   (query [_this q opts]
     (println "D:Search > Query blocks:" repo q opts)
     (let [[e1 e2 e3] (get-registered-engines repo)]
-      (doseq [e e2]
+      (doseq [e e2] ;; Plugin Engines
         (protocol/query e q opts))
-      (when e3
+      (when e3 ;; Semantic Engine
         (protocol/query e3 q opts))
       ;; Return the promise of the integrated search
       (protocol/query e1 q opts)))
@@ -40,9 +40,9 @@
   (query-page [_this q opts]
     (println "D:Search > Query-page contents:" repo q opts)
     (let [[e1 e2 e3] (get-registered-engines repo)]
-      (doseq [e e2]
+      (doseq [e e2] ;; Plugin Engines
         (protocol/query-page e q opts))
-      (when e3
+      (when e3 ;; Semantic Engine
         (protocol/query-page e3 q opts))
       ;; Return the promise of the integrated search
       (protocol/query-page e1 q opts)))
@@ -50,9 +50,9 @@
   (rebuild-blocks-indice! [_this]
     (println "D:Search > Initial blocks indice!:" repo)
     (let [[e1 e2 e3] (get-registered-engines repo)]
-      (doseq [e e2]
+      (doseq [e e2] ;; Plugin Engines
         (protocol/rebuild-blocks-indice! e))
-      (when e3
+      (when e3 ;; Semantic Engine
         (protocol/rebuild-blocks-indice! e3))
       ;; Return the promise of the integrated search
       (protocol/rebuild-blocks-indice! e1)))
