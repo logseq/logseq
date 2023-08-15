@@ -6,18 +6,13 @@
             [promesa.core :as p]))
 
 (defonce *worker (atom nil))
-
 (defonce *sqlite (atom nil))
 
-
-(defn- get-sqlite
-  "Guard against File System Access API permission, avoiding early access before granted"
-  []
+(defn- get-sqlite []
   (if (nil? @*worker)
     (js/Promise. (fn [resolve _reject]
                    (prn ::get-sqlite)
                    (let [worker (js/SharedWorker. "/static/js/ls-wa-sqlite/persist-db-worker.js")
-                         _ (js/console.log "get worker in new" worker)
                          _ (reset! *worker worker)
                          ^js sqlite (Comlink/wrap (.-port worker))
                          _ (reset! *sqlite sqlite)]
@@ -25,19 +20,6 @@
                       (.init ^js sqlite)
                       (resolve @*sqlite)))))
     (p/resolved @*sqlite)))
-
-(comment defn- get-sqlite
-         "Get the sqlite instance"
-         []
-         (prn ::get-sqlite)
-         (-> (if (nil? @*sqlite)
-               (let []
-          ;; (js/console.log sqlite "fuck")
-                 (reset! *worker worker)
-                 (reset! *sqlite sqlite)
-                 (.init sqlite))
-               (p/resolved nil))
-             (p/then (fn [_] @*sqlite))))
 
 (defn- type-of-block
   "
@@ -112,24 +94,7 @@
            :init-data init-data}))
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
     (p/let [^js sqlite (get-sqlite)
-            res (.fetchByExclude sqlite repo (clj->js exclude-uuids))]
+            res (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids))]
       (prn :<fetch-blocks-excluding res)
-      res))
-
-  (<rtc-init [_this repo]
-    (prn :rtc/init repo)
-    (p/let [^js sqlite (get-sqlite)]
-      (.rtcInit sqlite repo)))
-  (<rtc-add-ops [_this repo raw-ops]
-    (prn :rtc/add-ops repo raw-ops)
-    (p/let [^js sqlite (get-sqlite)]
-      (.rtcAddOps sqlite repo raw-ops)))
-  (<rtc-clean-ops [_this repo]
-    (prn :rtc/clean-ops repo)
-    (p/let [^js sqlite (get-sqlite)]
-      (.rtcClearOps sqlite repo)))
-  (<rtc-get-ops [_this repo]
-    (prn :rtc/get-ops&local-tx repo)
-    (p/let [^js sqlite (get-sqlite)]
-      (.rtcGetOps sqlite repo))))
+      res)))
 

@@ -11,11 +11,6 @@
     - added-blocks: list of blocks to be added
     - deleted-block-uuids: set of #uuid")
   (<fetch-initital-data [this repo opts])
-  (<fetch-blocks-excluding [this repo exclude-uuids opts])
-
-  (<rtc-init [this repo])
-  (<rtc-add-ops [this repo raw-ops])
-  (<rtc-clean-ops [this repo])
-  (<rtc-get-ops [this repo]))
+  (<fetch-blocks-excluding [this repo exclude-uuids opts]))
 
 

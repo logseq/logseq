@@ -44,15 +44,3 @@
    (p/let [ret (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)]
      (js/console.log "fetch-by-exclude" ret)
      ret)))
-
-(defn <rtc-init [repo]
-  (protocol/<rtc-init (get-impl) repo))
-
-(defn <rtc-clean-ops [repo]
-  (protocol/<rtc-clean-ops (get-impl) repo))
-
-(defn <rtc-get-ops [repo]
-  (protocol/<rtc-get-ops (get-impl) repo))
-
-(defn <rtc-add-ops [repo raw-ops]
-  (protocol/<rtc-add-ops (get-impl) repo raw-ops))
