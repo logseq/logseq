@@ -534,6 +534,7 @@
 
 (rum/defcs page-inner <
   (rum/local false ::mouse-down?)
+  (rum/local false ::hover?)
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
@@ -541,18 +542,20 @@
    All page-names are sanitized except page-name-in-block"
   [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
   (let [*mouse-down? (::mouse-down? state)
+        *hover? (::hover? state)
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
-    [:a
+    [:a.relative
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
-               (:property? config)
-               (str " page-property-key block-property")
+               (:property? config) (str " page-property-key block-property")
                untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
+      :on-mouse-over #(reset! *hover? true)
+      :on-mouse-leave #(reset! *hover? false)
       :on-mouse-down (fn [_e] (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
@@ -596,7 +599,24 @@
                        (util/trim-safe page-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
-           (if tag? (str "#" s) s))))]))
+           (if tag? (str "#" s) s))))
+
+     (let [repo (state/get-current-repo)
+           block-id (:block/uuid config)
+           block (when block-id (db/entity [:block/uuid block-id]))
+           tags-id (:block/uuid (db/entity [:block/name "tags"]))]
+       (when (and block tag? @*hover? (config/db-based-graph? repo))
+         [:a.close.fade-in
+          {:class "absolute top-0 right-0"
+           :title "Remove this tag"
+           :on-mouse-down
+           (fn [e]
+             (util/stop e)
+             (property-handler/delete-property-value! repo block
+                                                      tags-id
+                                                      (:block/uuid page-entity))
+             (prn "remove this tag"))}
+          (ui/icon "x")]))]))
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
