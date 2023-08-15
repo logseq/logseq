@@ -154,8 +154,10 @@
     :block/alias
     :block/tags})
 
+;; FIXME: replace with a fn that's synced with schema
 (def ref-type-attributes
-  #{:block/parent
+  #{:block/link
+    :block/parent
     :block/left
     :block/page
     :block/refs
