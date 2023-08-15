@@ -1716,6 +1716,7 @@
     :else
     (when uuid (route-handler/redirect-to-page! uuid))))
 
+(declare block-list)
 (rum/defc block-children < rum/reactive
   [config block children collapsed?]
   (let [ref?        (:ref? config)
@@ -1730,18 +1731,12 @@
         {:on-click (fn [_]
                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
        [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
-        (for [child children]
-          (when (map? child)
-            (let [child  (dissoc child :block/meta)
-                  child (or (:block/link child) child)
-                  config (cond->
-                           (-> config
-                               (assoc :block/uuid (:block/uuid child))
-                               (dissoc :breadcrumb-show? :embed-parent))
-                           (or ref? query?)
-                           (assoc :ref-query-child? true))]
-              (rum/with-key (block-container config child)
-                (str (:blocks-container-id config) "-" (:block/uuid child))))))]])))
+        (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
+                        (or ref? query?)
+                        (assoc :ref-query-child? true)
+                        true
+                        (assoc :block-children? true))]
+          (block-list config' children))]])))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]
@@ -3348,10 +3343,10 @@
 (defn- block-item
   [config blocks idx item]
   (let [item (or (:block/link item) item)
-        item (->
-              (dissoc item :block/meta)
-              (assoc :block.temp/top? (zero? idx)
-                     :block.temp/bottom? (= (count blocks) (inc idx))))
+        item (cond-> (dissoc item :block/meta)
+               (not (:block-children? config))
+               (assoc :block.temp/top? (zero? idx)
+                      :block.temp/bottom? (= (count blocks) (inc idx))))
         config (assoc config :block/uuid (:block/uuid item))]
     (rum/with-key (block-container config item)
       (str (:blocks-container-id config) "-" (:block/uuid item)))))

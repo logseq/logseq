@@ -438,8 +438,7 @@
        (let [{:keys [block value id config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
-             block (or (db/pull [:block/uuid block-id])
-                       block)
+             block (or (db/pull [:block/uuid block-id]) block)
              block-self? (block-self-alone-when-insert? config block-id)
              input (gdom/getElement (state/get-edit-input-id))
              selection-start (util/get-selection-start input)
