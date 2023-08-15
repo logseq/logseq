@@ -18,9 +18,8 @@
      (let [result (lookup-entity e k default-value)
            refs (:block/refs e)]
        (or
-        (if (and (seq refs) result)
-          (db-utils/special-id->page result refs)
-          result)
+        (when (string? result)
+          (db-utils/special-id->page result refs))
         default-value))
 
      :else
