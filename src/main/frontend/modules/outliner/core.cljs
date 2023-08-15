@@ -129,24 +129,23 @@
           new-refs (remove-self-page (:block/refs m))]
       (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs))))
 
-
-(defn- assoc-instance-when-save
+(defn- assoc-linked-block-when-save
   [txs-state block-entity m]
   (let [tags (seq (:block/tags m))]
     (when (and (config/db-based-graph? (state/get-current-repo))
                (:block/page block-entity)
                tags)
       (let [tag-names (set (map :block/name tags))]
-        (when-let [instance-id (:block/uuid
+        (when-let [linked-block-id (:block/uuid
                                 (first (remove (fn [ref]
                                                  (contains? tag-names (:block/name ref)))
                                                (:block/refs m))))]
           (swap! txs-state (fn [txs]
                              (concat txs
-                                     [{:block/uuid instance-id
+                                     [{:block/uuid linked-block-id
                                        :block/tags (:block/tags m)}
                                       {:db/id (:db/id block-entity)
-                                       :block/instance [:block/uuid instance-id]}]))))))))
+                                       :block/link [:block/uuid linked-block-id]}]))))))))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -287,7 +286,7 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj (dissoc m :db/other-tx)))
 
-      (assoc-instance-when-save txs-state block-entity m)
+      (assoc-linked-block-when-save txs-state block-entity m)
 
       (rebuild-refs txs-state block-entity m)
 

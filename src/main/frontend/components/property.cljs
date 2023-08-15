@@ -309,8 +309,8 @@
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 
-(defn- resolve-instance-page-if-exists
-  "Properties will be updated for the instance page instead of the refed block.
+(defn- resolve-linked-block-if-exists
+  "Properties will be updated for the linked page instead of the refed block.
   For example, the block below has a reference to the page \"How to solve it\",
   we'd like the properties of the class \"book\" (e.g. Authors, Published year)
   to be assigned for the page `How to solve it` instead of the referenced block.
@@ -319,8 +319,8 @@
   - [[How to solve it]] #book
   "
   [block]
-  (if-let [instance (:block/instance block)]
-    (db/sub-block (:db/id instance))
+  (if-let [linked-block (:block/link block)]
+    (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
 (rum/defcs properties-area < rum/reactive
@@ -328,7 +328,7 @@
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
   [state target-block edit-input-id opts]
-  (let [block (resolve-instance-page-if-exists target-block)
+  (let [block (resolve-linked-block-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))

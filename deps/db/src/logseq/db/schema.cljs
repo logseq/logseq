@@ -43,9 +43,9 @@
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
 
-   ;; an instance created by this block
-   :block/instance {:db/valueType :db.type/ref
-                    :db/index true}
+   ;; which block this block links to, used for tag, embeds
+   :block/link {:db/valueType :db.type/ref
+                :db/index true}
 
    ;; for pages
    :block/alias {:db/valueType :db.type/ref
