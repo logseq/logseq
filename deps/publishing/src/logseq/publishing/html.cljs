@@ -132,7 +132,7 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [app-state repo-config html-options]}]
+  [db* {:keys [app-state repo-config html-options db-graph?]}]
   (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
                             val
                             (:all-pages-public? repo-config))
@@ -140,9 +140,13 @@ generated index.html string and assets used by the html"
                                 (db/clean-export! db*)
                                 (db/filter-only-public-pages-and-blocks db*))
         asset-filenames (remove nil? asset-filenames')
+
         db-str (dt/write-transit-str db)
+        repo-name (if db-graph? "logseq_db_local" "local")
+        ;; The repo-name is used by the client and thus determines whether
+        ;; it's a db graph or not
         state (assoc app-state
-                     :config {"local" repo-config})
+                     :config {repo-name repo-config})
         raw-html-str (publishing-html db-str state html-options)]
     {:html raw-html-str
      :asset-filenames asset-filenames}))

@@ -50,13 +50,16 @@
 
 (defn restore-from-transit-str!
   []
-  (state/set-current-repo! "local")
-  (when-let [data js/window.logseq_db]
-    (let [data (unescape-html data)
-          db-conn (d/create-conn (conn/get-schema (state/get-current-repo)))
-          _ (swap! db/conns assoc "logseq-db/local" db-conn)
-          db (db/string->db data)]
-      (reset! db-conn db))))
+  ;; Client sets repo name (and graph type) based on what was written in app state
+  (let [repo-name (-> @state/state :config keys first)]
+    (state/set-current-repo! repo-name)
+
+    (when-let [data js/window.logseq_db]
+      (let [data (unescape-html data)
+            db-conn (d/create-conn (conn/get-schema (state/get-current-repo)))
+            _ (swap! db/conns assoc (str "logseq-db/" repo-name) db-conn)
+            db (db/string->db data)]
+        (reset! db-conn db)))))
 
 (defn restore-state!
   []
@@ -93,8 +96,8 @@
   (register-components-fns!)
   ;; Set :preferred-lang as some components depend on it
   (i18n/start)
-  (restore-from-transit-str!)
   (restore-state!)
+  (restore-from-transit-str!)
   (shortcut/refresh!)
   (events/run!)
   ;; actually, there's no persist for publishing
