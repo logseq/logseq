@@ -490,7 +490,8 @@
           *control-show? (::control-show? state)
           *all-collapsed? (::all-collapsed? state)
           *current-block-page (::current-page state)
-          block-or-whiteboard? (or block? whiteboard?)]
+          block-or-whiteboard? (or block? whiteboard?)
+          home? (= :home (state/get-current-route))]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -577,10 +578,9 @@
          (when (not journal?)
            (hierarchy/structures route-page-name)))
 
-       (when-not block-or-whiteboard?
-         (when-not sidebar?
-           [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references route-page-name)]))])))
+       (when-not (or block-or-whiteboard? sidebar? home?)
+         [:div {:key "page-unlinked-references"}
+          (reference/unlinked-references route-page-name)])])))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
