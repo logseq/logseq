@@ -19,7 +19,8 @@
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.db.rtc.op :as rtc-op]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [frontend.format.mldoc :as mldoc]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -131,21 +132,15 @@
 
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m]
-  (let [tags (seq (:block/tags m))]
-    (when (and (config/db-based-graph? (state/get-current-repo))
-               (:block/page block-entity)
-               tags)
-      (let [tag-names (set (map :block/name tags))]
-        (when-let [linked-block-id (:block/uuid
-                                (first (remove (fn [ref]
-                                                 (contains? tag-names (:block/name ref)))
-                                               (:block/refs m))))]
-          (swap! txs-state (fn [txs]
-                             (concat txs
-                                     [{:block/uuid linked-block-id
-                                       :block/tags (:block/tags m)}
-                                      {:db/id (:db/id block-entity)
-                                       :block/link [:block/uuid linked-block-id]}]))))))))
+  (let [linked-page (some-> (:block/content m) mldoc/extract-plain)
+        sanity-linked-page (util/page-name-sanity-lc linked-page)]
+    (when-not (string/blank? sanity-linked-page)
+      (let [page-m (block/page-name->map linked-page true)]
+        (swap! txs-state (fn [txs]
+                           (concat txs
+                                   [(assoc page-m :block/tags (:block/tags m))
+                                    {:db/id (:db/id block-entity)
+                                     :block/link [:block/uuid (:block/uuid page-m)]}])))))))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -250,28 +245,31 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [m* (-> (:data this)
-                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
-                        :block/title :block/body :block/level)
-                gp-util/remove-nils
-                block-with-timestamps
-                fix-tag-ids)
+                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
+                         :block/title :block/body :block/level)
+                 gp-util/remove-nils
+                 block-with-timestamps
+                 fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
           m (if db-based?
               (dissoc m* :block/properties :block/properties-order)
               m*)
           id (:db/id (:data this))
-          block-entity (db/entity id)]
+          block-entity (db/entity id)
+          structured-tags? (and (config/db-based-graph? (state/get-current-repo))
+                                (:block/page block-entity)
+                                (seq (:block/tags m)))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (if db-based?
                                    (remove #{:block/properties :block/properties-order} db-schema/retract-attributes))]
           (swap! txs-state (fn [txs]
-                            (vec
-                             (concat txs
-                                     (map (fn [attribute]
-                                            [:db/retract id attribute])
-                                       retract-attributes))))))
+                             (vec
+                              (concat txs
+                                      (map (fn [attribute]
+                                             [:db/retract id attribute])
+                                           retract-attributes))))))
 
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m)
@@ -286,7 +284,8 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj (dissoc m :db/other-tx)))
 
-      (assoc-linked-block-when-save txs-state block-entity m)
+      (when structured-tags?
+        (assoc-linked-block-when-save txs-state block-entity m))
 
       (rebuild-refs txs-state block-entity m)
 

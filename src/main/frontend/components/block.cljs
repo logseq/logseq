@@ -2348,6 +2348,9 @@
        (when-not plugin-slotted?
          [:div.flex-1.w-full
           (cond
+            (:block/original-name block)
+            (page-cp config block)
+
             (or (seq title) (:block/marker block))
             (build-block-title config block)
 
@@ -2369,7 +2372,7 @@
 
       (when-not (config/db-based-graph? repo)
         (when-let [invalid-properties (:block/invalid-properties block)]
-         (invalid-properties-cp invalid-properties)))
+          (invalid-properties-cp invalid-properties)))
 
       (when (and (seq properties)
                  (let [hidden? (file-property/properties-hidden? properties)]
@@ -3343,7 +3346,8 @@
 
 (defn- block-item
   [config blocks idx item]
-  (let [item (->
+  (let [item (or (:block/link item) item)
+        item (->
               (dissoc item :block/meta)
               (assoc :block.temp/top? (zero? idx)
                      :block.temp/bottom? (= (count blocks) (inc idx))))
