@@ -1,7 +1,7 @@
 (ns frontend.persist-db.node
   "Electron ipc based persistent db"
-  (:require [frontend.persist-db.protocol :as protocol]
-            [electron.ipc :as ipc]))
+  (:require [electron.ipc :as ipc]
+            [frontend.persist-db.protocol :as protocol]))
 
 (defrecord ElectronIPC []
   protocol/PersistentDB
@@ -10,7 +10,6 @@
     (ipc/ipc :db-new repo))
   (<transact-data [_this repo added-blocks deleted-block-uuids]
     (prn ::transact-data repo added-blocks deleted-block-uuids)
-    (prn (pr-str deleted-block-uuids))
     ; ( repo added-blocks deleted-block-uuids)
     (ipc/ipc :db-transact-data repo
              (pr-str
