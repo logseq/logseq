@@ -9,7 +9,6 @@
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.select :as select]
-            [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.config :as config]
@@ -44,18 +43,22 @@
             [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
-  [name {:keys [class]} child]
-
-  [:div.nav-content-item
-   {:class (util/classnames [class {:is-expand (not (state/sub [:ui/navigation-item-collapsed? class]))}])}
-   [:div.nav-content-item-inner
-    [:div.header.items-center.mb-1
-     {:on-click (fn [^js/MouseEvent _e]
-                  (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium name]
-     [:span
-      [:a.more svg/arrow-down-v2]]]
-    [:div.bd child]]])
+  [name {:keys [class count]} child]
+  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
+        shrink? (and (not collapsed?) (> count 3))
+        list-item-height 28]
+    [:div.nav-content-item.mt-3
+     {:class (util/classnames [class {:is-expand (not collapsed?)
+                                      :flex-shrink-0 (not shrink?)
+                                      :flex-shrink shrink?}])
+      :style {:min-height (when-not collapsed? (* (min count 4) list-item-height))}}
+     [:div.nav-content-item-inner
+      [:div.header.items-center
+       {:on-click (fn [^js/MouseEvent _e]
+                    (state/toggle-navigation-item-collapsed! class))}
+       [:div.font-medium name]
+       (ui/icon "chevron-left" {:class "more"})]
+      (when child [:div.bd child])]]))
 
 (defn- delta-y
   [e]
@@ -88,7 +91,7 @@
             (if whiteboard-page?
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitiled? "opacity-50")}
       (if untitiled? (t :untitled)
           (pdf-utils/fix-local-asset-pagename original-name))]]))
@@ -134,45 +137,47 @@
 
 (rum/defc favorites < rum/reactive
   [t]
-  (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "star" {:size 16})
-    [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+  (let [favorites (->> (:favorites (state/sub-config))
+                       (remove string/blank?)
+                       (filter string?))
+        favorite-entities (->> favorites
+                               (mapv #(db/entity [:block/name (util/safe-page-name-sanity-lc %)]))
+                               (remove nil?))]
+    (nav-content-item
+     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      (ui/icon "star" {:size 16})
+      [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
-   {:class "favorites"
-    :edit-fn
-    (fn [e]
-      (rfe/push-state :page {:name "Favorites"})
-      (util/stop e))}
-
-   (let [favorites (->> (:favorites (state/sub-config))
-                        (remove string/blank?)
-                        (filter string?))]
-     (when (seq favorites)
+     {:class "favorites"
+      :count (count favorite-entities)
+      :edit-fn
+      (fn [e]
+        (rfe/push-state :page {:name "Favorites"})
+        (util/stop e))}
+     (when (seq favorite-entities)
        [:ul.favorites.text-sm
-        (for [name favorites]
-          (when-not (string/blank? name)
-            (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-              (let [icon (get-page-icon entity)]
-                (favorite-item t name icon)))))]))))
+        (for [entity favorite-entities]
+          (let [icon (get-page-icon entity)]
+            (favorite-item t (:block/name entity) icon)))]))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
-  (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "history" {:size 16})
-    [:span.flex-1.ml-2
-     (string/upper-case (t :left-side-bar/nav-recent-pages))]]
+  (let [pages (->> (db/sub-key-value :recent/pages)
+                   (remove string/blank?)
+                   (filter string?)
+                   (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
+                                    :page page}))
+                   (util/distinct-by :lowercase)
+                   (map :page))]
+    (nav-content-item
+     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      (ui/icon "history" {:size 16})
+      [:span.flex-1.ml-2
+       (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
-   {:class "recent"}
+     {:class "recent"
+      :count (count pages)}
 
-   (let [pages (->> (db/sub-key-value :recent/pages)
-                    (remove string/blank?)
-                    (filter string?)
-                    (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
-                                     :page page}))
-                    (util/distinct-by :lowercase)
-                    (map :page))]
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
@@ -197,8 +202,9 @@
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
+     [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config :go/flashcards))]
      (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
+       [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
 (defn get-default-home-if-valid
   []
@@ -212,13 +218,7 @@
         (dissoc default-home :page)))))
 
 (defn sidebar-item
-  [{on-click-handler :on-click-handler
-    class :class
-    title :title
-    icon :icon
-    icon-extension? :icon-extension?
-    active :active
-    href :href}]
+  [{:keys [on-click-handler class title icon icon-extension? active href shortcut]}]
   [:div
    {:class class}
    [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
@@ -226,7 +226,9 @@
      :class (when active "active")
      :href href}
     (ui/icon (str icon) {:extension? icon-extension?})
-    [:span.flex-1 title]]])
+    [:span.flex-1 title]
+    (when shortcut
+      [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config shortcut))])]])
 
 (defn close-sidebar-on-mobile!
   []
@@ -245,17 +247,17 @@
    (->>
     [{:title (t :left-side-bar/new-page)
       :class "new-page-link"
-      :shortcut (ui/keyboard-shortcut-from-config :go/search)
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (state/pub-event! [:go/search]))}
+                               (state/pub-event! [:go/search]))
+                :shortcut (ui/keyboard-shortcut-from-config :go/search)}
       :icon (ui/type-icon {:name "new-page"
                            :class "highlight"
                            :extension? true})}
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
-      :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard-and-redirect!))}
+                               (whiteboard-handler/create-new-whiteboard-and-redirect!))
+                :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"
                            :extension? true})}])
@@ -345,55 +347,59 @@
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.gap-1.flex-col
+        [:div.nav-header.flex.gap-1.flex-col.mt-3
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
-              {:class            "home-nav"
-               :title            page
+              {:class "home-nav"
+               :title page
                :on-click-handler route-handler/redirect-to-home!
-               :active           (and (not srs-open?)
-                                      (= route-name :page)
-                                      (= page (get-in route-match [:path-params :name])))
-               :icon             "home"})
+               :active (and (not srs-open?)
+                            (= route-name :page)
+                            (= page (get-in route-match [:path-params :name])))
+               :icon "home"
+               :shortcut :go/home})
              (sidebar-item
-              {:class            "journals-nav"
-               :active           (and (not srs-open?)
-                                      (or (= route-name :all-journals) (= route-name :home)))
-               :title            (t :left-side-bar/journals)
+              {:class "journals-nav"
+               :active (and (not srs-open?)
+                            (or (= route-name :all-journals) (= route-name :home)))
+               :title (t :left-side-bar/journals)
                :on-click-handler (fn [e]
                                    (if (gobj/get e "shiftKey")
                                      (route-handler/sidebar-journals!)
                                      (route-handler/go-to-journals!)))
-               :icon             "calendar"})))
+               :icon "calendar"
+               :shortcut :go/journals})))
 
          (when enable-whiteboards?
            (sidebar-item
-            {:class            "whiteboard"
-             :title            (t :right-side-bar/whiteboards)
-             :href             (rfe/href :whiteboards)
+            {:class "whiteboard"
+             :title (t :right-side-bar/whiteboards)
+             :href (rfe/href :whiteboards)
              :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-             :active           (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon             "whiteboard"
-             :icon-extension? true}))
+             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon "whiteboard"
+             :icon-extension? true
+             :shortcut :go/whiteboards}))
 
          (when (state/enable-flashcards? (state/get-current-repo))
            [:div.flashcards-nav
             (flashcards srs-open?)])
 
          (sidebar-item
-          {:class  "graph-view-nav"
-           :title  (t :right-side-bar/graph-view)
-           :href   (rfe/href :graph)
+          {:class "graph-view-nav"
+           :title (t :right-side-bar/graph-view)
+           :href (rfe/href :graph)
            :active (and (not srs-open?) (= route-name :graph))
-           :icon   "hierarchy"})
+           :icon "hierarchy"
+           :shortcut :go/graph-view})
 
          (sidebar-item
-          {:class  "all-pages-nav"
-           :title  (t :right-side-bar/all-pages)
-           :href   (rfe/href :all-pages)
+          {:class "all-pages-nav"
+           :title (t :right-side-bar/all-pages)
+           :href (rfe/href :all-pages)
            :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})]]
+           :icon "files"})]]
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}

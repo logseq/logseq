@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -205,6 +206,7 @@
             repos (if (and (seq remotes) login?)
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
+            logged-in? (user-handler/logged-in?)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
@@ -219,11 +221,16 @@
                                  :title    repo-name}       ;; show full path on hover
                                 [:span.flex.relative
                                  {:style {:top 1}}
-                                 (ui/icon "database" {:size 16 :id "database-icon"})]
+                                 (ui/icon (if logged-in?
+                                            (let [icon (str "letter-" (first (user-handler/email)))]
+                                              (if (ui/tabler-icon icon) icon "user"))
+                                            "database") {:size (if logged-in? 12 16)
+                                                         :id "database-icon"
+                                                         :class (when logged-in? "p-1 rounded color-level-5")})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium
-                                          (if (= config/local-repo short-repo-name) "Demo" short-repo-name)
+                                          [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
