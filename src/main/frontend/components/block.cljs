@@ -2768,12 +2768,19 @@
     (assoc config :level 0)))
 
 (defn- build-block [config block* {:keys [navigating-block navigated?]}]
-  (let [block (if (or (and (:custom-query? config)
-                           (empty? (:block/_parent block*))
-                           (not (and (:dsl-query? config)
-                                     (string/includes? (:query config) "not"))))
-                      navigated?)
+  (let [linked-block (:block/link (db/entity (:db/id block*)))
+        block (cond
+                (or (and (:custom-query? config)
+                         (empty? (:block/_parent block*))
+                         (not (and (:dsl-query? config)
+                                   (string/includes? (:query config) "not"))))
+                    navigated?)
                 (db/entity [:block/uuid navigating-block])
+
+                linked-block
+                linked-block
+
+                :else
                 block*)]
     (merge (db/sub-block (:db/id block))
            (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))))
@@ -2905,7 +2912,7 @@
 
 (defn- block-changed?
   [old-block new-block]
-  (let [ks [:block/uuid :block/content :block/collapsed?
+  (let [ks [:block/uuid :block/content :block/collapsed? :block/link
             :block/properties :block.temp/bottom? :block.temp/top?]]
     (not
      (and (= (select-keys old-block ks)
