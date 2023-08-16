@@ -5,7 +5,8 @@
             [frontend.config :as config]
             [electron.ipc :as ipc]
             [frontend.db.conn :as db-conn]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.persist-db :as persist-db]))
 
 (defn get-all-graphs
   []
@@ -15,7 +16,9 @@
             ;; backward compatibility (release <= 0.5.4)
             result (if (seq result) result (idb/get-nfs-dbs))]
       (distinct result))
-    (idb/get-nfs-dbs)))
+    (p/let [repos (idb/get-nfs-dbs)
+            db-repos (persist-db/<list-db)]
+      (concat repos db-repos))))
 
 (defn get-serialized-graph
   [graph-name]
@@ -40,6 +43,7 @@
   [graph]
   (let [key (db-conn/datascript-db graph)
         db-based? (config/db-based-graph? graph)]
+    (persist-db/<unsafe-delete graph)
     (if (util/electron?)
       (ipc/ipc "deleteGraph" graph key db-based?)
      (idb/remove-item! key))))

@@ -50,7 +50,8 @@
   "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
-        :let [only-cloud? (and remote? (nil? url))]]
+        :let [only-cloud? (and remote? (nil? url))
+              db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
                                      (state/pub-event! [:graph/pull-down-remote-graph repo])
@@ -59,35 +60,53 @@
      [:div.controls
       [:div.flex.flex-row.items-center
        (ui/tippy {:html [:div.text-sm.max-w-xs
-                         (if only-cloud?
+                         (cond
+                           only-cloud?
                            "Deletes this remote graph. Note this can't be recovered."
+
+                           db-based?
+                           "Unsafe delete this DB-based graph. Note this can't be recovered."
+
+                           :else
                            "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
                   :class "tippy-hover"
                   :interactive true}
                  [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
                   {:on-click (fn []
-                               (if only-cloud?
-                                 (let [confirm-fn
-                                       (fn []
-                                         (ui/make-confirm-modal
-                                          {:title      [:div
-                                                        {:style {:max-width 700}}
-                                                        (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
-                                           :sub-title   [:div.small.mt-1
-                                                         "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                           :on-confirm (fn [_ {:keys [close-fn]}]
-                                                         (close-fn)
-
-                                                         (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                         (go (<! (file-sync/<delete-graph GraphUUID))
-                                                             (state/delete-repo! repo)
-                                                             (state/delete-remote-graph! repo)
-                                                             (state/set-state! [:file-sync/remote-graphs :loading] false)))}))]
-                                   (state/set-modal! (confirm-fn)))
-                                 (let [current-repo (state/get-current-repo)]
-                                   (repo-handler/remove-repo! repo)
-                                   (state/pub-event! [:graph/unlinked repo current-repo]))))}
-                  (if only-cloud? "Remove" "Unlink")])]]]))
+                               (let [has-prompt? (or only-cloud? db-based?)
+                                     prompt-str (cond only-cloud?
+                                                      (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
+                                                      db-based?
+                                                      (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
+                                                      :else
+                                                      "")
+                                     unlink-or-remote-fn (fn []
+                                                           (let [current-repo (state/get-current-repo)]
+                                                             (repo-handler/remove-repo! repo)
+                                                             (state/pub-event! [:graph/unlinked repo current-repo])))
+                                     action-confirm-fn (if only-cloud?
+                                                         (fn []
+                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                           (go (<! (file-sync/<delete-graph GraphUUID))
+                                                               (state/delete-repo! repo)
+                                                               (state/delete-remote-graph! repo)
+                                                               (state/set-state! [:file-sync/remote-graphs :loading] false)))
+                                                         unlink-or-remote-fn)
+                                     confirm-fn
+                                     (fn []
+                                       (ui/make-confirm-modal
+                                        {:title      [:div
+                                                      {:style {:max-width 700}}
+                                                      prompt-str]
+                                         :sub-title   [:div.small.mt-1
+                                                       "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                         :on-confirm (fn [_ {:keys [close-fn]}]
+                                                       (close-fn)
+                                                       (action-confirm-fn))}))]
+                                 (if has-prompt?
+                                   (state/set-modal! (confirm-fn))
+                                   (unlink-or-remote-fn))))}
+                  (if (or db-based? only-cloud?) "Remove" "Unlink")])]]]))
 
 (rum/defc repos < rum/reactive
   []

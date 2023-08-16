@@ -15,22 +15,31 @@
 (defn- ensure-sqlite-init []
   (if (nil? @*worker)
     (js/Promise. (fn [resolve _reject]
-                   (let [worker (js/SharedWorker. "/static/js/ls-wa-sqlite/persist-db-worker.js")
+                   (let [worker (try
+                                  (js/SharedWorker. "/static/js/ls-wa-sqlite/persist-db-worker.js")
+                                  (catch js/Error e
+                                    (js/console.error "worker error", e)
+                                    nil))
                          _ (reset! *worker worker)
                          ^js sqlite (Comlink/wrap (.-port worker))
                          _ (reset! *sqlite sqlite)]
-                     (p/do!
-                      (.init ^js sqlite)
-                      (resolve @*sqlite)
-                      ;; start the upsert loop
-                      (go-loop []
-                        (let [[repo ret-ch deleted-uuids upsert-blocks] (<! db-upsert-chan)
-                              delete-rc (when (seq deleted-uuids)
-                                          (<! (p->c (.deleteBlocks sqlite repo (clj->js deleted-uuids)))))
-                              upsert-rc (<! (p->c (.upsertBlocks sqlite repo (clj->js upsert-blocks))))]
-                          (async/put! ret-ch [delete-rc upsert-rc])
-                          (prn :db-upsert-chan :delete delete-rc :upsert upsert-rc))
-                        (recur))))))
+                     (-> (.init sqlite)
+                         (p/then (fn []
+                                   (js/console.log "sqlite init done")
+                                   (resolve @*sqlite)))
+                         (p/then (fn []
+                                   (go-loop []
+                                     (let [[repo ret-ch deleted-uuids upsert-blocks] (<! db-upsert-chan)
+                                           delete-rc (when (seq deleted-uuids)
+                                                       (<! (p->c (.deleteBlocks sqlite repo (clj->js deleted-uuids)))))
+                                           upsert-rc (<! (p->c (.upsertBlocks sqlite repo (clj->js upsert-blocks))))]
+                                       (async/put! ret-ch [delete-rc upsert-rc])
+                                       (prn :db-upsert-chan :delete delete-rc :upsert upsert-rc))
+                                     (recur))
+                                   (prn ::done))
+                                 )
+                         (p/catch (fn [e]
+                                    (js/console.error "init error", e)))))))
     (p/resolved @*sqlite)))
 
 (defn- type-of-block
@@ -77,10 +86,18 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
-    (prn ::repo repo)
+    (prn ::new-repo repo)
+    (p/let [^js sqlite (ensure-sqlite-init)]
+      (.newDB sqlite repo)))
+
+  (<list-db [_this]
     (p/let [^js sqlite (ensure-sqlite-init)
-            rc (.newDB ^js sqlite repo)]
-      (js/console.log "new db created rc=" rc)))
+            dbs (.listDB sqlite)]
+      (js/console.log "list DBs:" dbs)
+      dbs))
+  (<unsafe-delete [_this repo]
+    (p/let [^js sqlite (ensure-sqlite-init)]
+      (.unsafeUnlinkDB sqlite repo)))
 
   (<transact-data [_this repo upsert-blocks deleted-uuids]
     (go

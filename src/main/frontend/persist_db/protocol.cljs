@@ -4,7 +4,9 @@
 
 ;; TODO: exporting, importing support
 (defprotocol PersistentDB
+  (<list-db [this])
   (<new [this repo])
+  (<unsafe-delete [this repo])
   (<transact-data [this repo added-blocks deleted-block-uuids]
     "Transact data to db
 

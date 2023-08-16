@@ -8,14 +8,13 @@ import * as Comlink from 'comlink';
 
 let sqlite3;
 let dbMap = {};
-
+const idbName = "logseq-VFS";
 
 class AsyncLock {
     constructor() {
         this.disable = (_) => { }
         this.promise = Promise.resolve()
     }
-
     enable() {
         this.promise = new Promise(resolve => this.disable = resolve)
     }
@@ -42,7 +41,56 @@ const SQLiteDB = {
     inc() {
         return 233;
     },
-
+    async listDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(idbName);
+            request.onerror = reject;
+            request.onsuccess = (ev) => {
+                const db = ev.target.result;
+                const transaction = db.transaction(["blocks"], "readonly");
+                const objectStore = transaction.objectStore("blocks");
+                const request = objectStore.getAllKeys();
+                request.onsuccess = () => {
+                    db.close();
+                    const dbNames = [];
+                    for (const key of request.result) {
+                        if (dbNames.findIndex(dbName => dbName === key[0]) === -1) {
+                            dbNames.push(key[0]);
+                        }
+                    }
+                    resolve(dbNames.map(dbName => dbName.replace(/^\//, "")));
+                };
+                request.onerror = reject;
+            };
+        });
+    },
+    async unsafeUnlinkDB(dbName) {
+        const dbKey = "/" + dbName;
+        console.log("[worker] deleting", dbName);
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(idbName);
+            request.onerror = reject;
+            request.onsuccess = (ev) => {
+                const db = ev.target.result;
+                const transaction = db.transaction(["blocks"], "readwrite");
+                const objectStore = transaction.objectStore("blocks");
+                const request = objectStore.openCursor();
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        if (cursor.key[0] === (dbKey)) {
+                            cursor.delete();
+                        }
+                        cursor.continue();
+                    } else {
+                        db.close();
+                        resolve();
+                    }
+                };
+                request.onerror = reject;
+            };
+        });
+    },
     async init() {
         console.log("[worker] calling init");
         const module = await SQLiteModuleFactory();
@@ -59,9 +107,12 @@ const SQLiteDB = {
     // :db-new
     async newDB(dbName) {
         console.log("[worker] SQLite newDB", dbName);
-        const db = await sqlite3.open_v2(dbName ?? 'demo');
+        let db = dbMap[dbName];
+        if (db) {
+            return db;
+        }
+        db = await sqlite3.open_v2(dbName ?? 'demo');
         // create-blocks-table!
-
         const str = sqlite3.str_new(db, `CREATE TABLE IF NOT EXISTS blocks (
             uuid TEXT PRIMARY KEY NOT NULL,
             type INTEGER NOT NULL,
