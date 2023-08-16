@@ -187,10 +187,7 @@
         alias (if (seq (:block/alias entity)) #{"alias"} #{})
         exclude-properties (set/union
                             entity-properties
-                            alias
-                            (->> gp-property/db-hidden-built-in-properties
-                                 (map name)
-                                 set))
+                            alias)
         properties (->> (search/get-all-properties)
                         (remove exclude-properties))]
     (if @*property-key
@@ -217,7 +214,6 @@
                        :dropdown? true
                        :show-new-when-not-exact-match? true
                        :exact-match-exclude-items exclude-properties
-                       :sub-modal? page-configure?
                        :input-default-placeholder "Add a property"
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)

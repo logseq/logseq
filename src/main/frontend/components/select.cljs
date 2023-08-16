@@ -38,7 +38,7 @@
    * :limit - Limit number of items to search. Default is 100
    * :extract-fn - Fn applied to each item when extracting a value from it. Default is :value
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
-   * :sub-modal? - Boolean to indicate if in a sub-modal. Useful for closing behavior
+   * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
    TODO: Describe more options"
   < rum/reactive
   shortcut/disable-all-shortcuts
@@ -57,8 +57,7 @@
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply _selected-choices
-                 dropdown? show-new-when-not-exact-match? exact-match-exclude-items
-                 sub-modal?]
+                 dropdown? show-new-when-not-exact-match? exact-match-exclude-items]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
@@ -112,8 +111,7 @@
                                                        (swap! *selected-choices disj x)
                                                        (swap! *selected-choices conj x))
                                                      (do
-                                                       (when close-modal?
-                                                         (if sub-modal? (state/close-sub-modal!) (state/close-modal!)))
+                                                       (when close-modal? (state/close-modal!))
                                                        (when on-chosen
                                                          (on-chosen (if multiple-choices? @*selected-choices x))))))
                               :empty-placeholder (empty-placeholder t)})]
