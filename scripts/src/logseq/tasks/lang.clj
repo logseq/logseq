@@ -159,7 +159,8 @@
   "Allows certain keys in a language to have the same translation
    as English. Happens more in romance languages but pretty rare otherwise"
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins}
+         :settings-of-plugins :code :on-boarding/section-pages :paginates/pages :right-side-bar/history-global
+         :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}

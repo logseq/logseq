@@ -730,7 +730,7 @@
   ([] (loading (t :loading)))
   ([content] (loading content nil))
   ([content opts]
-   [:div.flex.flex-row.items-center.inline
+   [:div.flex.flex-row.items-center.inline.icon-loading
     [:span.icon.flex.items-center (svg/loader-fn opts)
      (when-not (string/blank? content)
        [:span.text.pl-2 content])]]))

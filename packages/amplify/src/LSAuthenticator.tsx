@@ -9,6 +9,12 @@ export function LSAuthenticator({ termsLink, children }: any) {
           username: { order: 2 },
           password: { order: 3 },
           confirm_password: { order: 4 },
+        },
+        signIn: {
+          username: {
+            placeholder: 'Enter your Username or Email',
+            label: 'Username or Email'
+          }
         }
       }}
       loginMechanisms={['username']}
