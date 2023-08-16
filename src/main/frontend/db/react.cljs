@@ -80,7 +80,7 @@
   []
   (let [state @query-state
         state (->> (filter (fn [[[_repo k] _v]]
-                             (contains? #{:blocks :block/block :custom} k)) state)
+                             (contains? #{:blocks :block/block ::block :custom} k)) state)
                    (into {}))]
     (reset! query-state state)))
 
