@@ -73,15 +73,16 @@
    (redirect-to-page! page-name {}))
   ([page-name {:keys [anchor push click-from-recent?]
                :or {click-from-recent? false}}]
-   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
-                                       click-from-recent?)
-   (let [m (cond->
-            (default-page-route page-name)
-            anchor
-            (assoc :query-params {:anchor anchor})
-            push
-            (assoc :push push))]
-     (redirect! m))))
+   (when (or (uuid? page-name) (seq page-name))
+     (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
+                                         click-from-recent?)
+     (let [m (cond->
+              (default-page-route page-name)
+               anchor
+               (assoc :query-params {:anchor anchor})
+               push
+               (assoc :push push))]
+       (redirect! m)))))
 
 (defn redirect-to-whiteboard!
   ([name]

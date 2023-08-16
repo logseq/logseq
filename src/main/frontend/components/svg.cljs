@@ -39,9 +39,15 @@
       :stroke          "currentColor"
       :d               d}]]))
 
-(def refresh
-  (hero-icon "M4 4V9H4.58152M19.9381 11C19.446 7.05369 16.0796 4 12 4C8.64262 4 5.76829 6.06817 4.58152 9M4.58152 9H9M20 20V15H19.4185M19.4185 15C18.2317 17.9318 15.3574 20 12 20C7.92038 20 4.55399 16.9463 4.06189 13M19.4185 15H15"
-             {:fill "none"}))
+(defn refresh
+  ([] (refresh 24 nil))
+  ([size] (refresh size nil))
+  ([size opts]
+   (hero-icon "M4 4V9H4.58152M19.9381 11C19.446 7.05369 16.0796 4 12 4C8.64262 4 5.76829 6.06817 4.58152 9M4.58152 9H9M20 20V15H19.4185M19.4185 15C18.2317 17.9318 15.3574 20 12 20C7.92038 20 4.55399 16.9463 4.06189 13M19.4185 15H15"
+              (cond-> (merge {:fill "none"} opts)
+
+                      (number? size)
+                      (assoc :height size :width size)))))
 
 (def close (hero-icon "M6 18L18 6M6 6L18 18"))
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))

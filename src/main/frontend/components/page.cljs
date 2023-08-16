@@ -666,7 +666,11 @@
        (fn [event node]
          (let [x (.-x event)
                y (.-y event)
-               drag? (not= [node x y] @last-node-position)]
+               drag? (not (let [[last-node last-x last-y] @last-node-position
+                                threshold 5]
+                            (and (= node last-node)
+                                 (<= (abs (- x last-x)) threshold)
+                                 (<= (abs (- y last-y)) threshold))))]
            (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
   (.on graph "nodeMousedown"
        (fn [event node]
