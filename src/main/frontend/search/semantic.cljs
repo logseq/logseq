@@ -81,9 +81,6 @@
                                                                :id      (:id block)
                                                                :uuid    (:uuid block)}
                                                     embeds    (text-encoder/text-encode (:content block) encoder-name)
-                                                    _ (prn "debug block embeds -> vs")
-                                                    _ (prn (:content block))
-                                                    _ (prn embeds) ;; TODO Junyi
                                                     _         (vector-store/rm store-conn (str (:id block)))
                                                     emb-add->vs   (fn [embed]
                                                                     (vector-store/add store-conn embed (str (:id block)) (bean/->js metadata)))]

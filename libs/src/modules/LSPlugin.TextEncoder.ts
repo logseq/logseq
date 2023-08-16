@@ -50,8 +50,9 @@ export class LSPluginTextEncoderService {
               ret = e
             } finally {
               if (v.reply) {
+                const payloadHash = payload['hash']
                 ctx.caller.call(
-                  `${hookEvent}:reply`, ret
+                  `${hookEvent}:reply:${payloadHash}`, ret
                 )
               }
             }

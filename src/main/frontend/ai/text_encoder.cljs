@@ -14,13 +14,17 @@
   ([service event payload reply?]
    (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]
      (let [{:keys [name]} service
+           payload-hash (hash (:text payload))
+           payload (assoc payload :hash payload-hash)
            hookEvent (str "service:" event ":" name)]
        (.call (.-caller pl) hookEvent (bean/->js (merge {:graph (state/get-current-repo)} payload)))
        (when reply?
          (-> (p/create (fn [resolve _rej]
-                     (.once (.-caller pl) (str hookEvent ":reply")
-                            (fn [^js e]
-                              (resolve (bean/->clj e))))))
+                         ;; Following the same pattern as logseq libs
+                         ;; https://github.com/logseq/logseq/blob/bf2f5a147065ac4fd3e4d34f802a27b8ddb7e5eb/libs/src/modules/LSPlugin.TextEncoder.ts#L55
+                         (.once (.-caller pl) (str hookEvent ":reply:" payload-hash)
+                                (fn [^js e]
+                                  (resolve (bean/->clj e))))))
              (p/timeout 20000)
              (p/catch #(log/error :ai-text-encoder/encode-text-timeout {:message "Timeout waiting reply from text encoder service" 
                                                                         :hookEvent hookEvent 
