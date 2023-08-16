@@ -67,6 +67,11 @@ const SQLiteDB = {
     async unsafeUnlinkDB(dbName) {
         const dbKey = "/" + dbName;
         console.log("[worker] deleting", dbName);
+        const db = dbMap[dbName];
+        if (db) {
+            await sqlite3.close_v2(db);
+            delete dbMap[dbName];
+        }
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(idbName);
             request.onerror = reject;
