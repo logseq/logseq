@@ -877,10 +877,10 @@
   "Move blocks up/down."
   [blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
-  (let [first-block (db/entity (:db/id (first blocks)))
+  (let [top-level-blocks (get-top-level-blocks blocks)
+        first-block (db/entity (:db/id (first top-level-blocks)))
         first-block-parent (:block/parent first-block)
         left-left (:block/left (:block/left first-block))
-        top-level-blocks (get-top-level-blocks blocks)
         last-top-block (last top-level-blocks)
         last-top-block-parent (:block/parent last-top-block)
         right (get-right-sibling (:db/id last-top-block))
@@ -889,18 +889,18 @@
       (and up? left-left)
       (cond
         (= (:block/parent left-left) first-block-parent)
-        (move-blocks blocks left-left (merge opts {:sibling? true}))
+        (move-blocks top-level-blocks left-left (merge opts {:sibling? true}))
 
         (= (:db/id left-left) (:db/id first-block-parent))
-        (move-blocks blocks left-left (merge opts {:sibling? false}))
+        (move-blocks top-level-blocks left-left (merge opts {:sibling? false}))
 
         (= (:block/left first-block) first-block-parent)
         (let [target-children (:block/_parent left-left)]
           (if (seq target-children)
             (when (= (:block/parent left-left) (:block/parent first-block-parent))
               (let [target-block (last (db-model/sort-by-left target-children left-left))]
-                (move-blocks blocks target-block (merge opts {:sibling? true}))))
-            (move-blocks blocks left-left (merge opts {:sibling? false}))))
+                (move-blocks top-level-blocks target-block (merge opts {:sibling? true}))))
+            (move-blocks top-level-blocks left-left (merge opts {:sibling? false}))))
 
         :else
         nil)
