@@ -133,7 +133,7 @@
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m]
   (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
-        sanity-linked-page (util/page-name-sanity-lc linked-page)]
+        sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
     (when-not (string/blank? sanity-linked-page)
       (let [existing-ref-id (some (fn [r]
                                     (when (= sanity-linked-page (:block/name r))
