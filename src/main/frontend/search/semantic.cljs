@@ -8,12 +8,19 @@
             [frontend.ai.vector-store :as vector-store]
             [frontend.ai.text-encoder :as text-encoder]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [clojure.pprint :as pprint]))
 
 (defn idstr-template-string
   "Accepts repo url and returns a string for the vector store comment"
   [url]
   (str "logseq-semsearch-vs-" url))
+
+;; TODO: Link to cmd+k panel
+(defn update-block-search-result
+  [rets]
+  (prn "semantic search result:")
+  (pprint/pprint (map #(dissoc % :embed) rets)))
 
 ;; See protocol for full documentation
 (defrecord ^:large-vars/data-var Semantic [repo]
@@ -33,16 +40,13 @@
       (p/let [embeds (text-encoder/text-encode q encoder-name)
               embed  (nth embeds 0)
               rets   (vector-store/search store-conn embed ret-k)
-              clj-ret (bean/->clj rets)
-              transform-fn (fn [{:keys [data]}]
-                             (let [{:keys [uuid page snippet]} data]
-                               {:block/uuid uuid
-                                :block/content snippet
-                                :block/page page}))
-              blocks (mapv transform-fn clj-ret)]
-        blocks)))
+              clj-ret (bean/->clj rets)]
+        (update-block-search-result clj-ret))))
   (query-page [_this _q _opt]
-    (prn "query full page search"))
+    ;; full text search is not applicable
+    ;; we don't distinguish page full content and block content
+    ;; we just have semantic records
+    nil)
   (rebuild-blocks-indice! [_this]
     ;; Step 1: reset vector store
     ;; Step 2: Don't do anything (wait transact-pages! or transact-blocks! being called) 
