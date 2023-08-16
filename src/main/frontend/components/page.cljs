@@ -366,6 +366,7 @@
                   db-based?
                   (not built-in-property?)
                   (not @*edit?)
+                  (not config/publishing?)
                   (not (seq (:block/properties page)))
                   (not (seq (:block/alias page)))
                   (not (seq (:block/tags page))))

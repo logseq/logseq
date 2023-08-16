@@ -2,6 +2,7 @@
   "Block properties management."
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.db :as db]
@@ -304,8 +305,9 @@
           :on-click toggle-fn}
          [:div.ml-1 (:block/original-name property)]])
       (fn [{:keys [toggle-fn]}]
-        [:div.p-8
-         (property-config repo property {:toggle-fn toggle-fn})])
+        (when (not config/publishing?)
+          [:div.p-8
+          (property-config repo property {:toggle-fn toggle-fn})]))
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 

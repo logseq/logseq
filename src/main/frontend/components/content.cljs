@@ -28,7 +28,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.graph-parser.property :as gp-property]
+            [frontend.config :as config]))
 
 ;; TODO i18n support
 
@@ -408,7 +409,7 @@
                           (and property-id property-block-id)
                           (let [block (db/entity [:block/uuid (uuid property-block-id)])
                                 property (db/entity [:block/uuid (uuid property-id)])]
-                            (when (and block property)
+                            (when (and block property (not config/publishing?))
                               (common-handler/show-custom-context-menu!
                                e
                                (property-custom-context-menu-content block
