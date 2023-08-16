@@ -93,15 +93,16 @@ const SQLiteDB = {
     },
     async init() {
         console.log("[worker] calling init");
-        const module = await SQLiteModuleFactory();
-        sqlite3 = SQLite.Factory(module);
-        // OPFS is not supported in shared worker
-        // const vfs = new OriginPrivateFileSystemVFS();
-        const vfs = new IDBBatchAtomicVFS("logseq-VFS");
-        await vfs.isReady;
-        sqlite3.vfs_register(vfs, true);
-        console.log("[worker] SQLite vfs init ok")
-        return;
+        if (typeof sqlite3 === "undefined") {
+            const module = await SQLiteModuleFactory();
+            sqlite3 = SQLite.Factory(module);
+            // OPFS is not supported in shared worker
+            // const vfs = new OriginPrivateFileSystemVFS();
+            const vfs = new IDBBatchAtomicVFS("logseq-VFS");
+            await vfs.isReady;
+            sqlite3.vfs_register(vfs, true);
+            console.log("[worker] SQLite vfs init ok")
+        }
     },
     // aka. newDB and openDB
     // :db-new
