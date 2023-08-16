@@ -424,14 +424,15 @@
           *all-collapsed? (::all-collapsed? state)
           *current-block-page (::current-page state)
           block-or-whiteboard? (or block? whiteboard?)]
-      [:div.flex-1.relative.p-6.sm:p-12.rounded-xl.color-level.page
+      [:div.flex-1.relative.page
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                   {:data-page-tags (text-util/build-data-value page-names)})
                 {})
 
               {:key path-page-name
-               :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+               :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                         "color-level rounded-xl sm:p-12 p-6" (not sidebar?)}])})
 
        (if (and whiteboard-page? (not sidebar?))
          [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
