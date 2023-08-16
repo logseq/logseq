@@ -177,17 +177,21 @@
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? page-configure? *configure-show?]
+  [state entity *property-key *property-value {:keys [class-schema? *configure-show?]
                                                :as opts}]
   (let [repo (state/get-current-repo)
         *show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
-        alias (if (seq (:block/alias entity)) #{"alias"} #{})
-        exclude-properties (set/union
-                            entity-properties
-                            alias)
+        existing-tag-alias (reduce (fn [acc prop]
+                                     (if (seq (get entity (get-in gp-property/db-built-in-properties [prop :attribute])))
+                                       (conj acc (get-in gp-property/db-built-in-properties [prop :original-name]))
+                                       acc))
+                                   #{}
+                                   [:tags :alias])
+        exclude-properties* (set/union entity-properties existing-tag-alias)
+        exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))
         properties (->> (search/get-all-properties)
                         (remove exclude-properties))]
     (if @*property-key
@@ -252,9 +256,9 @@
        (property-input block *property-key *property-value opts)]
 
       (or (:page-configure? opts)
-          (and (or (seq properties)
-                   (seq (:block/alias block))
-                   (seq (:block/tags block)))))
+          (seq properties)
+          (seq (:block/alias block))
+          (seq (:block/tags block)))
       [:div
        [:a.add-button-link
         {:title "Add another property"

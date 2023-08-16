@@ -164,16 +164,22 @@
         content))
     content))
 
-;; Configuration for db graph properties
+;; Configuration and fns for db graph properties
 ;; =============
 
 ;; FIXME: no support for built-in-extended-properties
-;; TODO: add description
 (def db-built-in-properties
+  "Map of built in properties for db graphs. Each property has a config map with
+  the following keys:
+   * :schema - Property's schema. Required key
+   * :original-name - Property's :block/original-name
+   * :attribute - Property that is saved to a datascript attribute outside of :block/properties"
   {:alias {:original-name "Alias"
+           :attribute :block/alias
            :schema {:type :page
                     :cardinality :many}}
    :tags {:original-name "Tags"
+          :attribute :block/tags
           :schema {:type :page
                    :cardinality :many}}
    :background-color {:schema {:type :default}}
@@ -202,7 +208,7 @@
 
 (def db-user-facing-built-in-properties
   "These are built-in properties that users can see and use"
-  #{:alias})
+  #{:alias :tags})
 
 (defonce db-built-in-properties-keys
   (set (keys db-built-in-properties)))
