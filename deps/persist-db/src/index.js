@@ -203,7 +203,7 @@ const SQLiteDB = {
             await this.newDB(dbName);
             db = dbMap[dbName];
         }
-        const sql = sqlite3.str_new(db, "SELECT uuid, page_uuid FROM blocks");
+        const sql = sqlite3.str_new(db, "SELECT uuid, page_uuid FROM blocks WHERE type = 1");
         const prepared = await sqlite3.prepare_v2(db, sqlite3.str_value(sql));
         const rows = [];
         while (await sqlite3.step(prepared.stmt) === SQLite.SQLITE_ROW) {

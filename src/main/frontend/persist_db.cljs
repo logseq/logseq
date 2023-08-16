@@ -41,6 +41,4 @@
   ([repo exclude-uuids]
    (<fetch-blocks-excluding repo exclude-uuids {}))
   ([repo exclude-uuids opts]
-   (p/let [ret (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)]
-     (js/console.log "fetch-by-exclude" ret)
-     ret)))
+   (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)))

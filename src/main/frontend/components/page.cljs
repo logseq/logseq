@@ -141,12 +141,17 @@
           block? (boolean block-id)
           block (get-block page-name)
           block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block))]
+      (prn ::page page-name block-id block? block page-e
+           (:block/_parent block))
       (cond
         block-unloaded?
         (ui/loading "Loading...")
 
-        (and (not block?)
-             (empty? (:block/_parent block)))
+        (and
+         (not block?)
+             (empty? (:block/_parent block))
+
+             )
         (dummy-block page-name)
 
         :else
