@@ -19,7 +19,6 @@
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.db.rtc.op :as rtc-op]
-            [clojure.core.async :as async]
             [frontend.format.mldoc :as mldoc]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
@@ -615,22 +614,35 @@
                          (dissoc :db/id)))))
                  blocks)))
 
+(defn- get-last-child-or-self
+  [block]
+  (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id block))
+                           db/entity)
+        target (or last-child block)]
+    [target (some? last-child)]))
+
 (defn- get-target-block
-  [target-block sibling? outliner-op]
+  [target-block sibling? outliner-op up?]
   (when-let [block (if (:db/id target-block)
                      (db/entity (:db/id target-block))
                      (when (:block/uuid target-block)
                        (db/entity [:block/uuid (:block/uuid target-block)])))]
-    (let [linked (:block/link block)]
+    [block sibling?]
+    (let [linked (:block/link block)
+          up-down? (= outliner-op :move-blocks-up-down)]
       (cond
-        (contains? #{:insert-blocks :move-blocks-up-down} outliner-op)
+        (and up-down? sibling?)
+        [block sibling?]
+
+        (and up-down? linked)
+        [linked false]
+
+        (contains? #{:insert-blocks} outliner-op)
         [block sibling?]
 
         linked
-        (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id linked))
-                                 db/entity)
-              target (or last-child linked)]
-          [target (if last-child true false)])
+        (get-last-child-or-self linked)
+
         :else
         [block sibling?]))))
 
@@ -651,7 +663,7 @@
   [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [[target-block' sibling?] (get-target-block target-block sibling? outliner-op)
+  (let [[target-block' sibling?] (get-target-block target-block sibling? outliner-op false)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -832,11 +844,10 @@
 
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
-  [blocks target-block {:keys [sibling? outliner-op]}]
+  [blocks target-block {:keys [sibling? up? outliner-op]}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [[target-block sibling?] (get-target-block target-block sibling? outliner-op)
-        _ (assert (some? target-block) (str "Invalid target: " target-block))
+  (let [[target-block sibling?] (get-target-block target-block sibling? outliner-op up?)
         non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
@@ -880,37 +891,71 @@
   (let [top-level-blocks (get-top-level-blocks blocks)
         first-block (db/entity (:db/id (first top-level-blocks)))
         first-block-parent (:block/parent first-block)
-        left-left (:block/left (:block/left first-block))
+        left (:block/left first-block)
+        left-original (first (:block/_link left))
+        left-left (:block/left left)
+        left-left-linked (:block/link left-left)
         last-top-block (last top-level-blocks)
         last-top-block-parent (:block/parent last-top-block)
         right (get-right-sibling (:db/id last-top-block))
         opts {:outliner-op :move-blocks-up-down}]
     (cond
+      (and up? left-left-linked (not= (:db/id first-block-parent)
+                                      (:db/id (:block/parent left-left))))
+      (let [[target sibling?] (get-last-child-or-self left-left-linked)]
+        (move-blocks top-level-blocks target (merge opts {:sibling? sibling?
+                                                          :up? up?})))
+
+      (and up? left-original (:block/left left-original))
+      (let [left-left-original (:block/left left-original)
+            block (or (:block/link left-left-original) left-left-original)
+            [target sibling?] (get-last-child-or-self block)]
+        (move-blocks top-level-blocks target (merge opts {:sibling? sibling?
+                                                          :up? up?})))
+
       (and up? left-left)
       (cond
         (= (:block/parent left-left) first-block-parent)
-        (move-blocks top-level-blocks left-left (merge opts {:sibling? true}))
+        (move-blocks top-level-blocks left-left (merge opts {:sibling? true
+                                                             :up? up?}))
 
         (= (:db/id left-left) (:db/id first-block-parent))
-        (move-blocks top-level-blocks left-left (merge opts {:sibling? false}))
+        (move-blocks top-level-blocks left-left (merge opts {:sibling? false
+                                                             :up? up?}))
 
         (= (:block/left first-block) first-block-parent)
         (let [target-children (:block/_parent left-left)]
           (if (seq target-children)
             (when (= (:block/parent left-left) (:block/parent first-block-parent))
               (let [target-block (last (db-model/sort-by-left target-children left-left))]
-                (move-blocks top-level-blocks target-block (merge opts {:sibling? true}))))
-            (move-blocks top-level-blocks left-left (merge opts {:sibling? false}))))
+                (move-blocks top-level-blocks target-block (merge opts {:sibling? true
+                                                                        :up? up?}))))
+            (move-blocks top-level-blocks left-left (merge opts {:sibling? false
+                                                                 :up? up?}))))
 
         :else
         nil)
 
       (not up?)
-      (if right
-        (move-blocks blocks right (merge opts {:sibling? true}))
-        (when last-top-block-parent
-          (when-let [parent-right (get-right-sibling (:db/id last-top-block-parent))]
-            (move-blocks blocks parent-right (merge opts {:sibling? false})))))
+      (let [original-block (when last-top-block-parent (first (:block/_link (db/entity (:db/id last-top-block-parent)))))
+            original-block-right (when original-block (get-right-sibling (:db/id original-block)))]
+        (cond
+          right
+          (move-blocks blocks right (merge opts {:sibling? true
+                                                 :up? up?}))
+
+          original-block-right
+          (move-blocks blocks original-block-right (merge opts {:sibling? false
+                                                                :up? up?}))
+
+          :else
+          (when last-top-block-parent
+            (when-let [parent-right (get-right-sibling (:db/id last-top-block-parent))]
+              (if-let [linked-block (:block/link parent-right)]
+                (move-blocks blocks linked-block (merge opts {:sibling? false
+                                                              :up? up?}))
+                (move-blocks blocks parent-right (merge opts {:sibling? false
+                                                              :up? up?})))))))
 
       :else
       nil)))
