@@ -823,11 +823,39 @@
             (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
           (rum/with-key (pdf-toolbar viewer {:on-external-window! #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
+(rum/defcs pdf-password-input <
+  (rum/local "" ::password)
+  [state confirm-fn]
+  (let [password (get state ::password)]
+    [:div.container
+     [:div.text-lg.mb-4 "Password required"]
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "This document is password protected. Please enter a password:"]]]
+
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:auto-focus true
+       :on-change (fn [e]
+                    (reset! password (util/evalue e)))}]
+
+     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click (fn []
+                     (let [password @password]
+                       (confirm-fn password)))}
+        "Submit"]]]]))
+
+
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
+        [doc-password, set-doc-password!] (rum/use-state nil) ;; use nil to handle empty string
+        [password-model-close-fn, set-password-model-close-fn!] (rum/use-state nil)
         [initial-page, set-initial-page!] (rum/use-state 1)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
@@ -881,6 +909,7 @@
        (let [^js loader-el (rum/deref *doc-ref)
              get-doc$      (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
              opts          {:url           url
+                            :password      (or doc-password "")
                             :ownerDocument (.-ownerDocument loader-el)
                             :cMapUrl       "./cmaps/"
                             ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
@@ -889,10 +918,13 @@
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
-             (p/then #(set-loader-state! {:pdf-document % :status :completed}))
+             (p/then (fn [doc]
+                       (when password-model-close-fn
+                         (password-model-close-fn))
+                       (set-loader-state! {:pdf-document doc :status :completed})))
              (p/catch #(set-loader-state! {:error %})))
          #()))
-     [url])
+     [url doc-password])
 
     (rum/use-effect!
      (fn []
@@ -916,6 +948,16 @@
               :error
               false)
              (state/set-state! :pdf/current nil))
+
+           "PasswordException"
+           (do
+             (set-loader-state! {:error nil})
+             (state/set-modal! (fn [close-fn]
+                                 (let [on-password-fn
+                                       (fn [password]
+                                         (set-password-model-close-fn! close-fn)
+                                         (set-doc-password! password))]
+                                   (pdf-password-input on-password-fn)))))
 
            (do
              (notification/show!
