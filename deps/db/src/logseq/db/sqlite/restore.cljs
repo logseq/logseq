@@ -69,10 +69,12 @@
         uuid->db-id-tmap (transient (hash-map))
         *next-db-id (atom 100001)
         assign-id-to-uuid-fn (fn [uuid-str]
-                               (let [id @*next-db-id]
-                                 (conj! uuid->db-id-tmap [uuid-str id])
-                                 (swap! *next-db-id inc)
-                                 id))
+                               (or
+                                (get uuid->db-id-tmap uuid-str)
+                                (let [id @*next-db-id]
+                                  (conj! uuid->db-id-tmap [uuid-str id])
+                                  (swap! *next-db-id inc)
+                                  id)))
         pages-eav-coll (doall (mapcat (fn [page]
                                         (let [eid (assign-id-to-uuid-fn (:uuid page))]
                                           (datoms-str->eav-vec (:datoms page) eid)))
