@@ -622,7 +622,7 @@
     [target (some? last-child)]))
 
 (defn- get-target-block
-  [target-block sibling? outliner-op up?]
+  [target-block {:keys [outliner-op indent? sibling?]}]
   (when-let [block (if (:db/id target-block)
                      (db/entity (:db/id target-block))
                      (when (:block/uuid target-block)
@@ -631,6 +631,9 @@
     (let [linked (:block/link block)
           up-down? (= outliner-op :move-blocks-up-down)]
       (cond
+        (and (= outliner-op :indent-outdent-blocks) (not indent?))
+        [block sibling?]
+
         (and up-down? sibling?)
         [block sibling?]
 
@@ -660,10 +663,10 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
+  [blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [[target-block' sibling?] (get-target-block target-block sibling? outliner-op false)
+  (let [[target-block' sibling?] (get-target-block target-block opts)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -844,10 +847,11 @@
 
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
-  [blocks target-block {:keys [sibling? up? outliner-op]}]
+  [blocks target-block {:keys [_sibling? _up? outliner-op _indent?]
+                        :as opts}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [[target-block sibling?] (get-target-block target-block sibling? outliner-op up?)
+  (let [[target-block sibling?] (get-target-block target-block opts)
         non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
@@ -975,8 +979,10 @@
                            {:tx-data (->> (map :tx-data results)
                                           (apply util/concat-without-nil))
                             :tx-meta (:tx-meta (first results))})
-            opts {:outliner-op :indent-outdent-blocks}]
-        (if indent?
+            opts {:outliner-op :indent-outdent-blocks}
+            parent-original (first (:block/_link parent))]
+        (cond
+          indent?
           (when (and left (not (page-first-child? first-block)))
             (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left) false)
                   blocks' (drop-while (fn [b]
@@ -986,13 +992,26 @@
               (when (seq blocks')
                 (if last-direct-child-id
                   (let [last-direct-child (db/entity last-direct-child-id)
-                        result (move-blocks blocks' last-direct-child (merge opts {:sibling? true}))
+                        result (move-blocks blocks' last-direct-child (merge opts {:sibling? true
+                                                                                   :indent? true}))
                         ;; expand `left` if it's collapsed
                         collapsed-tx (when (:block/collapsed? left)
                                        {:tx-data [{:db/id (:db/id left)
                                                    :block/collapsed? false}]})]
                     (concat-tx-fn result collapsed-tx))
-                  (move-blocks blocks' left (merge opts {:sibling? false}))))))
+                  (move-blocks blocks' left (merge opts {:sibling? false
+                                                         :indent? true}))))))
+
+          (and parent-original (not indent?))
+          (let [blocks' (take-while (fn [b]
+                                      (not= (:db/id (:block/parent b))
+                                            (:db/id (:block/parent parent))))
+                                    top-level-blocks)]
+            (move-blocks blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
+                                                              :sibling? true
+                                                              :indent? false})))
+
+          :else
           (when (and parent (not (page-block? (db/entity (:db/id parent)))))
             (let [blocks' (take-while (fn [b]
                                         (not= (:db/id (:block/parent b))
