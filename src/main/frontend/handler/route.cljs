@@ -87,10 +87,10 @@
 (defn redirect-to-whiteboard!
   ([name]
    (redirect-to-whiteboard! name nil))
-  ([name {:keys [block-id new-whiteboard?]}]
+  ([name {:keys [block-id new-whiteboard? click-from-recent?]}]
    ;; Always skip onboarding when loading an existing whiteboard
    (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-   (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name click-from-recent?)
    (if (= name (state/get-current-whiteboard))
      (state/focus-whiteboard-shape block-id)
      (redirect! {:to :whiteboard
