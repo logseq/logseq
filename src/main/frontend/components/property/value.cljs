@@ -2,6 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [frontend.components.select :as select]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -398,7 +399,7 @@
 (rum/defc delete-value-button < rum/reactive
   [entity property item]
   (let [editing? (state/sub :editor/editing?)]
-    (when-not editing?
+    (when-not (or editing? config/publishing?)
       [:a.close.fade-in
        {:class "absolute top-0 right-0"
         :title "Delete this value"
@@ -483,12 +484,12 @@
        [:div.rounded-sm {:on-click (fn [] (reset! *add-new-item? true))}
         [:div.opacity-50.text-sm "Input something"]]
 
-       (and @*show-add? row?)
+       (and @*show-add? row? (not config/publishing?))
        [:a.add-button-link.flex
         {:on-click (fn [] (reset! *add-new-item? true))}
         (ui/icon "circle-plus")]
 
-       (and @*show-add? block?)
+       (and @*show-add? block? (not config/publishing?))
        (multiple-blocks-add-button block property opts))]))
 
 (rum/defc property-value < rum/reactive

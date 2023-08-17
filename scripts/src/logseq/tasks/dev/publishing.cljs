@@ -3,11 +3,9 @@
   (:require [logseq.graph-parser.cli :as gp-cli]
             [logseq.publishing :as publishing]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.sqlite.restore :as sqlite-restore]
             [logseq.db.sqlite.cli :as sqlite-cli]
             ["fs" :as fs]
             ["path" :as node-path]
-            [cljs-bean.core :as bean]
             [clojure.edn :as edn]
             [datascript.core :as d]))
 

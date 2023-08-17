@@ -255,10 +255,11 @@
       [:div#edit-new-property
        (property-input block *property-key *property-value opts)]
 
-      (or (:page-configure? opts)
-          (seq properties)
-          (seq (:block/alias block))
-          (seq (:block/tags block)))
+      (and (or (:page-configure? opts)
+               (seq properties)
+               (seq (:block/alias block))
+               (seq (:block/tags block)))
+           (not config/publishing?))
       [:div
        [:a.add-button-link
         {:title "Add another property"

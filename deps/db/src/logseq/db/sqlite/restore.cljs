@@ -104,9 +104,8 @@
         blocks-eav-colls (->> (concat all-blocks' journal-blocks' init-data')
                               (apply concat))
         all-eav-coll (doall (concat pages-eav-coll blocks-eav-colls))
-        datoms (map
-                (partial eav->datom uuid->db-id-map)
-                all-eav-coll)
+        datoms (map (partial eav->datom uuid->db-id-map)
+                    all-eav-coll)
         db-conn (conn-from-datoms-fn datoms db-schema/schema-for-db-based-graph)]
     {:conn db-conn
      :uuid->db-id-map uuid->db-id-map
