@@ -105,14 +105,15 @@
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
-(defn- build-page-tx [repo format properties page journal? whiteboard?]
+(defn- build-page-tx [repo format properties page journal? whiteboard? class?]
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           title         (util/get-page-original-name page)
           create-title? (create-title-property? journal? title)
           page          (merge page
                                (when (seq properties) {:block/properties properties})
-                               (when whiteboard? {:block/type "whiteboard"}))
+                               (when whiteboard? {:block/type "whiteboard"})
+                               (when class? {:block/type "class"}))
           page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))
           db-based? (config/db-based-graph? (state/get-current-repo))]
       (cond
@@ -142,14 +143,15 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard? rename?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard? rename? class?]
            :or   {redirect?           true
                   create-first-block? true
                   rename?             false
                   format              nil
                   properties          nil
                   split-namespace?    true
-                  uuid                nil}}]
+                  uuid                nil
+                  class?              false}}]
    (let [title      (-> (string/trim title)
                         (text/page-ref-un-brackets!)
                         ;; remove `#` from tags
@@ -167,11 +169,11 @@
                              ;; only apply uuid to the deepest hierarchy of page to create if provided.
                              (-> (block/page-name->map page (if (= page title) with-uuid? true))
                                  (assoc :block/format format)))
-                        pages)
+                           pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx repo format nil % journal? false))
+                           (mapcat #(build-page-tx repo format nil % journal? false false))
                            (remove nil?))
              txs      (map-indexed (fn [i page]
                                      (if (zero? i)
@@ -179,7 +181,7 @@
                                        (assoc page :block/namespace
                                               [:block/uuid (:block/uuid (nth txs (dec i)))])))
                                    txs)
-             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard?)
+             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard? class?)
              last-txs (if (seq txs)
                         (update last-txs 0
                                 (fn [p]

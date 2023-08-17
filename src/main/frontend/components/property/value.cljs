@@ -94,10 +94,12 @@
                     :dropdown? true
                     :on-chosen (fn [chosen]
                                  (let [page (string/trim (:value chosen))
-                                       id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))]
+                                       id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
+                                       class? (= (:block/name property) "tags")]
                                    (when (nil? id)
                                      (page-handler/create! page {:redirect? false
-                                                                 :create-first-block? false}))
+                                                                 :create-first-block? false
+                                                                 :class? class?}))
                                    (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                      (add-property! block (:block/original-name property) id'))
                                    (when-let [f (:on-chosen opts)] (f))))
