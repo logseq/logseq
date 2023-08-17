@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
                                                poll! timeout]]
+            [cljs.core.async.interop :refer [p->c]]
             [electron.ipc :as ipc]
             [malli.core :as m]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -42,23 +43,30 @@
 
 (def data-from-ws-schema
   [:map
-   ["req-id" :string]
-   ["affected-blocks" {:optional true}
-    [:map-of :string
+   [:req-id :string]
+   [:t {:optional true} :int]
+   [:affected-blocks {:optional true}
+    [:map-of :keyword
      [:or
       [:map
-       ["op" [:= "move"]]
-       ["parents" [:sequential :string]]
-       ["left" :string]
-       ["self" :string]
-       ["first-child" :string]
-       ["sibling" :string]]
+       [:op [:= "move"]]
+       [:parents [:sequential :string]]
+       [:left [:maybe :string]]
+       [:self :string]
+       [:first-child [:maybe :string]]
+       [:sibling [:maybe :string]]
+       [:content {:optional true} :string]]
       [:map
-       ["op" [:= "remove"]]
-       ["block-uuid" :string]]]]]
-   ["blocks-env" {:optional true}
-    [:map-of :string
-     :any]]])
+       [:op [:= "remove"]]
+       [:block-uuid :string]]
+      [:map
+       [:op [:= "update-attrs"]]
+       [:parents [:sequential :string]]
+       [:left [:maybe :string]]
+       [:self :string]
+       [:first-child [:maybe :string]]
+       [:sibling [:maybe :string]]
+       [:content {:optional true} :string]]]]]])
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 
@@ -67,12 +75,16 @@
 ;;       it is suitable for operations from users(e.g. remove consecutive blocks),
 ;;       but blocks in remove-ops are scattered, even maybe from different pages
 (defn apply-remote-remove-ops
-  [_state remove-ops]
-  (outliner-tx/transact!
-   {:persist-op? false}
-   (doseq [op remove-ops]
-     (let [block (db/pull [:block/uuid (uuid (get op "block-uuid"))])]
-       (outliner-core/delete-blocks! [block] {:children? false})))))
+  [state remove-ops]
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)]
+    (outliner-tx/transact!
+     {:persist-op? false}
+     (prn :remove-ops remove-ops)
+     (doseq [op remove-ops]
+       (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
+         (outliner-core/delete-blocks! [block] {:children? false})
+         (prn :apply-remote-remove-ops (:block-uuid op)))))))
 
 (defn <query-blocks-env
   [block-uuids]
@@ -80,32 +92,43 @@
   {}
   )
 
-(defn align-parent&left
-  [block-uuid remote-parents remote-left]
-  {:pre [(seq remote-parents) (some? remote-left)]}
-  (let [first-remote-parent (first remote-parents)
-        local-parent* (db/pull [:block/uuid (uuid first-remote-parent)])
-        local-left* (db/pull [:block/uuid (uuid remote-left)])
-        self (db/pull [:block/uuid (uuid block-uuid)])
-        local-parent (some-> (:db/id (:block/parent self)) (db/pull '[:block/uuid]) :block/uuid str)
-        local-left (some-> (:db/id (:block/left self)) (db/pull '[:block/uuid]) :block/uuid str)]
-    (if (and local-parent* local-left*
-             (or (not= first-remote-parent local-parent)
-                 (not= remote-left local-left)))
-      (let [[target-block sibling?]
-            (if (= first-remote-parent remote-left)
-              [local-parent* false]
-              [local-left* true])]
+(defn- insert-or-move-block
+  [state block-uuid-str remote-parents remote-left-uuid-str content move?]
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)
+        local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
+        first-remote-parent (first remote-parents)
+        local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
+        b (db/entity repo [:block/uuid (uuid block-uuid-str)])]
+    (case [(some? local-parent) (some? local-left)]
+      [false true]
+      (outliner-tx/transact!
+       {:persist-op? false}
+       (if move?
+         (outliner-core/move-blocks! [b] local-left true)
+         (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
+                                       local-left {:sibling? true :keep-uuid? true})))
+
+      [true true]
+      (let [sibling? (= (:block/uuid local-parent) (:block/uuid local-left))]
         (outliner-tx/transact!
          {:persist-op? false}
-         (if self
-           (outliner-core/move-blocks! [self] target-block sibling?)
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid)
-                                           :block/content (str "from server: " block-uuid)}]
-                                         target-block
-                                         {:sibling? sibling?
-                                          :keep-uuid? true}))))
-      (throw (ex-info "TODO: local-parent*, local-left* not exist yet" {})))))
+         (if move?
+           (outliner-core/move-blocks! [b] local-left sibling?)
+           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
+                                         local-left {:sibling? sibling? :keep-uuid? true}))))
+
+      [true false]
+      (outliner-tx/transact!
+       {:persist-op? false}
+       (if move?
+         (outliner-core/move-blocks! [b] local-parent false)
+         (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
+                                       local-parent {:sibling? false :keep-uuid? true})))
+
+      [false false]
+      (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
+                                                    :remote-left remote-left-uuid-str})))))
 
 (defn- move-ops-map->sorted-move-ops
   [move-ops-map]
@@ -130,25 +153,78 @@
                      "3" {:parents [] :left nil :x "3"}})
   (move-ops-map->sorted-move-ops move-ops-map))
 
-(defn apply-remote-move-ops
-  [_state sorted-move-ops]
-  (outliner-tx/transact!
-   {:persist-op? false}
-   (doseq [{parents "parents" left "left" self "self" first-child "first-child" sibling "sibling"} sorted-move-ops]
-     (align-parent&left self parents left))))
+(defn- check-block-pos
+  [state block-uuid-str remote-parents remote-left-uuid-str]
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)
+        local-b (db/entity repo [:block/uuid (uuid block-uuid-str)])
+        remote-parent-uuid-str (first remote-parents)]
+    (cond
+      (nil? local-b)
+      :not-exist
 
-(defn apply-remote-data
+      (not (and (= (str (:block/uuid (:block/parent local-b))) remote-parent-uuid-str)
+                (= (str (:block/uuid (:block/left local-b))) remote-left-uuid-str)))
+      :wrong-pos
+      :else nil)))
+
+(defn apply-remote-move-ops
+  [state sorted-move-ops]
+  (prn :sorted-move-ops sorted-move-ops)
+  (doseq [{:keys [parents left self first-child sibling content]}
+          sorted-move-ops]
+    (case (check-block-pos state self parents left)
+      :not-exist
+      (insert-or-move-block state self parents left content false)
+      :wrong-pos
+      (insert-or-move-block state self parents left content true)
+      nil                               ; do nothing
+      nil)
+    (prn :apply-remote-move-ops self)))
+
+
+(defn apply-remote-update-ops
+  [state update-ops]
+  (prn :update-ops update-ops)
+  (doseq [{:keys [parents left self first-child sibling content]}
+          update-ops]
+    (case (check-block-pos state self parents left)
+      :not-exist
+      (insert-or-move-block state self parents left content false)
+      :wrong-pos
+      (insert-or-move-block state self parents left content true)
+      nil
+      (when content
+        (outliner-tx/transact!
+         {:persist-op? false}
+         (outliner-core/save-block! {:block/uuid (uuid self) :block/content content}))))
+
+    (prn :apply-remote-update-ops self)))
+
+
+
+
+(defn <apply-remote-data
   [state data-from-ws]
-  {:pre [(data-from-ws-validator data-from-ws)]}
-  (let [affected-blocks-map (get data-from-ws "affected-blocks")
-        {remove-ops-map "remove" move-ops-map "move"}
-        (update-vals
-         (group-by (fn [[_ env]] (get env "op")) affected-blocks-map)
-         (partial into {}))
-        remove-ops (vals remove-ops-map)
-        sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)]
-    (apply-remote-remove-ops state remove-ops)
-    (apply-remote-move-ops state sorted-move-ops)))
+  {:pre [(data-from-ws-validator data-from-ws)
+         (some? @(:*repo state))]}
+  (go
+    (let [affected-blocks-map (update-keys (:affected-blocks data-from-ws) str)
+          remote-t (:t data-from-ws)
+          {remove-ops-map "remove" move-ops-map "move" update-ops-map "update-attrs"}
+          (update-vals
+           (group-by (fn [[_ env]] (get env :op)) affected-blocks-map)
+           (partial into {}))
+          remove-ops (vals remove-ops-map)
+          sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
+          update-ops (vals update-ops-map)]
+      (prn :start-apply-remote-remove-ops)
+      (apply-remote-remove-ops state remove-ops)
+      (prn :start-apply-remote-move-ops)
+      (apply-remote-move-ops state sorted-move-ops)
+      (prn :start-apply-remote-update-ops)
+      (apply-remote-update-ops state update-ops)
+      (<! (p->c (op/<update-local-tx! @(:*repo state) remote-t))))))
 
 (defn- push-data-from-ws-handler
   [state push-data-from-ws]
@@ -214,19 +290,32 @@
         update-ops* (->> update-block-uuids
                          (keep (fn [block-uuid]
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
-                                   ["update" {:block-uuid block-uuid :content (:block/content b)}]))))]
-    [move-ops* remove-ops* update-ops*]))
+                                   (let [left-uuid (some-> b :block/left :block/uuid str)
+                                         parent-uuid (some-> b :block/parent :block/uuid str)]
+                                     ["update" {:block-uuid block-uuid
+                                                :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
+                                                :content (:block/content b)}])))))]
+    [remove-ops* move-ops* update-ops*]))
 
 
 (defn- <client-op-update-handler
-  [state ops t-before]
-  {:pre [(some? @(:*graph-uuid state))]}
+  [state]
+  {:pre [(some? @(:*graph-uuid state))
+         (some? @(:*repo state))]}
   (go
-    (let [ops-for-remote (client-ops->remote-ops state ops)
+    (let [repo @(:*repo state)
+          {:keys [ops local-tx]} (<! (p->c (op/<get-ops&local-tx repo)))
+          ops* (mapv second ops)
+          op-keys (mapv first ops)
+          ops-for-remote (apply concat (client-ops->remote-ops state ops*))
           r (with-sub-data-from-ws state
-              (<! (ws/<send! state {:action "apply-ops" :graph-uuid @(:*graph-uuid state)
-                                    :ops ops-for-remote :t-before t-before}))
+              (<! (ws/<send! state {:req-id (get-req-id)
+                                    :action "apply-ops" :graph-uuid @(:*graph-uuid state)
+                                    :ops ops-for-remote :t-before (or local-tx 1)}))
               (<! (get-result-ch)))]
+      (<! (p->c (op/<clean-ops repo op-keys)))
+      (<! (<apply-remote-data state r))
+
       (prn :<client-op-update-handler r))))
 
 (defn <loop-for-rtc
@@ -254,7 +343,7 @@
                 (do (push-data-from-ws-handler state push-data-from-ws)
                     (recur))
                 client-op-update
-                (do (prn :client-op-update client-op-update)
+                (do (<! (<client-op-update-handler state))
                     (recur))
                 :else
                 nil))))
@@ -285,5 +374,6 @@
 (comment
   (go
     (def global-state (<! (<init))))
-  (reset! (:*graph-uuid global-state) "00e016b1-cab1-4eea-bf74-a02d9e4910f8")
-  (reset! (:*repo global-state) (state/get-current-repo)))
+  (reset! (:*graph-uuid global-state) "ed4520d5-7985-49bd-a2d7-cf28694e4f03")
+  (reset! (:*repo global-state) (state/get-current-repo))
+  )

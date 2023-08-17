@@ -48,3 +48,14 @@
 (defn <clean-ops
   [repo keys]
   (op-store/<clear-ops! repo keys))
+
+
+(defn <update-local-tx!
+  [repo t]
+  {:pre [(pos-int? t)]}
+  (op-store/<update-local-tx! repo t))
+
+(defn <update-graph-uuid!
+  [repo graph-uuid]
+  {:pre [(some? graph-uuid)]}
+  (op-store/<update-graph-uuid! repo graph-uuid))

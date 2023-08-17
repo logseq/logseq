@@ -18,7 +18,7 @@
 
 (defn <update-local-tx!
   [repo tx]
-  (idb-keyval/set "local-tx" (clj->js {:local-tx tx}) (ensure-store repo)))
+  (idb-keyval/set "local-tx" tx (ensure-store repo)))
 
 (defn <update-graph-uuid!
   [repo graph-uuid]
@@ -50,8 +50,7 @@
 (defn <clear-ops!
   [repo keys]
   (let [store (ensure-store repo)]
-    (doseq [k keys]
-      (idb-keyval/del k store))))
+    (p/all (map #(idb-keyval/del % store) keys))))
 
 (defn <get-all-ops
   [repo]
