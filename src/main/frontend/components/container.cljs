@@ -89,7 +89,7 @@
                (:db/id page-entity)
                :page))
             (if whiteboard-page?
-              (route-handler/redirect-to-whiteboard! name)
+              (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
      [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitiled? "opacity-50")}
