@@ -125,7 +125,7 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
         total-seconds (some-> (re-matches reg-number timestamp)
                               util/safe-parse-int)
         [_ hours minutes seconds] (re-matches reg timestamp)
-        [hours minutes seconds] (map util/safe-parse-int [hours minutes seconds])]
+        [hours minutes seconds] (map #(if (nil? %) 0 (util/safe-parse-int %)) [hours minutes seconds])]
     (cond
       total-seconds
       total-seconds

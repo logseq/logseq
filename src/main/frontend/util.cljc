@@ -263,17 +263,11 @@
 
 #?(:cljs
    (defn safe-parse-int
-     "Use if arg could be an int or string, or nil. If arg is only a string, use `parse-long`. If arg is nil, return 0."
+     "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
      {:malli/schema [:=> [:cat [:or :int :string]] :int]}
      [x]
-     (cond
-       (string? x)
+     (if (string? x)
        (parse-long x)
-
-       (nil? x)
-       0
-
-       :else
        x)))
 
 #?(:cljs
