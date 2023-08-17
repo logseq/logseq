@@ -17,7 +17,9 @@
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
         current-format (:block/format first-block)
-        target-format (:block/format target-block)]
+        target-format (:block/format target-block)
+        target-block (if nested? target-block
+                         (or (first (:block/_link (db/entity (:db/id target-block)))) target-block))]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
@@ -46,9 +48,9 @@
                  (= (tree/-get-parent-id target-node)
                     (tree/-get-left-id target-node))]
              (if first-child?
-               (let [parent (tree/-get-parent target-node)]
+               (when-let [parent (tree/-get-parent target-node)]
                  (outliner-core/move-blocks! blocks' (:data parent) false))
-               (let [before-node (tree/-get-left target-node)]
+               (when-let [before-node (tree/-get-left target-node)]
                  (outliner-core/move-blocks! blocks' (:data before-node) true))))
            (outliner-core/move-blocks! blocks' target-block (not nested?)))))
 
