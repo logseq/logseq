@@ -1136,6 +1136,7 @@
   ([content-fn {:keys [trigger-once? _debug-id]
                 :or {trigger-once? false}}]
    (let [[visible? set-visible!] (rum/use-state false)
+         [initially-visible? set-initially-visible!] (rum/use-state false) ;; set initially visible
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
@@ -1144,7 +1145,8 @@
                                                    (when (or (and (not visible?) in-view?)
                                                              ;; hide only the components below the current top for better ux
                                                              (and visible? (not in-view?) (> self-top root-margin)))
-                                                     (set-visible! in-view?))))})
+                                                     (set-visible! in-view?)
+                                                       (set-initially-visible! true))))}) ;; set initially visible
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref))))
 
