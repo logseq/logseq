@@ -618,6 +618,9 @@
 (defmethod handle :window-close [^js win]
   (.close win))
 
+(defmethod handle :theme-loaded [^js win]
+  (.show win))
+
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;

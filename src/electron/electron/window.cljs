@@ -35,6 +35,7 @@
                       :titleBarStyle        "hiddenInset"
                       :trafficLightPosition {:x 16 :y 16}
                       :autoHideMenuBar      (not mac?)
+                      :show                 false
                       :webPreferences
                       {:plugins                 true        ; pdf
                        :nodeIntegration         false
