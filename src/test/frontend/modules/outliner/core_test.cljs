@@ -117,7 +117,7 @@
     (transact-tree! tree)
     (let [block (get-block 6)]
       (outliner-tx/transact! {:graph test-db}
-        (outliner-core/delete-blocks! [block] true))
+                             (outliner-core/delete-blocks! [block] {:children? true}))
       (is (= [3 9] (get-children 2))))))
 
 (deftest test-move-block-as-sibling
