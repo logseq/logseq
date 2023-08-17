@@ -406,6 +406,28 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
+(rum/defc class-select
+  [page class on-select]
+  (let [repo (state/get-current-repo)
+        children-pages (model/get-namespace-children repo (:db/id page))
+        exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
+                        (conj (:block/uuid page))) ; break cycle
+        classes (->> (model/get-all-classes repo)
+                     (remove (fn [[_name id]] (contains? exclude-ids id))))
+        options (map (fn [[name id]] {:label name
+                                      :value id
+                                      :selected (= class id)})
+                     classes)
+        options (if class options (cons
+                                   {:label "Choose parent page"
+                                    :disabled true
+                                    :selected true
+                                    :value ""}
+                                   options))]
+    (ui/select options
+               (fn [_e value]
+                 (on-select value)))))
+
 (rum/defcs configure < rum/reactive
   [state page opts]
   (let [page-id (:db/id page)
@@ -422,14 +444,25 @@
           [:div
            [:div.structured-schema
            ;; properties
-            [:h2.text-lg.font-medium.mb-2 "Schema:"]
+            [:p.font-medium.mb-2 "Properties:"]
             [:div.grid.gap-1
              (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
                (component-block/db-properties-cp
                 {:editor-box editor/box}
                 page
                 edit-input-id
-                (assoc properties-opts :class-schema? true)))]]
+                (assoc properties-opts :class-schema? true)))]
+
+            [:div.flex.flex-row.items-center.flex-wrap.gap-2
+             [:div.font-medium.my-4 "Parent:"]
+             (let [namespace (some-> (:db/id (:block/namespace page))
+                                     db/entity
+                                     :block/uuid)]
+               [:div.w-60
+                (class-select page namespace (fn [value]
+                                               (db/transact!
+                                                [{:db/id (:db/id page)
+                                                  :block/namespace [:block/uuid (uuid value)]}])))])]]
 
            (when (seq (:block/properties page))
              [:div.my-4

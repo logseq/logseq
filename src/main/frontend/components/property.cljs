@@ -325,6 +325,23 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
+(defn- get-namespace-properties
+  [tags]
+  (let [tags' (filter (fn [tag] (= "class" (:block/type tag))) tags)
+        *namespaces (atom #{})]
+    (doseq [tag tags']
+      (when-let [ns (:block/namespace tag)]
+        (loop [current-ns ns]
+          (when (and
+                 current-ns
+                 (= "class" (:block/type ns))
+                 (not (contains? @*namespaces (:db/id ns))))
+            (swap! *namespaces conj current-ns)
+            (recur (:block/namespace current-ns))))))
+    (mapcat
+     (fn [e] (:properties (:block/schema e)))
+     @*namespaces)))
+
 (rum/defcs properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
@@ -346,15 +363,18 @@
                                         (when (= "class" (:block/type tag))
                                           (let [e (db/entity (:db/id tag))]
                                             (:properties (:block/schema e))))))
-                              (map (fn [id]
-                                     [id nil])))
+                              (map (fn [id] [id nil])))
+        namespace-properties (->> (:block/tags block)
+                                  (get-namespace-properties)
+                                  (map (fn [id] [id nil])))
         built-in-properties (set/difference
                              (set (map name gp-property/db-built-in-properties-keys))
                              #{"alias" "tags"})
         properties (->> (concat (seq tags-properties)
                                 (seq alias-properties)
                                 (seq properties)
-                                class-properties)
+                                class-properties
+                                namespace-properties)
                         (util/distinct-by first)
                         (remove (fn [[k _v]]
                                   (when (uuid? k)

@@ -1514,6 +1514,19 @@ independent of format as format specific heading characters are stripped"
      [?page :block/uuid ?id]]
     (conn/get-db repo)))
 
+(defn get-namespace-children
+  [repo-url eid]
+  (->>
+   (d/q '[:find ?children
+          :in $ ?parent %
+          :where
+          (namespace ?parent ?children)]
+        (conn/get-db repo-url)
+        eid
+        (:namespace rules/rules))
+   db-utils/seq-flatten
+   (set)))
+
 (comment
   ;; For debugging
   (defn get-all-blocks
