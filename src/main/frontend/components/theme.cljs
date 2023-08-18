@@ -29,13 +29,17 @@
           (.add cls "dark")
           (.remove cls "dark"))
         (ui/apply-custom-theme-effect! theme)
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme})
-        (ipc/ipc "theme-loaded"))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
      [theme])
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]
         (.setAttribute doc "lang" preferred-language)))
+
+    (rum/use-effect!
+     #(when-not db-restoring?
+        (ipc/ipc "db-restored"))
+     [db-restoring?])
 
     (rum/use-effect!
      #(when (and restored-sidebar?

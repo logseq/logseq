@@ -618,7 +618,7 @@
 (defmethod handle :window-close [^js win]
   (.close win))
 
-(defmethod handle :theme-loaded [^js win]
+(defmethod handle :db-restored [^js win]
   (.show win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
