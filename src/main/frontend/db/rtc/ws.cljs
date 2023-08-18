@@ -1,4 +1,6 @@
 (ns frontend.db.rtc.ws
+  (:require-macros
+   [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
@@ -23,6 +25,7 @@
   (assert (= js/WebSocket.OPEN (.-readyState ws)))
   (.send ws (js/JSON.stringify (clj->js message))))
 
+(declare <send!)
 (defn <ensure-ws-open!
   [state]
   (go
@@ -31,7 +34,11 @@
         (let [ws-opened-ch (chan)
               ws* (ws-listen (:user-uuid state) (:data-from-ws-chan state) ws-opened-ch)]
           (<! ws-opened-ch)
-          (reset! (:*ws state) ws*))))))
+          (reset! (:*ws state) ws*)
+          (when-let [graph-uuid @(:*graph-uuid state)]
+            (with-sub-data-from-ws state
+              (<! (<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
+              (<! (get-result-ch)))))))))
 
 (defn <send!
   "ensure ws state=open, then send messages"

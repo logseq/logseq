@@ -12,7 +12,7 @@
             [cognitect.transit :as transit]
             [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
-            [electron.ipc :as ipc]))
+            [frontend.persist-db :as persist-db]))
 
 
 (defn- export-as-blocks
@@ -84,7 +84,7 @@
 
 
 (defn- <transact-remote-all-blocks-to-sqlite
-  [all-blocks graph-uuid]
+  [all-blocks repo]
   (go
     (let [{:keys [t blocks]} all-blocks
           conn (d/create-conn db-schema/schema-for-db-based-graph)
@@ -99,13 +99,13 @@
                     (cond-> (assoc b :datoms (sqlite-util/block-map->datoms-str blocks* b))
                       (:block/parent b) (assoc :page_uuid (str (:block/uuid (d/entity db (:db/id (:block/page b))))))))
                   blocks*)
-            repo (str "rtc-" graph-uuid)]
-        (<! (p->c (ipc/ipc :db-new repo)))
-        (<! (p->c (ipc/ipc :db-transact-data repo (pr-str {:blocks blocks**}))))))))
+            repo (str "logseq_db_rtc-" repo)]
+        (<! (p->c (persist-db/<new repo)))
+        (<! (persist-db/<transact-data repo blocks** nil))))))
 
 
 (defn <download-graph
-  [state graph-uuid]
+  [state repo graph-uuid]
   (go
     (let [{:keys [url]}
           (with-sub-data-from-ws state
@@ -116,4 +116,4 @@
         (ex-info "<download-graph failed" r)
         (let [reader (transit/reader :json)
               all-blocks (transit/read reader body)]
-          (<! (<transact-remote-all-blocks-to-sqlite all-blocks graph-uuid)))))))
+          (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo)))))))

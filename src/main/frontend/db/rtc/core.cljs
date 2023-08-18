@@ -16,7 +16,8 @@
             [frontend.db.rtc.ws :as ws]
             [clojure.set :as set]
             [frontend.state :as state]
-            [frontend.db.rtc.op :as op]))
+            [frontend.db.rtc.op :as op]
+            [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]))
 
 
 
@@ -29,6 +30,7 @@
   | :data-from-ws-chan     | channel for receive messages from server websocket  |
   | :data-from-ws-pub      | pub of :data-from-ws-chan, dispatch by :req-id      |
   | :client-op-update-chan | channel to notify that there're some new operations |
+  | :*stop-rtc-loop-chan   | atom of chan to stop <loop-for-rtc                  |
   | :*ws                   | atom of websocket                                   |
 "
   [:map
@@ -38,6 +40,7 @@
    [:data-from-ws-chan :any]
    [:data-from-ws-pub :any]
    [:client-op-update-chan :any]
+   [:*stop-rtc-loop-chan :any]
    [:*ws :any]])
 (def state-validator (m/validator state-schema))
 
@@ -78,13 +81,13 @@
   [state remove-ops]
   {:pre [(some? @(:*repo state))]}
   (let [repo @(:*repo state)]
-    (outliner-tx/transact!
-     {:persist-op? false}
-     (prn :remove-ops remove-ops)
-     (doseq [op remove-ops]
-       (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
-         (outliner-core/delete-blocks! [block] {:children? false})
-         (prn :apply-remote-remove-ops (:block-uuid op)))))))
+    (prn :remove-ops remove-ops)
+    (doseq [op remove-ops]
+      (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
+        (outliner-tx/transact!
+         {:persist-op? false}
+         (outliner-core/delete-blocks! [block] {:children? false}))
+        (prn :apply-remote-remove-ops (:block-uuid op))))))
 
 (defn <query-blocks-env
   [block-uuids]
@@ -95,40 +98,46 @@
 (defn- insert-or-move-block
   [state block-uuid-str remote-parents remote-left-uuid-str content move?]
   {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)
-        local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
-        first-remote-parent (first remote-parents)
-        local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
-        b (db/entity repo [:block/uuid (uuid block-uuid-str)])]
-    (case [(some? local-parent) (some? local-left)]
-      [false true]
-      (outliner-tx/transact!
-       {:persist-op? false}
-       (if move?
-         (outliner-core/move-blocks! [b] local-left true)
-         (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
-                                       local-left {:sibling? true :keep-uuid? true})))
+  (when (and (seq remote-parents) remote-left-uuid-str)
+    (let [repo @(:*repo state)
+          local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
+          first-remote-parent (first remote-parents)
+          local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
+          b {:block/uuid (uuid block-uuid-str)}]
+      (case [(some? local-parent) (some? local-left)]
+        [false true]
+        (prn (:tx-data
+              (outliner-tx/transact!
+               {:persist-op? false}
+               (if move?
+                 (outliner-core/move-blocks! [b] local-left true)
+                 (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
+                                               local-left {:sibling? true :keep-uuid? true})))))
 
-      [true true]
-      (let [sibling? (= (:block/uuid local-parent) (:block/uuid local-left))]
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (if move?
-           (outliner-core/move-blocks! [b] local-left sibling?)
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
-                                         local-left {:sibling? sibling? :keep-uuid? true}))))
+        [true true]
+        (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
+          (prn (:tx-data
+                (outliner-tx/transact!
+                 {:persist-op? false}
+                 (if move?
+                   (outliner-core/move-blocks! [b] local-left sibling?)
+                   (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+                                                   :block/format :markdown}]
+                                                 local-left {:sibling? sibling? :keep-uuid? true}))))))
 
-      [true false]
-      (outliner-tx/transact!
-       {:persist-op? false}
-       (if move?
-         (outliner-core/move-blocks! [b] local-parent false)
-         (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content}]
-                                       local-parent {:sibling? false :keep-uuid? true})))
+        [true false]
+        (prn (:tx-data
+              (outliner-tx/transact!
+               {:persist-op? false}
+               (if move?
+                 (outliner-core/move-blocks! [b] local-parent false)
+                 (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+                                                 :block/format :markdown}]
+                                               local-parent {:sibling? false :keep-uuid? true}))))
 
-      [false false]
-      (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
-                                                    :remote-left remote-left-uuid-str})))))
+             [false false])
+        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
+                                                      :remote-left remote-left-uuid-str}))))))
 
 (defn- move-ops-map->sorted-move-ops
   [move-ops-map]
@@ -185,21 +194,28 @@
 
 (defn apply-remote-update-ops
   [state update-ops]
-  (prn :update-ops update-ops)
-  (doseq [{:keys [parents left self first-child sibling content]}
-          update-ops]
-    (case (check-block-pos state self parents left)
-      :not-exist
-      (insert-or-move-block state self parents left content false)
-      :wrong-pos
-      (insert-or-move-block state self parents left content true)
-      nil
-      (when content
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (outliner-core/save-block! {:block/uuid (uuid self) :block/content content}))))
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)]
+    (prn :update-ops update-ops)
+    (doseq [{:keys [parents left self first-child sibling content]}
+            update-ops]
+      (let [r (check-block-pos state self parents left)]
+        (case r
+          :not-exist
+          (insert-or-move-block state self parents left content false)
+          :wrong-pos
+          (insert-or-move-block state self parents left content true)
+          nil
+          (when content
+            (prn (:tx-data
+                  (outliner-tx/transact!
+                   {:persist-op? false}
+                   (outliner-core/save-block! (merge (db/pull repo '[*] [:block/uuid (uuid self)])
+                                                     {:block/uuid (uuid self)
+                                                      :block/content content
+                                                      :block/format :markdown})))))))
 
-    (prn :apply-remote-update-ops self)))
+        (prn :apply-remote-update-ops r self)))))
 
 
 
@@ -209,7 +225,7 @@
   {:pre [(data-from-ws-validator data-from-ws)
          (some? @(:*repo state))]}
   (go
-    (let [affected-blocks-map (update-keys (:affected-blocks data-from-ws) str)
+    (let [affected-blocks-map (update-keys (:affected-blocks data-from-ws) name)
           remote-t (:t data-from-ws)
           {remove-ops-map "remove" move-ops-map "move" update-ops-map "update-attrs"}
           (update-vals
@@ -226,11 +242,10 @@
       (apply-remote-update-ops state update-ops)
       (<! (p->c (op/<update-local-tx! @(:*repo state) remote-t))))))
 
-(defn- push-data-from-ws-handler
+(defn- <push-data-from-ws-handler
   [state push-data-from-ws]
-  (prn :push-data-from-ws push-data-from-ws)
-  ;; TODO
-  )
+  (go (<! (<apply-remote-data state push-data-from-ws))
+      (prn :push-data-from-ws push-data-from-ws)))
 
 (defn- client-ops->remote-ops
   [state ops]
@@ -315,7 +330,6 @@
               (<! (get-result-ch)))]
       (<! (p->c (op/<clean-ops repo op-keys)))
       (<! (<apply-remote-data state r))
-
       (prn :<client-op-update-handler r))))
 
 (defn <loop-for-rtc
@@ -327,24 +341,28 @@
     (reset! (:*graph-uuid state) graph-uuid)
     (reset! (:*repo state) repo)
     (let [{:keys [data-from-ws-pub client-op-update-chan]} state
-          push-data-from-ws-ch (chan (async/sliding-buffer 100))]
+          push-data-from-ws-ch (chan (async/sliding-buffer 100))
+          stop-rtc-loop-chan (chan)]
+      (reset! (:*stop-rtc-loop-chan state) (chan))
       (with-sub-data-from-ws state
-        (<! (ws/<send! @(:*ws state) {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
+        (<! (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
         (<! (get-result-ch)))
       (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
       (<! (go-loop []
-            (let [{:keys [push-data-from-ws client-op-update]}
+            (let [{:keys [push-data-from-ws client-op-update stop]}
                   (async/alt!
                     client-op-update-chan {:client-op-update true}
                     push-data-from-ws-ch ([v] {:push-data-from-ws v})
+                    stop-rtc-loop-chan {:stop true}
                     :priority true)]
               (cond
                 push-data-from-ws
-                (do (push-data-from-ws-handler state push-data-from-ws)
+                (do (<push-data-from-ws-handler state push-data-from-ws)
                     (recur))
                 client-op-update
                 (do (<! (<client-op-update-handler state))
                     (recur))
+                stop (prn :stop-loop-for-rtc graph-uuid)
                 :else
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
@@ -357,7 +375,8 @@
             :*repo (atom nil)
             :data-from-ws-chan data-from-ws-chan
             :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-            :client-op-update-chan (chan)
+            :*stop-rtc-loop-chan (atom nil)
+            :client-op-update-chan (chan 1)
             :*ws (atom ws)}))
 
 
@@ -370,6 +389,30 @@
           ws (ws/ws-listen user-uuid data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
       (init-state ws data-from-ws-chan user-uuid))))
+
+(defonce debug-state (atom nil))
+(defonce debug-graph-uuid "ed4520d5-7985-49bd-a2d7-cf28694e4f03")
+(defn ^:export debug-init
+  []
+  (go
+    (let [state (<! (<init))]
+      (reset! debug-state state)
+      (<! (<loop-for-rtc state debug-graph-uuid (state/get-current-repo)))
+      state)))
+
+(defn ^:export debug-stop-rtc-loop
+  []
+  (async/close! (:*stop-rtc-loop-chan @debug-state)))
+
+(defn ^:export download-graph
+  [repo graph-uuid]
+  (go
+    (let [state (<! (<init))]
+      (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
+
+(defn ^:export debug-client-push-updates
+  []
+  (async/put! (:client-op-update-chan @debug-state) true))
 
 (comment
   (go
