@@ -130,13 +130,18 @@
                 (into {})))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "templates" "Query table" "page"
-             "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
-             "Whiteboard/Property" "Community" "Tweet"}
-           (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                (map (comp :block/original-name first))
-                set))
-        "Has correct namespaces")
+    (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                       (filter (fn [x]
+                                 (when-not (:block/original-name (first x))
+                                   x))))
+          all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                              (map (comp :block/original-name first))
+                              set)]
+      (is (= #{"term" "setting" "book" "templates" "Query table" "page"
+               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
+               "Whiteboard/Property" "Community" "Tweet"}
+             all-namespaces)
+          (str "Has correct namespaces: " no-name)))
 
     (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
                      (map first)
@@ -153,7 +158,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 303 (count files)) "Correct file count")
-    (is (= 63632 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 63731 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 5866
            (ffirst

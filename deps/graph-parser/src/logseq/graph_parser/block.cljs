@@ -367,18 +367,11 @@
                           (map
                            (fn [item]
                              (let [macro? (and (map? item)
-                                               (= "macro" (:type item)))
-                                   item-name (if macro? (str "macro." (:name item) " " (string/join " " (:arguments item))) item)
-                                   ref-page (cond-> (page-name->map item-name with-id? db true date-formatter)
-                                              tag?
-                                              (assoc :block/type "class")
-
-                                              ;; FIXME: property key should be UUID for db graphs
-                                              macro?
-                                              (assoc :block/type "macro"
-                                                     :block/properties {:logseq.macro-name (:name item)
-                                                                        :logseq.macro-arguments (:arguments item)}))]
-                               ref-page)) col)))]
+                                               (= "macro" (:type item)))]
+                               (when-not macro?
+                                 (cond-> (page-name->map item with-id? db true date-formatter)
+                                   tag?
+                                   (assoc :block/type "class"))))) col)))]
       (assoc block
              :refs (ref->map-fn *refs false)
              :tags (ref->map-fn *structured-tags true)))))
