@@ -855,7 +855,6 @@
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
         [doc-password, set-doc-password!] (rum/use-state nil) ;; use nil to handle empty string
-        [password-model-close-fn, set-password-model-close-fn!] (rum/use-state nil)
         [initial-page, set-initial-page!] (rum/use-state 1)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
@@ -919,8 +918,6 @@
 
          (-> (get-doc$ (clj->js opts))
              (p/then (fn [doc]
-                       (when password-model-close-fn
-                         (password-model-close-fn))
                        (set-loader-state! {:pdf-document doc :status :completed})))
              (p/catch #(set-loader-state! {:error %})))
          #()))
@@ -955,7 +952,7 @@
              (state/set-modal! (fn [close-fn]
                                  (let [on-password-fn
                                        (fn [password]
-                                         (set-password-model-close-fn! close-fn)
+                                         (close-fn)
                                          (set-doc-password! password))]
                                    (pdf-password-input on-password-fn)))))
 
