@@ -386,7 +386,7 @@
   [block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx]
   (cond
     ;; replace existing block
-    (and (= outliner-op :paste)
+    (and (contains? #{:paste :insert-blocks} outliner-op)
          replace-empty-target?
          (string/blank? (:block/content target-block))
          (zero? idx))
@@ -600,10 +600,10 @@
                            parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                            left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
                        (cond->
-                         (merge block {:block/uuid uuid
-                                       :block/page target-page
-                                       :block/parent parent
-                                       :block/left left})
+                        (merge block {:block/uuid uuid
+                                      :block/page target-page
+                                      :block/parent parent
+                                      :block/left left})
                          ;; We'll keep the original `:db/id` if it's a move operation,
                          ;; e.g. internal cut or drag and drop shouldn't change the ids.
                          (not move?)
