@@ -3,4 +3,7 @@
  {logseq/graph-parser
   {:local/root "../deps/graph-parser"}
   logseq/publishing
-  {:local/root "../deps/publishing"}}}
+  {:local/root "../deps/publishing"}
+  logseq/frontend
+  {:local/root ".."
+   :deps/root "src/main"}}}

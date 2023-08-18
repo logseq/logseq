@@ -1,18 +1,16 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.modules.datascript-report.core :as ds-report]
             [frontend.modules.outliner.file :as file]
+            [frontend.modules.outliner.pipeline-util :as pipeline-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db.schema :as db-schema]
             [promesa.core :as p]
-            [cognitect.transit :as t]
             [frontend.persist-db :as persist-db]))
 
 (defn updated-page-hook
@@ -90,31 +88,6 @@
                          children-refs))))
                   blocks))))))
 
-(defn- filter-deleted-blocks
-  [datoms]
-  (keep
-   (fn [d]
-     (when (and (= :block/uuid (:a d)) (false? (:added d)))
-       (:v d)))
-   datoms))
-
-(defn- datom->av-vector
-  [db datom]
-  (let [a (:a datom)
-        v (:v datom)
-        v' (cond
-             (contains? db-schema/ref-type-attributes a)
-             (when-some [block-uuid-datom (first (d/datoms db :eavt v :block/uuid))]
-               [:block/uuid (str (:v block-uuid-datom))])
-
-             (and (= :block/uuid a) (uuid? v))
-             (str v)
-
-             :else
-             v)]
-    (when (some? v')
-      [a v'])))
-
 (defn invoke-hooks
   [tx-report]
   (let [tx-meta (:tx-meta tx-report)]
@@ -135,29 +108,13 @@
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)
             importing? (:graph/importing @state/state)
-            deleted-block-uuids (set (filter-deleted-blocks (:tx-data tx-report)))]
+            deleted-block-uuids (set (pipeline-util/filter-deleted-blocks (:tx-data tx-report)))]
 
         (when-not importing?
           (react/refresh! repo tx-report'))
 
         (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta)))
-          (let [t-writer (t/writer :json)
-                upsert-blocks (->> blocks
-                                   (remove (fn [b] (contains? deleted-block-uuids (:block/uuid b))))
-                                   (map (fn [b]
-                                          (let [datoms (d/datoms (:db-after tx-report') :eavt (:db/id b))]
-                                            (assoc b :datoms
-                                                   (->> datoms
-                                                        (keep
-                                                         (partial datom->av-vector (:db-after tx-report')))
-                                                        (t/write t-writer))))))
-                                   (map (fn [b]
-                                          (if-some [page-uuid (:block/uuid (d/entity (:db-after tx-report') (:db/id (:block/page b))))]
-                                            (assoc b :page_uuid page-uuid)
-                                            b)))
-                                   (map (fn [b]
-                                          (let [uuid (or (:block/uuid b) (random-uuid))]
-                                            (assoc b :block/uuid uuid)))))]
+          (let [upsert-blocks (pipeline-util/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))]
             (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
                     _ipc-result (comment ipc/ipc :db-transact-data repo
                                          (pr-str
