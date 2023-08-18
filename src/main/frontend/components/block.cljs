@@ -2355,9 +2355,6 @@
 
        (clock-summary-cp block body)]
 
-      (when (seq children)
-        (dnd-separator-wrapper block block-id slide? false true))
-
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
           (timestamp-cp block "DEADLINE" deadline-ast)))
@@ -2795,7 +2792,6 @@
         navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
         block (build-block config* block* {:navigating-block navigating-block :navigated? navigated?})
         {:block/keys [uuid pre-block? refs content properties]} block
-        {:block.temp/keys [top?]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         blocks-container-id (:blocks-container-id config)
@@ -2818,6 +2814,7 @@
         whiteboard-block? (pu/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
+        top? (zero? (:idx config))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs block)
         data-refs (build-refs-data-value children-refs)
@@ -3356,7 +3353,9 @@
                (not (:block-children? config))
                (assoc :block.temp/top? (zero? idx)
                       :block.temp/bottom? (= (count blocks) (inc idx))))
-        config' (cond-> (assoc config :block/uuid (:block/uuid item))
+        config' (cond-> (assoc config
+                               :block/uuid (:block/uuid item)
+                               :idx idx)
                   linked-block
                   (assoc :original-block original-block))]
     (rum/with-key (block-container config' item)
