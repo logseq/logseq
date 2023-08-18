@@ -4,11 +4,8 @@
             [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
-            [frontend.fs.test-node :as test-node]
-            [frontend.fs :as fs]
             [frontend.state :as state]
-            [frontend.test.helper :as test-helper]
-            [cljs.test :refer [async]]))
+            [frontend.test.helper :as test-helper]))
 
 (defn load-test-env
   [f]
@@ -34,13 +31,3 @@
     (reset-datascript repo)
     (let [r (f)]
       (reset-datascript repo) r)))
-
-(let [get-fs-fn (atom nil)]
-  (def redef-get-fs
-    "Redef fs/get-fs to an implementation that is valid for node tests"
-    {:before (fn []
-               (async done
-                      (reset! get-fs-fn fs/get-fs)
-                      (set! fs/get-fs (constantly (test-node/->NodeTestfs)))
-                      (done)))
-     :after (fn [] (set! fs/get-fs @get-fs-fn))}))

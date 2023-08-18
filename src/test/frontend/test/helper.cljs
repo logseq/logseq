@@ -11,7 +11,10 @@
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]))
 
-(defonce test-db (if (some? js/process.env.DB_GRAPH) "logseq_db_test-db" "test-db"))
+(def node? (exists? js/process))
+
+(defonce test-db
+  (if (and node? (some? js/process.env.DB_GRAPH)) "logseq_db_test-db" "test-db"))
 
 (defn start-test-db!
   []

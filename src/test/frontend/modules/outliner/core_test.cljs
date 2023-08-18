@@ -333,15 +333,12 @@
 (deftest test-paste-into-empty-block
   (testing "
     Paste a block into the first block (its content is empty)
-    [[22 [[2 [[3 [[4]
-                [5]]]
-            [6 [[7 [[8]]]]]
-            [9 [[10]
-                [11]]]]]
-        [12 [[13]
-             [14]
-             [15]]]
-        [16 [[17]]]]]]
+    [[22 [[2 [[3 [[4] [5]]]
+              [6 [[7
+                   [[8]]]]]
+              [9 [[10] [11]]]]]
+          [12 [[13] [14] [15]]]
+          [16 [[17]]]]]]
  "
     (transact-tree! tree)
     (db/transact! test-db [{:block/uuid 22
@@ -349,9 +346,9 @@
     (let [target-block (get-block 22)]
       (outliner-tx/transact!
        {:graph test-db}
-       (outliner-core/insert-blocks! [{:block/left [:block/uuid 1]
+       (outliner-core/insert-blocks! [{:block/left 1
                                        :block/content "test"
-                                       :block/parent [:block/uuid 1]
+                                       :block/parent 1
                                        :block/page 1}]
                                      target-block
                                      {:sibling? false
