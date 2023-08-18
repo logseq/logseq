@@ -97,7 +97,10 @@
                  [:small (t :on-boarding/section-btn-desc)]])]]]
            [:div.px-5
             (ui/admonition :warning
-                           (widgets/native-fs-api-alert))]))]
+                           (widgets/native-fs-api-alert))
+            [:div.choose.flex.flex-col.items-center
+             (ui/button "Open a DB-based Graph"
+                        :on-click #(state/pub-event! [:graph/new-db-graph]))]]))]
       [:section.b.flex.items-center.flex-col
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]

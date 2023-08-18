@@ -26,14 +26,15 @@
      (if (mobile-util/native-platform?)
        [:div.text-sm
         (ui/button "Open a local directory"
-          :on-click #(state/pub-event! [:graph/setup-a-repo]))
+                   :on-click #(state/pub-event! [:graph/setup-a-repo]))
         [:hr]
         [:div
          [:div.font-bold.mb-2 "I need some help"]
          [:p "👋 Join our Forum to chat with the makers and our helpful community members."]
          (ui/button "Join the community"
-           :href "https://discuss.logseq.com"
-           :target "_blank")]]
+                    :href "https://discuss.logseq.com"
+                    :target "_blank")]]
+       ;; non-mobile
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
          (when nfs-supported?
@@ -86,7 +87,10 @@
                              (keep generate-f)
                              (vec)
                              (interpose [:b.mt-10.mb-5.opacity-50 "OR"]))]
-    [:div.p-8.flex.flex-col available-graph]))
+    [:div.p-8.flex.flex-col
+     available-graph
+     (ui/button "Open a DB-based Graph"
+                :on-click #(state/pub-event! [:graph/new-db-graph]))]))
 
 (rum/defc demo-graph-alert
   []
