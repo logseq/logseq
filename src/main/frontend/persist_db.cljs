@@ -28,6 +28,7 @@
    (protocol/<unsafe-delete (get-impl) repo))
 
 (defn <new [repo]
+  {:pre [(<= (count repo) 56)]}
   (protocol/<new (get-impl) repo))
 
 (defn <transact-data [repo added-blocks deleted-block-uuids]
