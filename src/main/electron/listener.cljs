@@ -48,14 +48,14 @@
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (safe-api-call "file-watcher"
-                     (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)
-                             path (gp-util/path-normalize (:path payload))
-                             dir (:dir payload)
-                             payload (assoc payload :path (path/relative-path dir path))]
-                         (watcher-handler/handle-changed! type payload)
-                         (when (file-sync-handler/enable-sync?)
-                           (sync/file-watch-handler type payload)))))
+                 (fn [data]
+                   (let [{:keys [type payload]} (bean/->clj data)
+                         path (gp-util/path-normalize (:path payload))
+                         dir (:dir payload)
+                         payload (assoc payload :path (path/relative-path dir path))]
+                     (watcher-handler/handle-changed! type payload)
+                     (when (file-sync-handler/enable-sync?)
+                       (sync/file-watch-handler type payload)))))
 
   (safe-api-call "file-sync-progress"
                  (fn [data]
@@ -114,8 +114,8 @@
                        block-id
                        (if-let [block (db-model/get-block-by-uuid block-id)]
                          (if (pu/shape-block? block)
-                          (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
-                          (route-handler/redirect-to-page! block-id))
+                           (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
+                           (route-handler/redirect-to-page! block-id))
                          (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
 
                        file
@@ -127,8 +127,7 @@
                  (fn [data]
                    (let [{:keys [graph tx-data]} (bean/->clj data)
                          tx-data (db/string->db (:data tx-data))]
-                     (when-let [conn (db/get-db graph false)]
-                       (d/transact! conn tx-data {:dbsync? true}))
+                     (db/transact! graph tx-data {:dbsync? true})
                      (ui-handler/re-render-root!))))
 
   (safe-api-call "persistGraph"

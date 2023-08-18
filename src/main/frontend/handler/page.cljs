@@ -561,7 +561,7 @@
           (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
                 page-txs [{:db/id (:db/id page)
                            :block/namespace (:db/id namespace-block)}]]
-            (d/transact! (db/get-db repo false) page-txs))))
+            (db/transact! repo page-txs))))
 
       old-namespace?
       ;; retract namespace
@@ -603,7 +603,7 @@
                                   :block/original-name new-name}]
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
-        (d/transact! (db/get-db repo false) page-txs)
+        (db/transact! repo page-txs)
 
         (when (fs-util/create-title-property? new-page-name)
           (page-property/add-property! new-page-name :title new-name))
@@ -720,7 +720,7 @@
 
                              (= (:block/parent block) {:db/id from-id})
                              (assoc :block/parent {:db/id to-id})))) blocks)]
-      (d/transact! conn tx-data)
+      (db/transact! repo tx-data)
       (outliner-file/sync-to-file {:db/id to-id})
 
       (rename-update-refs! from-page
@@ -770,7 +770,7 @@
                                     (assoc :block/parent {:db/id to-id})))) blocks)
           replace-ref-tx-data (db-replace-ref repo from-page to-page)
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
-      (d/transact! conn tx-data)
+      (db/transact! repo tx-data)
       (rename-update-namespace! from-page
                                 (util/get-page-original-name from-page)
                                 (util/get-page-original-name to-page)))

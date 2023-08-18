@@ -126,8 +126,7 @@
 
 (defn- transact!
   [txs tx-meta]
-  (let [conn (conn/get-db false)]
-    (d/transact! conn txs tx-meta)))
+  (db/transact! (state/get-current-repo) txs tx-meta))
 
 (defn- page-pop-undo
   [page-id]

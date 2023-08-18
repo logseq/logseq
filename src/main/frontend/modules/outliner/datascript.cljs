@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.datascript
   (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
             [frontend.db :as db]
             [frontend.modules.outliner.pipeline :as pipelines]
             [frontend.modules.editor.undo-redo :as undo-redo]
@@ -176,8 +175,7 @@
 
       (try
         (let [repo (get opts :repo (state/get-current-repo))
-              conn (conn/get-db repo false)
-              rs (d/transact! conn txs (assoc opts :outliner/transact? true))
+              rs (db/transact! repo txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
           ;; TODO: disable this when db is stable
           (when config/dev? (validate-db! rs))
