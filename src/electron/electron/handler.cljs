@@ -6,6 +6,7 @@
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
             ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
@@ -619,6 +620,7 @@
   (.close win))
 
 (defmethod handle :db-restored [^js win]
+  (.manage (windowStateKeeper) win)
   (.show win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
