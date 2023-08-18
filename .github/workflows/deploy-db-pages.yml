@@ -2,7 +2,7 @@ name: Deploy DB Version to Cloud
 
 on:
   push:
-    branches: ["feat/db-pages"]
+    branches: ["feat/db"]
 
 env:
   CLOJURE_VERSION: "1.10.1.763"
