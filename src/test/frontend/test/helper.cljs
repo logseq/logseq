@@ -5,7 +5,7 @@
             [frontend.db.conn :as conn]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db :as db]
             [frontend.date :as date]
             [datascript.core :as d]
@@ -132,7 +132,7 @@
                               (into {}))
           ;; from upsert-property!
           new-properties-tx (mapv (fn [[prop-name uuid]]
-                                    (outliner-core/block-with-timestamps
+                                    (sqlite-util/block-with-timestamps
                                      {:block/uuid uuid
                                       :block/schema {:type :default}
                                       :block/original-name (name prop-name)
@@ -149,7 +149,7 @@
                           (map #(vector % (random-uuid)))
                           (into {}))
           page-tx (mapv (fn [[page-name uuid]]
-                          (outliner-core/block-with-timestamps
+                          (sqlite-util/block-with-timestamps
                            {:block/name (string/lower-case page-name)
                             :block/original-name page-name
                             :block/uuid uuid}))

@@ -14,10 +14,10 @@
             [goog.object :as gobj]
             [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.restore :as sqlite-restore]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [frontend.modules.outliner.core :as outliner-core]
             [logseq.graph-parser.property :as gp-property]))
 
 (defn- old-schema?
@@ -81,7 +81,7 @@
                       :block/name (util/page-name-sanity-lc k-name)
                       :block/uuid (:block/uuid property)
                       :block/type "property"}
-                     (outliner-core/block-with-timestamps
+                     (sqlite-util/block-with-timestamps
                       {:block/schema schema
                        :block/original-name (or original-name k-name)
                        :block/name (util/page-name-sanity-lc k-name)

@@ -12,6 +12,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.common.repo :as repo-common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -27,7 +28,6 @@
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.property :as gp-property]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -36,9 +36,7 @@
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
             [frontend.db.react :as react]
-            [frontend.db.listener :as db-listener]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.db.rtc.core :as rtc-core]))
+            [frontend.db.listener :as db-listener]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -550,26 +548,7 @@
           _ (route-handler/redirect-to-home!)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
                           {:skip-persist? true})
-          initial-files [{:block/uuid (db/new-block-id)
-                          :file/path (str "logseq/" "config.edn")
-                          :file/content config/config-default-content}
-                         {:block/uuid (db/new-block-id)
-                          :file/path (str "logseq/" "custom.css")
-                          :file/content ""}
-                         {:block/uuid (db/new-block-id)
-                          :file/path (str "logseq/" "custom.js")
-                          :file/content ""}]
-          default-properties (map
-                              (fn [[k-keyword {:keys [schema original-name]}]]
-                                (let [k-name (name k-keyword)]
-                                  (outliner-core/block-with-timestamps
-                                   {:block/schema schema
-                                    :block/original-name (or original-name k-name)
-                                    :block/name (util/page-name-sanity-lc k-name)
-                                    :block/uuid (db/new-block-id)
-                                    :block/type "property"})))
-                              gp-property/db-built-in-properties)
-          initial-data (concat initial-files default-properties)
+          initial-data (repo-common-handler/build-db-initial-data config/config-default-content)
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph

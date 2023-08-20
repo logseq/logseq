@@ -57,3 +57,13 @@
                    [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
                   [a v])))
          (transit/write t-writer))))
+
+(defn block-with-timestamps
+  "Copy of outliner-core/block-with-timestamps. Too basic to couple this to main app"
+  [block]
+  (let [updated-at (time-ms)
+        block (cond->
+               (assoc block :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))]
+    block))

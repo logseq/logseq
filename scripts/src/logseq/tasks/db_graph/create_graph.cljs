@@ -1,23 +1,26 @@
-(ns create-graph
-  "Script that generates a DB graph using an EDN format"
-  (:require [nbb.core :as nbb]
-            [logseq.db.sqlite.db :as sqlite-db]
+(ns logseq.tasks.db-graph.create-graph
+  "This ns provides fns to create a DB graph using EDN. See `init-conn` for
+  initializing a DB graph with a datascript connection that syncs to a sqlite DB
+  at the given directory. See `create-blocks-tx` for the EDN format to create a
+  graph. This ns can likely be used to also update graphs"
+  (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
             [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
             ["fs" :as fs]
-            ["path" :as path]
-            ;; These namespaces should move to deps/
+            ["path" :as node-path]
+            [nbb.classpath :as cp]
+            ;; TODO: Move these namespaces to more stable deps/ namespaces
             [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.modules.outliner.pipeline-util :as pipeline-util]))
+            [frontend.modules.outliner.pipeline-util :as pipeline-util]
+            [frontend.handler.common.repo :as repo-common-handler]))
 
 (defn- invoke-hooks
   "Modified copy frontend.modules.outliner.pipeline/invoke-hooks that doesn't
-  handle path-ref recalculation or persist to app db"
+  handle :block/path-refs recalculation"
   [{:keys [db-after] :as tx-report}]
-  ;; TODO: Add :block/path-refs to blocks
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
         deleted-block-uuids (set (pipeline-util/filter-deleted-blocks (:tx-data tx-report)))
         upsert-blocks (pipeline-util/build-upsert-blocks blocks deleted-block-uuids db-after)]
@@ -32,6 +35,36 @@
   (when (seq blocks)
     (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
       (sqlite-db/upsert-blocks! db-name (bean/->js blocks')))))
+
+(defn- find-on-classpath [rel-path]
+  (some (fn [dir]
+          (let [f (node-path/join dir rel-path)]
+            (when (fs/existsSync f) f)))
+        (string/split (cp/get-classpath) #":")))
+
+(defn- setup-init-data
+  "Setup initial data same as frontend.handler.repo/create-db"
+  [conn]
+  ;; App doesn't persist :db/type but it does load it each time
+  (d/transact! conn [{:db/id -1 :db/ident :db/type :db/type "db"}])
+  (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
+                           (do (println "Setting graph's config to empty since no templates/config.edn was found.")
+                               "{}"))]
+    (d/transact! conn (repo-common-handler/build-db-initial-data config-content))))
+
+(defn init-conn
+  "Create sqlite DB, initialize datascript connection and sync listener and then
+  transacts initial data"
+  [dir db-name]
+  (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true})
+  (sqlite-db/open-db! dir db-name)
+  ;; Same order as frontend.db.conn/start!
+  (let [conn (ldb/start-conn :create-default-pages? false)]
+    (d/listen! conn :persist-to-sqlite (fn persist-to-sqlite [tx-report]
+                                         (update-sqlite-db db-name (invoke-hooks tx-report))))
+    (ldb/create-default-pages! conn)
+    (setup-init-data conn)
+    conn))
 
 (defn- translate-property-value
   "Translates a property value as needed. A value wrapped in vector indicates a reference type
@@ -81,9 +114,29 @@
      :page-uuids page-uuids
      :block-uuids block-uuids}))
 
-(defn- create-blocks-tx
-  "For a map of pages to their blocks, this creates frontend blocks assuming only top level blocks
-   are desired. Anything more complex starts to recreate outliner namespaces"
+(defn create-blocks-tx
+  "Given an EDN map for defining pages, blocks and properties, this creates a
+  vector of transactable data for use with d/transact!. The EDN map is basic and
+  only supports defining blocks at the top level. The EDN map has the following keys:
+
+   * :pages-and-blocks - This is a vector of maps containing a :page key and optionally a :blocks
+     key when defining a page's blocks. More about each key:
+     * :page - This is a datascript attribute map e.g. `{:block/name \"foo\"}` .
+       :block/name is required and :properties can be passed to define page properties
+     * :blocks - This is a vec of datascript attribute maps e.g. `{:block/content \"bar\"}`.
+       :block/content is required and :properties can be passed to define block properties
+   * :properties - This is a map to configure properties where the keys are property names
+     and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`
+
+   The :properties for :pages-and-blocks is a map of property names to property
+   values.  Multiple property values for a many cardinality property are defined
+   as a set. The following property types are supported: :default, :url,
+   :checkbox, :number, :page and :block. :checkbox and :number values are written
+   as booleans and integers. :page and :block are references that are written as
+   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`
+
+   Limitations:
+   * Page and block properties do not update :block/refs and :block/path-refs yet"
   [{:keys [pages-and-blocks properties]}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
@@ -137,86 +190,3 @@
                        blocks))))
           pages-and-blocks'))]
     (into pages-and-blocks-tx new-properties-tx)))
-
-(defn- setup-db-graph
-  "Create sqlite DB and initialize datascript connection to sync to it"
-  [dir db-name]
-  (fs/mkdirSync (path/join dir db-name) #js {:recursive true})
-  (sqlite-db/open-db! dir db-name)
-  ;; Same order as frontend.db.conn/start!
-  (let [conn (ldb/start-conn :create-default-pages? false)]
-    (d/listen! conn :persist-to-sqlite (fn persist-to-sqlite [tx-report]
-                                         (update-sqlite-db db-name (invoke-hooks tx-report))))
-    (ldb/create-default-pages! conn)
-    conn))
-
-(defn- date-journal-title [date]
-  (let [title (.toLocaleString date "en-US" #js {:month "short" :day "numeric" :year "numeric"})
-        suffixes {1 "th" 21 "th" 31 "th" 2 "nd" 22 "nd" 3 "rd" 33 "rd"}]
-    (string/lower-case
-     (string/replace-first title #"(\d+)" (str "$1" (suffixes (.getDate date) "th"))))))
-
-(defn- date-journal-day [date]
-  (js/parseInt (str (.toLocaleString date "en-US" #js {:year "numeric"})
-                    (.toLocaleString date "en-US" #js {:month "2-digit"})
-                    (.toLocaleString date "en-US" #js {:day "2-digit"}))))
-
-(defn- create-init-data
-  []
-  {:pages-and-blocks
-   [{:page
-     (let [today (new js/Date)]
-       {:block/name (date-journal-title today) :block/journal? true :block/journal-day (date-journal-day today)})
-     :blocks
-     [{:block/content "[[Properties]]"}
-      {:block/content "[[Queries]]"}]}
-    {:page {:block/name "properties"}
-     :blocks
-     [{:block/content "default property block" :properties {:default "haha"}}
-      {:block/content "url property block" :properties {:url "https://logseq.com"}}
-      {:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
-      {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
-      {:block/content "checkbox property block" :properties {:checkbox true}}
-      {:block/content "number property block" :properties {:number 5}}
-      {:block/content "number-many property block" :properties {:number-many #{5 10}}}
-      {:block/content "page property block" :properties {:page [:page "page 1"]}}
-      {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-      {:block/content "block property block" :properties {:block [:block "yee"]}}
-      {:block/content "block-many property block" :properties {:block-many #{[:block "yee"] [:block "haw"]}}}]}
-    {:page {:block/name "queries"}
-     :blocks
-     [{:block/content "{{query (property :default \"haha\")}}"}
-      {:block/content "{{query (property :url \"https://logseq.com\")}}"}
-      {:block/content "{{query (property :default-many \"woo\")}}"}
-      {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
-      {:block/content "{{query (property :checkbox true)}}"}
-      {:block/content "{{query (property :number 5)}}"}
-      {:block/content "{{query (property :number-many 10)}}"}
-      {:block/content "{{query (property :page \"Page 1\")}}"}
-      {:block/content "{{query (property :page-many \"Page 2\")}}"}]}
-    {:page {:block/name "page 1"}
-     :blocks
-     [{:block/content "yee"}
-      {:block/content "haw"}]}
-    {:page {:block/name "page 2"}}]
-   :properties
-   (->> [:default :url :checkbox :number :page :block]
-        (mapcat #(cond-> [[% {:block/schema {:type %}}]]
-                   (not= % :checkbox)
-                   (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
-        (into {}))})
-
-(defn -main [args]
-  (when (not= 1 (count args))
-    (println "Usage: $0 GRAPH-DIR")
-    (js/process.exit 1))
-  (let [[dir db-name] ((juxt path/dirname path/basename) (first args))
-        conn (setup-db-graph dir db-name)
-        blocks-tx (create-blocks-tx (create-init-data))]
-    (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
-             (count (filter :block/content blocks-tx)) "blocks ...")
-    (d/transact! conn blocks-tx)
-    (println "Created graph" (str db-name "!"))))
-
-(when (= nbb/*file* (:file (meta #'-main)))
-  (-main *command-line-args*))
