@@ -11,7 +11,7 @@
             [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.db.validate :as db-validate]
+            [frontend.db.fix :as db-fix]
             [frontend.handler.file-based.property.util :as property-util]))
 
 (defn new-outliner-txs-state [] (atom []))
@@ -129,16 +129,8 @@
                                       :db/id)))
                            (remove nil?)
                            (distinct))]
-    (reduce
-     (fn [_ page-id]
-       (if-let [result (db-validate/broken-page? db-after page-id)]
-         (do
-           ;; TODO: revert db changes
-           (assert (false? result) (str "Broken page: " result))
-           (reduced false))
-         true))
-     true
-     changed-pages)))
+    (doseq [changed-page-id changed-pages]
+      (db-fix/fix-page-if-broken! db-after changed-page-id {}))))
 
 (defn transact!
   [txs opts before-editor-cursor]
