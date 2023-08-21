@@ -9,7 +9,7 @@
 
 (defn- date-journal-title [date]
   (let [title (.toLocaleString date "en-US" #js {:month "short" :day "numeric" :year "numeric"})
-        suffixes {1 "th" 21 "th" 31 "th" 2 "nd" 22 "nd" 3 "rd" 33 "rd"}]
+        suffixes {1 "st" 21 "st" 31 "st" 2 "nd" 22 "nd" 3 "rd" 33 "rd"}]
     (string/lower-case
      (string/replace-first title #"(\d+)" (str "$1" (suffixes (.getDate date) "th"))))))
 

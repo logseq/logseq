@@ -2,7 +2,8 @@
   "This ns provides fns to create a DB graph using EDN. See `init-conn` for
   initializing a DB graph with a datascript connection that syncs to a sqlite DB
   at the given directory. See `create-blocks-tx` for the EDN format to create a
-  graph. This ns can likely be used to also update graphs"
+  graph. Note that block creation is limited to top level blocks for now. This
+  ns can likely be used to also update graphs"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
@@ -114,6 +115,34 @@
      :page-uuids page-uuids
      :block-uuids block-uuids}))
 
+(defn- build-property-refs [properties property-db-ids]
+  (mapv
+   (fn [prop-name]
+     {:db/id
+      (or (property-db-ids (name prop-name))
+          (throw (ex-info (str "No :db/id for property '" prop-name "'") {:property prop-name})))})
+   (keys properties)))
+
+(def block-count (atom 100001))
+(def new-db-id #(swap! block-count inc))
+
+(defn- ->block-tx [m uuid-maps property-db-ids page-id last-block]
+  (let [property-refs (when (seq (:properties m))
+                        (build-property-refs (:properties m) property-db-ids))]
+    (merge (dissoc m :properties)
+           (sqlite-util/block-with-timestamps
+            {:db/id (new-db-id)
+             :block/format :markdown
+             :block/path-refs (cond-> [{:db/id page-id}]
+                                (seq (:properties m))
+                                (into property-refs))
+             :block/page {:db/id page-id}
+             :block/left {:db/id (or (:db/id last-block) page-id)}
+             :block/parent {:db/id page-id}})
+           (when (seq (:properties m))
+             {:block/properties (->block-properties-tx (:properties m) uuid-maps)
+              :block/refs property-refs}))))
+
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
   vector of transactable data for use with d/transact!. The EDN map is basic and
@@ -133,10 +162,7 @@
    as a set. The following property types are supported: :default, :url,
    :checkbox, :number, :page and :block. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
-   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`
-
-   Limitations:
-   * Page and block properties do not update :block/refs and :block/path-refs yet"
+   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
   [{:keys [pages-and-blocks properties]}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
@@ -145,11 +171,10 @@
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
         {:keys [property-uuids] :as uuid-maps} (create-uuid-maps pages-and-blocks')
-        page-count (atom 100001)
-        new-db-id #(swap! page-count inc)
         created-at (js/Date.now)
         new-properties-tx (mapv (fn [[prop-name uuid]]
-                                  {:block/uuid uuid
+                                  {:db/id (new-db-id)
+                                   :block/uuid uuid
                                    :block/schema (merge {:type :default}
                                                         (get-in properties [prop-name :block/schema]))
                                    :block/original-name (name prop-name)
@@ -158,6 +183,9 @@
                                    :block/created-at created-at
                                    :block/updated-at created-at})
                                 property-uuids)
+        property-db-ids (->> new-properties-tx
+                             (map (juxt :block/original-name :db/id))
+                             (into {}))
         pages-and-blocks-tx
         (vec
          (mapcat
@@ -171,21 +199,14 @@
                         :block/created-at created-at
                         :block/updated-at created-at}
                        (when (seq (:properties page))
-                         {:block/properties (->block-properties-tx (:properties page) uuid-maps)}))]
+                         {:block/properties (->block-properties-tx (:properties page) uuid-maps)
+                          :block/refs (build-property-refs (:properties page) property-db-ids)
+                          ;; app doesn't do this yet but it should to link property to page
+                          :block/path-refs (build-property-refs (:properties page) property-db-ids)}))]
                ;; blocks tx
                (reduce (fn [acc m]
                          (conj acc
-                               (merge (dissoc m :properties)
-                                      {:db/id (new-db-id)
-                                       :block/format :markdown
-                                       :block/path-refs [{:db/id page-id}]
-                                       :block/page {:db/id page-id}
-                                       :block/left {:db/id (or (:db/id (last acc)) page-id)}
-                                       :block/parent {:db/id page-id}
-                                       :block/created-at created-at
-                                       :block/updated-at created-at}
-                                      (when (seq (:properties m))
-                                        {:block/properties (->block-properties-tx (:properties m) uuid-maps)}))))
+                               (->block-tx m uuid-maps property-db-ids page-id (last acc))))
                        []
                        blocks))))
           pages-and-blocks'))]
