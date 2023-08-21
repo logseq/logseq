@@ -2,40 +2,18 @@
   "This ns provides fns to create a DB graph using EDN. See `init-conn` for
   initializing a DB graph with a datascript connection that syncs to a sqlite DB
   at the given directory. See `create-blocks-tx` for the EDN format to create a
-  graph. Note that block creation is limited to top level blocks for now. This
-  ns can likely be used to also update graphs"
+  graph and current limitations"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs-bean.core :as bean]
+            [logseq.tasks.db-graph.persist-graph :as persist-graph]
             [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
             ["fs" :as fs]
             ["path" :as node-path]
             [nbb.classpath :as cp]
-            ;; TODO: Move these namespaces to more stable deps/ namespaces
-            [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.modules.outliner.pipeline-util :as pipeline-util]
+            ;; TODO: Move this namespace to more stable deps/ namespaces
             [frontend.handler.common.repo :as repo-common-handler]))
-
-(defn- invoke-hooks
-  "Modified copy frontend.modules.outliner.pipeline/invoke-hooks that doesn't
-  handle :block/path-refs recalculation"
-  [{:keys [db-after] :as tx-report}]
-  (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-        deleted-block-uuids (set (pipeline-util/filter-deleted-blocks (:tx-data tx-report)))
-        upsert-blocks (pipeline-util/build-upsert-blocks blocks deleted-block-uuids db-after)]
-    {:blocks upsert-blocks
-     :deleted-block-uuids deleted-block-uuids}))
-
-(defn- update-sqlite-db
-  "Modified copy of :db-transact-data defmethod in electron.handler"
-  [db-name {:keys [blocks deleted-block-uuids]}]
-  (when (seq deleted-block-uuids)
-    (sqlite-db/delete-blocks! db-name deleted-block-uuids))
-  (when (seq blocks)
-    (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
-      (sqlite-db/upsert-blocks! db-name (bean/->js blocks')))))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -61,8 +39,7 @@
   (sqlite-db/open-db! dir db-name)
   ;; Same order as frontend.db.conn/start!
   (let [conn (ldb/start-conn :create-default-pages? false)]
-    (d/listen! conn :persist-to-sqlite (fn persist-to-sqlite [tx-report]
-                                         (update-sqlite-db db-name (invoke-hooks tx-report))))
+    (persist-graph/add-listener conn db-name)
     (ldb/create-default-pages! conn)
     (setup-init-data conn)
     conn))
@@ -145,8 +122,15 @@
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
-  vector of transactable data for use with d/transact!. The EDN map is basic and
-  only supports defining blocks at the top level. The EDN map has the following keys:
+  vector of transactable data for use with d/transact!. The blocks that can be created
+   have the following limitations:
+
+ * Only top level blocks can be easily defined. Other level blocks can be
+   defined but they require explicit setting of attributes like :block/left and :block/parent
+ * Block content containing page refs or tags is not supported yet
+ * Property types :object and :date aren't supported yet
+
+   The EDN map has the following keys:
 
    * :pages-and-blocks - This is a vector of maps containing a :page key and optionally a :blocks
      key when defining a page's blocks. More about each key:

@@ -8,7 +8,7 @@ Most bb scripts live under `src/` and are defined as bb tasks. See [babashka tas
 
 ### Nbb scripts
 
-Before running any [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be sure to have node >= 18.14 installed as well as a recent [babashka](https://github.com/babashka/babashka) for managing the dependencies in `nbb.edn`. Then `yarn install` to install dependencies
+Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be sure to have node >= 18.14 installed as well as a recent [babashka](https://github.com/babashka/babashka) for managing the dependencies in `nbb.edn`. Then `yarn install` to install dependencies
 
 #### Create graph scripts
 
@@ -20,7 +20,7 @@ concise EDN map for graph generation. For example, the
 a variety of properties:
 
 ```
-$ yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ~/logseq/graphs/woot
+$ yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs woot
 Generating 16 pages and 24 blocks ...
 Created graph woot!
 ```
@@ -30,3 +30,19 @@ both single and many cardinality. It also includes queries for most of these
 properties. Read the docs in
 [logseq.tasks.db-graph.create-graph](src/logseq/tasks/db_graph/create_graph.cljs)
 for specifics on the EDN map.
+
+#### Update graph scripts
+
+For database graphs, it is possible to update graphs with the
+[logseq.tasks.db-graph.persist-graph](src/logseq/tasks/db_graph/persist_graph.cljs)
+ns. This ns makes it easy to write scripts that update graphs using datascript
+and logseq's schema. For example, the `update_graph_to_add_todos.cljs` script
+uses this ns to update blocks with a specified query with a `TODO` task marker:
+
+```
+$ yarn -s nbb-logseq src/logseq/tasks/db_graph/update_graph_to_add_todos.cljs woot '[:find (pull ?b [*]) :where (has-property ?b :url-many)]'
+Updated 1 block(s) with a 'TODO' for graph woot!
+```
+
+This script updates a DB graph by finding all blocks that match the given
+property query and marking them as `TODO`.

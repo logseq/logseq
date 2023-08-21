@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
+            ["os" :as os]
             [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
@@ -67,7 +68,10 @@
   (when (not= 1 (count args))
     (println "Usage: $0 GRAPH-DIR")
     (js/process.exit 1))
-  (let [[dir db-name] ((juxt node-path/dirname node-path/basename) (first args))
+  (let [graph-dir (first args)
+        [dir db-name] (if (string/includes? graph-dir "/")
+                        ((juxt node-path/dirname node-path/basename) graph-dir)
+                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
         blocks-tx (create-graph/create-blocks-tx (create-init-data))]
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
