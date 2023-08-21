@@ -266,10 +266,12 @@
                               (context-menu-content db-id idx block-type collapsed? block-count close-fn)))
                [:button.button.close {:title (t :right-side-bar/pane-close)
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
-             [:div.scrollbar-spacing.p-4 {:role "region"
+             [:div.pt-4.p-1 {:role "region"
                                           :id (str "sidebar-panel-content-" idx)
                                           :aria-labelledby (str "sidebar-panel-header-" idx)
-                                          :class (if collapsed? "hidden" "initial")}
+                                          :class (util/classnames [{:hidden collapsed?
+                                                                    :initial (not collapsed?)
+                                                                    :p-4 (not (contains? #{:page :block :contents} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))
