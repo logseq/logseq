@@ -18,14 +18,8 @@
         blocks (:block/_parent parent)]
     (when (seq blocks)
       (let [children-ids (set (map :db/id blocks))
-            full-ids (conj children-ids parent-id)
-            left-ids (set (keep (fn [block]
-                                  (let [left-id (:db/id (:block/left block))]
-                                    (when (and (not= left-id (:db/id block))
-                                               (contains? full-ids left-id))
-                                      left-id))) blocks))
-            broken-chain? (not (and (set/subset? left-ids full-ids)
-                                    (= 1 (- (count full-ids) (count left-ids)))))]
+            sorted (db-model/sort-by-left blocks parent)
+            broken-chain? (not= (count sorted) (count blocks))]
         (when broken-chain?
           (let [error-data {:parent-id parent-id}]
             (prn :debug "Broken chain:")
