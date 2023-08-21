@@ -25,67 +25,7 @@
                                                (contains? full-ids left-id))
                                       left-id))) blocks))
             broken-chain? (not (and (set/subset? left-ids full-ids)
-                                    (= 1 (- (count full-ids) (count left-ids)))))
-            first-child-id (:db/id (db-model/get-by-parent-&-left db parent-id parent-id))
-            *ids (atom children-ids)
-            sections (loop [sections []]
-                       (if (seq @*ids)
-                         (let [last-section (last sections)
-                               current-section (if (seq (last sections))
-                                                 last-section
-                                                 (if (and (empty? sections) first-child-id)
-                                                   (do
-                                                     (swap! *ids disj first-child-id)
-                                                     [first-child-id])
-                                                   (do
-                                                     (let [id (first @*ids)]
-                                                       (swap! *ids disj id)
-                                                       [id]))))
-                               section-with-left (or
-                                                  (when-let [left-id (:db/id (:block/left (db/entity (first current-section))))]
-                                                    (swap! *ids disj left-id)
-                                                    (when (and
-                                                           (not (contains? (set current-section) left-id)) ; circle
-                                                           (contains? children-ids left-id))
-                                                      (vec (cons left-id current-section))))
-                                                  current-section)
-                               section-with-right (or
-                                                   (when-let [right-id (:db/id (db-model/get-right-sibling db (last section-with-left)))]
-                                                     (swap! *ids disj right-id)
-                                                     (when (and (not (contains? (set section-with-left) right-id)) ; circle
-                                                                (contains? children-ids right-id))
-                                                       (conj section-with-left right-id)))
-                                                   section-with-left)
-                               new-sections (cond
-                                              (empty? last-section)
-                                              (conj (vec (butlast sections)) section-with-right)
-
-                                              (= section-with-right current-section)
-                                              (conj sections [])
-
-                                              :else
-                                              (conj (vec (butlast sections)) section-with-right))]
-                           (recur new-sections))
-                         sections))
-            tx-data (->>
-                     (map-indexed
-                      (fn [idx section]
-                        (map-indexed
-                         (fn [idx' item]
-                           (let [m {:db/id item}
-                                 left (cond
-                                        (and (zero? idx) (zero? idx'))
-                                        parent-id
-
-                                        (and (not (zero? idx)) (zero? idx')) ; first one need to connected to the last section
-                                        (last (nth sections (dec idx)))
-
-                                        (> idx' 0)
-                                        (nth section (dec idx')))]
-                             (assoc m :block/left left)))
-                         section))
-                      sections)
-                     (apply concat))]
+                                    (= 1 (- (count full-ids) (count left-ids)))))]
         (when broken-chain?
           (let [error-data {:parent-id parent-id}]
             (prn :debug "Broken chain:")
@@ -93,8 +33,67 @@
              [:div
               (str "Broken chain detected:\n" error-data)]
              :error
-             false)))
-        tx-data))))
+             false))
+          (let [first-child-id (:db/id (db-model/get-by-parent-&-left db parent-id parent-id))
+                *ids (atom children-ids)
+                sections (loop [sections []]
+                           (if (seq @*ids)
+                             (let [last-section (last sections)
+                                   current-section (if (seq (last sections))
+                                                     last-section
+                                                     (if (and (empty? sections) first-child-id)
+                                                       (do
+                                                         (swap! *ids disj first-child-id)
+                                                         [first-child-id])
+                                                       (do
+                                                         (let [id (first @*ids)]
+                                                           (swap! *ids disj id)
+                                                           [id]))))
+                                   section-with-left (or
+                                                      (when-let [left-id (:db/id (:block/left (db/entity (first current-section))))]
+                                                        (swap! *ids disj left-id)
+                                                        (when (and
+                                                               (not (contains? (set current-section) left-id)) ; circle
+                                                               (contains? children-ids left-id))
+                                                          (vec (cons left-id current-section))))
+                                                      current-section)
+                                   section-with-right (or
+                                                       (when-let [right-id (:db/id (db-model/get-right-sibling db (last section-with-left)))]
+                                                         (swap! *ids disj right-id)
+                                                         (when (and (not (contains? (set section-with-left) right-id)) ; circle
+                                                                    (contains? children-ids right-id))
+                                                           (conj section-with-left right-id)))
+                                                       section-with-left)
+                                   new-sections (cond
+                                                  (empty? last-section)
+                                                  (conj (vec (butlast sections)) section-with-right)
+
+                                                  (= section-with-right current-section)
+                                                  (conj sections [])
+
+                                                  :else
+                                                  (conj (vec (butlast sections)) section-with-right))]
+                               (recur new-sections))
+                             sections))]
+            (->>
+             (map-indexed
+              (fn [idx section]
+                (map-indexed
+                 (fn [idx' item]
+                   (let [m {:db/id item}
+                         left (cond
+                                (and (zero? idx) (zero? idx'))
+                                parent-id
+
+                                (and (not (zero? idx)) (zero? idx')) ; first one need to connected to the last section
+                                (last (nth sections (dec idx)))
+
+                                (> idx' 0)
+                                (nth section (dec idx')))]
+                     (assoc m :block/left left)))
+                 section))
+              sections)
+             (apply concat))))))))
 
 (defn- fix-broken-chain
   [db parent-left->es]
