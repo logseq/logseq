@@ -662,6 +662,7 @@
                          (concat (drop-last prev) [from (last prev)] next)
                          (concat prev [from] next))
                        (remove nil?)
+                       (mapv util/safe-page-name-sanity-lc)
                        distinct
                        vec)]
         (config-handler/set-config! :favorites favorites)))))
