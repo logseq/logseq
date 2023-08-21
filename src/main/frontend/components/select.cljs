@@ -71,7 +71,7 @@
                           (fn? transform-fn)
                           (transform-fn @input))
                         (remove nil?))
-        exact-match? (contains? (set (map (comp string/lower-case extract-fn) search-result'))
+        exact-match? (contains? (set (map (comp string/lower-case str extract-fn) search-result'))
                                 (string/lower-case @input))
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
