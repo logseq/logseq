@@ -1,7 +1,6 @@
 (ns frontend.handler.property.util
   (:require [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.config :as config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]
@@ -24,6 +23,11 @@
   (let [block (db/entity (:db/id block))]
     (when-let [properties (:block/properties block)]
       (lookup properties key))))
+
+(defn get-property-name
+  "Get a property's name given its uuid"
+  [uuid]
+  (:block/original-name (db/entity [:block/uuid uuid])))
 
 (defn block->shape [block]
   (get-property block :logseq.tldraw.shape))
