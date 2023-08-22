@@ -656,7 +656,8 @@
                                       (let [page-cp (state/get-page-blocks-cp)]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name redirect-page-name
-                                                  :sidebar? sidebar? :preview? true}))])))]
+                                                  :sidebar? sidebar?
+                                                  :preview? true}))])))]
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref

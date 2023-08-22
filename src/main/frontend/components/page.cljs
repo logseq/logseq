@@ -293,7 +293,7 @@
   (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property?]}]
+  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           *hover? (::hover? state)
@@ -345,10 +345,11 @@
                                :page-name page-name
                                :old-name old-name
                                :untitled? untitled?
-                               :whiteboard-page? whiteboard-page?}))
+                               :whiteboard-page? whiteboard-page?
+                               :preview? preview?}))
          [:span.title.block
           {:on-click (fn []
-                       (when (state/home?)
+                       (when (and (state/home?) (not preview?))
                          (route-handler/redirect-to-page! page-name)))
            :data-value @*input-value
            :data-ref   page-name
@@ -487,7 +488,7 @@
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::configure-show?)
-  [state {:keys [repo page-name] :as option}]
+  [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-block-uuid-by-block-route-name state)
                                 ;; is page name or uuid
@@ -504,7 +505,6 @@
           built-in-property? (and (= "property" (:block/type page))
                                   (contains? gp-property/db-built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
-          sidebar? (:sidebar? option)
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
@@ -554,7 +554,8 @@
              (when-not whiteboard?
                (page-title page-name icon title {:fmt-journal? fmt-journal?
                                                  :*configure-show? *configure-show?
-                                                 :built-in-property? built-in-property?}))
+                                                 :built-in-property? built-in-property?
+                                                 :preview? preview?}))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
