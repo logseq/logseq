@@ -6,12 +6,17 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
+            [frontend.handler.property.util :as pu]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
   [& pull-args]
-  (let [pull-data (with-out-str (pprint/pprint (apply db/pull pull-args)))]
+  (let [result* (apply db/pull pull-args)
+        result (cond-> result*
+                 (seq (:block/properties result*))
+                 (assoc :block.debug/properties (update-keys (:block/properties result*) pu/get-property-name)))
+        pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
      [:div
