@@ -233,7 +233,7 @@ const SQLiteDB = {
     },
 
     async fetchAllPages(dbName) {
-        console.log("featch all pages");
+        console.log("fetch all pages");
         let db = dbMap[dbName];
         if (!db) {
             await this.newDB(dbName);
@@ -369,4 +369,3 @@ onconnect = function (event) {
     const port = event.ports[0];
     Comlink.expose(SQLiteDB, port);
 };
-
