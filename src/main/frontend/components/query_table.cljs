@@ -129,13 +129,14 @@
 
     :block       ; block title
     (let [content (:block/content row)
+          uuid (:block/uuid row)
           {:block/keys [title]} (block/parse-title-and-body
                                  (:block/uuid row)
                                  (:block/format row)
                                  (:block/pre-block? row)
                                  content)]
       (if (seq title)
-        [:element (->elem :div (map-inline row title))]
+        [:element (->elem :div (map-inline {:block/uuid uuid} title))]
         [:string content]))
 
     :created-at
