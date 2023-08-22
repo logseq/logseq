@@ -350,12 +350,10 @@
   optionalDependencies:
     global-agent "^3.0.0"
 
-"@excalidraw/excalidraw@0.12.0":
-  version "0.12.0"
-  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.12.0.tgz#0c281624f29aa7834a015035b21dfd928be861d4"
-  integrity sha512-xMPmKmOEgKij43k5m6Koaevb+SBw6La7MT9UDY8Iq7nQCMhA1HQwcUURfSkZ3ERibdQmMsAGtjSLbkX7hrA3+A==
-  dependencies:
-    dotenv "10.0.0"
+"@excalidraw/excalidraw@0.15.3":
+  version "0.15.3"
+  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.15.3.tgz#5dea570f76451adf68bc24d4bfdd67a375cfeab1"
+  integrity sha512-/gpY7fgMO/AEaFLWnPqzbY8H7ly+/zocFf7D0Is5sWNMD2mhult5tana12lXKLSJ6EAz7ubo1A7LajXzvJXJDA==
 
 "@highlightjs/cdn-assets@10.4.1":
   version "10.4.1"
@@ -2618,11 +2616,6 @@ domutils@^2.8.0:
     dom-serializer "^1.0.1"
     domelementtype "^2.2.0"
     domhandler "^4.2.0"
-
-dotenv@10.0.0:
-  version "10.0.0"
-  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-10.0.0.tgz#3d4227b8fb95f81096cdd2b66653fb2c7085ba81"
-  integrity sha512-rlBi9d8jpv9Sf1klPjNfFAuWDjKLwTIJJ/VxtoTwIR6hnZxcEOQCZg2oIL3MWBYw5GpUDKOEnND7LXTbIpQ03Q==
 
 duplexify@^3.6.0:
   version "3.7.1"
