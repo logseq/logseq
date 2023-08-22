@@ -9,7 +9,6 @@
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.property :as property-handler]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -218,101 +217,104 @@
 
 (defn commands-map
   [get-page-ref-text]
-  (->>
-   (concat
+  (let [db? (config/db-based-graph? (state/get-current-repo))]
+    (->>
+     (concat
     ;; basic
-    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
-                        [:editor/search-page]] "Create a backlink to a page"]
-     ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
-                         [:editor/search-block :reference]] "Create a backlink to a block"]
-     ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
-     ["Link" (link-steps) "Create a HTTP link"]
-     ["Image link" (image-link-steps) "Create a HTTP link to a image"]
-     (when (state/markdown?)
-       ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern command-trigger
-                       :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input command-trigger nil]
-                  [:editor/search-template]] "Insert a created template here"]
-     (cond
-       (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
+      [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
+                          [:editor/search-page]] "Create a backlink to a page"]
+       ["Page embed" (embed-page) "Embed a page here"]
+       ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
+                           [:editor/search-block :reference]] "Create a backlink to a block"]
+       ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
+       ["Link" (link-steps) "Create a HTTP link"]
+       ["Image link" (image-link-steps) "Create a HTTP link to a image"]
+       (when (state/markdown?)
+         ["Underline" [[:editor/input "<ins></ins>"
+                        {:last-pattern command-trigger
+                         :backward-pos 6}]] "Create a underline text decoration"])
+       (when-not db?
+         ["Template" [[:editor/input command-trigger nil]
+                      [:editor/search-template]] "Insert a created template here"])
+       (cond
+         (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
+         ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
 
-    (headings)
+      (headings)
 
     ;; time & date
 
-    [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
-     ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
-     ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
-     ["Current time" #(date/get-current-time) "Insert current time"]
-     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+      [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
+       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
+       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
+       ["Current time" #(date/get-current-time) "Insert current time"]
+       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
     ;; order list
-    [["Number list" [[:editor/clear-current-slash]
-                     [:editor/toggle-own-number-list]] "Number list"]
-     ["Number children" [[:editor/clear-current-slash]
-                         [:editor/toggle-children-number-list]] "Number children"]]
+      [["Number list" [[:editor/clear-current-slash]
+                       [:editor/toggle-own-number-list]] "Number list"]
+       ["Number children" [[:editor/clear-current-slash]
+                           [:editor/toggle-children-number-list]] "Number children"]]
 
     ;; task management
-    (get-preferred-workflow)
-    [["DONE" (->marker "DONE")]
-     ["WAITING" (->marker "WAITING")]
-     ["CANCELED" (->marker "CANCELED")]
-     ["Deadline" [[:editor/clear-current-slash]
-                  [:editor/show-date-picker :deadline]]]
-     ["Scheduled" [[:editor/clear-current-slash]
-                   [:editor/show-date-picker :scheduled]]]]
+      (get-preferred-workflow)
+      [["DONE" (->marker "DONE")]
+       ["WAITING" (->marker "WAITING")]
+       ["CANCELED" (->marker "CANCELED")]
+       ["Deadline" [[:editor/clear-current-slash]
+                    [:editor/show-date-picker :deadline]]]
+       ["Scheduled" [[:editor/clear-current-slash]
+                     [:editor/show-date-picker :scheduled]]]]
 
     ;; priority
-    [["A" (->priority "A")]
-     ["B" (->priority "B")]
-     ["C" (->priority "C")]]
+      [["A" (->priority "A")]
+       ["B" (->priority "B")]
+       ["C" (->priority "C")]]
 
     ;; advanced
 
-    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
-               [:editor/exit]] query-doc]
-     ["Zotero" (zotero-steps) "Import Zotero journal article"]
-     ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
-     ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
-                                                     :backward-pos 4}]
-                    [:codemirror/focus]] "Insert a calculator"]
-     ["Draw" (fn []
-               (let [file (draw/file-name)
-                     path (str gp-config/default-draw-directory "/" file)
-                     text (page-ref/->page-ref path)]
-                 (p/let [_ (draw/create-draw-with-default-content path)]
-                   (println "draw file created, " path))
-                 text)) "Draw a graph with Excalidraw"]
-     ["Embed HTML " (->inline "html")]
+      [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
+                 [:editor/exit]] query-doc]
+       ["Zotero" (zotero-steps) "Import Zotero journal article"]
+       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
+       ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
+                                                       :backward-pos 4}]
+                      [:codemirror/focus]] "Insert a calculator"]
+       ["Draw" (fn []
+                 (let [file (draw/file-name)
+                       path (str gp-config/default-draw-directory "/" file)
+                       text (page-ref/->page-ref path)]
+                   (p/let [_ (draw/create-draw-with-default-content path)]
+                     (println "draw file created, " path))
+                   text)) "Draw a graph with Excalidraw"]
+       ["Embed HTML " (->inline "html")]
 
-     ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
-                                                      :backward-pos 2}]]]
+       ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
+                                                        :backward-pos 2}]]]
 
-     ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
+       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
-     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
-                                                          :backward-pos 2}]]]
-     ["Add new property" [[:editor/clear-current-slash]
-                          [:editor/new-property]]]
+       ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
+                                                            :backward-pos 2}]]]
+       (when db?
+         ["Add new property" [[:editor/clear-current-slash]
+                             [:editor/new-property]]])
 
-     ["Code block" [[:editor/input "```\n```\n" {:type            "block"
-                                                 :backward-pos    5
-                                                 :only-breakline? true}]
-                    [:editor/select-code-block-mode]] "Insert code block"]]
+       ["Code block" [[:editor/input "```\n```\n" {:type            "block"
+                                                   :backward-pos    5
+                                                   :only-breakline? true}]
+                      [:editor/select-code-block-mode]] "Insert code block"]]
 
-    @*extend-slash-commands
+      @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
 
-    (state/get-commands)
-    (state/get-plugins-slash-commands))
-   (remove nil?)
-   (util/distinct-by-last-wins first)))
+      (state/get-commands)
+      (state/get-plugins-slash-commands))
+     (remove nil?)
+     (util/distinct-by-last-wins first))))
 
 (defn init-commands!
   [get-page-ref-text]

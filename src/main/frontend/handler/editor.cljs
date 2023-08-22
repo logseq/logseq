@@ -2053,67 +2053,69 @@
   ([element-id db-id]
    (insert-template! element-id db-id {}))
   ([element-id db-id {:keys [target] :as opts}]
-   (when-let [db-id (if (integer? db-id)
-                      db-id
-                      (:db/id (db-model/get-template-by-name (name db-id))))]
-     (let [journal? (:block/journal? target)
-           repo (state/get-current-repo)
-           target (or target (state/get-edit-block))
-           block (db/entity db-id)
-           format (:block/format block)
-           block-uuid (:block/uuid block)
-           template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-           blocks (db/get-block-and-children repo block-uuid)
-           root-block (db/pull db-id)
-           blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
-           sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-           sorted-blocks (cons
-                          (-> (first sorted-blocks)
-                              (update :block/properties-text-values dissoc :template)
-                              (update :block/properties-order (fn [keys]
-                                                                (vec (remove #{:template} keys)))))
-                          (rest sorted-blocks))
-           blocks (if template-including-parent?
-                    sorted-blocks
-                    (drop 1 sorted-blocks))]
-       (when element-id
-         (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
-       (let [exclude-properties [:id :template :template-including-parent]
-             content-update-fn (fn [content]
-                                 (->> content
-                                      (file-property/remove-property-when-file-based repo format "template")
-                                      (file-property/remove-property-when-file-based repo format "template-including-parent")
-                                      template/resolve-dynamic-template!))
-             page (if (:block/name block) block
-                      (when target (:block/page (db/entity (:db/id target)))))
-             blocks' (map (fn [block]
-                            (paste-block-cleanup repo block page exclude-properties format content-update-fn false))
-                          blocks)
-             sibling? (:sibling? opts)
-             sibling?' (cond
-                         (some? sibling?)
-                         sibling?
+   (let [repo (state/get-current-repo)
+         db? (config/db-based-graph? repo)]
+     (when-not db?
+       (when-let [db-id (if (integer? db-id)
+                          db-id
+                          (:db/id (db-model/get-template-by-name (name db-id))))]
+         (let [journal? (:block/journal? target)
+               target (or target (state/get-edit-block))
+               block (db/entity db-id)
+               format (:block/format block)
+               block-uuid (:block/uuid block)
+               template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
+               blocks (db/get-block-and-children repo block-uuid)
+               root-block (db/pull db-id)
+               blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
+               sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+               sorted-blocks (cons
+                              (-> (first sorted-blocks)
+                                  (update :block/properties-text-values dissoc :template)
+                                  (update :block/properties-order (fn [keys]
+                                                                    (vec (remove #{:template} keys)))))
+                              (rest sorted-blocks))
+               blocks (if template-including-parent?
+                        sorted-blocks
+                        (drop 1 sorted-blocks))]
+           (when element-id
+             (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
+           (let [exclude-properties [:id :template :template-including-parent]
+                 content-update-fn (fn [content]
+                                     (->> content
+                                          (file-property/remove-property-when-file-based repo format "template")
+                                          (file-property/remove-property-when-file-based repo format "template-including-parent")
+                                          template/resolve-dynamic-template!))
+                 page (if (:block/name block) block
+                          (when target (:block/page (db/entity (:db/id target)))))
+                 blocks' (map (fn [block]
+                                (paste-block-cleanup repo block page exclude-properties format content-update-fn false))
+                              blocks)
+                 sibling? (:sibling? opts)
+                 sibling?' (cond
+                             (some? sibling?)
+                             sibling?
 
-                         (db/has-children? (:block/uuid target))
-                         false
+                             (db/has-children? (:block/uuid target))
+                             false
 
-                         :else
-                         true)]
-         (try
-           (outliner-tx/transact!
-            {:outliner-op :insert-blocks
-             :created-from-journal-template? journal?}
-            (save-current-block!)
-            (let [result (outliner-core/insert-blocks! blocks'
-                                                       target
-                                                       (assoc opts
-                                                              :sibling? sibling?'))]
-              (edit-last-block-after-inserted! result)))
-           (catch :default ^js/Error e
-             (notification/show!
-              [:p.content
-               (util/format "Template insert error: %s" (.-message e))]
-              :error))))))))
+                             :else
+                             true)]
+             (try
+               (outliner-tx/transact!
+                {:outliner-op :insert-blocks
+                 :created-from-journal-template? journal?}
+                (save-current-block!)
+                (let [result (outliner-core/insert-blocks! blocks'
+                                                           target
+                                                           (assoc opts
+                                                                  :sibling? sibling?'))]
+                  (edit-last-block-after-inserted! result)))
+               (catch :default ^js/Error e
+                 (notification/show!
+                  [:p.content
+                   (util/format "Template insert error: %s" (.-message e))]
+                  :error))))))))))
 
 (defn template-on-chosen-handler
   [element-id]
