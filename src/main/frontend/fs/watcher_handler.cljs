@@ -141,10 +141,15 @@
                   (p/chain (fn [files]
                              (->> files
                                   (map #(path/relative-path repo-dir %))
-                                  (remove #(fs-util/ignored-path? repo-dir %))))
+                                  (remove #(fs-util/ignored-path? repo-dir %))
+                                  (sort-by (fn [f] [(not (string/starts-with? f "logseq/"))
+                                                    (not (string/starts-with? f "journals/"))
+                                                    (not (string/starts-with? f "pages/"))
+                                                    (string/lower-case f)]))))
                            (fn [files]
                              (let [deleted-files (set/difference (set db-files) (set files))]
-                               [files deleted-files])))
+                               [files
+                                deleted-files])))
                   (p/catch (fn [error]
                              (when-not (config/demo-graph? graph)
                                (js/console.error "reading" graph)
