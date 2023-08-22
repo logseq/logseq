@@ -17,7 +17,8 @@ html[data-theme=light] {
 
 .sidebar-item-list {
   margin-top: -8px;
-  height: calc(100vh - 40px);
+  padding-bottom: 150px;
+  height: calc(100vh - 48px);
 }
 
 
@@ -30,8 +31,12 @@ html[data-theme=light] a.toggle:hover {
     color: var(--ls-header-button-background);
 }
 
-.cp__right-sidebar-topbar button {
-  opacity: 1;
+.cp__right-sidebar-topbar {
+  background-color: var(--ls-primary-background-color);
+
+  button {
+    opacity: 1;
+  }
 }
 
 html[data-theme=dark] {

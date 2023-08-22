@@ -521,6 +521,30 @@
   }
 }
 
+.color-level-1 {
+  background-color: var(--color-level-1);
+}
+
+.color-level-2 {
+  background-color: var(--color-level-2);
+}
+
+.color-level-3 {
+  background-color: var(--color-level-3);
+}
+
+.color-level-4 {
+  background-color: var(--color-level-4);
+}
+
+.color-level-5 {
+  background-color: var(--color-level-5);
+}
+
+.color-level-6 {
+  background-color: var(--color-level-6);
+}
+
 .bullet-container {
   display: flex;
   height: 16px;

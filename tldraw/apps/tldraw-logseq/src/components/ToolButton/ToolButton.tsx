@@ -22,13 +22,13 @@ export const ToolButton = observer(
     // Tool must exist
     const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
-    const shortcuts = (Tool as any)?.['shortcut']
+    const shortcut = (Tool as any)?.['shortcut']
 
     const tooltipContent =
-      shortcuts && tooltip ? (
+      shortcut && tooltip ? (
         <div className="flex">
           {tooltip}
-          <KeyboardShortcut action={shortcuts} />
+          <KeyboardShortcut action={shortcut} />
         </div>
       ) : (
         tooltip

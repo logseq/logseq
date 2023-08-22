@@ -176,24 +176,24 @@
   [db-id idx type collapsed? block-count toggle-fn]
   [:.menu-links-wrapper.text-left
    {:on-click toggle-fn}
-   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close) nil)
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-clese-others) nil))
+   (ui/menu-link {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
    (when (> block-count 1) (ui/menu-link {:on-click (fn []
                                                       (state/clear-sidebar-blocks!)
-                                                      (state/hide-right-sidebar!))} (t :right-side-bar/pane-clese-all) nil))
+                                                      (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
    (when (or (not collapsed?) (> block-count 1)) [:hr.menu-separator])
-   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse) nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others) nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all) nil))
+   (when-not collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
    (when (or collapsed? (> block-count 1)) [:hr.menu-separator])
-   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand) nil))
-   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)}  (t :right-side-bar/pane-expand-all) nil))
+   (when collapsed? (ui/menu-link {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
+   (when (> block-count 1) (ui/menu-link {:on-click #(state/sidebar-block-set-collapsed-all! false)}  (t :right-side-bar/pane-expand-all)))
    (when (= type :page) [:hr.menu-separator])
    (when (= type :page)
      (let [name (:block/name (db/entity db-id))]
        (ui/menu-link {:href (if (db-model/whiteboard-page? name)
                               (rfe/href :whiteboard {:name name})
-                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page) nil)))])
+                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page))))])
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -224,7 +224,7 @@
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
          (when (zero? idx) (drop-indicator (dec idx) drag-to))
-         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded-md.overflow-hidden
+         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded-md
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
@@ -266,10 +266,12 @@
                               (context-menu-content db-id idx block-type collapsed? block-count close-fn)))
                [:button.button.close {:title (t :right-side-bar/pane-close)
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
-             [:div.scrollbar-spacing.p-4 {:role "region"
+             [:div.pt-4.p-1 {:role "region"
                                           :id (str "sidebar-panel-content-" idx)
                                           :aria-labelledby (str "sidebar-panel-header-" idx)
-                                          :class (if collapsed? "hidden" "initial")}
+                                          :class (util/classnames [{:hidden collapsed?
+                                                                    :initial (not collapsed?)
+                                                                    :p-4 (not (contains? #{:page :block :contents} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))
@@ -417,7 +419,7 @@
                                                                        (state/sidebar-add-block! repo "history" :history))}
             (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.mx-2
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key

@@ -204,7 +204,7 @@ export const ContextMenu = observer(function ContextMenu({
               {t('whiteboard/paste')}
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>v</code>
+                  <code>{MOD_KEY}+v</code>
                 </span>
               </div>
             </ReactContextMenu.Item>
@@ -217,7 +217,7 @@ export const ContextMenu = observer(function ContextMenu({
               {t('whiteboard/paste-as-link')}
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>⇧</code> <code>v</code>
+                  <code>{MOD_KEY}+⇧+v</code>
                 </span>
               </div>
             </ReactContextMenu.Item>

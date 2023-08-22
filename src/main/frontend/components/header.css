@@ -1,7 +1,7 @@
 .cp__header {
   @apply shadow z-10;
   -webkit-app-region: drag;
-  
+
   padding-top: calc(var(--ls-headbar-inner-top-padding));
   margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
@@ -173,18 +173,8 @@
 }
 
 #repo-name {
-  display: table-cell;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 20ch;
-  height: 14px;
-
-  .ui__icon {
-    position: relative;
-    top: 5px;
-    right: -1px;
-  }
+  @apply inline-flex items-center whitespace-nowrap;
+  max-width: 16ch;
 }
 
 .button {

@@ -12,7 +12,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -80,8 +79,10 @@
 
 (rum/defc keyboard-shortcut
   [props]
-  (let [shortcut (shortcut-helper/gen-shortcut-seq (keyword (gobj/get props "action")))]
-    (ui/render-keyboard-shortcut shortcut)))
+  (let [shortcut (ui/keyboard-shortcut-from-config (keyword (gobj/get props "action")))]
+    (cond
+      (string? shortcut) (ui/render-keyboard-shortcut shortcut)
+      :else (interpose " | " (map ui/render-keyboard-shortcut shortcut)))))
 
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
