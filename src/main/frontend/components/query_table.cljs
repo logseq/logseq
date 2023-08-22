@@ -122,10 +122,10 @@
                   (get-keys result page?))
         included-columns #{:created-at :updated-at}]
     (distinct
+     ;; Ensure that timestamp columns are last columns since they take up space
      (if (some included-columns columns)
        (concat (remove included-columns columns)
-               (filter included-columns columns)
-               included-columns)
+               (filter included-columns columns))
        columns))))
 
 (defn- build-column-value
