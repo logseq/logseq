@@ -281,7 +281,10 @@
         (when (seq other-tx)
           (swap! txs-state (fn [txs]
                              (vec (concat txs other-tx)))))
-        (swap! txs-state conj (dissoc m :db/other-tx)))
+        (swap! txs-state conj
+               (cond-> (dissoc m :db/other-tx)
+                 structured-tags?
+                 (dissoc :block/tags :block/refs))))
 
       (when structured-tags?
         (assoc-linked-block-when-save txs-state block-entity m))
