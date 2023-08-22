@@ -794,7 +794,6 @@ mark {
   letter-spacing: 0;
   background-color: var(--ls-page-inline-code-bg-color, #eee);
   color: var(--ls-page-inline-code-color);
-  word-spacing: -0.15em;
   text-rendering: optimizeSpeed;
 }
 
