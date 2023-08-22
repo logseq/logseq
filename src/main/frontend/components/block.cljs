@@ -20,6 +20,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
             [frontend.components.property :as property-component]
+            [frontend.components.property.value :as property-value]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -622,10 +623,8 @@
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [*tippy-ref (rum/create-ref)
         page-name (util/page-name-sanity-lc page-name)
-        whiteboard-page? (model/whiteboard-page? page-name)
         redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
-        page-original-name (model/get-page-original-name redirect-page-name)
         _  #_:clj-kondo/ignore (rum/defc html-template []
                                  (let [*el-popup (rum/use-ref nil)]
 
@@ -678,7 +677,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
+  [{:keys [html-export? redirect-page-name label children contents-page? preview? disable-preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
@@ -698,7 +697,8 @@
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?))
+             (not preview?)
+             (not disable-preview?))
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -2275,8 +2275,19 @@
                (rum/with-key (block-child block)
                  (str uuid "-" idx)))))]))))
 
+(rum/defc named-block
+  [config block]
+  [:div.flex.flex-1.flex-row.flex-wrap.items-center
+   (page-cp config block)
+   (when (:block/tags block)
+     [:div.flex.flex-1.flex-row.flex-wrap.items-center.ml-4
+      (for [tag (:block/tags block)]
+        (page-cp (assoc config
+                        :tag? true
+                        :disable-preview? true) tag))])])
+
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
+  [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
   (let [repo (state/get-current-repo)
         content (property/remove-built-in-properties format content)
         {:block/keys [title body] :as block} (if (:block/title block) block
@@ -2330,7 +2341,7 @@
          [:div.flex-1.w-full
           (cond
             (:block/original-name block)
-            (page-cp config block)
+            (named-block config block)
 
             (or (seq title) (:block/marker block))
             (build-block-title config block)
@@ -2880,7 +2891,8 @@
            (db-properties-cp config
                              block
                              edit-input-id
-                             {:selected? selected?}))])
+                             {:selected? selected?
+                              :in-block-container? true}))])
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]

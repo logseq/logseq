@@ -1200,7 +1200,19 @@
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
-        (save-block-if-changed! block value opts)))))
+        (if (:block/original-name entity)
+          (let [existing-tags (:block/tags block)
+                tags (mldoc/extract-tags value)]
+            (when (seq tags)
+              (let [tag-pages (concat
+                               (map #(block/page-name->map % true) tags)
+                               (map :db/id existing-tags))
+                    opts {:outliner-op :save-block}]
+                (outliner-tx/transact!
+                 opts
+                 (outliner-core/save-block! {:db/id (:db/id block)
+                                             :block/tags tag-pages})))))
+          (save-block-if-changed! block value opts))))))
 
 (defn save-block!
   ([repo block-or-uuid content]
