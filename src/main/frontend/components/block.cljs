@@ -645,7 +645,7 @@
                                     [])
 
                                    (when redirect-page-name
-                                     [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none
+                                     [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none.rounded-md
                                       {:ref   *el-popup
                                        :tab-index -1
                                        :style {:width          600
@@ -653,26 +653,10 @@
                                                :font-weight    500
                                                :max-height     600
                                                :padding-bottom 64}}
-                                      (if (and (string? page-original-name) (text/namespace-page? page-original-name))
-                                        [:div.my-2
-                                         (->>
-                                          (for [namespace-page (gp-util/split-namespace-pages page-original-name)]
-                                            (when (and (string? namespace-page) namespace-page)
-                                              (let [label (second (gp-util/split-last model/ns-char namespace-page))]
-                                                (page-reference false namespace-page {:preview? true} label))))
-                                          (interpose [:span.mx-2.opacity-30 model/ns-char]))]
-                                        [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                                 page-original-name
-                                                                 [:span
-                                                                  [:span.text-sm.mr-2 "Alias:"]
-                                                                  page-original-name])])
-                                      (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
-                                        (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
-                                        (let [page-blocks-cp (state/get-page-blocks-cp)
-                                              tldraw-preview (state/get-component :whiteboard/tldraw-preview)]
-                                          (if whiteboard-page?
-                                            (tldraw-preview page-name)
-                                            (page-blocks-cp (state/get-current-repo) page {:sidebar? sidebar? :preview? true}))))])))]
+                                      (let [page-cp (state/get-page-blocks-cp)]
+                                        (page-cp {:repo (state/get-current-repo)
+                                                  :page-name redirect-page-name
+                                                  :sidebar? sidebar? :preview? true}))])))]
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
