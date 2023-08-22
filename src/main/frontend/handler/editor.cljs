@@ -814,7 +814,8 @@
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
           query-properties (if db-based?
-                             query-properties
+                           ;; TODO: Remove this when :query-properties can be saved as a vector
+                             (vec query-properties)
                              (some-> query-properties
                                      (common-handler/safe-read-string "Parsing query properties failed")))
           query-properties (if (seq query-properties)

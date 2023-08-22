@@ -328,8 +328,10 @@
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
   (let [properties (:block/properties block)
         query-properties (pu/lookup properties :query-properties)
-        block-properties (some-> query-properties
-                                 (common-handler/safe-read-string "Parsing query properties failed"))
+        block-properties (if (config/db-based-graph? (state/get-current-repo))
+                           query-properties
+                           (some-> query-properties
+                                   (common-handler/safe-read-string "Parsing query properties failed")))
         shown-properties (if (seq block-properties)
                            (set block-properties)
                            (set all-properties))

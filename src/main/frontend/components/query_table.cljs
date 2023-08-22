@@ -112,7 +112,8 @@
   (let [properties (:block/properties current-block)
         query-properties (pu/lookup properties :query-properties)
         query-properties (if (config/db-based-graph? (state/get-current-repo))
-                           query-properties
+                           ;; TODO: Remove this when :query-properties can be saved as a vector
+                           (vec query-properties)
                            (some-> query-properties
                                    (common-handler/safe-read-string "Parsing query properties failed")))
         query-properties (if page? (remove #{:block} query-properties) query-properties)
