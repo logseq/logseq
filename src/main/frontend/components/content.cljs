@@ -174,11 +174,12 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
   shortcut/disable-all-shortcuts
   [_target block-id]
+  (let [repo (state/get-current-repo)
+        db? (config/db-based-graph? repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [properties (:block/properties block)
             heading (or (pu/lookup properties :heading)
-                        false)
-            repo (state/get-current-repo)]
+                        false)]
         [:.menu-links-wrapper
          (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)
                                    #(property-handler/remove-block-property! repo block-id :background-color))
@@ -243,7 +244,8 @@
 
          [:hr.menu-separator]
 
-         (block-template block-id)
+         (when-not db?
+           (block-template block-id))
 
          (cond
            (srs/card-block? block)
@@ -260,9 +262,9 @@
            nil)
 
          (ui/menu-link
-           {:key "Toggle number list"
-            :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
-           (t :context-menu/toggle-number-list))
+          {:key "Toggle number list"
+           :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+          (t :context-menu/toggle-number-list))
 
          [:hr.menu-separator]
 
@@ -302,7 +304,7 @@
              :on-click (fn []
                          (let [block (db/pull [:block/uuid block-id])]
                            (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
-            (t :dev/show-block-ast)))])))
+            (t :dev/show-block-ast)))]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
