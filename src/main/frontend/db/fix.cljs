@@ -152,7 +152,7 @@
   [db page-id {:keys [fix-parent-left? fix-broken-chain? replace-tx?]
             :or {fix-parent-left? true
                  fix-broken-chain? true
-                 replace-tx? true}
+                 replace-tx? false}
             :as _opts}]
   (let [repo (state/get-current-repo)
         transact-opts (if replace-tx? {:replace? true} {})]

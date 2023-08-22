@@ -851,7 +851,8 @@
                         :as opts}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [[target-block sibling?] (get-target-block target-block opts)
+  (let [blocks (map (fn [b] (db/pull [:block/uuid (:block/uuid b)])) blocks)
+        [target-block sibling?] (get-target-block target-block opts)
         non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
