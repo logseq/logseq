@@ -4,8 +4,7 @@
             [frontend.handler.file-based.property :as file-property]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.modules.outliner.core :as outliner-core]))
+            [frontend.db :as db]))
 
 (def user-face-builtin-schema-types db-property/user-face-builtin-schema-types)
 (def internal-builtin-schema-types db-property/internal-builtin-schema-types)
@@ -27,15 +26,13 @@
 (defn update-property!
   [repo property-uuid opts]
   {:pre [(uuid? property-uuid)]}
-  #_:clj-kondo/ignore
   (when (config/db-based-graph? repo)
     (db-property/update-property! repo property-uuid opts)))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
   [repo block property-id property-value]
-  #_:clj-kondo/ignore
-  (if (config/db-based-graph? repo)
+  (when (config/db-based-graph? repo)
     (db-property/delete-property-value! repo block property-id property-value)))
 
 (defn set-editing-new-property!
