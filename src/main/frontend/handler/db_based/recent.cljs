@@ -2,7 +2,8 @@
   "Fns related to recent pages feature"
   (:require [frontend.db :as db]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [clojure.string :as string]))
 
 (defn add-page-to-recent!
   [repo page click-from-recent?]
@@ -19,8 +20,10 @@
 
 (defn get-recent-pages
   []
-  (->> (db/get-key-value :recent/pages)
+  (->> (db/sub-key-value :recent/pages)
+       (distinct)
        (map (fn [id]
               (let [e (db/entity [:block/uuid id])]
                 (or (:block/original-name e)
-                    (:block/uuid e)))))))
+                    (:block/uuid e)))))
+       (remove string/blank?)))
