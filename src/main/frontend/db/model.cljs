@@ -72,7 +72,7 @@
            [?page :block/original-name ?original-name]
            [?page :block/name ?name]]
          (conn/get-db repo)
-         (util/page-name-sanity-lc tag-name))))
+      (util/page-name-sanity-lc tag-name))))
 
 (defn get-all-tagged-pages
   [repo]
@@ -1526,6 +1526,23 @@ independent of format as format specific heading characters are stripped"
         (:namespace rules/rules))
    db-utils/seq-flatten
    (set)))
+
+(defn get-class-objects
+  [repo class-id]
+  (when-let [class (db-utils/entity repo class-id)]
+    (if (first (:block/_namespace class))        ; has children classes
+      (d/q
+       '[:find [?object ...]
+         :in $ % ?parent
+         :where
+         (namespace ?parent ?c)
+         (or
+          [?object :block/tags ?parent]
+          [?object :block/tags ?c])]
+       (conn/get-db repo)
+       (:namespace rules/rules)
+       class-id)
+      (map :db/id (:block/_tags class)))))
 
 (comment
   ;; For debugging

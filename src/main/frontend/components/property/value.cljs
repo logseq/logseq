@@ -86,9 +86,9 @@
   [block property {:keys [class] :as opts}]
   (let [repo (state/get-current-repo)
         pages (if class
-                (some->> (:block/name (db/entity [:block/uuid (uuid class)]))
-                         (db/get-tag-pages repo)
-                         (map first))
+                (some->> (:db/id (db/entity [:block/uuid (uuid class)]))
+                         (model/get-class-objects repo)
+                         (map #(:block/original-name (db/entity %))))
                 (model/get-all-page-original-names repo))
         options (map (fn [p] {:value p}) pages)]
     (select/select {:items options

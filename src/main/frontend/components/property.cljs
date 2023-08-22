@@ -48,8 +48,16 @@
         options (map (fn [[name id]] {:label name
                                       :value id
                                       :selected (= class id)})
-                     classes)]
-    (ui/select options
+                     classes)
+        options' (if class
+                   options
+                   (cons
+                    {:label "Choose a class"
+                     :disabled true
+                     :selected true
+                     :value ""}
+                    options))]
+    (ui/select options'
                (fn [_e value]
                  (swap! *property-schema assoc :class (str value))))))
 
