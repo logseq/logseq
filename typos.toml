@@ -12,5 +12,6 @@ BA = "BA"
 fo = "fo"
 aks = "aks"
 Mannor = "Mannor"
+nd = "nd"
 [files]
 extend-exclude = ["resources/*", "src/resources/*"]

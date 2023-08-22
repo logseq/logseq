@@ -68,6 +68,15 @@
             db)
        ffirst))
 
+(defn- get-counts-for-common-attributes [db]
+  (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
+        :block/repeated?]
+       (map (fn [attr]
+              [attr
+               (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
+                            db))]))
+       (into {})))
+
 (defn- query-assertions
   [db graph-dir files]
   (testing "Query based stats"
@@ -121,13 +130,7 @@
             :block/deadline 1
             :block/collapsed? 80
             :block/repeated? 1}
-           (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/repeated?]
-                (map (fn [attr]
-                       [attr
-                        (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
-                                     db))]))
-                (into {})))
+           (get-counts-for-common-attributes db))
         "Counts for blocks with common block attributes")
 
     (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
