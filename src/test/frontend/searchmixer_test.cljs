@@ -145,9 +145,9 @@
       (is (= (set expected-results) (set merged-results))))))
 
 (deftest ^:focus test-merge-search-results
-  (let [trad-results [{:block/uuid "uuid1" :block/content "Hello world"}
-                      {:block/uuid "uuid2" :block/content "Goodbye world"}
-                      {:block/uuid "uuid3" :block/content "Hello universe"}]
+  (let [trad-results {:blocks '({:block/uuid "uuid1" :block/content "Hello world"}
+                                {:block/uuid "uuid2" :block/content "Goodbye world"}
+                                {:block/uuid "uuid3" :block/content "Hello universe"})}
         semantic-results [{:key "uuid4"
                            :id 18
                            :data {:snippet "Greetings earthlings"
@@ -167,5 +167,4 @@
 
     (is (not (empty? merged-results)))
     (is (= 5 (count merged-results)))
-    (prn merged-results)
     ))

@@ -4,9 +4,9 @@
 
 (defn assoc-default-fuse-score
   "If a search result doesn't contain :fuse-score, then add it with worst score"
-  [search-results]
-  (map (fn [result]
-         (if (contains? result :fuse-score)
+  [search-results] 
+  (map (fn [result] 
+         (if (get result :fuse-score)
            result
            (assoc result :fuse-score 1)))
        search-results))
@@ -15,7 +15,7 @@
   "If a search result doesn't contain :semantic-score, then add it with worst score"
   [search-results worst-score]
   (map (fn [result]
-         (if (contains? result :semantic-score)
+         (if (get result :semantic-score)
            result
            (assoc result :semantic-score worst-score)))
        search-results))
@@ -49,7 +49,6 @@
   ({
       :key <key to return>
       :content <string>
-      <other records>
   })
   return:
   ({
@@ -75,24 +74,33 @@
                   :fuse-score (or (score-map (get item :key)) 1.0)))
          search-results)))
 
-(defn transform-trad-results
-  "trad-results:
-     ({:block/uuid <uuid>
-         :block/content <content>})
-        return:
-        ({
-            :key <key to return>
-            :content <content>
-        })
-   "
-  [trad-results query]
-    (assoc-fuse-score (map (fn [result]
-                             {:key (:block/uuid result)})
-                           trad-results) query))
+(defn transform-search-results [results]
+  (let [blocks       (map (fn [block]
+                            {:key (:block/uuid block)
+                             :content (:block/content block)})
+                          (:blocks results))
+
+        pages-content (map (fn [page-content]
+                             {:key (:block/uuid page-content)
+                              :content (:block/snippet page-content)})
+                           (:pages-content results))
+
+        pages        (map (fn [page]
+                            {:key (str "page:" page)
+                             :content page})
+                          (:pages results))
+
+        files        (map (fn [file]
+                            {:key (str "file:" file)
+                             :content file})
+                          (:files results))]
+
+    (concat blocks pages-content pages files)))
 
 (defn get-worst-semantic-score
   [semantic-results]
-  (let [scores (map :semantic-score semantic-results)]
+  (let [scores (map :semantic-score semantic-results)
+        scores (conj scores 0)]
     (apply max scores)))
 
 (defn sort-scores-search-results
@@ -132,16 +140,17 @@
 
 (defn- merge-search-results'
   "Merge fuse.js search results with semantic search results and remove duplicates"
-  [trad-results semantic-results]
-  (-> trad-results
-      (concat semantic-results)
-      (merge-duplicated-search-results)
-      (assoc-default-fuse-score)
-      (assoc-default-semantic-score (get-worst-semantic-score semantic-results))
-      (sort-scores-search-results)))
+  [trad-results semantic-results] 
+ (-> trad-results
+     (concat semantic-results)
+     (merge-duplicated-search-results)
+     (assoc-default-fuse-score)
+     (assoc-default-semantic-score (get-worst-semantic-score semantic-results))
+     (sort-scores-search-results)))
   
 (defn merge-search-results
   [trad-results semantic-results query]
-  (let [trad-results (transform-trad-results trad-results query)
+  (let [trad-results (transform-search-results trad-results)
+        fuse-score-results (assoc-fuse-score trad-results query)
         semantic-results (transform-semantic-results semantic-results)]
-    (merge-search-results' trad-results semantic-results)))
+    (merge-search-results' fuse-score-results semantic-results)))

@@ -7,6 +7,7 @@
             [frontend.search.db :as search-db]
             [frontend.ai.vector-store :as vector-store]
             [frontend.ai.text-encoder :as text-encoder]
+            [frontend.ai.search-mixer :as mixer]
             [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]
             [clojure.pprint :as pprint]))
@@ -19,8 +20,8 @@
 ;; TODO: Link to cmd+k panel
 (defn update-block-search-result
   [rets]
-  (prn "semantic search result:")
-  (pprint/pprint (map #(dissoc % :embed) rets)))
+  (prn "semantic search result:") 
+  (pprint/pprint (mixer/merge-search-results (:search/result @state/state) rets (:search/q @state/state))))
 
 ;; See protocol for full documentation
 (defrecord ^:large-vars/data-var Semantic [repo]
