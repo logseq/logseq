@@ -90,7 +90,7 @@
   (let [repo (state/get-current-repo)]
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
-                      (property-handler/set-block-property! repo block-id :query-sort-by (name column))
+                      (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) uuid (name column)))
                       (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?)))}
       [:div.flex.items-center
        [:span.mr-1 title]

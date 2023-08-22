@@ -185,9 +185,10 @@
    :background-color {:schema {:type :default}}
    :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
    :query-table {:schema {:type :checkbox}}
-   ;; query-properties is a coll of property uuids and keywords where keywords are special frontend properties
+   ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
    :query-properties {:schema {:type :coll}}
-   :query-sort-by {:schema {:type :checkbox}}
+   ;; query-sort-by is either a property uuid or a keyword where keyword is a special frontend keyword
+   :query-sort-by {:schema {:type :any}}
    :query-sort-desc {:schema {:type :checkbox}}
    :logseq.query/nlp-date {:schema {:type :checkbox}}
    :ls-type {:schema {:type :keyword}}

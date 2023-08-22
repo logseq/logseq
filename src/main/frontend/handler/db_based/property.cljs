@@ -82,7 +82,7 @@
   (if (and (not (string? v-str)) (not (object? v-str)))
     v-str
     (case schema-type
-      :default
+      (:default :any :url)
       v-str
 
       :number
@@ -102,9 +102,7 @@
 
       :date
       v-str                  ; uuid
-
-      :url
-      v-str)))
+      )))
 
 (defn upsert-property!
   [repo k-name schema {:keys [property-uuid]}]
