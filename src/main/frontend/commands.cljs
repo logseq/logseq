@@ -233,9 +233,8 @@
          ["Underline" [[:editor/input "<ins></ins>"
                         {:last-pattern command-trigger
                          :backward-pos 6}]] "Create a underline text decoration"])
-       (when-not db?
-         ["Template" [[:editor/input command-trigger nil]
-                      [:editor/search-template]] "Insert a created template here"])
+       ["Template" [[:editor/input command-trigger nil]
+                    [:editor/search-template]] "Insert a created template here"]
        (cond
          (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
 
@@ -299,9 +298,8 @@
 
        ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                             :backward-pos 2}]]]
-       (when db?
-         ["Add new property" [[:editor/clear-current-slash]
-                             [:editor/new-property]]])
+       ["Add new property" [[:editor/clear-current-slash]
+                            [:editor/new-property]]]
 
        ["Code block" [[:editor/input "```\n```\n" {:type            "block"
                                                    :backward-pos    5

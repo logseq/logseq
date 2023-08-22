@@ -9,6 +9,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
@@ -131,3 +132,25 @@
        ast)
       (-> (string/trim (apply str @*result))
           text/page-ref-un-brackets!))))
+
+(defn extract-tags
+  "Extract tags from content"
+  [content]
+  (let [ast (->edn content (gp-mldoc/default-config :markdown))
+        *result (atom [])]
+    (walk/prewalk
+     (fn [f]
+       (cond
+           ;; tag
+         (and (vector? f)
+              (= "Tag" (first f)))
+         (let [tag (gp-block/get-tag f)]
+           (swap! *result conj tag)
+           nil)
+
+         :else
+         f))
+     ast)
+    (->> @*result
+         (remove string/blank?)
+         (distinct))))

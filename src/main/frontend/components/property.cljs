@@ -355,7 +355,7 @@
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
-  [state target-block edit-input-id opts]
+  [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
   (let [block (resolve-linked-block-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
                      (let [properties (:properties (:block/schema block))]
@@ -365,7 +365,7 @@
         tags (set (map :block/uuid (:block/tags block)))
         alias-properties (when (seq alias)
                            [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
-        tags-properties (when (seq tags)
+        tags-properties (when (and (seq tags) (not in-block-container?))
                           [[(:block/uuid (db/entity [:block/name "tags"])) tags]])
         class-properties (->> (:block/tags block)
                               (mapcat (fn [tag]
