@@ -133,7 +133,7 @@
       nil)))
 
 (defn preload-graph-homepage-files!
-  "Preload the homepage file for the current graph.
+  "Preload the homepage file for the current graph. Return loaded file paths.
 
    Prerequisites:
    - current graph is set
@@ -157,7 +157,7 @@
                                               (config/get-journals-directory)
                                               (config/get-pages-directory))]
                              (str parent-dir "/" file-name "." ext)))]
-        (prn ::preload-homepage repo-dir file-rpath)
+        (prn ::preload-homepage file-rpath)
         (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
                 _ (when file-exists?
                     ;; BUG: avoid active-editing block content overwrites incoming fs changes
@@ -170,23 +170,29 @@
                 db-content (if-not db-empty?
                              (db/get-file repo file-rpath)
                              "")]
-          (cond
-            (and file-exists?
-                 db-empty?)
-            (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
+          (p/do!
+           (cond
+             (and file-exists?
+                  db-empty?)
+             (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
 
-            (and file-exists?
-                 (not db-empty?)
-                 (not= file-content db-content))
-            (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))
-          (ui-handler/re-render-root!))))))
+             (and file-exists?
+                  (not db-empty?)
+                  (not= file-content db-content))
+             (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))
+
+           (ui-handler/re-render-root!)
+
+           [file-rpath]))))))
 
 (defn load-graph-files!
-  [graph]
+  "This fn replaces the former initial fs watcher"
+  [graph exclude-files]
   (when graph
     (let [repo-dir (config/get-repo-dir graph)
           db-files (->> (db/get-files graph)
-                        (map first))]
+                        (map first))
+          exclude-files (set (or exclude-files []))]
       ;; read all files in the repo dir, notify if readdir error
       (p/let [[files deleted-files]
               (-> (fs/readdir repo-dir :path-only? true)
@@ -200,7 +206,8 @@
                                                     (string/lower-case f)]))))
                            (fn [files]
                              (let [deleted-files (set/difference (set db-files) (set files))]
-                               [files
+                               [(->> files
+                                     (remove #(contains? exclude-files %)))
                                 deleted-files])))
                   (p/catch (fn [error]
                              (when-not (config/demo-graph? graph)

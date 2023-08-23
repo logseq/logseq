@@ -380,12 +380,13 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/do!
-   (fs-watcher/preload-graph-homepage-files!)
-   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-   (repo-handler/graph-ready! repo)
-   ;; This replaces the former initial fs watcher
-   (fs-watcher/load-graph-files! repo))
+  (p/let [loaded-homepage-files (fs-watcher/preload-graph-homepage-files!)
+          ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+          _ (js/setTimeout #(mobile/mobile-postinit) 1000)
+          ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+          _ (repo-handler/graph-ready! repo)
+          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]
+
   ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
@@ -397,7 +398,7 @@
   ;;                   (not= filename-format :triple-lowbar))
   ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
   ;;    3000))
-  )
+    ))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
