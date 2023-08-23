@@ -223,7 +223,7 @@
                [:a.flex.ml-1.fade-link
                 {:title "Setting properties"
                  :on-click (fn []
-                             (let [all-keys (query-table/get-keys result page-list?)]
+                             (let [all-keys (query-table/get-all-columns-for-result result page-list?)]
                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
                 (ui/icon "settings" {:style {:font-size 20}})]
 
