@@ -73,16 +73,21 @@
 
 (defn- create-uuid-maps
   "Creates maps of unique page names, block contents and property names to their uuids"
-  [pages-and-blocks]
+  [pages-and-blocks properties]
   (let [property-uuids (->> pages-and-blocks
                             (map #(-> (:blocks %) vec (conj (:page %))))
                             (mapcat #(->> % (map :properties) (mapcat keys)))
                             set
                             (map #(vector % (random-uuid)))
+                            ;; TODO: Dedupe with above to avoid squashing a previous definition
+                            (concat (map (fn [[k v]]
+                                           [k (or (:block/uuid v) (random-uuid))])
+                                         properties))
                             (into {}))
         page-uuids (->> pages-and-blocks
                         (map :page)
-                        (map (juxt :block/name :block/uuid))
+                        (map (juxt #(or (:block/name %) (string/lower-case (:block/original-name %)))
+                                   :block/uuid))
                         (into {}))
         block-uuids (->> pages-and-blocks
                          (mapcat :blocks)
@@ -154,7 +159,7 @@
                                     (seq blocks)
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
-        {:keys [property-uuids] :as uuid-maps} (create-uuid-maps pages-and-blocks')
+        {:keys [property-uuids] :as uuid-maps} (create-uuid-maps pages-and-blocks' properties)
         created-at (js/Date.now)
         new-properties-tx (mapv (fn [[prop-name uuid]]
                                   {:db/id (new-db-id)
@@ -174,12 +179,13 @@
         (vec
          (mapcat
           (fn [{:keys [page blocks]}]
-            (let [page-id (new-db-id)]
+            (let [page-id (or (:db/id page) (new-db-id))]
               (into
                ;; page tx
                [(merge (dissoc page :properties)
                        {:db/id page-id
-                        :block/original-name (string/capitalize (:block/name page))
+                        :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                        :block/name (or (:block/name page) (string/lower-case (:block/original-name page)))
                         :block/created-at created-at
                         :block/updated-at created-at}
                        (when (seq (:properties page))
