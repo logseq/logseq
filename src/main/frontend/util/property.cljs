@@ -361,7 +361,7 @@
 ;; The future plan is to separate those properties from the block' content.
 (defn remove-built-in-properties
   [format content]
-  (let [trim-content (string/trim content)]
+  (let [trim-content (some-> content string/trim)]
     (if (or
          (and (= format :markdown)
               (string/starts-with? trim-content "```")
