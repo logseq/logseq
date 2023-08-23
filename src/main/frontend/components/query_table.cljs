@@ -17,6 +17,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.handler.property.util :as pu]))
 
 ;; Util fns
@@ -96,15 +97,25 @@
          [:span
           (if sort-desc? (svg/caret-down) (svg/caret-up))])]]]))
 
-(defn get-keys
-  "Get keys for a query table result, which are the columns in a table"
+(defn get-all-columns-for-result
+  "Gets all possible columns for a given result. For a db graph, this is a mix
+  of property uuids and special keywords like :page. For a file graph, these are
+  all property names as keywords"
   [result page?]
-  (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
-                  (remove (file-property/built-in-properties))
-                  (remove #{:template}))
-        keys (if page? (cons :page keys) (concat '(:block :page) keys))
-        keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
-    keys))
+  (let [repo (state/get-current-repo)
+        db-graph? (config/db-based-graph? repo)
+        hidden-properties (if db-graph?
+                            ;; TODO: Support additional hidden properties e.g. from user config
+                            ;; or gp-property/built-in-extended properties
+                            (set (map #(:block/uuid (db/entity repo [:block/name %]))
+                                      gp-property/db-built-in-properties-keys-str))
+                            (conj (file-property/built-in-properties) :template))
+        prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
+                        (remove hidden-properties))
+        prop-keys (cond-> (if page? (cons :page prop-keys*) (concat '(:block :page) prop-keys*))
+                    (or db-graph? page?)
+                    (concat [:created-at :updated-at]))]
+    prop-keys))
 
 (defn get-columns [current-block result {:keys [page?]}]
   (let [properties (:block/properties current-block)
@@ -117,7 +128,7 @@
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
-                  (get-keys result page?))
+                  (get-all-columns-for-result result page?))
         included-columns #{:created-at :updated-at}]
     (distinct
      ;; Ensure that timestamp columns are last columns since they take up space
