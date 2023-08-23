@@ -351,6 +351,32 @@
      (fn [e] (:properties (:block/schema e)))
      @*namespaces)))
 
+(defn- find-inferred-properties [tags properties]
+  (let [tag-maps (map #(-> (db/entity [:block/uuid %])
+                           (select-keys [:block/uuid :block/type :block/name :block/tags])
+                           (update :block/tags (fn [tag-ids]
+                                                 (set (map (comp :block/name db/entity :db/id) tag-ids)))))
+                      tags)
+        property-maps (map (fn [prop-uuid]
+                             (let [ent (db/entity [:block/uuid prop-uuid])]
+                               (merge {:block/uuid prop-uuid
+                                       :block/name (:block/name ent)}
+                                      (when-let [uuid-string (get-in ent [:block/schema :class])]
+                                        {:class (:block/name (db/entity [:block/uuid (uuid uuid-string)]))}))))
+                           properties)]
+    (->> tag-maps
+         ;; TODO: Do this in less hacky version
+         #_(remove #(= "class" (:block/type %)))
+         (keep (fn [{:block/keys [tags uuid]}]
+                 (when-let [matching-properties (seq (filter #(contains? tags (:class %)) property-maps))]
+                   ;; Inference works if there's one match. For more than one, user needs to choose
+                   ;; or have a config for choosing
+                   (when (= 1 (count matching-properties))
+                     [(-> matching-properties first :block/uuid) uuid]))))
+         (reduce (fn [acc [k v]]
+                   (update acc k (fnil conj #{}) v))
+                 {}))))
+
 (rum/defcs properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
@@ -388,6 +414,15 @@
                         (remove (fn [[k _v]]
                                   (when (uuid? k)
                                     (contains? built-in-properties (:block/name (db/entity [:block/uuid k])))))))
+        inferred-properties (find-inferred-properties tags (map first properties))
+        properties (if (seq inferred-properties)
+                     (map (fn [[k v]]
+                            (if-let [inferred-v (inferred-properties k)]
+                              ;; TODO: Handle single cardinality and not cloberring existing values for many
+                              [k inferred-v]
+                              [k v]))
+                          properties)
+                     properties)
         new-property? (or
                        (and (:*configure-show? opts)
                             @(:*configure-show? opts)
