@@ -910,8 +910,8 @@
              opts          {:url           url
                             :password      (or doc-password "")
                             :ownerDocument (.-ownerDocument loader-el)
-                            :cMapUrl       "./cmaps/"
-                            ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
+                            :cMapUrl       "./js/pdfjs/cmaps/"
+                            ;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/cmaps/"
                             :cMapPacked    true}]
 
          (set-loader-state! {:status :loading})
