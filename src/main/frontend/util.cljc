@@ -780,20 +780,22 @@
             (rec-get-tippy-container (gobj/get node "parentNode"))))))
 
 #?(:cljs
-   (defn rec-get-blocks-container
-     [node]
-     (if (and node (d/has-class? node "blocks-container"))
+   (defn rec-get-node
+     [node class]
+     (if (and node (d/has-class? node class))
        node
        (and node
-            (rec-get-blocks-container (gobj/get node "parentNode"))))))
+            (rec-get-node (gobj/get node "parentNode") class)))))
+
+#?(:cljs
+   (defn rec-get-blocks-container
+     [node]
+     (rec-get-node node "blocks-container")))
 
 #?(:cljs
    (defn rec-get-blocks-content-section
      [node]
-     (if (and node (d/has-class? node "content"))
-       node
-       (and node
-            (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
+     (rec-get-node node "content")))
 
 #?(:cljs
    (defn get-blocks-noncollapse

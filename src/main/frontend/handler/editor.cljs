@@ -1674,15 +1674,9 @@
     (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (let [top-level-blocks (->> (outliner-core/get-top-level-blocks blocks)
-                                                   (map (fn [b]
-                                                          (let [original-block (first (:block/_link (db/entity (:db/id b))))]
-                                                            (or (and original-block
-                                                                     (db/pull (:db/id original-block)))
-                                                                b)))))]
-                         (outliner-tx/transact!
-                          {:outliner-op :move-blocks}
-                          (outliner-core/move-blocks-up-down! top-level-blocks up?)))
+                       (outliner-tx/transact!
+                        {:outliner-op :move-blocks}
+                        (outliner-core/move-blocks-up-down! blocks up?))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
@@ -3645,8 +3639,8 @@
   ([select?]
    (when (state/editing?)
      (if select?
-       (->> (:block/uuid (state/get-edit-block))
-            select-block!)
+       (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+         (state/exit-editing-and-set-selected-blocks! [node]))
        (state/clear-edit!)))))
 
 (defn replace-block-reference-with-content-at-point

@@ -674,7 +674,7 @@
                          nil)
           src-block    (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error src-block-uuid))
           target-block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error target-block-uuid))]
-      (editor-dnd-handler/move-blocks nil [src-block] target-block move-to) nil)))
+      (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to) nil)))
 
 (def ^:export get_block api-block/get_block)
 

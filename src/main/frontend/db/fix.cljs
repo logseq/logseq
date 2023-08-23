@@ -8,8 +8,7 @@
             [frontend.db.model :as db-model]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.handler.notification :as notification]
-            [clojure.set :as set]))
+            [frontend.handler.notification :as notification]))
 
 (defn- fix-parent-broken-chain
   [db parent-id]

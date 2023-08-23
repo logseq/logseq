@@ -10,7 +10,7 @@
             [frontend.db :as db]))
 
 (defn move-blocks
-  [^js event blocks target-block move-to]
+  [^js event blocks target-block original-block move-to]
   (let [blocks' (map #(db/pull (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
@@ -19,7 +19,7 @@
         current-format (:block/format first-block)
         target-format (:block/format target-block)
         target-block (if nested? target-block
-                         (or (first (:block/_link (db/entity (:db/id target-block)))) target-block))]
+                         (or original-block target-block))]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))

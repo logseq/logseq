@@ -20,7 +20,6 @@
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
             [frontend.components.property :as property-component]
-            [frontend.components.property.value :as property-value]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -2661,7 +2660,7 @@
    (editor-handler/unhighlight-blocks!)))
 
 (defn- block-drop
-  [^js event uuid target-block *move-to]
+  [^js event uuid target-block original-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
     (let [block-uuids (state/get-selection-block-ids)
@@ -2677,7 +2676,7 @@
             :edit-block? false
             :sibling?    (= @*move-to :sibling)
             :before?     (= @*move-to :top)}))
-        (dnd/move-blocks event blocks target-block @*move-to))))
+        (dnd/move-blocks event blocks target-block original-block @*move-to))))
   (block-drag-end event *move-to))
 
 (defn- block-mouse-over
@@ -2707,13 +2706,13 @@
     (state/into-selection-mode!)))
 
 (defn- on-drag-and-mouse-attrs
-  [block uuid top? block-id *move-to]
+  [block original-block uuid top? block-id *move-to]
   {:on-drag-over (fn [event]
                    (block-drag-over event uuid top? block-id *move-to))
    :on-drag-leave (fn [_event]
                     (block-drag-leave *move-to))
    :on-drop (fn [event]
-              (block-drop event uuid block *move-to))
+              (block-drop event uuid block original-block *move-to))
    :on-drag-end (fn [event]
                   (block-drag-end event *move-to))})
 
@@ -2811,7 +2810,8 @@
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         top? (zero? (:idx config))
-        attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
+        original-block (:original-block config)
+        attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
         children-refs (get-children-refs block)
         data-refs (build-refs-data-value children-refs)
         data-refs-self (build-refs-data-value refs)
@@ -2820,7 +2820,8 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         selected? (when-not slide?
-                    (state/sub-block-selected? blocks-container-id uuid))]
+                    (state/sub-block-selected? blocks-container-id uuid))
+        config (dissoc config :original-block)]
     [:div.ls-block
      (cond->
       {:id block-id
@@ -2835,6 +2836,9 @@
                    (when (string/blank? content) " is-blank"))
        :blockid (str uuid)
        :haschild (str (boolean has-child?))}
+
+       original-block
+       (assoc :originalblockid (str (:block/uuid original-block)))
 
        level
        (assoc :level level)
@@ -3354,10 +3358,10 @@
                       :idx idx)
         config' (if linked-block
                   (let [new-container-id (state/next-blocks-container-id)]
-                    (prn {:new-container-id new-container-id})
                     (assoc config
                            :original-block original-block
-                           :blocks-container-id new-container-id))
+                           ;; :blocks-container-id new-container-id
+                           ))
                   config)]
     (rum/with-key (block-container config' item)
       (str (:blocks-container-id config') "-" (:block/uuid item)))))
