@@ -17,8 +17,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [logseq.graph-parser.text :as text]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.property :as property-handler]))
+            [frontend.handler.property.util :as pu]))
 
 ;; Util fns
 ;; ========
@@ -72,13 +71,12 @@
         desc? (if (some? p-desc?) p-desc? true)
         properties (:block/properties current-block)
         query-sort-by (pu/lookup properties :query-sort-by)
-        p-sort-by (keyword query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
         nlp-date? (pu/lookup properties :logseq.query/nlp-date)
-        sort-by-column (or (some-> p-sort-by keyword)
-                         (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
-                           nil
-                           :updated-at))]
+        sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
+                           (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
+                             nil
+                             :updated-at))]
     {:sort-desc? desc?
      :sort-by-column sort-by-column
      :sort-nlp-date? nlp-date?}))
@@ -90,7 +88,7 @@
   (let [repo (state/get-current-repo)]
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
-                      (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) uuid (name column)))
+                      (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) column (name column)))
                       (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?)))}
       [:div.flex.items-center
        [:span.mr-1 title]
