@@ -3350,13 +3350,17 @@
                (not (:block-children? config))
                (assoc :block.temp/top? (zero? idx)
                       :block.temp/bottom? (= (count blocks) (inc idx))))
-        config' (cond-> (assoc config
-                               :block/uuid (:block/uuid item)
-                               :idx idx)
-                  linked-block
-                  (assoc :original-block original-block))]
+        config (assoc config :block/uuid (:block/uuid item)
+                      :idx idx)
+        config' (if linked-block
+                  (let [new-container-id (state/next-blocks-container-id)]
+                    (prn {:new-container-id new-container-id})
+                    (assoc config
+                           :original-block original-block
+                           :blocks-container-id new-container-id))
+                  config)]
     (rum/with-key (block-container config' item)
-      (str (:blocks-container-id config) "-" (:block/uuid item)))))
+      (str (:blocks-container-id config') "-" (:block/uuid item)))))
 
 (defn- block-list
   [config blocks]
