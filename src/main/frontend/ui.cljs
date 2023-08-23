@@ -1134,7 +1134,7 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (let [[visible? set-visible!] (rum/use-state false)
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")
