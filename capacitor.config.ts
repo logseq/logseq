@@ -8,6 +8,7 @@ const config: CapacitorConfig = {
   appName: 'Logseq',
   bundledWebRuntime: false,
   webDir: 'public',
+  loggingBehavior: 'debug',
   plugins: {
     SplashScreen: {
       launchShowDuration: 500,
