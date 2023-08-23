@@ -143,7 +143,7 @@
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
 
-;; FIXME: awful multi-arty function.
+;; FIXME(andelf): awful multi-arty function.
 ;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
   ([graph]
@@ -380,10 +380,12 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-  (repo-handler/graph-ready! repo)
-  ;; Replace initial fs watcher
-  (fs-watcher/load-graph-files! repo)
+  (p/do!
+   (fs-watcher/preload-graph-homepage-files!)
+   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+   (repo-handler/graph-ready! repo)
+   ;; This replaces the former initial fs watcher
+   (fs-watcher/load-graph-files! repo))
   ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
