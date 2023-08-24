@@ -97,10 +97,19 @@
                                  (let [page (string/trim (:value chosen))
                                        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
                                        class? (= (:block/name property) "tags")]
-                                   (when (nil? id)
+                                   (cond
+                                     (nil? id)
                                      (page-handler/create! page {:redirect? false
                                                                  :create-first-block? false
-                                                                 :class? class?}))
+                                                                 :tags [(uuid class)]
+                                                                 :class? class?})
+                                     ;; user typed a new option to get here so update the existing page
+                                     ;; to make their option valid
+                                     (seq class)
+                                     (db/transact! repo
+                                                   [{:block/uuid id
+                                                     :block/tags [{:db/id (:db/id (db/entity repo [:block/uuid (uuid class)]))}]}]
+                                                   {:outliner-op :save-block}))
                                    (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                      (add-property! block (:block/original-name property) id'))
                                    (when-let [f (:on-chosen opts)] (f))))

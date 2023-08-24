@@ -105,7 +105,7 @@
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
-(defn- build-page-tx [repo format properties page journal? whiteboard? class?]
+(defn- build-page-tx [repo format properties page journal? {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           title         (util/get-page-original-name page)
@@ -113,7 +113,10 @@
           page          (merge page
                                (when (seq properties) {:block/properties properties})
                                (when whiteboard? {:block/type "whiteboard"})
-                               (when class? {:block/type "class"}))
+                               (when class? {:block/type "class"})
+                               (when tags {:block/tags (mapv #(hash-map :db/id
+                                                                        (:db/id (db/entity repo [:block/uuid %])))
+                                                             tags)}))
           page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))
           db-based? (config/db-based-graph? (state/get-current-repo))]
       (cond
@@ -136,22 +139,27 @@
         [page]))))
 
 (defn create!
-  "Create page.
-   :redirect?           - when true, redirect to the created page, otherwise return sanitized page name.
-   :split-namespace?    - when true, split hierarchical namespace into levels.
-   :create-first-block? - when true, create an empty block if the page is empty.
-   :uuid                - when set, use this uuid instead of generating a new one."
+  "Create page. Has the following options:
+
+   * :redirect?           - when true, redirect to the created page, otherwise return sanitized page name.
+   * :split-namespace?    - when true, split hierarchical namespace into levels.
+   * :create-first-block? - when true, create an empty block if the page is empty.
+   * :uuid                - when set, use this uuid instead of generating a new one.
+   * :class?              - when true, adds a :block/type 'class'
+   * :whiteboard?         - when true, adds a :block/type 'whiteboard'
+   * :tags                - tag uuids that are added to :block/tags
+   TODO: Add other options"
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard? rename? class?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename?]
            :or   {redirect?           true
                   create-first-block? true
                   rename?             false
                   format              nil
                   properties          nil
                   split-namespace?    true
-                  uuid                nil
-                  class?              false}}]
+                  uuid                nil}
+           :as options}]
    (let [title      (-> (string/trim title)
                         (text/page-ref-un-brackets!)
                         ;; remove `#` from tags
@@ -173,7 +181,7 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx repo format nil % journal? false false))
+                           (mapcat #(build-page-tx repo format nil % journal? {}))
                            (remove nil?))
              txs      (map-indexed (fn [i page]
                                      (if (zero? i)
@@ -181,7 +189,7 @@
                                        (assoc page :block/namespace
                                               [:block/uuid (:block/uuid (nth txs (dec i)))])))
                                    txs)
-             last-txs (build-page-tx repo format properties (last pages) journal? whiteboard? class?)
+             last-txs (build-page-tx repo format properties (last pages) journal? (select-keys options [:whiteboard? :class? :tags]))
              last-txs (if (seq txs)
                         (update last-txs 0
                                 (fn [p]
