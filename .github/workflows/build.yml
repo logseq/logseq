@@ -25,7 +25,7 @@ jobs:
       - name: Checkout Actions Repository
         uses: actions/checkout@v3
       - name: Check spelling with custom config file
-        uses: crate-ci/typos@v1.13.10
+        uses: crate-ci/typos@v1.16.8
         with:
           config: ./typos.toml
 
