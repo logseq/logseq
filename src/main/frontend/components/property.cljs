@@ -376,9 +376,6 @@
         namespace-properties (->> (:block/tags block)
                                   (get-namespace-properties)
                                   (map (fn [id] [id nil])))
-        built-in-properties (set/difference
-                             (set (map name gp-property/db-built-in-properties-keys))
-                             #{"alias" "tags"})
         properties (->> (concat (seq tags-properties)
                                 (seq alias-properties)
                                 (seq properties)
@@ -387,7 +384,7 @@
                         (util/distinct-by first)
                         (remove (fn [[k _v]]
                                   (when (uuid? k)
-                                    (contains? built-in-properties (:block/name (db/entity [:block/uuid k])))))))
+                                    (contains? gp-property/db-hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid k]))))))))
         new-property? (or
                        (and (:*configure-show? opts)
                             @(:*configure-show? opts)

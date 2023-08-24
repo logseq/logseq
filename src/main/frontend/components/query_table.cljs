@@ -294,9 +294,10 @@
           sort-result (sort-result result (assoc sort-state :page? page?))
           table-version (get-shui-component-version :table config)]
       (case table-version
-        2 (let [result-as-text (for [row sort-result]
+        2 (let [v2-columns (mapv #(if (uuid? %) (pu/get-property-name %) %) columns)
+                result-as-text (for [row result]
                                  (for [column columns]
                                    (build-column-text row column)))]
-            (shui/table-v2 {:data (conj [[columns]] result-as-text)}
+            (shui/table-v2 {:data (conj [[v2-columns]] result-as-text)}
                            (make-shui-context config inline)))
         1 (result-table-v1 config current-block sort-result sort-state columns options map-inline page-cp ->elem inline-text)))))
