@@ -183,11 +183,25 @@
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
                                                   "Shift+CommandOrControl+N")}
                                   (if mac?
-                                    {:role "close"}
+                                    ;; Disable Command+W shortcut
+                                    {:role "close"
+                                     :accelerator false}
                                     {:role "quit"})]}
                        {:role "editMenu"}
                        {:role "viewMenu"}
-                       {:role "windowMenu"})
+                       {:role "windowMenu"
+                        :submenu (if mac?
+                                   [{:role "minimize"}
+                                    {:role "zoom"}
+                                    {:type "separator"}
+                                    {:role "front"}
+                                    {:type "separator"}
+                                    {:role "window"}]
+                                   [{:role "minimize"}
+                                    {:role "zoom"}
+                                    ;; Disable Control+W shortcut
+                                    {:role "close"
+                                     :accelerator false}])})
         ;; Windows has no about role
         template (conj template
                        (if mac?
