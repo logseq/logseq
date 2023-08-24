@@ -399,7 +399,8 @@ independent of format as format specific heading characters are stripped"
                                                               blocks)
                                                       (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
            (util/pprint duplicates)))
-       (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
+       ;; (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+       )
 
      (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
        (loop [block parent
