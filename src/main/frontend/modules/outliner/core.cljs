@@ -131,6 +131,14 @@
           new-refs (remove-self-page (:block/refs m))]
       (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs))))
 
+(defn- get-last-child-or-self
+  [block]
+  (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id block))
+                           db/entity)
+        target (or last-child block)]
+    [target (some? last-child)]))
+
+(declare move-blocks)
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m]
   (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
@@ -140,12 +148,23 @@
                                     (when (= sanity-linked-page (:block/name r))
                                       (:block/uuid r)))
                                   (:block/refs m))
-            page-m (block/page-name->map linked-page (or existing-ref-id true))]
+            page-m (block/page-name->map linked-page (or existing-ref-id true))
+            _ (when-not (db/entity [:block/uuid (:block/uuid page-m)])
+                (db/transact! [page-m]))
+            merge-tx (let [children (:block/_parent block-entity)]
+                       (let [page (db/entity [:block/uuid (:block/uuid page-m)])
+                             [target sibling?] (get-last-child-or-self page)]
+                         (when (seq children)
+                           (:tx-data
+                            (move-blocks children target
+                                         {:sibling? sibling?
+                                          :outliner-op :move-blocks})))))]
         (swap! txs-state (fn [txs]
                            (concat txs
                                    [(assoc page-m :block/tags (:block/tags m))
                                     {:db/id (:db/id block-entity)
-                                     :block/link [:block/uuid (:block/uuid page-m)]}])))))))
+                                     :block/link [:block/uuid (:block/uuid page-m)]}]
+                                   merge-tx)))))))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -646,13 +665,6 @@
                          (not move?)
                          (dissoc :db/id)))))
                  blocks)))
-
-(defn- get-last-child-or-self
-  [block]
-  (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id block))
-                           db/entity)
-        target (or last-child block)]
-    [target (some? last-child)]))
 
 (defn- get-target-block
   [blocks target-block {:keys [outliner-op indent? sibling? up?]}]
