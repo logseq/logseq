@@ -1,9 +1,10 @@
 (ns frontend.shui
   "Glue between frontend code and deps/shui for convenience"
-  (:require 
-    [frontend.date :refer [int->local-time-2]]
-    [frontend.state :as state]
-    [logseq.shui.context :refer [make-context]]))
+  (:require
+   [frontend.date :refer [int->local-time-2]]
+   [frontend.state :as state]
+   [frontend.handler.property.util :as pu]
+   [logseq.shui.context :refer [make-context]]))
 
 (def default-versions {:logseq.table.version 1})
 
@@ -13,7 +14,7 @@
   [component-name block-config]
   (let [version-key (keyword (str "logseq." (name component-name) ".version"))]
     (js/parseFloat
-      (or (get-in block-config [:block :block/properties version-key])
+      (or (pu/lookup (get-in block-config [:block :block/properties]) version-key)
           (get-in (state/get-config) [version-key])
           (get-in default-versions [version-key])
           1))))

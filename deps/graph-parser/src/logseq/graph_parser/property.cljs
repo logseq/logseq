@@ -173,13 +173,16 @@
   the following keys:
    * :schema - Property's schema. Required key
    * :original-name - Property's :block/original-name
-   * :attribute - Property that is saved to a datascript attribute outside of :block/properties"
+   * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
+   * :visible - Boolean to indicate user can see and use this property"
   {:alias {:original-name "Alias"
            :attribute :block/alias
+           :visible true
            :schema {:type :page
                     :cardinality :many}}
    :tags {:original-name "Tags"
           :attribute :block/tags
+          :visible true
           :schema {:type :page
                    :cardinality :many}}
    :background-color {:schema {:type :default}}
@@ -201,6 +204,25 @@
    :logseq.order-list-type {:schema {:type :checkbox}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
+   ;; color props
+   :logseq.color {:schema {:type :default}
+                  :visible true}
+   ;; table-v2 props
+   :logseq.table.version {:schema {:type :number}
+                          :visible true}
+   :logseq.table.compact {:schema {:type :checkbox}
+                          :visible true}
+   :logseq.table.headers {:schema {:type :default}
+                          :visible true}
+   :logseq.table.hover {:schema {:type :default}
+                        :visible true}
+   :logseq.table.borders {:schema {:type :checkbox}
+                          :visible true}
+   :logseq.table.stripes {:schema {:type :checkbox}
+                          :visible true}
+   :logseq.table.max-width {:schema {:type :number}
+                            :visible true}
+
    :icon {:original-name "Icon"
           :schema {:type :map}}
    :public {:schema {:type :checkbox}}
@@ -208,15 +230,15 @@
    :exclude-from-graph-view {:schema {:type :checkbox}}
    :created-in-property {:schema {:type :checkbox}}})
 
-(def db-user-facing-built-in-properties
+(def db-visible-built-in-properties
   "These are built-in properties that users can see and use"
-  #{:alias :tags})
+  (set (keep (fn [[k v]] (when (:visible v) k)) db-built-in-properties)))
 
 (defonce db-built-in-properties-keys
   (set (keys db-built-in-properties)))
 
 (def db-hidden-built-in-properties
-  (set/difference db-built-in-properties-keys db-user-facing-built-in-properties))
+  (set/difference db-built-in-properties-keys db-visible-built-in-properties))
 
 (defonce db-built-in-properties-keys-str
   (set (map name (keys db-built-in-properties))))
