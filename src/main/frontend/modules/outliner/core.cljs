@@ -832,9 +832,10 @@
            :or {children? true}}]
   [:pre [(seq blocks)]]
   (let [txs-state (ds/new-outliner-txs-state)
+        blocks (get-top-level-blocks blocks)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
         start-block (first blocks)
-        end-block (last (get-top-level-blocks blocks))
+        end-block (last blocks)
         start-node (block start-block)
         end-node (block end-block)
         end-node-parents (->>

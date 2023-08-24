@@ -31,13 +31,12 @@
                                    (go-loop []
                                      (let [[repo ret-ch deleted-uuids upsert-blocks] (<! db-upsert-chan)
                                            delete-rc (when (seq deleted-uuids)
-                                                       (<! (p->c (.deleteBlocks sqlite repo (clj->js deleted-uuids)))))
+                                                       (<! (p->c (.deleteBlocks sqlite repo (clj->js (map str deleted-uuids))))))
                                            upsert-rc (<! (p->c (.upsertBlocks sqlite repo (clj->js upsert-blocks))))]
                                        (async/put! ret-ch [delete-rc upsert-rc])
                                        (prn :db-upsert-chan :delete delete-rc :upsert upsert-rc))
                                      (recur))
-                                   (prn ::done))
-                                 )
+                                   (prn ::done)))
                          (p/catch (fn [e]
                                     (js/console.error "init error", e)))))))
     (p/resolved @*sqlite)))
@@ -123,4 +122,3 @@
             res (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids))]
       (prn :<fetch-blocks-excluding res)
       res)))
-
