@@ -30,7 +30,8 @@
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -103,10 +104,36 @@
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
 
+(defn- page-on-chosen-handler
+  [embed? input id q pos format]
+  (if embed?
+    (fn [chosen-item]
+      (let [value (.-value input)
+            value' (str (gp-util/safe-subs value 0 q)
+                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+        (state/set-edit-content! (.-id input) value')
+        (state/clear-editor-action!)
+        (let [page-name (util/page-name-sanity-lc chosen-item)
+              page (db/entity [:block/name page-name])
+              _ (when-not page (page-handler/create! chosen-item {:redirect? false
+                                                                  :create-first-block? false}))
+              current-block (state/get-edit-block)]
+          (editor-handler/api-insert-new-block! chosen-item
+                                                {:block-uuid (:block/uuid current-block)
+                                                 :sibling? true
+                                                 :replace-empty-target? true
+                                                 :other-attrs {:block/link (:db/id (db/entity [:block/name page-name]))}}))))
+    (page-handler/on-chosen-handler input id q pos format)))
+
 (rum/defc page-search < rum/reactive
+  {:will-unmount (fn [state]
+                   (reset! commands/*current-command nil)
+                   state)}
   "Embedded page searching popup"
   [id format]
-  (let [action (state/sub :editor/action)]
+  (let [action (state/sub :editor/action)
+        db? (config/db-based-graph? (state/get-current-repo))
+        embed? (and db? (= @commands/*current-command "Page embed"))]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -149,7 +176,7 @@
                                     (cons q matched-pages))))]
             (ui/auto-complete
              matched-pages
-             {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+             {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
               :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
               :item-render (fn [page-name chosen?]
                              [:div.preview-trigger-wrapper
@@ -176,6 +203,27 @@
                              (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
       (reset! result matched-blocks))))
 
+(defn- block-on-chosen-handler
+  [embed? input id q format selected-text]
+  (if embed?
+    (fn [chosen-item]
+      (let [pos (state/get-editor-last-pos)
+            value (.-value input)
+            value' (str (gp-util/safe-subs value 0 q)
+                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+        (state/set-edit-content! (.-id input) value')
+        (state/clear-editor-action!)
+        (let [current-block (state/get-edit-block)
+              id (:block/uuid chosen-item)
+              id (if (string? id) (uuid id) id)]
+          (editor-handler/api-insert-new-block! ""
+                                                {:block-uuid (:block/uuid current-block)
+                                                 :sibling? true
+                                                 :replace-empty-target? true
+                                                 :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
+          (state/clear-edit!))))
+    (editor-handler/block-on-chosen-handler id q format selected-text)))
+
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
            (let [result (atom nil)]
@@ -187,7 +235,9 @@
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
+        db? (config/db-based-graph? (state/get-current-repo))
+        embed? (and db? (= @commands/*current-command "Block embed"))
+        chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
@@ -207,6 +257,7 @@
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
+                   (reset! commands/*current-command nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
