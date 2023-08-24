@@ -163,6 +163,8 @@
                            (concat txs
                                    [(assoc page-m :block/tags (:block/tags m))
                                     {:db/id (:db/id block-entity)
+                                     :block/content ""
+                                     :block/refs []
                                      :block/link [:block/uuid (:block/uuid page-m)]}]
                                    merge-tx)))))))
 
