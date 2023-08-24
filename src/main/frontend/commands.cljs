@@ -233,8 +233,9 @@
          ["Underline" [[:editor/input "<ins></ins>"
                         {:last-pattern command-trigger
                          :backward-pos 6}]] "Create a underline text decoration"])
-       ["Template" [[:editor/input command-trigger nil]
-                    [:editor/search-template]] "Insert a created template here"]
+       (when-not db?
+         ["Template" [[:editor/input command-trigger nil]
+                      [:editor/search-template]] "Insert a created template here"])
        (cond
          (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
 

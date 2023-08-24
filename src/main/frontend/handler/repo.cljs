@@ -552,7 +552,7 @@
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
-
+          _ (state/pub-event! [:init/commands])
           _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
     (js/setTimeout ui-handler/re-render-root! 100)
     (prn "New db created: " full-graph-name)))

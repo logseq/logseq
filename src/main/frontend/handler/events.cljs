@@ -144,6 +144,9 @@
     (fs/watch-dir! dir-name))
   (file-sync-restart!))
 
+(defmethod handle :init/commands [_]
+  (page-handler/init-commands!))
+
 (defmethod handle :graph/unlinked [repo current-repo]
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
@@ -158,6 +161,7 @@
      (state/pub-event! [:validate-appId graph-switch graph])
      (do
        (state/set-current-repo! graph)
+       (page-handler/init-commands!)
        ;; load config
        (repo-config-handler/restore-repo-config! graph)
        (when-not (= :draw (state/get-current-route))
@@ -193,11 +197,11 @@
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
     (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-           (:sync-graph/init? @state/state))
+            (:sync-graph/init? @state/state))
       (graph-switch-on-persisted graph opts)
-     (notification/show!
-      "Please wait seconds until all changes are saved for the current graph."
-      :warning))))
+      (notification/show!
+       "Please wait seconds until all changes are saved for the current graph."
+       :warning))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)
