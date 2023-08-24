@@ -16,6 +16,7 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [logseq.common.path :as path]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
@@ -3133,7 +3134,8 @@
   "shortcut copy action:
   * when in selection mode, copy selected blocks
   * when in edit mode but no text selected, copy current block ref
-  * when in edit mode with text selected, copy selected text as normal"
+  * when in edit mode with text selected, copy selected text as normal
+  * when text is selected on a PDF, copy the highlighted text"
   [e]
   (when-not (auto-complete?)
     (cond
@@ -3146,7 +3148,13 @@
             selected-end (util/get-selection-end input)]
         (save-current-block!)
         (when (= selected-start selected-end)
-          (copy-current-block-ref "ref"))))))
+          (copy-current-block-ref "ref")))
+
+      (and (state/get-current-pdf)
+           (.closest (.. js/window getSelection -baseNode -parentElement)  ".pdfViewer"))
+      (util/copy-to-clipboard!
+       (pdf-utils/fix-selection-text-breakline (.. js/window getSelection toString))
+       nil))))
 
 (defn shortcut-copy-text
   "shortcut copy action:
