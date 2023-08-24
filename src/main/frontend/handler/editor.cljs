@@ -2175,13 +2175,19 @@
 
 (defn outdent-on-enter
   [node]
-  (when-not (parent-is-page? node)
-    (let [parent-node (tree/-get-parent node)]
-      (save-current-block!)
-      (outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
+  (let [original-block (outliner-core/get-current-editing-original-block)]
+    (when (or (not (parent-is-page? node))
+              original-block)
+      (let [parent-node (tree/-get-parent node)
+            target (if (parent-is-page? node)
+                     original-block
+                     (:data parent-node))]
+        (save-current-block!)
+        (when target
+          (outliner-tx/transact!
+           {:outliner-op :move-blocks
+            :real-outliner-op :indent-outdent}
+           (outliner-core/move-blocks! [(:data node)] target true)))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]

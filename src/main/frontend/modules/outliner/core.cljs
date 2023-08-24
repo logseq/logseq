@@ -945,22 +945,27 @@
                 {:tx-data full-tx
                  :tx-meta tx-meta}))))))))
 
+(defn get-current-editing-original-block
+  []
+  (when-let [input (state/get-input)]
+    (get-original-block-by-dom (util/rec-get-node input "ls-block"))))
+
 (defn- get-first-block-original
   []
-  (if-let [input (state/get-input)]
-    (get-original-block-by-dom (util/rec-get-node input "ls-block"))
-    (when-let [node (some-> (first (state/get-selection-blocks)))]
-      (get-original-block-by-dom node))))
+  (or
+   (get-current-editing-original-block)
+   (when-let [node (some-> (first (state/get-selection-blocks)))]
+     (get-original-block-by-dom node))))
 
 (defn- get-last-block-original
   [last-top-block]
-  (if-let [input (state/get-input)]
-    (get-original-block-by-dom (util/rec-get-node input "ls-block"))
-    (when-let [last-block-node (->> (state/get-selection-blocks)
-                                    (filter (fn [node]
-                                              (= (dom/attr node "blockid") (str (:block/uuid last-top-block)))))
-                                    last)]
-      (get-original-block-by-dom last-block-node))))
+  (or
+   (get-current-editing-original-block)
+   (when-let [last-block-node (->> (state/get-selection-blocks)
+                                   (filter (fn [node]
+                                             (= (dom/attr node "blockid") (str (:block/uuid last-top-block)))))
+                                   last)]
+     (get-original-block-by-dom last-block-node))))
 
 (defn move-blocks-up-down
   "Move blocks up/down."
