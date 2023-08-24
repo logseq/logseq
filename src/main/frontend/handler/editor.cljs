@@ -470,7 +470,8 @@
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
-                   custom-uuid replace-empty-target? edit-block?]
+                   custom-uuid replace-empty-target? edit-block?
+                   other-attrs]
             :or {sibling? false
                  before? false
                  edit-block? true}}]
@@ -511,6 +512,7 @@
               new-block (if (and db-based? (seq properties))
                           (assoc new-block :block/properties (db-property/replace-key-with-id! properties))
                           new-block)
+              new-block (merge new-block other-attrs)
               [block-m sibling?] (cond
                                    before?
                                    (let [first-child? (->> [:block/parent :block/left]

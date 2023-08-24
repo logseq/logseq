@@ -100,17 +100,28 @@
     [[:editor/input template {:last-pattern command-trigger
                               :backward-pos 2}]]))
 
-(defn embed-page
+(defn file-based-embed-page
   []
-  (conj
-   [[:editor/input "{{embed [[]]}}" {:last-pattern command-trigger
-                                     :backward-pos 4}]]
-   [:editor/search-page :embed]))
+  [[:editor/input "{{embed [[]]}}" {:last-pattern command-trigger
+                                    :backward-pos 4}]
+   [:editor/search-page :embed]])
 
-(defn embed-block
+(defn file-based-embed-block
   []
   [[:editor/input "{{embed (())}}" {:last-pattern command-trigger
                                     :backward-pos 4}]
+   [:editor/search-block :embed]])
+
+(defn db-based-embed-page
+  []
+  [[:editor/input "[[]]" {:last-pattern command-trigger
+                          :backward-pos 2}]
+   [:editor/search-page :embed]])
+
+(defn db-based-embed-block
+  []
+  [[:editor/input "(())" {:last-pattern command-trigger
+                          :backward-pos 2}]
    [:editor/search-block :embed]])
 
 (defn get-preferred-workflow
@@ -217,7 +228,9 @@
 
 (defn commands-map
   [get-page-ref-text]
-  (let [db? (config/db-based-graph? (state/get-current-repo))]
+  (let [db? (config/db-based-graph? (state/get-current-repo))
+        embed-page (if db? db-based-embed-page file-based-embed-page)
+        embed-block (if db? db-based-embed-block file-based-embed-block)]
     (->>
      (concat
     ;; basic
@@ -339,7 +352,8 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command only-breakline?]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number
+           command only-breakline? skip-blank-value-check?]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
@@ -391,9 +405,9 @@
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
           postfix (cond-> postfix
-                          (and only-breakline? postfix
-                               (= (get postfix 0) "\n"))
-                          (string/replace-first "\n" ""))
+                    (and only-breakline? postfix
+                         (= (get postfix 0) "\n"))
+                    (string/replace-first "\n" ""))
           new-value (cond
                       (string/blank? postfix)
                       prefix
@@ -405,7 +419,8 @@
                       (str prefix postfix))
           new-pos (- (count prefix)
                      (or backward-pos 0))]
-      (when-not (string/blank? new-value)
+      (when (or (not (string/blank? new-value))
+                skip-blank-value-check?)
         (state/set-block-content-and-last-pos! id new-value new-pos)
         (cursor/move-cursor-to input new-pos)))))
 
@@ -651,7 +666,7 @@
             (state/set-edit-content! input-id new-content))
           (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
 
-(defmethod handle-step :editor/search-page [[_]]
+(defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))
 
 (defmethod handle-step :editor/search-page-hashtag [[_]]
