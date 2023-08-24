@@ -302,10 +302,17 @@
   {:will-unmount (fn [state]
                    (reset! *query-properties {})
                    state)}
-  [block shown-properties all-properties _close-fn]
+  [block shown-properties all-properties]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
      [:div.font-bold (t :query/config-property-settings)]
+     [:div.flex
+      {:title "Refresh list of columns"
+       :on-click
+       (fn []
+         (reset! *query-properties {})
+         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :query-properties))}
+      (ui/icon "refresh")]
      (for [property all-properties]
        (let [property-value (get query-properties property)
              shown? (if (nil? property-value)
@@ -326,8 +333,8 @@
 
 (defn query-properties-settings
   [block shown-properties all-properties]
-  (fn [close-fn]
-    (query-properties-settings-inner block shown-properties all-properties close-fn)))
+  (fn [_close-fn]
+    (query-properties-settings-inner block shown-properties all-properties)))
 
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
   (let [properties (:block/properties block)
