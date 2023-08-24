@@ -111,7 +111,7 @@ html[data-theme='dark'] {
   --color-level-6: #3a7e8e;
 }
 
-/* You should always use .light-theme for light mode, the .white-theme is just for backword compatibility.
+/* You should always use .light-theme for light mode, the .white-theme is just for backward compatibility.
 
 See: https://github.com/logseq/logseq/pull/4652. */
 .white-theme,

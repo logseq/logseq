@@ -66,8 +66,8 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-              #(js->clj % :keywordize-keys true)
-              :files)
+               #(js->clj % :keywordize-keys true)
+               :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
                  nil))))
@@ -253,7 +253,7 @@
   (if (mobile-util/native-ios?)
     (cond
       (or (string/includes? path "///private/")
-          ;; virtual matchine
+          ;; virtual machine
           (string/starts-with? path "file:///Users/"))
       path
 
@@ -303,7 +303,7 @@
               (state/pub-event! [:modal/show-instruction]))
           exists? (<dir-exists? path)
           _ (when-not exists?
-             (p/rejected (str "Cannot access selected directory: " path)))
+              (p/rejected (str "Cannot access selected directory: " path)))
           _ (when (mobile-util/is-iCloud-container-path? path)
               (p/rejected (str "Please avoid accessing the top-level iCloud container path: " path)))
           path (if (mobile-util/native-ios?)
