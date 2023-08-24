@@ -1043,8 +1043,9 @@ Similar to re-frame subscriptions"
 
 (defn get-selection-blocks
   []
-  (->> @(:selection/blocks @state)
-       (remove nil?)))
+  (let [blocks (util/sort-by-height (bean/->clj (dom/by-class "ls-block selected")))]
+    (set-state! :selecton/blocks blocks)
+    blocks))
 
 (defn get-selection-block-ids
   []
