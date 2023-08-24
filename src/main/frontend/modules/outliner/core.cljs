@@ -963,7 +963,9 @@
                           (:block/left (get-first-block-original)))
             sibling? (= (:db/id (:block/parent left-left))
                         (:db/id first-block-parent))]
-        (when left-left
+        (when (and left-left
+                   (not= (:db/id (:block/page first-block-parent))
+                         (:db/id left-left)))
           (move-blocks top-level-blocks left-left (merge opts {:sibling? sibling?
                                                                :up? up?}))))
 
