@@ -1669,7 +1669,13 @@
 
 (defn- bullet-drag-start
   [event block uuid block-id]
-  (editor-handler/highlight-block! uuid)
+  (let [selected (set (map #(.-id %) (state/get-selection-blocks)))
+        selected? (contains? selected block-id)]
+    (when-not selected?
+    (util/clear-selection!)
+    (state/conj-selection-block! (gdom/getElement block-id) :down)
+    (editor-handler/highlight-block! uuid)))
+
   (editor-handler/block->data-transfer! uuid event)
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
