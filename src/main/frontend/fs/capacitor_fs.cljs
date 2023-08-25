@@ -254,7 +254,7 @@
   (if (mobile-util/native-ios?)
     (cond
       (or (string/includes? path "///private/")
-          ;; virtual matchine
+          ;; virtual machine
           (string/starts-with? path "file:///Users/"))
       path
 
