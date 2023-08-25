@@ -55,6 +55,7 @@
    ;; internal usage
    :keyword  keyword?
    :map      map?
+   ;; coll elements are ordered as it's saved as a vec
    :coll     coll?
    :any      some?})
 
@@ -179,7 +180,9 @@
                                   :else
                                   v*)
                       new-value (if (coll? new-value)
-                                  (set (remove string/blank? new-value))
+                                  (if (= :coll property-type)
+                                    (vec (remove string/blank? new-value))
+                                    (set (remove string/blank? new-value)))
                                   new-value)
                       block-properties (assoc properties property-uuid new-value)
                       refs (outliner-core/rebuild-block-refs block block-properties)]
