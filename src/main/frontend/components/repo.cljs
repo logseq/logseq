@@ -168,13 +168,12 @@
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
-                                        local? (db/get-repo-name url)
-                                        db-only? url
-                                        :else GraphName)
-                            short-repo-name (cond
-                                              local? (text-util/get-graph-name-from-path repo-url)
-                                              db-only? url
-                                              :else GraphName)]
+                                       local? (db/get-repo-name url)
+                                       db-only? url
+                                       :else GraphName)
+                            short-repo-name (if (or local? db-only?)
+                                              (text-util/get-graph-name-from-path repo-url)
+                                              GraphName)]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1.flex.items-center
@@ -241,7 +240,9 @@
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
                                    short-repo-name (if repo-name
-                                                     (db/get-short-repo-name repo-name)
+                                                     (if (config/db-based-graph? repo-name)
+                                                       (string/replace-first repo-name config/db-version-prefix "")
+                                                       (db/get-short-repo-name repo-name))
                                                      "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
