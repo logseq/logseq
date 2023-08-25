@@ -190,18 +190,11 @@
                        {:role "editMenu"}
                        {:role "viewMenu"}
                        {:role "windowMenu"
-                        :submenu (if mac?
-                                   [{:role "minimize"}
-                                    {:role "zoom"}
-                                    {:type "separator"}
-                                    {:role "front"}
-                                    {:type "separator"}
-                                    {:role "window"}]
-                                   [{:role "minimize"}
-                                    {:role "zoom"}
-                                    ;; Disable Control+W shortcut
-                                    {:role "close"
-                                     :accelerator false}])})
+                        :submenu (when-not mac? [{:role "minimize"}
+                                                 {:role "zoom"}
+                                                 ;; Disable Control+W shortcut
+                                                 {:role "close"
+                                                  :accelerator false}])})
         ;; Windows has no about role
         template (conj template
                        (if mac?
