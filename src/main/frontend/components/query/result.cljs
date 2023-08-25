@@ -18,6 +18,8 @@
         result-atom (atom nil)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
+        current-block-parent (or (:block/name (:block/page (:embed-parent config)))
+                                 (:block/name (:block/page (:block config))))
         _ (reset! *query-error nil)
         query-atom (try
                      (cond
@@ -40,7 +42,8 @@
                            (query-dsl/query (state/get-current-repo) q)))
 
                        :else
-                       (db/custom-query query {:current-block-uuid current-block-uuid}))
+                       (db/custom-query query { :current-block-uuid current-block-uuid
+                                                :current-block-parent current-block-parent }))
                      (catch :default e
                        (reset! *query-error e)
                        (atom nil)))]
