@@ -417,12 +417,14 @@
                                       :value id
                                       :selected (= class id)})
                      classes)
-        options (if class options (cons
-                                   {:label "Choose parent page"
-                                    :disabled true
-                                    :selected true
-                                    :value ""}
-                                   options))]
+        options (cons (if class
+                        {:label "Choose parent page"
+                         :value ""}
+                        {:label "Choose parent page"
+                         :disabled true
+                         :selected true
+                         :value ""})
+                      options)]
     (ui/select options
                (fn [_e value]
                  (on-select value)))))
@@ -459,9 +461,12 @@
                                      :block/uuid)]
                [:div.w-60
                 (class-select page namespace (fn [value]
-                                               (db/transact!
-                                                [{:db/id (:db/id page)
-                                                  :block/namespace [:block/uuid (uuid value)]}])))])]]
+                                               (if (seq value)
+                                                 (db/transact!
+                                                  [{:db/id (:db/id page)
+                                                    :block/namespace [:block/uuid (uuid value)]}])
+                                                 (db/transact!
+                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]]
 
            (when (seq (:block/properties page))
              [:div.my-4
