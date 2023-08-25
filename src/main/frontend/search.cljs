@@ -4,6 +4,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.graph-parser.config :as gp-config]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.regex :as regex]
@@ -65,16 +66,16 @@
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
         :else (if (= (first q) (first s))
-                   (recur (rest q)
-                          (rest s)
-                          (inc mult) ;; increase the multiplier as more query chars are matched
-                          (dec idx) ;; decrease idx so score gets lowered the further into the string we match
-                          (+ mult score)) ;; score for this match is current multiplier * idx
-                   (recur q
-                          (rest s)
-                          1 ;; when there is no match, reset multiplier to one
-                          (dec idx)
-                          score))))))
+                  (recur (rest q)
+                         (rest s)
+                         (inc mult) ;; increase the multiplier as more query chars are matched
+                         (dec idx) ;; decrease idx so score gets lowered the further into the string we match
+                         (+ mult score)) ;; score for this match is current multiplier * idx
+                  (recur q
+                         (rest s)
+                         1 ;; when there is no match, reset multiplier to one
+                         (dec idx)
+                         score))))))
 
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
@@ -104,6 +105,13 @@
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query-page engine q option)))))
+
+(defn asset-search
+  "Based off of frontend.handler.editor/ensure-assets-dir!"
+  [repo q]
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          [repo-dir assets-dir] ( repo)]))
 
 (defn- transact-blocks!
   [repo data]

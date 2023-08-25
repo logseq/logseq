@@ -34,6 +34,11 @@
   @apply w-px h-full bg-white/10;
 }
 
+.shui__button-theme-text {
+  background: none;
+  box-shadow: none;
+}
+
 .shui__button-theme-color {
   background: or(--lx-accent-09, --rx-blue-09);
 }

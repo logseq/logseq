@@ -24,17 +24,19 @@
     (name key)))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme text info shortcut value-label value title highlighted on-highlight on-highlight-dep header]}]
+(rum/defc root [{:keys [icon icon-theme text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click]}]
   (let [ref (rum/create-ref)]
     (rum/use-effect! 
       (fn [] 
         (when (and highlighted on-highlight) 
           (on-highlight ref)))
       [highlighted on-highlight-dep])
+
     [:div.flex.flex-col.px-6.gap-1.py-4 {:style {:background (if highlighted "var(--lx-gray-04-alpha)" "var(--lx-gray-02)")
                                                  :opacity (if highlighted 1 0.8)
                                                  :mix-blend-mode (if highlighted :normal :luminosity)}
-                                         :ref ref}
+                                         :ref ref
+                                         :on-click (when on-click on-click)}
      ;; header
      (when header
       [:div.text-xs.pl-8.font-light {:class "-mt-1"

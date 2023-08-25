@@ -10,7 +10,7 @@
 (rum/defc root 
   [{:keys [theme text depth size icon interactive shortcut tiled on-click] :or {theme :color depth 1 size :md interactive true}} context]
   (let [theme-class (str "shui__button-theme-" (name theme))
-        depth-class (str "shui__button-depth-" depth) 
+        depth-class (when-not (= :text theme) (str "shui__button-depth-" depth)) 
         color-class (str "shui__button-color-" (some-> context :state deref :ui/radix-color name))
         size-class  (str "shui__button-size-" (name size))
         tiled-class (when tiled "shui__button-tiled")]
