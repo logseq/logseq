@@ -372,9 +372,11 @@
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center
-            {:on-click #(reset! *configure-show? true)}
-            (ui/icon "plus" {:size 14})
-            [:div.ml-1.text-sm (if (= "class" (:block/type page)) "Configure page" "Add property")]]]])])))
+            {:on-click #(swap! *configure-show? not)}
+            (when @*configure-show? (ui/icon "x" {:size 14}))
+            [:div.ml-1.text-sm (if @*configure-show?
+                                 "Close configure"
+                                 "Configure page")]]]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -436,56 +438,44 @@
         type (:block/type page)
         properties-opts (merge {:selected? false
                                 :page-configure? true}
-                               opts)]
+                               opts)
+        class? (= type "class")]
     (when page
-      [:div.property-configure
-       [:div.grid.gap-4.p-1
-        (case type
-          "class"
-          [:div
-           [:div.structured-schema
-           ;; properties
-            [:p.font-medium.mb-2 "Properties:"]
-            [:div.grid.gap-1
-             (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
-               (component-block/db-properties-cp
-                {:editor-box editor/box}
-                page
-                edit-input-id
-                (assoc properties-opts :class-schema? true)))]
+      [:div.property-configure.grid.gap-1.p-1
+       [:div.grid.grid-cols-4.gap-1
+        [:div.col-span-1 "Class page?"]
+        [:div.col-span-3
+         (ui/checkbox {:checked class?
+                       :on-change (fn []
+                                    (if class?
+                                      (db/transact! [[:db/retract (:db/id page) :block/type]])
+                                      (db/transact! [{:db/id (:db/id page)
+                                                      :block/type "class"}])))})]]
 
-            [:div.flex.flex-row.items-center.flex-wrap.gap-2
-             [:div.font-medium.my-4 "Parent:"]
-             (let [namespace (some-> (:db/id (:block/namespace page))
-                                     db/entity
-                                     :block/uuid)]
-               [:div.w-60
-                (class-select page namespace (fn [value]
-                                               (if (seq value)
-                                                 (db/transact!
-                                                  [{:db/id (:db/id page)
-                                                    :block/namespace [:block/uuid (uuid value)]}])
-                                                 (db/transact!
-                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]]
+       (when class?
+         [:div.grid.grid-cols-4.gap-1.items-center.class-parent
+          [:div.col-span-1 "Parent:"]
+          [:div.col-span-3
+           (let [namespace (some-> (:db/id (:block/namespace page))
+                                   db/entity
+                                   :block/uuid)]
+             [:div.w-60
+              (class-select page namespace (fn [value]
+                                             (if (seq value)
+                                               (db/transact!
+                                                [{:db/id (:db/id page)
+                                                  :block/namespace [:block/uuid (uuid value)]}])
+                                               (db/transact!
+                                                [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]])
 
-           (when (seq (:block/properties page))
-             [:div.my-4
-              [:div.grid.gap-1
-               (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-                 (component-block/db-properties-cp
-                  {:editor-box editor/box}
-                  page
-                  edit-input-id
-                  properties-opts))]])]
-
-          [:div
-           (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-             [:div
-              (component-block/db-properties-cp
-               {:editor-box editor/box}
-               page
-               edit-input-id
-               properties-opts)])])]])))
+       [:div
+        [:p.my-1 "Properties: "]
+        (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+          (component-block/db-properties-cp
+           {:editor-box editor/box}
+           page
+           edit-input-id
+           (assoc properties-opts :class-schema? class?)))]])))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive

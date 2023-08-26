@@ -304,7 +304,7 @@
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub [:editor/editing? editor-id]))
         select-opts {:on-chosen (fn []
-                                  (when *configure-show? (reset! *configure-show? false))
+                                  ;; (when *configure-show? (reset! *configure-show? false))
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
     (case type
       :date
