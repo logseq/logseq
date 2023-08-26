@@ -401,4 +401,5 @@
                     [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
                                                                        {:style {:margin-left -20}})
                      (pv/property-value block property v opts)])])))))
-       (new-property block edit-input-id properties new-property? opts)])))
+       (when (or new-property? (not in-block-container?))
+         (new-property block edit-input-id properties new-property? opts))])))
