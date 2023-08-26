@@ -185,7 +185,7 @@
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? *configure-show?]
+  [state entity *property-key *property-value {:keys [class-schema?]
                                                :as opts}]
   (let [repo (state/get-current-repo)
         *show-new-property-config? (::show-new-property-config? state)
@@ -230,18 +230,12 @@
                        :on-chosen (fn [{:keys [value]}]
                                     (reset! *property-key value)
                                     (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
-                       :input-opts {:on-blur (fn []
-                                               (when *configure-show?
-                                                 (reset! *configure-show? false))
-                                               (pv/exit-edit-property))
+                       :input-opts {:on-blur (fn [] (pv/exit-edit-property))
                                     :on-key-down
                                     (fn [e]
                                       (case (util/ekey e)
                                         "Escape"
-                                        (do
-                                          (when *configure-show?
-                                            (reset! *configure-show? false))
-                                          (pv/exit-edit-property))
+                                        (pv/exit-edit-property)
                                         nil))}})])))
 
 (rum/defcs new-property < rum/reactive
@@ -385,11 +379,7 @@
                         (remove (fn [[k _v]]
                                   (when (uuid? k)
                                     (contains? gp-property/db-hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid k]))))))))
-        new-property? (or
-                       (and (:*configure-show? opts)
-                            @(:*configure-show? opts)
-                            (empty? properties))
-                       (= edit-input-id (state/sub :ui/new-property-input-id)))
+        new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         opts (assoc opts :blocks-container-id (::blocks-container-id state))]
     (when-not (and (empty? properties)
                    (not new-property?)
