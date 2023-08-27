@@ -17,7 +17,8 @@
    [frontend.db.listener :as db-listener]
    [frontend.util.drawer :as drawer]
    [frontend.handler.file-based.property.util :as property-util]
-   [frontend.handler.property.util :as pu]))
+   [frontend.handler.property.util :as pu]
+   [dommy.core :as dom]))
 
 ;;  Fns
 
@@ -66,7 +67,7 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
+  (let [blocks (js/document.getElementsByClassName (str "id" block-uuid))]
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
 
@@ -307,10 +308,30 @@
                   :own-order-list-index own-order-list-index
                   :own-order-number-list? (= own-order-list-type "number"))))
 
+(defn get-nearby-block-by-id
+  [block-id direction]
+  (when block-id
+    (let [block-id (str block-id)]
+      (when (util/uuid-string? block-id)
+        (when-let [e (state/get-input)]
+          (when-let [current-block ^js (or (dom/closest e ".ls-block") e)]
+            (when-let [near-by (if (= direction :down)
+                                 (let [next (.-nextSibling current-block)]
+                                   (if (and next (dom/has-class? next (str "id" block-id)))
+                                     next
+                                     (first (dom/by-class current-block (str "id" block-id)))))
+                                 (let [prev (.-previousSibling current-block)]
+                                   (if (and prev (dom/has-class? prev (str "id" block-id)))
+                                     prev
+                                     (last (dom/by-class prev (str "id" block-id))))))]
+              (when (dom/has-class? near-by (str "id" block-id))
+                near-by))))))))
+
 (defn- get-edit-input-id-with-block-id
-  [block-id]
-  (when-let [first-block (util/get-first-block-by-id block-id)]
-    (string/replace (gobj/get first-block "id")
+  [block-id direction]
+  (when-let [target (or (get-nearby-block-by-id block-id direction)
+                        (util/get-first-block-by-id block-id))]
+    (string/replace (gobj/get target "id")
                     "ls-block"
                     "edit-block")))
 
@@ -335,7 +356,7 @@
 (defn edit-block!
   ([block pos id]
    (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len retry-times]
+  ([block pos id {:keys [custom-content tail-len retry-times direction]
                   :or {tail-len 0
                        retry-times 0}
                   :as opts}]
@@ -344,9 +365,11 @@
        (when-let [block-id (:block/uuid block)]
          (let [block (or (db/entity [:block/uuid block-id]) block)
                edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id)
-                               (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                   (string/replace "ls-block" "edit-block")))
+                               (get-edit-input-id-with-block-id id direction)
+                               (let [id (str (subs id 0 (- (count id) 36)) block-id)]
+                                 (if (gdom/getElement id)
+                                   (string/replace id "ls-block" "edit-block")
+                                   (get-edit-input-id-with-block-id block-id direction))))
                content (or custom-content (:block/content block) "")
                content-length (count content)
                text-range (cond

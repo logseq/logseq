@@ -1888,7 +1888,7 @@ Similar to re-frame subscriptions"
   ([edit-input-id content block cursor-range move-cursor?]
    (if (> (count content)
           (block-content-max-length (get-current-repo)))
-     (let [elements (array-seq (js/document.getElementsByClassName (:block/uuid block)))]
+     (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
        (when (first elements)
          (util/scroll-to-element (gobj/get (first elements) "id")))
        (exit-editing-and-set-selected-blocks! elements))

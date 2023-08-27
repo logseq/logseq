@@ -2833,7 +2833,7 @@
        :data-refs data-refs
        :data-refs-self data-refs-self
        :data-collapsed (and collapsed? has-child?)
-       :class (str uuid
+       :class (str (str "id" uuid)      ; ID starts with a number can't be selected
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-md")
                    (when selected? " selected")
@@ -2946,9 +2946,13 @@
 
                :else
                nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
+             (let [container-id (if (:original-block config)
+                                  (state/next-blocks-container-id)
+                                  (:blocks-container-id config))]
+               (assoc state
+                      ::control-show? (atom false)
+                      ::navigating-block (atom (:block/uuid block))
+                      ::blocks-container-id container-id))))
    :should-update (fn [old-state new-state]
                     (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
                           b1                  (second (:rum/args old-state))
@@ -2968,7 +2972,8 @@
                    state)}
   [state config block]
   (let [repo (state/get-current-repo)
-        blocks-container-id (:blocks-container-id config)
+        blocks-container-id (::blocks-container-id state)
+        config (assoc config :blocks-container-id blocks-container-id)
         edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
         edit? (state/sub [:editor/editing? edit-input-id])
         opts {:edit? edit?
@@ -3363,14 +3368,14 @@
         config (assoc config :block/uuid (:block/uuid item)
                       :idx idx)
         config' (if linked-block
-                  (let [new-container-id (state/next-blocks-container-id)]
-                    (assoc config
-                           :original-block original-block
-                           ;; :blocks-container-id new-container-id
-                           ))
+                  (assoc config :original-block original-block)
                   config)]
     (rum/with-key (block-container config' item)
-      (str (:blocks-container-id config') "-" (:block/uuid item)))))
+      (str (:blocks-container-id config')
+           "-"
+           (:block/uuid item)
+           (when linked-block
+             (str "-" (:block/uuid original-block)))))))
 
 (defn- block-list
   [config blocks]
