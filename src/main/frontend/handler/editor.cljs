@@ -3590,6 +3590,7 @@
       (state/exit-editing-and-set-selected-blocks! blocks))
     (->> (all-blocks-with-level {:page page
                                  :collapse? true})
+         (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
          (map (comp gdom/getElementByClass str :block/uuid))
          state/exit-editing-and-set-selected-blocks!))
   (state/set-state! :selection/selected-all? true))
