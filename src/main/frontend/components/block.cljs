@@ -2826,8 +2826,7 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         selected? (when-not slide?
-                    (state/sub-block-selected? blocks-container-id uuid))
-        config (dissoc config :original-block)]
+                    (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
      (cond->
       {:id block-id
@@ -2909,7 +2908,8 @@
 
      (when-not (:hide-children? config)
        (let [children (db/sort-by-left (:block/_parent block) block)
-             config' (update config :level inc)]
+             config' (-> (update config :level inc)
+                         (dissoc :original-block))]
          (block-children config' block children collapsed?)))
 
      (dnd-separator-wrapper block block-id slide? false false)]))
