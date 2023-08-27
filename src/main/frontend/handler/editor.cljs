@@ -227,7 +227,7 @@
 
 (defn highlight-block!
   [block-uuid]
-  (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
+  (let [blocks (array-seq (js/document.getElementsByClassName (str "id" block-uuid)))]
     (doseq [block blocks]
       (dom/add-class! block "block-highlight"))))
 
@@ -2516,7 +2516,8 @@
           (edit-block! block
                        (or (:pos move-opts)
                         [direction line-pos])
-                       new-id))))))
+                       new-id
+                       {:direction direction}))))))
 
 (defn keydown-up-down-handler
   [direction {:keys [_pos] :as move-opts}]

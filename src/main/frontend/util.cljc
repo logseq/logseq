@@ -999,7 +999,7 @@
      (when block-id
        (let [block-id (str block-id)]
          (when (uuid-string? block-id)
-           (first (array-seq (js/document.getElementsByClassName block-id))))))))
+           (first (array-seq (js/document.getElementsByClassName (str "id" block-id)))))))))
 
 #?(:cljs
    (defn url-encode
