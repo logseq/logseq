@@ -91,7 +91,7 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
       if (this._settings[k] == v) return
       this._settings[k] = v
     } else if (isObject(k)) {
-      deepMerge(this._settings, k)
+      this._settings = deepMerge(this._settings, k)
     } else {
       return
     }
