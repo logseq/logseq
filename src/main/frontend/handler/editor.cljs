@@ -2762,7 +2762,8 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?))
+      (js/setTimeout #(edit-block! block (state/get-edit-pos) (:block/uuid block)) 30))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
