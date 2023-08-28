@@ -2973,6 +2973,7 @@
   [state config block]
   (let [repo (state/get-current-repo)
         blocks-container-id (::blocks-container-id state)
+        unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block)))
         config (assoc config :blocks-container-id blocks-container-id)
         edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
         edit? (state/sub [:editor/editing? edit-input-id])
@@ -2980,13 +2981,24 @@
               :edit-input-id edit-input-id}
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))]
-    (if (or ref? custom-query? (:lazy? config))
-      (ui/lazy-visible
-       (fn [] (block-container-inner state repo config block opts))
-       {:debug-id (str "block-container-ref " (:db/id block))
-        :fade-in? false
-        :initial-state edit?})
-      (block-container-inner state repo config block opts))))
+    (cond
+      unloaded?
+      [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+     [:div.flex.flex-row
+      [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+       [:span.bullet-container.cursor
+        [:span.bullet]]]
+      [:div.flex.flex-1
+       [:span.opacity-70
+        "Loading..."]]]]
+      :else
+      (if (or ref? custom-query? (:lazy? config))
+       (ui/lazy-visible
+        (fn [] (block-container-inner state repo config block opts))
+        {:debug-id (str "block-container-ref " (:db/id block))
+         :fade-in? false
+         :initial-state edit?})
+       (block-container-inner state repo config block opts)))))
 
 (defn divide-lists
   [[f & l]]
