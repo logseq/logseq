@@ -43,12 +43,12 @@
      {:actor
       {:block/uuid actor-id
        :block/schema {:type :object
-                      :class (str person-id)
+                      :class person-id
                       :cardinality :many}}
       :attendee
       {:block/uuid attendee-id
        :block/schema {:type :object
-                      :class (str person-id)
+                      :class person-id
                       :cardinality :many}}
       :comment {:block/uuid comment-id}
       :duration {:block/uuid duration-id}}}))

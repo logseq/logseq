@@ -59,7 +59,7 @@
                     options))]
     (ui/select options'
                (fn [_e value]
-                 (swap! *property-schema assoc :class (str value))))))
+                 (swap! *property-schema assoc :class (uuid value))))))
 
 (rum/defcs property-config <
   rum/reactive
