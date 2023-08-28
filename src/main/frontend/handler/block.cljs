@@ -308,6 +308,16 @@
                   :own-order-list-index own-order-list-index
                   :own-order-number-list? (= own-order-list-type "number"))))
 
+(defn- check-node?
+  [node block-id]
+  (= block-id (dom/attr node "blockid")))
+
+(defn- get-blocks-by-id
+  [node block-id]
+  (->> (dom/by-class node "ls-block")
+       (filter #(check-node? % block-id))
+       (util/sort-by-height)))
+
 (defn get-nearby-block-by-id
   [block-id direction]
   (when block-id
@@ -315,16 +325,17 @@
       (when (util/uuid-string? block-id)
         (when-let [e (state/get-input)]
           (when-let [current-block ^js (or (dom/closest e ".ls-block") e)]
-            (when-let [near-by (if (= direction :down)
-                                 (let [next (.-nextSibling current-block)]
-                                   (if (and next (dom/has-class? next (str "id" block-id)))
-                                     next
-                                     (first (dom/by-class current-block (str "id" block-id)))))
-                                 (let [prev (.-previousSibling current-block)]
-                                   (if (and prev (dom/has-class? prev (str "id" block-id)))
-                                     prev
-                                     (last (dom/by-class prev (str "id" block-id))))))]
-              (when (dom/has-class? near-by (str "id" block-id))
+            (let [near-by (if (= direction :down)
+                            (let [next (.-nextSibling current-block)]
+                              (if (and next (check-node? next block-id))
+                                next
+                                (first (get-blocks-by-id current-block block-id))))
+                            (let [prev (or (.-previousSibling current-block)
+                                           (util/rec-get-node (gobj/get current-block "parentNode") "ls-block"))]
+                              (if (and prev (check-node? prev block-id))
+                                prev
+                                (when prev (last (get-blocks-by-id prev block-id))))))]
+              (when (and near-by (check-node? near-by block-id))
                 near-by))))))))
 
 (defn- get-edit-input-id-with-block-id
