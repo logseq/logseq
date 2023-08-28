@@ -432,7 +432,7 @@
                  (on-select value)))))
 
 (rum/defcs configure < rum/reactive
-  [state page opts]
+  [state page {:keys [journal?] :as opts}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         type (:block/type page)
@@ -442,15 +442,16 @@
         class? (= type "class")]
     (when page
       [:div.property-configure.grid.gap-1.p-1
-       [:div.grid.grid-cols-4.gap-1
-        [:div.col-span-1 "Class page?"]
-        [:div.col-span-3
-         (ui/checkbox {:checked class?
-                       :on-change (fn []
-                                    (if class?
-                                      (db/transact! [[:db/retract (:db/id page) :block/type]])
-                                      (db/transact! [{:db/id (:db/id page)
-                                                      :block/type "class"}])))})]]
+       (when-not journal?
+         [:div.grid.grid-cols-4.gap-1
+          [:div.col-span-1 "Class page?"]
+          [:div.col-span-3
+           (ui/checkbox {:checked class?
+                         :on-change (fn []
+                                      (if class?
+                                        (db/transact! [[:db/retract (:db/id page) :block/type]])
+                                        (db/transact! [{:db/id (:db/id page)
+                                                        :block/type "class"}])))})]])
 
        (when class?
          [:div.grid.grid-cols-4.gap-1.items-center.class-parent
@@ -558,7 +559,8 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when (and @*configure-show? db-based? (not built-in-property?))
-            (configure page {:*configure-show? *configure-show?}))
+            (configure page {:*configure-show? *configure-show?
+                             :journal? journal?}))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
