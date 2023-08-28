@@ -342,7 +342,8 @@
   [block-id direction retry-times current-container-id]
   (let [container-id (when current-container-id
                        (string/replace current-container-id "edit-block" "ls-block"))]
-    (when-let [target (if (and (< retry-times 3) container-id)
+
+    (when-let [target (if (and (< retry-times 2) container-id)
                         (gdom/getElement container-id)
                         (or (get-nearby-block-by-id block-id direction)
                             (util/get-first-block-by-id block-id)))]
