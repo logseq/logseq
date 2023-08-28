@@ -14,5 +14,6 @@
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";
 @import "react-tippy/dist/tippy.css";
+@import "pdfjs-dist/web/pdf_viewer.css";
 @import "resources/css/tabler-extension.css";
 @import-glob "src/main/frontend/**/[!_]*.css";
