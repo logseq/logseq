@@ -3332,55 +3332,74 @@
   (when-let [graph-uuid (second @graphs-txid)]
     (get-pwd graph-uuid)))
 
+
+(defn- <connectivity-testing
+  []
+  (go
+    (let [api-url (str "https://" config/API-DOMAIN "/logseq/version")
+          r1 (http/get api-url)
+          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL)
+          r1* (<! r1)
+          r2* (<! r2)
+          ok? (and (= 200 (:status r1*))
+                   (= 200 (:status r2*))
+                   (= "OK" (:body r2*)))]
+      (if ok?
+        (println :connectivity-testing-succ)
+        (notification/show! (str (t :file-sync/connectivity-testing-failed)
+                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url])) :warning false))
+      ok?)))
+
 (declare network-online-cursor)
 
 (defn <sync-start
   []
-  (when-not (false? (state/enable-sync?))
-    (go
-      (when (false? @*sync-entered?)
-        (reset! *sync-entered? true)
-        (let [*sync-state                 (atom (sync-state))
-              current-user-uuid           (<! (user/<user-uuid))
+  (go
+    (when (and (state/enable-sync?)
+               (false? @*sync-entered?)
+               (<! (<connectivity-testing)))
+      (reset! *sync-entered? true)
+      (let [*sync-state                 (atom (sync-state))
+            current-user-uuid           (<! (user/<user-uuid))
               ;; put @graph-uuid & get-current-repo together,
               ;; prevent to get older repo dir and current graph-uuid.
-              _                           (<! (p->c (persist-var/-load graphs-txid)))
-              [user-uuid graph-uuid txid] @graphs-txid
-              txid                        (or txid 0)
-              repo                        (state/get-current-repo)]
-          (when-not (instance? ExceptionInfo current-user-uuid)
-            (when (and repo
-                       @network-online-cursor
-                       user-uuid graph-uuid txid
-                       (graph-sync-off? graph-uuid)
-                       (user/logged-in?)
-                       (not (config/demo-graph? repo)))
-              (try
-                (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                      (config/get-repo-dir repo) repo
-                                                      txid *sync-state)]
-                  (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                    (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                      (clear-graphs-txid! repo)
-                      (do
-                        (state/set-file-sync-state graph-uuid @*sync-state)
-                        (state/set-file-sync-manager graph-uuid sm)
+            _                           (<! (p->c (persist-var/-load graphs-txid)))
+            [user-uuid graph-uuid txid] @graphs-txid
+            txid                        (or txid 0)
+            repo                        (state/get-current-repo)]
+        (when-not (instance? ExceptionInfo current-user-uuid)
+          (when (and repo
+                     @network-online-cursor
+                     user-uuid graph-uuid txid
+                     (graph-sync-off? graph-uuid)
+                     (user/logged-in?)
+                     (not (config/demo-graph? repo)))
+            (try
+              (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                    (config/get-repo-dir repo) repo
+                                                    txid *sync-state)]
+                (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                  (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                    (clear-graphs-txid! repo)
+                    (do
+                      (state/set-file-sync-state graph-uuid @*sync-state)
+                      (state/set-file-sync-manager graph-uuid sm)
 
                         ;; update global state when *sync-state changes
-                        (add-watch *sync-state ::update-global-state
-                                   (fn [_ _ _ n]
-                                     (state/set-file-sync-state graph-uuid n)))
+                      (add-watch *sync-state ::update-global-state
+                                 (fn [_ _ _ n]
+                                   (state/set-file-sync-state graph-uuid n)))
 
-                        (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+                      (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                        (.start sm)
+                      (.start sm)
 
-                        (offer! remote->local-full-sync-chan true)
-                        (offer! full-sync-chan true)))))
-                (catch :default e
-                  (prn "Sync start error: ")
-                  (log/error :exception e)))))
-          (reset! *sync-entered? false))))))
+                      (offer! remote->local-full-sync-chan true)
+                      (offer! full-sync-chan true)))))
+              (catch :default e
+                (prn "Sync start error: ")
+                (log/error :exception e)))))
+        (reset! *sync-entered? false)))))
 
 (defn- restart-if-stopped!
   [is-active?]
