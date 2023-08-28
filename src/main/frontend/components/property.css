@@ -11,7 +11,8 @@
     @apply grid gap-1;
 
     .property-pair {
-        @apply grid grid-cols-4 gap-1
+        @apply grid grid-cols-4 gap-1;
+        grid-template-columns: repeat(auto-fit, 160px);
     }
 
     .add-button-link {
