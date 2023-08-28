@@ -118,7 +118,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [row column {:keys [page? ->elem map-inline config comma-separated-property?]}]
+  [row column {:keys [page? ->elem map-inline comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
@@ -129,13 +129,14 @@
 
     :block       ; block title
     (let [content (:block/content row)
+          uuid (:block/uuid row)
           {:block/keys [title]} (block/parse-title-and-body
                                  (:block/uuid row)
                                  (:block/format row)
                                  (:block/pre-block? row)
                                  content)]
       (if (seq title)
-        [:element (->elem :div (map-inline config title))]
+        [:element (->elem :div (map-inline {:block/uuid uuid} title))]
         [:string content]))
 
     :created-at
@@ -189,7 +190,7 @@
           render-column-value (fn [row-format cell-format value]
                                 (cond 
                                   ;; elements should be rendered as they are provided
-                                  (= :element cell-format) value 
+                                  (= :element cell-format) value
                                   ;; collections are treated as a comma separated list of page-cps
                                   (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
                                                      (interpose [:span ", "]))
@@ -198,7 +199,7 @@
                                   ;; string values will attempt to be rendered as pages, falling back to 
                                   ;; inline-text when no page entity is found
                                   (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                                                    (page-cp {} page) 
+                                                    (page-cp {} page)
                                                     (inline-text row-format value))
                                   ;; anything else should just be rendered as provided
                                   :else value))]

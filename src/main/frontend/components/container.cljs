@@ -139,9 +139,11 @@
   [t]
   (let [favorites (->> (:favorites (state/sub-config))
                        (remove string/blank?)
-                       (filter string?))
+                       (filter string?)
+                       (mapv util/safe-page-name-sanity-lc)
+                       (distinct))
         favorite-entities (->> favorites
-                               (mapv #(db/entity [:block/name (util/safe-page-name-sanity-lc %)]))
+                               (mapv #(db/entity [:block/name %]))
                                (remove nil?))]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th

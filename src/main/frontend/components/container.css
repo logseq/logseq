@@ -653,13 +653,10 @@ html[data-theme='dark'] {
     min-height: 100px;
 
     .sidebar-item-header {
-      white-space: nowrap;
-
       .breadcrumb {
         margin-top: 0;
         margin-bottom: 0;
-        text-overflow: ellipsis;
-        overflow: hidden;
+        text-align: left;
       }
     }
 
