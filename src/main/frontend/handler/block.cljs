@@ -339,12 +339,16 @@
                 near-by))))))))
 
 (defn- get-edit-input-id-with-block-id
-  [block-id direction]
-  (when-let [target (or (get-nearby-block-by-id block-id direction)
-                        (util/get-first-block-by-id block-id))]
-    (string/replace (gobj/get target "id")
-                    "ls-block"
-                    "edit-block")))
+  [block-id direction retry-times current-container-id]
+  (let [container-id (when current-container-id
+                       (string/replace current-container-id "edit-block" "ls-block"))]
+    (when-let [target (if (and (< retry-times 3) container-id)
+                        (gdom/getElement container-id)
+                        (or (get-nearby-block-by-id block-id direction)
+                            (util/get-first-block-by-id block-id)))]
+      (string/replace (gobj/get target "id")
+                      "ls-block"
+                      "edit-block"))))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -371,16 +375,16 @@
                   :or {tail-len 0
                        retry-times 0}
                   :as opts}]
-   (when-not (> retry-times 2)
+   (when-not (> retry-times 3)
      (when-not config/publishing?
        (when-let [block-id (:block/uuid block)]
          (let [block (or (db/entity [:block/uuid block-id]) block)
                edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id direction)
+                               (get-edit-input-id-with-block-id id direction retry-times nil)
                                (let [id (str (subs id 0 (- (count id) 36)) block-id)]
                                  (if (gdom/getElement id)
                                    (string/replace id "ls-block" "edit-block")
-                                   (get-edit-input-id-with-block-id block-id direction))))
+                                   (get-edit-input-id-with-block-id block-id direction retry-times id))))
                content (or custom-content (:block/content block) "")
                content-length (count content)
                text-range (cond
