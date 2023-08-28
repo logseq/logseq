@@ -49,17 +49,20 @@
                                       :value id
                                       :selected (= class id)})
                      classes)
-        options' (if class
-                   options
-                   (cons
+        options' (cons
+                  (if class
+                    {:label "Choose a class"
+                     :value ""}
                     {:label "Choose a class"
                      :disabled true
                      :selected true
-                     :value ""}
-                    options))]
+                     :value ""})
+                  options)]
     (ui/select options'
                (fn [_e value]
-                 (swap! *property-schema assoc :class (uuid value))))))
+                 (if (seq value)
+                   (swap! *property-schema assoc :class (uuid value))
+                   (swap! *property-schema dissoc :class))))))
 
 (rum/defcs property-config <
   rum/reactive
