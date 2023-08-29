@@ -57,7 +57,7 @@
                  (tc/to-local-date value))]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
-       [:a
+       [:a.flex
         {:tabIndex "0"
          :on-click toggle-fn
          :on-key-down (fn [e]
