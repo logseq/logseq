@@ -252,7 +252,7 @@
                  (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
-  [state block edit-input-id properties new-property? opts]
+  [state block edit-input-id properties new-property? *hover? opts]
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
@@ -264,15 +264,19 @@
                (seq properties)
                (seq (:block/alias block))
                (seq (:block/tags block)))
-           (not config/publishing?))
-      [:div
-       [:a.add-button-link
-        {:title "Add another property"
-         :on-click (fn []
-                     (property-handler/set-editing-new-property! edit-input-id)
-                     (reset! *property-key nil)
-                     (reset! *property-value nil))}
-        (ui/icon "circle-plus" {:size 15})]])))
+           (not config/publishing?)
+           (or (:page-configure? opts)  @*hover?))
+      [:a.fade-link.my-1
+       {:on-click (fn []
+                    (property-handler/set-editing-new-property! edit-input-id)
+                    (reset! *property-key nil)
+                    (reset! *property-value nil))}
+       [:div.flex.flex-row.items-center
+        (ui/icon "circle-plus" {:size 16})
+        [:div.ml-1.text-sm "Add property"]]]
+
+      :else
+      [:div {:style {:height 28}}])))
 
 (rum/defcs property-key
   [state block property {:keys [class-schema?]}]
@@ -349,11 +353,13 @@
      @*namespaces)))
 
 (rum/defcs properties-area < rum/reactive
+  (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
   [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
-  (let [block (resolve-linked-block-if-exists target-block)
+  (let [*hover? (::hover? state)
+        block (resolve-linked-block-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
@@ -388,8 +394,11 @@
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area
-       (when (:selected? opts)
-         {:class "select-none"})
+       (cond->
+        {:on-mouse-over #(reset! *hover? true)
+         :on-mouse-out #(reset! *hover? false)}
+         (:selected? opts)
+         (assoc :class "select-none"))
        (when (seq properties)
          (for [[k v] properties]
            (when (uuid? k)
@@ -405,4 +414,4 @@
                                                                        {:style {:margin-left -20}})
                      (pv/property-value block property v opts)])])))))
        (when (or new-property? (not in-block-container?))
-         (new-property block edit-input-id properties new-property? opts))])))
+         (new-property block edit-input-id properties new-property? *hover? opts))])))

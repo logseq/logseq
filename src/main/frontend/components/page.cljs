@@ -293,7 +293,7 @@
   (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview?]}]
+  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview? journal?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           *hover? (::hover? state)
@@ -310,7 +310,8 @@
                     (date/journal-title->custom-format title)
                     title))
           old-name (or title page-name)
-          db-based? (config/db-based-graph? repo)]
+          db-based? (config/db-based-graph? repo)
+          object? (= (:block/type page) "object")]
       [:div.ls-page-title.flex-1.flex-row.w-full.relative
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(reset! *hover? false)}
@@ -365,7 +366,9 @@
                   db-based?
                   (not built-in-property?)
                   (not @*edit?)
-                  (not config/publishing?))
+                  (not config/publishing?)
+                  (not journal?)
+                  (not object?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center
@@ -543,7 +546,8 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               (page-title page-name icon title {:fmt-journal? fmt-journal?
+               (page-title page-name icon title {:journal? journal?
+                                                 :fmt-journal? fmt-journal?
                                                  :*configure-show? *configure-show?
                                                  :built-in-property? built-in-property?
                                                  :preview? preview?}))
@@ -572,7 +576,7 @@
                   (or (seq (:block/properties page))
                       (seq (:block/alias page))
                       (seq (:block/tags page))))
-             [:div.p-2.mb-4
+             [:div.p-2
               (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")]
                 (component-block/db-properties-cp
                  {:editor-box editor/box}

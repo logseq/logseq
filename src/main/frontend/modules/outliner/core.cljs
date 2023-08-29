@@ -161,7 +161,9 @@
                                           :outliner-op :move-blocks})))))]
         (swap! txs-state (fn [txs]
                            (concat txs
-                                   [(assoc page-m :block/tags (:block/tags m))
+                                   [(assoc page-m
+                                           :block/tags (:block/tags m)
+                                           :block/type "object")
                                     {:db/id (:db/id block-entity)
                                      :block/content ""
                                      :block/refs []
