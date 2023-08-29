@@ -381,7 +381,7 @@ const db: Partial<IDBProxy> = {
     callback: (
       block: BlockEntity,
       txData: Array<IDatom>,
-      txMeta?: { outlinerOp: string; [p: string]: any }
+      txMeta?: { outlinerOp: string;[p: string]: any }
     ) => void
   ): IUserOffHook {
     if (!shouldValidUUID(uuid)) return
@@ -530,6 +530,7 @@ export class LSPluginUser
       this._connected = true
 
       baseInfo = deepMerge(this._baseInfo, baseInfo)
+      this._baseInfo = baseInfo;
 
       if (baseInfo?.id) {
         this._debugTag =
