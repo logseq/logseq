@@ -78,8 +78,8 @@
         *property-schema (::property-schema state)
         built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
         property (db/sub-block (:db/id property))]
-    [:div.property-configure
-     [:p.font-bold.text-xl
+    [:div.property-configure.flex.flex-1.flex-col
+     [:div.font-bold.text-xl
       (if built-in-property?
         "Built-in property"
         "Configure property")]
@@ -313,7 +313,7 @@
       (fn [{:keys [toggle-fn]}]
         (when (not config/publishing?)
           [:div.p-8
-          (property-config repo property {:toggle-fn toggle-fn})]))
+           (property-config repo property {:toggle-fn toggle-fn})]))
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 

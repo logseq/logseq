@@ -365,10 +365,7 @@
                   db-based?
                   (not built-in-property?)
                   (not @*edit?)
-                  (not config/publishing?)
-                  (not (seq (:block/properties page)))
-                  (not (seq (:block/alias page)))
-                  (not (seq (:block/tags page))))
+                  (not config/publishing?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center
@@ -469,21 +466,22 @@
                                                (db/transact!
                                                 [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]])
 
-       [:div
-        [:p.my-1 "Properties: "]
-        (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-          (component-block/db-properties-cp
-           {:editor-box editor/box}
-           page
-           edit-input-id
-           (assoc properties-opts :class-schema? class?)))]])))
+       (let [edit-input-id (str "edit-block-" (:block/uuid page))]
+         (component-block/db-properties-cp
+          {:editor-box editor/box}
+          page
+          edit-input-id
+          (assoc properties-opts :class-schema? class?)))])))
 
 ;; A page is just a logical block
-(rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::configure-show?)
+  {:will-unmount (fn [state]
+                   (reset! (::configure-show? state) false)
+                   state)}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-block-uuid-by-block-route-name state)
@@ -573,6 +571,7 @@
                   (config/db-based-graph? repo)
                   (not block?)
                   (not whiteboard?)
+                  (not @*configure-show?)
                   (or (seq (:block/properties page))
                       (seq (:block/alias page))
                       (seq (:block/tags page))))
@@ -616,6 +615,10 @@
        (when-not (or block-or-whiteboard? sidebar? home?)
          [:div {:key "page-unlinked-references"}
           (reference/unlinked-references route-page-name)])])))
+
+(rum/defc page
+  [option]
+  (rum/with-key (page-inner option) (str (:page-name option))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
