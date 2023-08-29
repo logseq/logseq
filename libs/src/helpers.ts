@@ -2,7 +2,7 @@ import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import merge from 'deepmerge';
+import { merge } from 'lodash-es'
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
@@ -52,10 +52,7 @@ export function isObject(item: any) {
   return item === Object(item) && !Array.isArray(item)
 }
 
-export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
-  const arrayOverwriteMerge = (destinationArray, sourceArray) => sourceArray
-  return merge(a, b, { arrayMerge: arrayOverwriteMerge })
-}
+export const deepMerge = merge
 
 export class PluginLogger extends EventEmitter<'change'> {
   private _logs: Array<[type: string, payload: any]> = []
@@ -262,9 +259,9 @@ export function setupInjectedStyle(
   el.textContent = style
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   document.head.append(el)
 
@@ -340,22 +337,22 @@ export function setupInjectedUI(
 
     // update attributes
     attrs &&
-      Object.entries(attrs).forEach(([k, v]) => {
-        el.setAttribute(k, v)
-      })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
     let positionDirty = el.dataset.dx != null
     ui.style &&
-      Object.entries(ui.style).forEach(([k, v]) => {
-        if (
-          positionDirty &&
-          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-        ) {
-          return
-        }
+    Object.entries(ui.style).forEach(([k, v]) => {
+      if (
+        positionDirty &&
+        ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
 
-        el.style[k] = v
-      })
+      el.style[k] = v
+    })
     return
   }
 
@@ -375,14 +372,14 @@ export function setupInjectedUI(
   content.innerHTML = ui.template
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      el.style[k] = v
-    })
+  Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -414,36 +411,36 @@ export function setupInjectedUI(
 
   target.appendChild(el)
 
-    // TODO: How handle events
-    ;[
-      'click',
-      'focus',
-      'focusin',
-      'focusout',
-      'blur',
-      'dblclick',
-      'keyup',
-      'keypress',
-      'keydown',
-      'change',
-      'input',
-      'contextmenu'
-    ].forEach((type) => {
-      el.addEventListener(
-        type,
-        (e) => {
-          const target = e.target! as HTMLElement
-          const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
-          if (!trigger) return
+  // TODO: How handle events
+  ;[
+    'click',
+    'focus',
+    'focusin',
+    'focusout',
+    'blur',
+    'dblclick',
+    'keyup',
+    'keypress',
+    'keydown',
+    'change',
+    'input',
+    'contextmenu'
+  ].forEach((type) => {
+    el.addEventListener(
+      type,
+      (e) => {
+        const target = e.target! as HTMLElement
+        const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
+        if (!trigger) return
 
-          const { preventDefault } = trigger.dataset
-          const msgType = trigger.dataset[`on${ucFirst(type)}`]
-          if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
-          if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
-        },
-        false
-      )
-    })
+        const { preventDefault } = trigger.dataset
+        const msgType = trigger.dataset[`on${ucFirst(type)}`]
+        if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
+      },
+      false
+    )
+  })
 
   // callback
   initialCallback?.({ el, float })
@@ -483,24 +480,24 @@ export function transformableEvent(target: HTMLElement, e: Event) {
     const ds = target.dataset
     const FLAG_RECT = 'rect'
 
-      ;['value', 'id', 'className', 'dataset', FLAG_RECT].forEach((k) => {
-        let v: any
+    ;['value', 'id', 'className', 'dataset', FLAG_RECT].forEach((k) => {
+      let v: any
 
-        switch (k) {
-          case FLAG_RECT:
-            if (!ds.hasOwnProperty(FLAG_RECT)) return
-            v = target.getBoundingClientRect().toJSON()
-            break
-          default:
-            v = target[k]
-        }
+      switch (k) {
+        case FLAG_RECT:
+          if (!ds.hasOwnProperty(FLAG_RECT)) return
+          v = target.getBoundingClientRect().toJSON()
+          break
+        default:
+          v = target[k]
+      }
 
-        if (typeof v === 'object') {
-          v = { ...v }
-        }
+      if (typeof v === 'object') {
+        v = { ...v }
+      }
 
-        obj[k] = v
-      })
+      obj[k] = v
+    })
   }
 
   return obj
