@@ -1,3 +1,7 @@
+.property-configure {
+    min-width: 32rem;
+}
+
 .property-value-content {
     cursor: text;
     min-height: 24px;
