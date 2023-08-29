@@ -2,7 +2,7 @@ import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import { merge } from 'lodash-es'
+import merge from 'deepmerge';
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
@@ -52,7 +52,10 @@ export function isObject(item: any) {
   return item === Object(item) && !Array.isArray(item)
 }
 
-export const deepMerge = merge
+export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
+  const overwriteArrayMerge = (destinationArray, sourceArray) => sourceArray
+  return merge(a, b, { arrayMerge: overwriteArrayMerge })
+}
 
 export class PluginLogger extends EventEmitter<'change'> {
   private _logs: Array<[type: string, payload: any]> = []
