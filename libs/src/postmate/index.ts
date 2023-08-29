@@ -81,7 +81,9 @@ export const sanitize = (message, allowedOrigin) => {
  */
 export const resolveValue = (model, property, args) => {
   const unwrappedContext =
-    typeof model[property] === 'function' ? model[property].apply(null, args) : model[property]
+    typeof model[property] === 'function'
+      ? model[property].apply(null, args)
+      : model[property]
   return Promise.resolve(unwrappedContext)
 }
 

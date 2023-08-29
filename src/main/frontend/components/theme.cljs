@@ -92,7 +92,7 @@
     (rum/use-effect!
      #(state/set-modal!
        (when settings-open?
-         (fn [] [:div.settings-modal (settings/settings)])))
+         (fn [] [:div.settings-modal (settings/settings settings-open?)])))
      [settings-open?])
 
     (rum/use-effect!

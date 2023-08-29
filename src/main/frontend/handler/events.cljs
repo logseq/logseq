@@ -22,7 +22,6 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
-            [frontend.components.shortcut :as shortcut]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -457,8 +456,8 @@
   (commands/exec-plugin-simple-command! pid cmd action))
 
 (defmethod handle :shortcut-handler-refreshed [[_]]
-  (when-not @st/*inited?
-    (reset! st/*inited? true)
+  (when-not @st/*pending-inited?
+    (reset! st/*pending-inited? true)
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
@@ -936,10 +935,8 @@
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
-(defmethod handle :modal/keymap-manager [[_]]
-  (state/set-modal!
-    #(shortcut/keymap-pane)
-    {:label "keymap-manager"}))
+(defmethod handle :modal/keymap [[_]]
+  (state/open-settings! :keymap))
 
 (defmethod handle :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)

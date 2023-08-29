@@ -25,9 +25,9 @@
 (deftest test-memoize-last
   (testing "memoize-last add test"
     (let [actual-ops (atom 0)
-          m+         (util/memoize-last (fn [x1 x2]
-                                           (swap! actual-ops inc) ;; side effect for counting
-                                           (+ x1 x2)))]
+          m+ (util/memoize-last (fn [x1 x2]
+                                  (swap! actual-ops inc)    ;; side effect for counting
+                                  (+ x1 x2)))]
       (is (= (m+ 1 1) 2))
       (is (= @actual-ops 1))
       (is (= (m+ 1 1) 2))
@@ -44,58 +44,58 @@
 
   (testing "memoize-last nested mapping test"
     (let [actual-ops (atom 0)
-          flatten-f  (util/memoize-last (fn [& args]
-                                           (swap! actual-ops inc) ;; side effect for counting
-                                           (apply #'shortcut-data-helper/flatten-key-bindings args)))
-          target     (atom {:part1 {:date-picker/complete         {:binding "enter"
-                                                                   :fn      "ui-handler/shortcut-complete"}
-                                    :date-picker/prev-day         {:binding "left"
-                                                                   :fn      "ui-handler/shortcut-prev-day"}}
-                            :part2 {:date-picker/next-day         {:binding "right"
-                                                                   :fn      "ui-handler/shortcut-next-day"}
-                                    :date-picker/prev-week        {:binding ["up" "ctrl+p"]
-                                                                   :fn      "ui-handler/shortcut-prev-week"}}})]
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "enter"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]}))
+          flatten-f (util/memoize-last (fn [& args]
+                                         (swap! actual-ops inc) ;; side effect for counting
+                                         (apply #'shortcut-data-helper/flatten-bindings-by-id (conj (vec args) nil true))))
+          target (atom {:part1 {:date-picker/complete {:binding "enter"
+                                                       :fn      "ui-handler/shortcut-complete"}
+                                :date-picker/prev-day {:binding "left"
+                                                       :fn      "ui-handler/shortcut-prev-day"}}
+                        :part2 {:date-picker/next-day  {:binding "right"
+                                                        :fn      "ui-handler/shortcut-next-day"}
+                                :date-picker/prev-week {:binding ["up" "ctrl+p"]
+                                                        :fn      "ui-handler/shortcut-prev-week"}}})]
+      (is (= (flatten-f @target) {:date-picker/complete  "enter"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]}))
       (is (= @actual-ops 1))
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "enter"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]}))
+      (is (= (flatten-f @target) {:date-picker/complete  "enter"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]}))
       (is (= @actual-ops 1))
       ;; edit value
       (swap! target assoc-in [:part1 :date-picker/complete :binding] "tab")
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "tab"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]}))
+      (is (= (flatten-f @target) {:date-picker/complete  "tab"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]}))
       (is (= @actual-ops 2))
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "tab"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]}))
+      (is (= (flatten-f @target) {:date-picker/complete  "tab"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]}))
       (is (= @actual-ops 2))
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "tab"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]}))
+      (is (= (flatten-f @target) {:date-picker/complete  "tab"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]}))
       (is (= @actual-ops 2))
       ;; edit key
       (swap! target assoc :part3 {:date-picker/next-week {:binding "down"
                                                           :fn      "ui-handler/shortcut-next-week"}})
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "tab"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]
-                                         :date-picker/next-week        "down"}))
+      (is (= (flatten-f @target) {:date-picker/complete  "tab"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]
+                                  :date-picker/next-week "down"}))
       (is (= @actual-ops 3))
-      (is (= (flatten-f (vals @target)) {:date-picker/complete         "tab"
-                                         :date-picker/prev-day         "left"
-                                         :date-picker/next-day         "right"
-                                         :date-picker/prev-week        ["up" "ctrl+p"]
-                                         :date-picker/next-week        "down"}))
+      (is (= (flatten-f @target) {:date-picker/complete  "tab"
+                                  :date-picker/prev-day  "left"
+                                  :date-picker/next-day  "right"
+                                  :date-picker/prev-week ["up" "ctrl+p"]
+                                  :date-picker/next-week "down"}))
       (is (= @actual-ops 3)))))
 
 (deftest test-media-format-from-input
