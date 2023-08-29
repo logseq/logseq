@@ -734,9 +734,12 @@ input::-webkit-inner-spin-button {
     background-color: #042f3c;
 
     .pdfViewer {
-      -webkit-filter: invert(100%);
-      filter: invert(100%);
       background: transparent;
+
+      .page {
+        -webkit-filter: invert(100%);
+        filter: invert(100%);
+      }
     }
 
     .textLayer {
