@@ -1,5 +1,5 @@
 import { expect, Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, traceAll } from './fixtures'
 import { Block } from './types'
 import { modKey, createRandomPage, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 import { searchPage, closeSearchBox } from './util/search-modal'
@@ -179,3 +179,5 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
 test('page diacritic alias', async ({ block, page }) => {
   await alias_test(block, page, "ü", ["ü", "ü", "Ü"])
 })
+
+traceAll()

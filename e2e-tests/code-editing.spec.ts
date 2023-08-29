@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { test } from './fixtures'
+import { test, traceAll } from './fixtures'
 import {
   createRandomPage,
   escapeToCodeEditor,

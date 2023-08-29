@@ -19,6 +19,22 @@
   []
   (state/block-content-max-length (state/get-current-repo)))
 
+(defn inject-original-name
+  "Injects the original-name into the index content."
+  [original-name content]
+  (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))
+
+(defn extract-original-name-and-content
+  "Extracts the original-name and the content from the index content inside DB."
+  [content]
+  (let [start-ind (string/index-of content "$pfts_f6ld>$ ")
+        end-ind (string/index-of content " $<pfts_f6ld$ ")]
+    (if (and start-ind end-ind)
+      (let [title   (subs content (+ start-ind 13) end-ind)
+            content (subs content (+ end-ind 13))]
+        [title content])
+      [nil content])))
+
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
@@ -40,7 +56,7 @@
         {:id   (:db/id page)
          :uuid (str uuid)
          ;; Add page name to the index
-         :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
+         :content (sanitize (inject-original-name original-name content))}))))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection

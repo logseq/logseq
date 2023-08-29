@@ -357,6 +357,16 @@
   (when-let [pid (keyword pid)]
     (state/uninstall-plugin-service pid :search)))
 
+(defn register-plugin-text-encoder
+  [pid name opts]
+  (when-let [pid (and name (keyword pid))]
+    (state/install-plugin-service pid :text-encoder name opts)))
+
+(defn unregister-plugin-text-encoders
+  [pid]
+  (when-let [pid (keyword pid)]
+    (state/uninstall-plugin-service pid :text-encoder)))
+
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
   ([pid effect]

@@ -35,7 +35,7 @@ import {
   BlockEntity,
   IDatom,
   IAssetsProxy,
-  AppInfo, IPluginSearchServiceHooks,
+  AppInfo, IPluginSearchServiceHooks, IPluginTextEncoderServiceHooks,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -44,6 +44,7 @@ import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 import { LSPluginSearchService } from './modules/LSPlugin.Search'
+import { LSPluginTextEncoderService } from './modules/LSPlugin.TextEncoder'
 
 declare global {
   interface Window {
@@ -113,6 +114,9 @@ function checkEffect(p: LSPluginUser) {
 let _appBaseInfo: AppInfo = null
 let _searchServices: Map<string, LSPluginSearchService> = new Map()
 
+// AI services
+let _textEncoderServices: Map<string, LSPluginTextEncoderService> = new Map()
+
 const app: Partial<IAppProxy> = {
   async getInfo(
     this: LSPluginUser,
@@ -135,6 +139,17 @@ const app: Partial<IAppProxy> = {
     }
 
     _searchServices.set(s.name, new LSPluginSearchService(this, s))
+  },
+
+  registerTextEncoderService<T extends IPluginTextEncoderServiceHooks>(
+    this: LSPluginUser,
+    s: T
+  ) {
+    if (_textEncoderServices.has(s.name)) {
+      throw new Error(`TextEncoderService: #${s.name} has registered!`)
+    }
+
+    _textEncoderServices.set(s.name, new LSPluginTextEncoderService(this, s))
   },
 
   registerCommandPalette(

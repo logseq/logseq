@@ -55,6 +55,8 @@
      :search/graph-filters                  []
      :search/engines                        {}
 
+     :ai/text-encoders                      {}
+
      ;; modals
      :modal/dropdowns                       {}
      :modal/id                              nil
@@ -1542,7 +1544,11 @@ Similar to re-frame subscriptions"
 
          ;; search engines state for results
          (when (= type :search)
-           (set-state! [:search/engines (str pid name)] service)))))))
+           (set-state! [:search/engines (str pid name)] service))
+         
+         ;; text encoders for calling
+         (when (= type :text-encoder)
+           (set-state! [:ai/text-encoders (str pid name)] service)))))))
 
 (defn uninstall-plugin-service
   [pid type-or-all]
@@ -1567,6 +1573,8 @@ Similar to re-frame subscriptions"
   (:search/engines @state))
 
 (defn update-plugin-search-engine
+  "Put search engine results into the :result of state under :search/engines.
+   Then subscribed by the search modal to display results."
   [pid name f]
   (when-let [pid (keyword pid)]
     (set-state! :search/engines
@@ -1575,6 +1583,9 @@ Similar to re-frame subscriptions"
                                 (f %) %)))))
 
 (defn reset-plugin-search-engines
+  "Clears all search engine results.
+   Search engine results are stored in the :result of state under :search/engines.
+   Then subscribed by the search modal to display results."
   []
   (when-let [engines (get-all-plugin-search-engines)]
     (set-state! :search/engines
@@ -1924,6 +1935,30 @@ Similar to re-frame subscriptions"
 
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
+
+;; TODO make this setting configurable
+(defn get-semsearch-encoder
+  "Returns a semantic search encoder in the state map"
+  []
+  (-> (sub :ai/text-encoders)
+      seq
+      first ;; Pick a "first" elem in the map, temporarily
+      second ;; Return the encoder, without the encoder key
+      ))
+
+(defn sub-semsearch-enabled?
+  "Conditions to enable semantic search"
+  []
+  (-> (sub :ai/text-encoders)
+      (not-empty)
+      (boolean)))
+
+(defn semsearch-enabled?
+  "Conditions to enable semantic search"
+  []
+  (-> (:ai/text-encoders @state)
+      (not-empty)
+      (boolean)))
 
 (defn consume-updates-from-coming-plugin!
   [payload updated?]
