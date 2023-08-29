@@ -479,9 +479,6 @@
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::configure-show?)
-  {:will-unmount (fn [state]
-                   (reset! (::configure-show? state) false)
-                   state)}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-block-uuid-by-block-route-name state)
@@ -616,9 +613,12 @@
          [:div {:key "page-unlinked-references"}
           (reference/unlinked-references route-page-name)])])))
 
-(rum/defc page
-  [option]
-  (rum/with-key (page-inner option) (str (:page-name option))))
+(rum/defcs page
+  [state option]
+  (rum/with-key
+    (page-inner option)
+    (or (:page-name option)
+        (get-page-name state))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
