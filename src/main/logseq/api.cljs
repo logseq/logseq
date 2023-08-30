@@ -367,9 +367,9 @@
                                (if palette?
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
-                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd :cmd palette-cmd)]
-            (println :shortcut/register-shortcut [handler-id id shortcut-map])
-            (st/register-shortcut! handler-id id shortcut-map)))))))
+                [mode-id id shortcut-map] (update shortcut-args 2 merge cmd {:fn dispatch-cmd :cmd palette-cmd})]
+            (println :shortcut/register-shortcut [mode-id id shortcut-map])
+            (st/register-shortcut! mode-id id shortcut-map)))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]
@@ -422,7 +422,7 @@
                            (util/safe-lower-case)
                            (keyword)))]
       (when-let [action (get-in (palette-handler/get-commands-unique) [id :action])]
-        (apply action args)))))
+        (apply plugin-handler/hook-lifecycle-fn! id action args)))))
 
 ;; flag - boolean | 'toggle'
 (def ^:export set_left_sidebar_visible

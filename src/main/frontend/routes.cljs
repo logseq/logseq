@@ -9,7 +9,6 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.shortcut :as shortcut]
             [frontend.components.whiteboard :as whiteboard] 
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
@@ -68,10 +67,6 @@
    ["/settings"
     {:name :settings
      :view settings/settings}]
-
-   ["/settings/shortcut"
-    {:name :shortcut-setting
-     :view shortcut/shortcut-page}]
 
    ["/settings/zotero"
     {:name :zotero-setting

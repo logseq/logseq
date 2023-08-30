@@ -61,6 +61,7 @@
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
+     :modal/payload                         nil
      :modal/fullscreen?                     false
      :modal/close-btn?                      nil
      :modal/close-backdrop?                 true
@@ -136,6 +137,7 @@
 
      :editor/code-block-context             {}
 
+     :db/properties-changed-pages           {}
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
@@ -344,6 +346,18 @@
              (merge current new)
              new)))))
 
+(defn get-global-config
+  []
+  (get-in @state [:config ::global-config]))
+
+(defn get-global-config-str-content
+  []
+  (get-in @state [:config ::global-config-str-content]))
+
+(defn get-graph-config
+  ([] (get-graph-config (get-current-repo)))
+  ([repo-url] (get-in @state [:config repo-url])))
+
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -352,8 +366,8 @@ should be done through this fn in order to get global config and config defaults
   ([repo-url]
    (merge-configs
     default-config
-    (get-in @state [:config ::global-config])
-    (get-in @state [:config repo-url]))))
+    (get-global-config)
+    (get-graph-config repo-url))))
 
 (defonce publishing? (atom nil))
 
@@ -1341,7 +1355,7 @@ Similar to re-frame subscriptions"
   ([panel-content]
    (set-sub-modal! panel-content
                    {:close-btn? true}))
-  ([panel-content {:keys [id label close-btn? close-backdrop? show? center?] :as opts}]
+  ([panel-content {:keys [id label payload close-btn? close-backdrop? show? center?] :as opts}]
    (if (not (modal-opened?))
      (set-modal! panel-content opts)
      (let [modals (:modal/subsets @state)
@@ -1351,6 +1365,7 @@ Similar to re-frame subscriptions"
                    #(not (nil? %1))
                    {:modal/id            id
                     :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                    :modal/payload       payload
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
                     :modal/close-btn?    close-btn?
@@ -1380,7 +1395,7 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
+  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?]}]
    (let [opened? (modal-opened?)]
      (when opened?
        (close-modal!))
@@ -1395,6 +1410,7 @@ Similar to re-frame subscriptions"
               :modal/label (or label (if center? "ls-modal-align-center" ""))
               :modal/show? (boolean modal-panel-content)
               :modal/panel-content modal-panel-content
+              :modal/payload payload
               :modal/fullscreen? fullscreen?
               :modal/close-btn? close-btn?
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
@@ -1408,6 +1424,7 @@ Similar to re-frame subscriptions"
       (swap! state assoc
              :modal/id nil
              :modal/label ""
+             :modal/payload nil
              :modal/show? false
              :modal/fullscreen? false
              :modal/panel-content nil
@@ -1477,9 +1494,11 @@ Similar to re-frame subscriptions"
   (when value (set-state! [:config repo-url] value)))
 
 (defn set-global-config!
-  [value]
+  [value str-content]
   ;; Placed under :config so cursors can work seamlessly
-  (when value (set-config! ::global-config value)))
+  (when value
+    (set-config! ::global-config value)
+    (set-config! ::global-config-str-content str-content)))
 
 (defn get-wide-mode?
   []
@@ -1499,13 +1518,13 @@ Similar to re-frame subscriptions"
 
 (defn get-plugins-commands-with-type
   [type]
-  (filterv #(= (keyword (first %)) (keyword type))
-           (apply concat (vals (:plugin/simple-commands @state)))))
+  (->> (apply concat (vals (:plugin/simple-commands @state)))
+       (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugins-ui-items-with-type
   [type]
-  (filterv #(= (keyword (first %)) (keyword type))
-           (apply concat (vals (:plugin/installed-ui-items @state)))))
+  (->> (apply concat (vals (:plugin/installed-ui-items @state)))
+       (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugin-resources-with-type
   [pid type]
@@ -1734,8 +1753,8 @@ Similar to re-frame subscriptions"
   (set-state! :ui/settings-open? false))
 
 (defn open-settings!
-  []
-  (set-state! :ui/settings-open? true))
+  ([] (open-settings! true))
+  ([active-tab] (set-state! :ui/settings-open? active-tab)))
 
 ;; TODO: Move those to the uni `state`
 
@@ -2165,3 +2184,13 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn set-page-properties-changed!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (update-state! [:db/properties-changed-pages page-name] #(inc %))))
+
+(defn sub-page-properties-changed
+  [page-name]
+  (when-not (string/blank? page-name)
+    (sub [:db/properties-changed-pages page-name])))

@@ -70,7 +70,7 @@ export class PluginLogger extends EventEmitter<'change'> {
   }
 
   write(type: string, payload: any[], inConsole?: boolean) {
-    if (payload?.length && (true === payload[payload.length - 1])) {
+    if (payload?.length && true === payload[payload.length - 1]) {
       inConsole = true
       payload.pop()
     }
@@ -120,9 +120,13 @@ export class PluginLogger extends EventEmitter<'change'> {
 }
 
 export function isValidUUID(s: string) {
-  return (typeof s === 'string' &&
-    (s.length === 36) &&
-    (/^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi).test(s))
+  return (
+    typeof s === 'string' &&
+    s.length === 36 &&
+    /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi.test(
+      s
+    )
+  )
 }
 
 export function genID() {
@@ -262,9 +266,9 @@ export function setupInjectedStyle(
   el.textContent = style
 
   attrs &&
-  Object.entries(attrs).forEach(([k, v]) => {
-    el.setAttribute(k, v)
-  })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
   document.head.append(el)
 
@@ -340,22 +344,22 @@ export function setupInjectedUI(
 
     // update attributes
     attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+      Object.entries(attrs).forEach(([k, v]) => {
+        el.setAttribute(k, v)
+      })
 
     let positionDirty = el.dataset.dx != null
     ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      if (
-        positionDirty &&
-        ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-      ) {
-        return
-      }
+      Object.entries(ui.style).forEach(([k, v]) => {
+        if (
+          positionDirty &&
+          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+        ) {
+          return
+        }
 
-      el.style[k] = v
-    })
+        el.style[k] = v
+      })
     return
   }
 
@@ -375,14 +379,14 @@ export function setupInjectedUI(
   content.innerHTML = ui.template
 
   attrs &&
-  Object.entries(attrs).forEach(([k, v]) => {
-    el.setAttribute(k, v)
-  })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
   ui.style &&
-  Object.entries(ui.style).forEach(([k, v]) => {
-    el.style[k] = v
-  })
+    Object.entries(ui.style).forEach(([k, v]) => {
+      el.style[k] = v
+    })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -395,11 +399,11 @@ export function setupInjectedUI(
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat =
       (pl._setupResizableContainer(el, key),
-        pl._setupDraggableContainer(el, {
-          key,
-          close: () => teardownUI(),
-          title: attrs?.title,
-        }))
+      pl._setupDraggableContainer(el, {
+        key,
+        close: () => teardownUI(),
+        title: attrs?.title,
+      }))
   }
 
   if (!!slot && ui.reset) {
@@ -427,7 +431,7 @@ export function setupInjectedUI(
     'keydown',
     'change',
     'input',
-    'contextmenu'
+    'contextmenu',
   ].forEach((type) => {
     el.addEventListener(
       type,
@@ -438,7 +442,8 @@ export function setupInjectedUI(
 
         const { preventDefault } = trigger.dataset
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
-        if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (msgType)
+          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
         if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
       },
       false
@@ -458,12 +463,12 @@ export function setupInjectedUI(
   return teardownUI
 }
 
-export function cleanInjectedUI(
-  id: string
-) {
+export function cleanInjectedUI(id: string) {
   if (!injectedUIEffects.has(id)) return
   const clean = injectedUIEffects.get(id)
-  try { clean() } catch (e) {
+  try {
+    clean()
+  } catch (e) {
     console.warn('[CLEAN Injected UI] ', id, e)
   }
 }
