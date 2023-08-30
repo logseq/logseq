@@ -13,6 +13,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -449,17 +450,23 @@
 
 (def ^:export push_state
   (fn [^js k ^js params ^js query]
-    (rfe/push-state
-      (keyword k)
-      (bean/->clj params)
-      (bean/->clj query))))
+    (let [k (keyword k)
+          page? (= k :page)
+          params (bean/->clj params)
+          query (bean/->clj query)]
+      (if-let [page-name (and page? (:name params))]
+        (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push true})
+        (rfe/push-state k params query)))))
 
 (def ^:export replace_state
   (fn [^js k ^js params ^js query]
-    (rfe/replace-state
-      (keyword k)
-      (bean/->clj params)
-      (bean/->clj query))))
+    (let [k (keyword k)
+          page? (= k :page)
+          params (bean/->clj params)
+          query (bean/->clj query)]
+      (if-let [page-name (and page? (:name params))]
+        (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push false})
+        (rfe/replace-state k params query)))))
 
 (defn ^:export get_external_plugin
   [pid]
