@@ -513,7 +513,7 @@ export class LSPluginUser
         cb && (await cb(rest))
         actor?.resolve(null)
       } catch (e) {
-        console.debug(`${_caller.debugTag} [beforeunload] `, e)
+        this.logger.error(`[beforeunload] `, e)
         actor?.reject(e)
       }
     })

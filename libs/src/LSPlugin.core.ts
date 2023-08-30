@@ -924,7 +924,7 @@ class PluginLocal extends EventEmitter<
           )
           this.emit('beforeunload', eventBeforeUnload)
         } catch (e) {
-          this.logger.error('[beforeunload Error]', e)
+          this.logger.error('[beforeunload]', e)
         }
 
         await this.dispose()
