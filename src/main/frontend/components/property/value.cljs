@@ -86,7 +86,7 @@
   [block property {:keys [class] :as opts}]
   (let [repo (state/get-current-repo)
         pages (if class
-                (some->> (:db/id (db/entity [:block/uuid (uuid class)]))
+                (some->> (:db/id (db/entity [:block/uuid class]))
                          (model/get-class-objects repo)
                          (map #(:block/original-name (db/entity %))))
                 (model/get-all-page-original-names repo))
@@ -101,14 +101,14 @@
                                      (nil? id)
                                      (page-handler/create! page {:redirect? false
                                                                  :create-first-block? false
-                                                                 :tags [(uuid class)]
+                                                                 :tags [class]
                                                                  :class? class?})
                                      ;; user typed a new option to get here so update the existing page
                                      ;; to make their option valid
-                                     (seq class)
+                                     (some? class)
                                      (db/transact! repo
                                                    [{:block/uuid id
-                                                     :block/tags [{:db/id (:db/id (db/entity repo [:block/uuid (uuid class)]))}]}]
+                                                     :block/tags [{:db/id (:db/id (db/entity repo [:block/uuid class]))}]}]
                                                    {:outliner-op :save-block}))
                                    (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                      (add-property! block (:block/original-name property) id'))
