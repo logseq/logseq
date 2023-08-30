@@ -148,17 +148,19 @@
    * :class?              - when true, adds a :block/type 'class'
    * :whiteboard?         - when true, adds a :block/type 'whiteboard'
    * :tags                - tag uuids that are added to :block/tags
+   * :persist-op?         - when true, add an update-page op
    TODO: Add other options"
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename? persist-op?]
            :or   {redirect?           true
                   create-first-block? true
                   rename?             false
                   format              nil
                   properties          nil
                   split-namespace?    true
-                  uuid                nil}
+                  uuid                nil
+                  persist-op?         true}
            :as options}]
    (let [title      (-> (string/trim title)
                         (text/page-ref-un-brackets!)
@@ -203,7 +205,7 @@
                        txs
                        last-txs)]
          (when (seq txs)
-           (db/transact! txs)))
+           (db/transact! repo txs {:persist-op? persist-op?})))
 
        (when create-first-block?
          (when (or
@@ -474,9 +476,10 @@
           tx-data)))))
 
 (defn delete!
-  [page-name ok-handler & {:keys [delete-file? redirect-to-home?]
+  [page-name ok-handler & {:keys [delete-file? redirect-to-home? persist-op?]
                            :or {delete-file? true
-                                redirect-to-home? true}}]
+                                redirect-to-home? true
+                                persist-op? true}}]
   (when redirect-to-home? (route-handler/redirect-to-home!))
   (when page-name
     (when-let [repo (state/get-current-repo)]
@@ -507,7 +510,7 @@
                              nil)
             tx-data (concat truncate-blocks-tx-data delete-page-tx)]
 
-        (db/transact! repo tx-data {:outliner-op :delete-page})
+        (db/transact! repo tx-data {:outliner-op :delete-page :persist-op? persist-op?})
 
         (unfavorite-page! page-name)
 
@@ -747,7 +750,7 @@
                               :path-params {:name to-page-name}})))
 
 (defn db-based-merge-pages!
-  [from-page-name to-page-name]
+  [from-page-name to-page-name persist-op?]
   (when (and (db/page-exists? from-page-name)
              (db/page-exists? to-page-name)
              (not= from-page-name to-page-name))
@@ -778,13 +781,13 @@
                                     (assoc :block/parent {:db/id to-id})))) blocks)
           replace-ref-tx-data (db-replace-ref repo from-page to-page)
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
-      (db/transact! repo tx-data)
+      (db/transact! repo tx-data {:persist-op? persist-op?})
       (rename-update-namespace! from-page
                                 (util/get-page-original-name from-page)
                                 (util/get-page-original-name to-page)))
 
 
-    (delete! from-page-name nil :redirect-to-home? false)
+    (delete! from-page-name nil :redirect-to-home? false :persist-op? persist-op?)
 
     (route-handler/redirect! {:to          :page
                               :push        false
@@ -793,8 +796,8 @@
 ;; FIXME:
 (defn db-based-rename!
   ([old-name new-name]
-   (db-based-rename! old-name new-name true))
-  ([old-name new-name redirect?]
+   (db-based-rename! old-name new-name true true))
+  ([old-name new-name redirect? persist-op?]
    (let [old-name      (string/trim old-name)
          new-name      (string/trim new-name)
          old-page-name (util/page-name-sanity-lc old-name)
@@ -808,18 +811,20 @@
        (cond
          (= old-page-name new-page-name) ; case changed
          (db/transact! [{:db/id (:db/id page-e)
-                         :block/original-name new-name}])
+                         :block/original-name new-name}]
+                       {:persist-op? persist-op?})
 
          (and (not= old-page-name new-page-name)
               (db/entity [:block/name new-page-name])) ; merge page
-         (db-based-merge-pages! old-page-name new-page-name)
+         (db-based-merge-pages! old-page-name new-page-name persist-op?)
 
          :else                          ; rename
          (create! new-page-name
                   {:rename? true
                    :uuid (:block/uuid page-e)
                    :redirect? redirect?
-                   :create-first-block? false}))
+                   :create-first-block? false
+                   :persist-op? persist-op?}))
 
        (when (string/blank? new-name)
          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
@@ -856,11 +861,11 @@
 
 (defn rename!
   ([old-name new-name] (rename! old-name new-name true))
-  ([old-name new-name redirect?]
-   (let [f (if (config/db-based-graph? (state/get-current-repo))
-             db-based-rename!
-             file-based-rename!)]
-     (f old-name new-name redirect?))))
+  ([old-name new-name redirect?] (rename! old-name new-name redirect? true))
+  ([old-name new-name redirect? persist-op?]
+   (if (config/db-based-graph? (state/get-current-repo))
+     (db-based-rename! old-name new-name redirect? persist-op?)
+     (file-based-rename! old-name new-name redirect?))))
 
 (defn- split-col-by-element
   [col element]
