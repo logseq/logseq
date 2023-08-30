@@ -353,7 +353,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [original-uuid (:block/uuid (db/entity (:db/id block)))
+     (let [original-block (db/entity (:db/id block))
+           original-uuid (:block/uuid original-block)
+           original-props (:block/properties original-block)
            uuid-changed? (not= (:block/uuid block) original-uuid)
            block' (-> (wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
@@ -365,7 +367,12 @@
                                                      :to original-uuid})))]
        (outliner-tx/transact!
         opts'
-        (outliner-core/save-block! block'))
+        (outliner-core/save-block! block')
+        ;; page properties changed
+        (when-let [page-name (and (:block/pre-block? block')
+                                  (not= original-props (:block/properties block'))
+                                  (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
+          (state/set-page-properties-changed! page-name)))
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]

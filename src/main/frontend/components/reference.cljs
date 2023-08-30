@@ -183,16 +183,25 @@
             (concat children (rest blocks))
             (conj result fb))))))))
 
+(rum/defc sub-page-properties-changed < rum/static
+  [page-name v filters-atom]
+  (rum/use-effect!
+    (fn []
+      (reset! filters-atom
+              (page-handler/get-filters (util/page-name-sanity-lc page-name))))
+    [page-name v filters-atom])
+  [:<>])
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
-                 filters (when page-name
-                           (atom (page-handler/get-filters (util/page-name-sanity-lc page-name))))]
+                 filters (when page-name (atom nil))]
              (assoc state ::filters filters)))}
   [state page-name]
   (when page-name
     (let [page-name (util/page-name-sanity-lc page-name)
+          page-props-v (state/sub-page-properties-changed page-name)
           *ref-pages (::ref-pages state)
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
@@ -236,6 +245,7 @@
       (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
         [:div.references.page-linked.flex-1.flex-row
+         (sub-page-properties-changed page-name page-props-v filters-atom)
          [:div.content.pt-6
           (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
