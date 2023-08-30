@@ -8,7 +8,8 @@
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [datascript.core :as d]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db.rtc.db-listener :as rtc-db-listener]))
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
@@ -70,4 +71,6 @@
   [repo]
   (when-let [conn (conn/get-db repo false)]
     (d/unlisten! conn :persistence)
-    (repo-listen-to-tx! repo conn)))
+    (repo-listen-to-tx! repo conn)
+    (d/unlisten! conn :gen-ops)
+    (rtc-db-listener/listen-db-to-generate-ops repo conn)))
