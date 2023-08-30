@@ -34,6 +34,26 @@
           (p/recur (inc key*))
           (idb-keyval/set key* (clj->js op) store))))))
 
+(defn- <add-ops*!
+  [repo ops]
+  (let [store (ensure-store repo)
+        key* (tc/to-long (t/now))]
+    (p/loop [key* key* ops ops]
+      (let [[op & other-ops] ops]
+        (when op
+          (p/let [old-v (idb-keyval/get key* store)]
+            (if old-v
+              (p/recur (inc key*) ops)
+              (do (idb-keyval/set key* (clj->js op) store)
+                  (p/recur (inc key*) other-ops)))))))))
+
+(def ^:private add-ops-ch (async/chan 100))
+(async/go-loop []
+  (if-let [[repo ops] (async/<! add-ops-ch)]
+    (do (prn :add-ops ops)
+        (async/<! (p->c (<add-ops*! repo ops)))
+        (recur))
+    (recur)))
 
 (def ^:private add-op-ch (async/chan 100))
 (async/go-loop []
@@ -46,6 +66,11 @@
 (defn <add-op!
   [repo op]
   (async/go (async/>! add-op-ch [repo op])))
+
+
+(defn <add-ops!
+  [repo ops]
+  (async/go (async/>! add-ops-ch [repo ops])))
 
 (defn <clear-ops!
   [repo keys]

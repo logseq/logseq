@@ -56,8 +56,6 @@
        [:parents [:sequential :string]]
        [:left [:maybe :string]]
        [:self :string]
-       [:first-child [:maybe :string]]
-       [:sibling [:maybe :string]]
        [:content {:optional true} :string]]
       [:map
        [:op [:= "remove"]]
@@ -67,8 +65,6 @@
        [:parents [:sequential :string]]
        [:left [:maybe :string]]
        [:self :string]
-       [:first-child [:maybe :string]]
-       [:sibling [:maybe :string]]
        [:content {:optional true} :string]]]]]])
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
@@ -110,7 +106,10 @@
               (outliner-tx/transact!
                {:persist-op? false}
                (if move?
-                 (outliner-core/move-blocks! [b] local-left true)
+                 (do (outliner-core/move-blocks! [b] local-left true)
+                     (when (and content (not= (:block/content b) content))
+                       (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                         :block/content content))))
                  (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
                                                local-left {:sibling? true :keep-uuid? true})))))
 
@@ -120,7 +119,10 @@
                 (outliner-tx/transact!
                  {:persist-op? false}
                  (if move?
-                   (outliner-core/move-blocks! [b] local-left sibling?)
+                   (do (outliner-core/move-blocks! [b] local-left sibling?)
+                       (when (and content (not= (:block/content b) content))
+                         (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                           :block/content content))))
                    (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
                                                    :block/format :markdown}]
                                                  local-left {:sibling? sibling? :keep-uuid? true}))))))
@@ -130,7 +132,10 @@
               (outliner-tx/transact!
                {:persist-op? false}
                (if move?
-                 (outliner-core/move-blocks! [b] local-parent false)
+                 (do (outliner-core/move-blocks! [b] local-parent false)
+                     (when (and content (not= (:block/content b) content))
+                       (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                         :block/content content))))
                  (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
                                                  :block/format :markdown}]
                                                local-parent {:sibling? false :keep-uuid? true}))))
@@ -391,7 +396,7 @@
       (init-state ws data-from-ws-chan user-uuid))))
 
 (defonce debug-state (atom nil))
-(defonce debug-graph-uuid "ed4520d5-7985-49bd-a2d7-cf28694e4f03")
+(def debug-graph-uuid "6478874f-20a7-4335-9379-4cfb1cfa1b25")
 (defn ^:export debug-init
   []
   (go
@@ -410,6 +415,12 @@
     (let [state (<! (<init))]
       (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
+(defn ^:export upload-graph
+  []
+  (go
+    (let [state (<! (<init))]
+      (<! (full-upload-download-graph/<upload-graph state)))))
+
 (defn ^:export debug-client-push-updates
   []
   (async/put! (:client-op-update-chan @debug-state) true))
@@ -417,6 +428,6 @@
 (comment
   (go
     (def global-state (<! (<init))))
-  (reset! (:*graph-uuid global-state) "ed4520d5-7985-49bd-a2d7-cf28694e4f03")
+  (reset! (:*graph-uuid global-state) debug-graph-uuid)
   (reset! (:*repo global-state) (state/get-current-repo))
   )

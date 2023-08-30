@@ -13,6 +13,12 @@
     [:value [:map [:block-uuids [:sequential :string]]]]]
    [:catn
     [:op [:= "update"]]
+    [:value [:map [:block-uuid :string]]]]
+   [:catn
+    [:op [:= "update-page"]]
+    [:value [:map [:block-uuid :string]]]]
+   [:catn
+    [:op [:= "remove-page"]]
     [:value [:map [:block-uuid :string]]]]])
 
 (def op-validator (m/validator op-schema))
@@ -34,6 +40,11 @@
   (let [op ["update" {:block-uuid (str block-uuid)}]]
     (assert (op-validator op) op)
     (op-store/<add-op! repo op)))
+
+(defn <add-ops!
+  [repo ops]
+  (assert (every? op-validator ops) ops)
+  (op-store/<add-ops! repo ops))
 
 (defn <get-ops&local-tx
   [repo]
