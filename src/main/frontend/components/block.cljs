@@ -952,7 +952,7 @@
        (if (and (not paragraph?)
                 (mldoc/block-with-title? (ffirst ast)))
          (markup-elements-cp (assoc config :block/format format) ast)
-         (inline-text format macro-content)))
+         (inline-text config format macro-content)))
      [:span.warning {:title (str "Unsupported macro name: " name)}
       (macro->text name arguments)])])
 

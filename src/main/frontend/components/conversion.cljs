@@ -59,9 +59,9 @@
     (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
                :class "text-md p-2 mr-1"
                :on-click #(do (reset! *target-format :triple-lowbar)
-                            (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
-                            (write-filename-format! repo :triple-lowbar)
-                            (reset! *solid-format :triple-lowbar)))]
+                              (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                              (write-filename-format! repo :triple-lowbar)
+                              (reset! *solid-format :triple-lowbar)))]
    [:p (t :file-rn/instruct-3)]])
 
 (rum/defc filename-format-select
@@ -171,7 +171,7 @@
                  [:tr {:key (:block/name page)}
                   [:td [:div [:p "📄 " old-title]]
                    (case status
-                     :breaking ;; if properety title override the title, it't not breaking change
+                     :breaking ;; if property title override the title, it't not breaking change
                      [:div [:p "🟡 " (t :file-rn/suggest-rename) rename-but]
                       [:p (t :file-rn/otherwise-breaking) " \"" changed-title \"]]
                      :unreachable

@@ -64,7 +64,7 @@
     (gp-util/safe-subs s 0 200)))
 
 (defn- build-title [page]
-  ;; Don't wrap `\"` anymore, as tiitle property is not effected by `,` now
+  ;; Don't wrap `\"` anymore, as title property is not effected by `,` now
   ;; The previous extract behavior isn't unwrapping the `'"` either. So no need
   ;; to maintain the compatibility.
   (:block/original-name page))
@@ -341,12 +341,12 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-   (let [favorites  (:favorites (state/sub-config))
-         favorited? (contains? (set (map string/lower-case favorites))
-                               (string/lower-case page-name))]
-    (if favorited?
-      (unfavorite-page! page-name)
-      (favorite-page! page-name)))))
+    (let [favorites  (:favorites (state/sub-config))
+          favorited? (contains? (set (map string/lower-case favorites))
+                                (string/lower-case page-name))]
+      (if favorited?
+        (unfavorite-page! page-name)
+        (favorite-page! page-name)))))
 
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
@@ -618,30 +618,30 @@
   "Accepts unsanitized page names"
   ([old-name new-name] (rename! old-name new-name true))
   ([old-name new-name redirect?]
-    (let [repo          (state/get-current-repo)
-          old-name      (string/trim old-name)
-          new-name      (string/trim new-name)
-          old-page-name (util/page-name-sanity-lc old-name)
-          new-page-name (util/page-name-sanity-lc new-name)
-          name-changed? (not= old-name new-name)]
-      (if (and old-name
+   (let [repo          (state/get-current-repo)
+         old-name      (string/trim old-name)
+         new-name      (string/trim new-name)
+         old-page-name (util/page-name-sanity-lc old-name)
+         new-page-name (util/page-name-sanity-lc new-name)
+         name-changed? (not= old-name new-name)]
+     (if (and old-name
               new-name
               (not (string/blank? new-name))
               name-changed?)
-        (do
-          (cond
-            (= old-page-name new-page-name)
-            (rename-page-aux old-name new-name redirect?)
+       (do
+         (cond
+           (= old-page-name new-page-name)
+           (rename-page-aux old-name new-name redirect?)
 
-            (db/pull [:block/name new-page-name])
-            (merge-pages! old-page-name new-page-name)
+           (db/pull [:block/name new-page-name])
+           (merge-pages! old-page-name new-page-name)
 
-            :else
-            (rename-namespace-pages! repo old-name new-name))
-          (rename-nested-pages old-name new-name))
-        (when (string/blank? new-name)
-          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-      (ui-handler/re-render-root!))))
+           :else
+           (rename-namespace-pages! repo old-name new-name))
+         (rename-nested-pages old-name new-name))
+       (when (string/blank? new-name)
+         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+     (ui-handler/re-render-root!))))
 
 (defn- split-col-by-element
   [col element]
@@ -836,19 +836,19 @@
                               (config/get-file-extension format))
               repo-dir (config/get-repo-dir repo)
               template (state/get-default-journal-template)]
-          (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
-                  file-content (when file-exists?
-                                 (fs/read-file repo-dir file-rpath))]
-            (when (and (db/page-empty? repo today-page)
-                       (or (not file-exists?)
-                           (and file-exists? (string/blank? file-content))))
-              (create! title {:redirect? false
-                              :split-namespace? false
-                              :create-first-block? (not template)
-                              :journal? true})
-              (state/pub-event! [:journal/insert-template today-page])
-              (ui-handler/re-render-root!)
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page}))))))))
+          (when (db/page-empty? repo today-page)
+            (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
+                    file-content (when file-exists?
+                                   (fs/read-file repo-dir file-rpath))]
+              (when (or (not file-exists?)
+                        (and file-exists? (string/blank? file-content)))
+                (create! title {:redirect? false
+                                :split-namespace? false
+                                :create-first-block? (not template)
+                                :journal? true})
+                (state/pub-event! [:journal/insert-template today-page])
+                (ui-handler/re-render-root!)
+                (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))))))))
 
 (defn open-today-in-sidebar
   []

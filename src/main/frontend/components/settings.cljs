@@ -23,6 +23,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.components.shortcut2 :as shortcut2]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -578,13 +579,13 @@
 (rum/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
-              [:strong.pr-1
+              [:span.pr-1
                (case type
                  "system" "System Default"
                  "direct" "Direct"
                  (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
-             :small? true
+             :class "text-sm p-1"
              :on-click #(state/set-sub-modal!
                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
@@ -1037,18 +1038,41 @@
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
+(rum/defc settings-effect
+  < rum/static
+  [active]
+
+  (rum/use-effect!
+    (fn []
+      (let [active (and (sequential? active) (name (first active)))
+            ^js ds (.-dataset js/document.body)]
+        (if active
+          (set! (.-settingsTab ds) active)
+          (js-delete ds "settingsTab"))
+        #(js-delete ds "settingsTab")))
+    [active])
+
+  [:<>])
+
 (rum/defcs settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
     {:will-mount
      (fn [state]
        (state/load-app-user-cfgs)
        state)
+     :did-mount
+     (fn [state]
+       (let [active-tab (first (:rum/args state))
+             *active (::active state)]
+         (when (keyword? active-tab)
+           (reset! *active [active-tab nil])))
+       state)
      :will-unmount
      (fn [state]
        (state/close-settings!)
        state)}
     rum/reactive
-  [state]
+  [state _active-tab]
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
@@ -1056,9 +1080,8 @@
         *active (::active state)]
 
     [:div#settings.cp__settings-main
-
+     (settings-effect @*active)
      [:div.cp__settings-inner
-
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
         (ui/icon "settings")
@@ -1069,6 +1092,7 @@
                 [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
+               [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
@@ -1113,6 +1137,9 @@
 
          :editor
          (settings-editor current-repo)
+
+         :keymap
+         (shortcut2/shortcut-keymap-x)
 
          :version-control
          (settings-git)
