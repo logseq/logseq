@@ -534,6 +534,7 @@ export class LSPluginUser
       this._connected = true
 
       baseInfo = deepMerge(this._baseInfo, baseInfo)
+      this._baseInfo = baseInfo
 
       if (baseInfo?.id) {
         this._debugTag =
