@@ -31,6 +31,18 @@ properties. Read the docs in
 [logseq.tasks.db-graph.create-graph](src/logseq/tasks/db_graph/create_graph.cljs)
 for specifics on the EDN map.
 
+Another example is the `create_graph_with_schema_org.cljs` script which creates a graph
+with the https://schema.org/ ontology with as many of the classes and properties as possible:
+
+```
+$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs schema
+Skipping 67 superseded properties
+Skipping 25 properties with unsupported data types
+Renaming 44 classes due to page name conflicts
+Generating 2268 pages with 900 classes and 1368 properties ...
+Created graph schema!
+```
+
 #### Update graph scripts
 
 For database graphs, it is possible to update graphs with the

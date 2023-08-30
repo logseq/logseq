@@ -105,8 +105,10 @@
           (throw (ex-info (str "No :db/id for property '" prop-name "'") {:property prop-name})))})
    (keys properties)))
 
-(def block-count (atom 100001))
-(def new-db-id #(swap! block-count inc))
+(def current-db-id (atom 0))
+(def new-db-id
+  "Provides the next temp :db/id to use in a create-graph transact!"
+  #(swap! current-db-id dec))
 
 (defn- ->block-tx [m uuid-maps property-db-ids page-id last-block]
   (let [property-refs (when (seq (:properties m))
@@ -160,21 +162,25 @@
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
         {:keys [property-uuids] :as uuid-maps} (create-uuid-maps pages-and-blocks' properties)
+        property-db-ids (->> property-uuids
+                             (map #(vector (name (first %)) (new-db-id)))
+                             (into {}))
         created-at (js/Date.now)
         new-properties-tx (mapv (fn [[prop-name uuid]]
-                                  {:db/id (new-db-id)
-                                   :block/uuid uuid
-                                   :block/schema (merge {:type :default}
-                                                        (get-in properties [prop-name :block/schema]))
-                                   :block/original-name (name prop-name)
-                                   :block/name (string/lower-case (name prop-name))
-                                   :block/type "property"
-                                   :block/created-at created-at
-                                   :block/updated-at created-at})
+                                  (merge {:db/id (or (property-db-ids (name prop-name))
+                                                     (throw (ex-info "No :db/id for property" {:property prop-name})))
+                                          :block/uuid uuid
+                                          :block/schema (merge {:type :default}
+                                                               (get-in properties [prop-name :block/schema]))
+                                          :block/original-name (name prop-name)
+                                          :block/name (string/lower-case (name prop-name))
+                                          :block/type "property"
+                                          :block/created-at created-at
+                                          :block/updated-at created-at}
+                                         (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                           {:block/properties (->block-properties-tx props uuid-maps)
+                                            :block/refs (build-property-refs props property-db-ids)})))
                                 property-uuids)
-        property-db-ids (->> new-properties-tx
-                             (map (juxt :block/original-name :db/id))
-                             (into {}))
         pages-and-blocks-tx
         (vec
          (mapcat
