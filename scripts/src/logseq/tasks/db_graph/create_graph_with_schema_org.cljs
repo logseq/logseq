@@ -48,8 +48,8 @@
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
-   "schema:Text" :default
-   "schema:URL" :url
+   "schema:Text_Class" :default
+   "schema:URL_Class" :url
    "schema:Boolean" :checkbox
    "schema:Date" :date})
 
@@ -106,6 +106,10 @@
          (every? (fn [x] (contains? unsupported-data-types x)) range-includes))))
 
 (defn- detect-id-conflicts-and-get-renamed-classes
+  "Properties and class names conflict in Logseq because schema.org names are
+  case sensitive whereas Logseq's :block/name is case insensitive. This is dealt
+  with by appending a '_Class' suffix to conflicting classes.  If this strategy
+  changes, be sure to update schema->logseq-data-types"
   [property-ids class-ids]
   (let [conflicts
         (->> (concat property-ids class-ids)
