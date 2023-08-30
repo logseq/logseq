@@ -1096,49 +1096,24 @@
 
 (defn save-block!
   [block]
-  (let [repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<update-block-op! repo (:block/uuid block))))
   (op-transact! #'save-block block))
 
 (defn insert-blocks!
   [blocks target-block opts]
-  (let [r (op-transact! #'insert-blocks blocks target-block (assoc opts :outliner-op :insert-blocks))
-        repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<move-blocks-op! repo (keep :block/uuid (:blocks r))))
-    r))
+  (op-transact! #'insert-blocks blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
   [blocks opts]
-  (let [repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<remove-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'delete-blocks blocks (assoc opts :outliner-op :delete-blocks)))
 
 (defn move-blocks!
   [blocks target-block sibling?]
-  (let [repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks blocks target-block {:sibling? sibling?
                                                    :outliner-op :move-blocks}))
 (defn move-blocks-up-down!
   [blocks up?]
-  (let [repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'move-blocks-up-down blocks up?))
 
 (defn indent-outdent-blocks!
   [blocks indent?]
-  (let [repo (:repo *transaction-args*)
-        persist-op? (:persist-op? *transaction-args*)]
-    (when (and persist-op? repo)
-      (rtc-op/<move-blocks-op! repo (keep :block/uuid blocks))))
   (op-transact! #'indent-outdent-blocks blocks indent?))

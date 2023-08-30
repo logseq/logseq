@@ -23,24 +23,6 @@
 
 (def op-validator (m/validator op-schema))
 
-(defn <move-blocks-op!
-  [repo block-uuids]
-  (let [op ["move" {:block-uuids (mapv str block-uuids)}]]
-    (assert (op-validator op) op)
-    (op-store/<add-op! repo op)))
-
-(defn <remove-blocks-op!
-  [repo block-uuids]
-  (let [op ["remove" {:block-uuids (mapv str block-uuids)}]]
-    (assert (op-validator op) "illegal op")
-    (op-store/<add-op! repo op)))
-
-(defn <update-block-op!
-  [repo block-uuid]
-  (let [op ["update" {:block-uuid (str block-uuid)}]]
-    (assert (op-validator op) op)
-    (op-store/<add-op! repo op)))
-
 (defn <add-ops!
   [repo ops]
   (assert (every? op-validator ops) ops)

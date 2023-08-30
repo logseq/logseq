@@ -2,10 +2,7 @@
   "listen datascript changes, infer operations from the db tx-report"
   (:require [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.rtc.op :as op]
-            [frontend.util :as util]))
-
-
+            [frontend.db.rtc.op :as op]))
 
 (defn- gen-block-ops
   [repo same-entity-datoms]
@@ -30,7 +27,7 @@
             (when-let [block-uuid (:block/uuid (db/entity repo e))]
               (mapv (fn [op]
                       (case op
-                        :move ["move" {:block-uuid (str block-uuid)}]
+                        :move ["move" {:block-uuids [(str block-uuid)]}]
                         :update ["update" {:block-uuid (str block-uuid)}])) ops))))))))
 
 (defn- gen-page-ops
@@ -81,8 +78,7 @@
                             :else
                             (recur others))))]
               (recur (conj ops-coll ops) same-entity-datoms-coll*))))]
-    (prn :ops ops)
-    ))
+    (op/<add-ops! repo ops)))
 
 
 (defn listen-db-to-generate-ops

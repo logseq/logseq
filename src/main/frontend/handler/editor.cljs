@@ -274,7 +274,7 @@
              (when (and (:block/pre-block? block')
                         (not (string/blank? title))
                         (not= (util/page-name-sanity-lc title) old-page-name))
-               (state/pub-event! [:page/title-property-changed old-page-name title])))
+               (state/pub-event! [:page/title-property-changed old-page-name title true])))
            (js/console.error (str "Title is not a string: " title))))))))
 
 ;; id: block dom id, "ls-block-counter-uuid"

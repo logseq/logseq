@@ -25,15 +25,6 @@
   {:pre [(some? graph-uuid)]}
   (idb-keyval/set "graph-uuid" graph-uuid (ensure-store repo)))
 
-(defn- <add-op*!
-  [repo op]
-  (let [store (ensure-store repo)]
-    (p/loop [key* (tc/to-long (t/now))]
-      (p/let [old-v (idb-keyval/get key* store)]
-        (if old-v
-          (p/recur (inc key*))
-          (idb-keyval/set key* (clj->js op) store))))))
-
 (defn- <add-ops*!
   [repo ops]
   (let [store (ensure-store repo)
@@ -54,19 +45,6 @@
         (async/<! (p->c (<add-ops*! repo ops)))
         (recur))
     (recur)))
-
-(def ^:private add-op-ch (async/chan 100))
-(async/go-loop []
-  (if-let [[repo op] (async/<! add-op-ch)]
-    (do (prn :add-op op)
-        (async/<! (p->c (<add-op*! repo op)))
-        (recur))
-    (recur)))
-
-(defn <add-op!
-  [repo op]
-  (async/go (async/>! add-op-ch [repo op])))
-
 
 (defn <add-ops!
   [repo ops]

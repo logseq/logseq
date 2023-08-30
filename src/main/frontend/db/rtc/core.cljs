@@ -17,7 +17,8 @@
             [clojure.set :as set]
             [frontend.state :as state]
             [frontend.db.rtc.op :as op]
-            [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]))
+            [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
+            [frontend.handler.page :as page-handler]))
 
 
 
@@ -65,14 +66,18 @@
        [:parents [:sequential :string]]
        [:left [:maybe :string]]
        [:self :string]
-       [:content {:optional true} :string]]]]]])
+       [:content {:optional true} :string]]
+      [:map
+       [:op [:= "update-page"]]
+       [:self :string]
+       [:page-name :string]]
+      [:map
+       [:op [:= "remove-page"]]
+       [:block-uuid :string]]]]]])
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 
 
-;; TODO: don't use outliner-core/delete-blocks loop to remove blocks,
-;;       it is suitable for operations from users(e.g. remove consecutive blocks),
-;;       but blocks in remove-ops are scattered, even maybe from different pages
 (defn apply-remote-remove-ops
   [state remove-ops]
   {:pre [(some? @(:*repo state))]}
@@ -85,12 +90,6 @@
          (outliner-core/delete-blocks! [block] {:children? false}))
         (prn :apply-remote-remove-ops (:block-uuid op))))))
 
-(defn <query-blocks-env
-  [block-uuids]
-  ;; TODO
-  {}
-  )
-
 (defn- insert-or-move-block
   [state block-uuid-str remote-parents remote-left-uuid-str content move?]
   {:pre [(some? @(:*repo state))]}
@@ -102,45 +101,41 @@
           b {:block/uuid (uuid block-uuid-str)}]
       (case [(some? local-parent) (some? local-left)]
         [false true]
-        (prn (:tx-data
-              (outliner-tx/transact!
-               {:persist-op? false}
-               (if move?
-                 (do (outliner-core/move-blocks! [b] local-left true)
-                     (when (and content (not= (:block/content b) content))
-                       (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                         :block/content content))))
-                 (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
-                                               local-left {:sibling? true :keep-uuid? true})))))
+        (outliner-tx/transact!
+         {:persist-op? false}
+         (if move?
+           (do (outliner-core/move-blocks! [b] local-left true)
+               (when (and content (not= (:block/content b) content))
+                 (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                   :block/content content))))
+           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
+                                         local-left {:sibling? true :keep-uuid? true})))
 
         [true true]
         (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-          (prn (:tx-data
-                (outliner-tx/transact!
-                 {:persist-op? false}
-                 (if move?
-                   (do (outliner-core/move-blocks! [b] local-left sibling?)
-                       (when (and content (not= (:block/content b) content))
-                         (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                           :block/content content))))
-                   (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
-                                                   :block/format :markdown}]
-                                                 local-left {:sibling? sibling? :keep-uuid? true}))))))
+          (outliner-tx/transact!
+           {:persist-op? false}
+           (if move?
+             (do (outliner-core/move-blocks! [b] local-left sibling?)
+                 (when (and content (not= (:block/content b) content))
+                   (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                     :block/content content))))
+             (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+                                             :block/format :markdown}]
+                                           local-left {:sibling? sibling? :keep-uuid? true}))))
 
         [true false]
-        (prn (:tx-data
-              (outliner-tx/transact!
-               {:persist-op? false}
-               (if move?
-                 (do (outliner-core/move-blocks! [b] local-parent false)
-                     (when (and content (not= (:block/content b) content))
-                       (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                         :block/content content))))
-                 (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
-                                                 :block/format :markdown}]
-                                               local-parent {:sibling? false :keep-uuid? true}))))
+        (outliner-tx/transact!
+         {:persist-op? false}
+         (if move?
+           (do (outliner-core/move-blocks! [b] local-parent false)
+               (when (and content (not= (:block/content b) content))
+                 (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
+                                                   :block/content content))))
+           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+                                           :block/format :markdown}]
+                                         local-parent {:sibling? false :keep-uuid? true})))
 
-             [false false])
         (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
                                                       :remote-left remote-left-uuid-str}))))))
 
@@ -212,17 +207,33 @@
           (insert-or-move-block state self parents left content true)
           nil
           (when content
-            (prn (:tx-data
-                  (outliner-tx/transact!
-                   {:persist-op? false}
-                   (outliner-core/save-block! (merge (db/pull repo '[*] [:block/uuid (uuid self)])
-                                                     {:block/uuid (uuid self)
-                                                      :block/content content
-                                                      :block/format :markdown})))))))
+            (outliner-tx/transact!
+             {:persist-op? false}
+             (outliner-core/save-block! (merge (db/pull repo '[*] [:block/uuid (uuid self)])
+                                               {:block/uuid (uuid self)
+                                                :block/content content
+                                                :block/format :markdown})))))
 
         (prn :apply-remote-update-ops r self)))))
 
+(defn apply-remote-update-page-ops
+  [state update-page-ops]
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)]
+    (doseq [{:keys [self page-name]} update-page-ops]
+      (if-let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))]
+        (when (not= old-page-name page-name)
+          (page-handler/rename! old-page-name page-name false false))
+        (page-handler/create! page-name {:redirect? false :create-first-block? false
+                                         :uuid (uuid self) :persist-op? false})))))
 
+(defn apply-remote-remove-page-ops
+  [state remove-page-ops]
+  {:pre [(some? @(:*repo state))]}
+  (let [repo @(:*repo state)]
+    (doseq [op remove-page-ops]
+      (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid (:block-uuid op))]))]
+        (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false})))))
 
 
 (defn <apply-remote-data
@@ -232,19 +243,26 @@
   (go
     (let [affected-blocks-map (update-keys (:affected-blocks data-from-ws) name)
           remote-t (:t data-from-ws)
-          {remove-ops-map "remove" move-ops-map "move" update-ops-map "update-attrs"}
+          {remove-ops-map "remove" move-ops-map "move" update-ops-map "update-attrs"
+           update-page-ops-map "update-page" remove-page-ops-map "remove-page"}
           (update-vals
            (group-by (fn [[_ env]] (get env :op)) affected-blocks-map)
            (partial into {}))
           remove-ops (vals remove-ops-map)
           sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
-          update-ops (vals update-ops-map)]
+          update-ops (vals update-ops-map)
+          update-page-ops (vals update-page-ops-map)
+          remove-page-ops (vals remove-page-ops-map)]
+      (prn :start-apply-remote-update-page-ops)
+      (apply-remote-update-page-ops state update-page-ops)
       (prn :start-apply-remote-remove-ops)
       (apply-remote-remove-ops state remove-ops)
       (prn :start-apply-remote-move-ops)
       (apply-remote-move-ops state sorted-move-ops)
       (prn :start-apply-remote-update-ops)
       (apply-remote-update-ops state update-ops)
+      (prn :start-apply-remote-remove-page-ops)
+      (apply-remote-remove-page-ops state remove-page-ops)
       (<! (p->c (op/<update-local-tx! @(:*repo state) remote-t))))))
 
 (defn- <push-data-from-ws-handler
@@ -256,28 +274,38 @@
   [state ops]
   {:pre [(some? @(:*repo state))]}
   (let [repo @(:*repo state)
-        [remove-block-uuids-set update-block-uuids-set move-block-uuids-set]
+        [remove-block-uuids-set update-block-uuids-set move-block-uuids-set update-page-uuids-set remove-page-uuids-set]
         (loop [[op & other-ops] ops
                remove-block-uuids #{}
                update-block-uuids #{}
-               move-block-uuids #{}]
+               move-block-uuids #{}
+               update-page-uuids #{}
+               remove-page-uuids #{}]
           (if-not op
-            [remove-block-uuids update-block-uuids move-block-uuids]
+            [remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids]
             (case (first op)
               "move"
               (let [block-uuids (set (:block-uuids (second op)))
                     move-block-uuids (set/union move-block-uuids block-uuids)
                     remove-block-uuids (set/difference remove-block-uuids block-uuids)]
-                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids))
+                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
               "remove"
               (let [block-uuids (set (:block-uuids (second op)))
                     move-block-uuids (set/difference move-block-uuids block-uuids)
                     remove-block-uuids (set/union remove-block-uuids block-uuids)]
-                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids))
+                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
               "update"
               (let [block-uuid (:block-uuid (second op))
                     update-block-uuids (conj update-block-uuids block-uuid)]
-                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids))
+                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
+              "update-page"
+              (let [block-uuid (:block-uuid (second op))
+                    update-page-uuids (conj update-page-uuids block-uuid)]
+                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
+              "remove-page"
+              (let [block-uuid (:block-uuid (second op))
+                    remove-page-uuids (conj remove-page-uuids block-uuid)]
+                (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
               (throw (ex-info "unknown op type" op)))))
         {move-ops "move" remove-ops "remove" _update-ops "update"} (group-by first ops)
         move-block-uuids (->> move-ops
@@ -290,6 +318,8 @@
                                                (let [block-uuids (set (:block-uuids (second op)))]
                                                  (seq (set/intersection remove-block-uuids-set block-uuids))))))
         update-block-uuids (seq update-block-uuids-set)
+        update-page-uuids (seq update-page-uuids-set)
+        remove-page-uuids (seq remove-page-uuids-set)
         move-ops* (keep
                    (fn [block-uuid]
                      (when-let [block (db/entity repo [:block/uuid (uuid block-uuid)])]
@@ -314,8 +344,18 @@
                                          parent-uuid (some-> b :block/parent :block/uuid str)]
                                      ["update" {:block-uuid block-uuid
                                                 :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
-                                                :content (:block/content b)}])))))]
-    [remove-ops* move-ops* update-ops*]))
+                                                :content (:block/content b)}])))))
+        update-page-ops* (->> update-page-uuids
+                              (keep (fn [block-uuid]
+                                      (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
+                                        ["update-page" {:block-uuid block-uuid
+                                                        :page-name page-name}]))))
+        remove-page-ops* (->> remove-page-uuids
+                              (keep (fn [block-uuid]
+                                      (let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
+                                        (when-not b
+                                          ["remove-page" {:block-uuid block-uuid}])))))]
+    [update-page-ops* remove-ops* move-ops* update-ops* remove-page-ops*]))
 
 
 (defn- <client-op-update-handler
