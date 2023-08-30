@@ -276,7 +276,7 @@
             categories (conj (vec categories)
                              {:key      :ls-shortcuts
                               :title    [:span "Keyboard shortcuts"]
-                              :children [:span (->> (vals @shortcut-config/config)
+                              :children [:span (->> (vals @shortcut-config/*config)
                                                     (map count)
                                                     (apply +))
                                          " shortcuts"]
