@@ -59,7 +59,7 @@
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
-      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing.s3.us-east-2.amazonaws.com/logseq-connectivity-testing")))
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
 
 ;; Feature flags
 ;; =============
