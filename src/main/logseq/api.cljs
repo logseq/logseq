@@ -570,8 +570,11 @@
   page-handler/rename!)
 
 (defn ^:export open_in_right_sidebar
-  [block-uuid]
-  (editor-handler/open-block-in-sidebar! (sdk-utils/uuid-or-throw-error block-uuid)))
+  [block-id-or-uuid]
+  (editor-handler/open-block-in-sidebar!
+    (if (number? block-id-or-uuid)
+      block-id-or-uuid
+      (sdk-utils/uuid-or-throw-error block-id-or-uuid))))
 
 (defn ^:export new_block_uuid []
   (str (db/new-block-id)))
