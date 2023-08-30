@@ -1,6 +1,13 @@
 (ns logseq.tasks.db-graph.create-graph-with-schema-org
   "Script that converts the jsonld version of schema.org into Logseq classes and
-  properties. Initially works with 900 classes and 1368 properties"
+  properties. Initially works with 900 classes and 1368 properties! The script
+   currently provides the following in a Logseq graph:
+   * All schema.org classes with their name, url, parent class (namespace) and properties
+     * Some classes are renamed due to naming conflicts
+   * All properties with their property type, url, description
+     * Some properties are skipped because they are superseded/deprecated or because they have a property
+       type logseq doesnt' support yet
+     * schema.org assumes no cardinality. For now, only :object properties are given a :cardinality :many"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -11,9 +18,6 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [babashka.cli :as cli]))
-
-(def current-db-id (atom 0))
-(def new-db-id #(swap! current-db-id dec))
 
 (defn- get-class-db-id [class-db-ids class-id]
   (or (class-db-ids class-id)
@@ -38,13 +42,15 @@
     (cond-> {:block/original-name (string/replace-first (class-m "@id") "schema:" "")
              :block/type "class"
              :block/uuid (get-class-uuid class-uuids (class-m "@id"))
-             :db/id (get-class-db-id class-db-ids (class-m "@id"))}
+             :db/id (get-class-db-id class-db-ids (class-m "@id"))
+             :properties {:url (string/replace-first (class-m "@id") "schema:" "https://schema.org/")}}
       parent-class
       (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
       (assoc :block/schema {:properties (mapv property-uuids properties)}))))
 
 (def schema->logseq-data-types
+  "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
@@ -53,7 +59,11 @@
    "schema:Boolean" :checkbox
    "schema:Date" :date})
 
-(defn- ->property-page [property-m prop-uuid class-map class-uuids]
+(def unsupported-data-types
+  "Schema datatypes, https://schema.org/DataType, that don't have Logseq equivalents"
+  #{"schema:Time" "schema:DateTime"})
+
+(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose]}]
   (let [range-includes (as-> (property-m "schema:rangeIncludes") range-includes*
                          (map (fn [m] (m "@id"))
                               (if (map? range-includes*) [range-includes*] range-includes*)))
@@ -61,8 +71,13 @@
         schema-type (some #(or (schema->logseq-data-types %)
                                (when (class-map %) :object))
                           range-includes)
+        _ (when (and verbose (> (count range-includes) 1))
+            (println "Picked first property type for" (pr-str (property-m "@id"))))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
         schema (cond-> {:type schema-type}
+                 ;; This cardinality rule should be adjusted as we use schema.org more
+                 (= schema-type :object)
+                 (assoc :cardinality :many)
                  (property-m "rdfs:comment")
                  (assoc :description (property-m "rdfs:comment"))
                  (= schema-type :object)
@@ -70,11 +85,8 @@
                                    (throw (ex-info (str "No uuids found for range(s): " range-includes) {})))))]
     {(keyword (string/replace-first (property-m "@id") "schema:" ""))
      {:block/uuid prop-uuid
-      :block/schema schema}}))
-
-(def unsupported-data-types
-  "Schema datatypes, https://schema.org/DataType, that don't have Logseq equivalents"
-  #{"schema:Time" "schema:DateTime"})
+      :block/schema schema
+      :properties {:url (string/replace-first (property-m "@id") "schema:" "https://schema.org/")}}}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -110,7 +122,7 @@
   case sensitive whereas Logseq's :block/name is case insensitive. This is dealt
   with by appending a '_Class' suffix to conflicting classes.  If this strategy
   changes, be sure to update schema->logseq-data-types"
-  [property-ids class-ids]
+  [property-ids class-ids {:keys [verbose]}]
   (let [conflicts
         (->> (concat property-ids class-ids)
              (group-by (comp string/lower-case first))
@@ -126,26 +138,46 @@
                              ;; b/c schema.org doesn't use '_' in their names
                              (map #(vector % (str % "_Class")))
                              (into {}))]
+    (if verbose
+      (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
+               (keys renamed-classes) "\n")
+      (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))
+        ;; Looks for all instances of a renamed class and updates them to the renamed class reference
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
   (let [all-properties** (filter #(= "rdf:Property" (% "@type")) schema-data)
         [superseded-properties all-properties*] ((juxt filter remove) #(% "schema:supersededBy") all-properties**)
         _ (if verbose
-            (println "Skipping the following superseded properties:" (mapv #(% "@id") superseded-properties))
+            (println "Skipping the following superseded properties:" (mapv #(% "@id") superseded-properties) "\n")
             (println "Skipping" (count superseded-properties) "superseded properties"))
         [unsupported-properties all-properties] ((juxt filter remove) property-with-unsupported-type? all-properties*)
         _ (if verbose
-            (println "Skipping the following unsupported properties:" (mapv #(% "@id") unsupported-properties))
+            (println "Skipping the following unsupported properties:" (mapv #(% "@id") unsupported-properties) "\n")
             (println "Skipping" (count unsupported-properties) "properties with unsupported data types"))]
     all-properties))
 
-(defn create-init-data [options]
-  (let [schema-data (-> (str (fs/readFileSync "resources/schemaorg-current-https.json"))
-                        js/JSON.parse
-                        (js->clj)
-                        (get "@graph"))
-        ;; TODO: See if it's worth pulling in non-types like schema:MusicReleaseFormatType
+(defn- generate-pages
+  [select-classes class-uuids class-to-properties property-uuids options]
+  (let [;; Build db-ids for all classes as they are needed for refs later, across class maps
+        class-db-ids (->> select-classes
+                          (map #(vector (% "@id") (create-graph/new-db-id)))
+                          (into {}))
+        pages (mapv #(hash-map :page
+                               (->class-page % class-db-ids class-uuids class-to-properties property-uuids options))
+                    select-classes)]
+    pages))
+
+(defn- generate-properties
+  [select-properties property-uuids class-map class-uuids options]
+  (apply merge
+         (mapv #(->property-page % (property-uuids (% "@id")) class-map class-uuids options)
+               select-properties)))
+
+(defn- get-all-classes-and-properties
+  "Get all classes and properties from raw json file"
+  [schema-data options]
+  (let [;; TODO: See if it's worth pulling in non-types like schema:MusicReleaseFormatType
         all-classes* (filter #(contains? (set (as-> (% "@type") type'
                                                 (if (string? type') [type'] type')))
                                          "rdfs:Class")
@@ -153,12 +185,8 @@
         all-properties* (get-all-properties schema-data options)
         renamed-classes (detect-id-conflicts-and-get-renamed-classes
                          (map #(vector (% "@id") :property) all-properties*)
-                         (map #(vector (% "@id") :class) all-classes*))
-        _ (if (:verbose options)
-            (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
-                     (keys renamed-classes))
-            (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))
-        ;; Looks for all instances of a renamed class and updates them to the renamed class reference
+                         (map #(vector (% "@id") :class) all-classes*)
+                         options)
         rename-class-ids (fn [m]
                            (w/postwalk (fn [x]
                                          (if-let [new-class (and (map? x) (renamed-classes (x "@id")))]
@@ -167,39 +195,42 @@
         ;; Updates keys like @id, @subClassOf
         all-classes (map rename-class-ids all-classes*)
         ;; Updates keys like @id, @rangeIncludes, @domainIncludes
-        all-properties (map rename-class-ids all-properties*)
+        all-properties (map rename-class-ids all-properties*)]
+    [all-classes all-properties]))
+
+(defn- create-init-data [options]
+  (let [schema-data (-> (str (fs/readFileSync "resources/schemaorg-current-https.json"))
+                        js/JSON.parse
+                        (js->clj)
+                        (get "@graph"))
+        [all-classes all-properties] (get-all-classes-and-properties schema-data options)
+        ;; Generate data shared across pages and properties
         class-map (->> all-classes
                        (map #(vector (% "@id") %))
                        (into {}))
-        property-map (->> all-properties
-                          (map #(vector (% "@id") %))
-                          (into {}))
         select-class-ids (keys class-map)
         ;; Debug: Uncomment to generate a narrower graph of classes
         ;; select-class-ids ["schema:Person" "schema:CreativeWorkSeries"
         ;;                   "schema:Movie" "schema:CreativeWork" "schema:Thing"]
-        select-classes (map #(class-map %) select-class-ids)
-        ;; Build db-ids for all classes as they are needed for refs later, across class maps
-        class-db-ids (->> select-classes
-                          (map #(vector (% "@id") (new-db-id)))
-                          (into {}))
-        ;; Generate all uuids as they are needed for properties and pages
+        ;; Generate class uuids as they are needed for properties (:object) and pages
         class-uuids (->> all-classes
                          (map #(vector (% "@id") (random-uuid)))
                          (into {}))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
-        select-properties (mapcat val class-to-properties)
-        ;; Build property uuids as they are needed for properties and pages
+        select-properties (set (mapcat val class-to-properties))
+        ;; Generate property uuids as they are needed for properties and pages (:schema properties)
         property-uuids (->> select-properties
                             (map #(vector % (random-uuid)))
                             (into {}))
-        properties-config (apply merge
-                                 (mapv #(->property-page (property-map %) (property-uuids %) class-map class-uuids)
-                                       select-properties))
-        pages (mapv #(hash-map :page (->class-page % class-db-ids class-uuids class-to-properties property-uuids options))
-                    select-classes)]
+        ;; Generate pages and properties
+        properties (generate-properties
+                    (filter #(contains? select-properties (% "@id")) all-properties)
+                    property-uuids class-map class-uuids options)
+        pages (generate-pages
+               (map #(class-map %) select-class-ids)
+               class-uuids class-to-properties property-uuids options)]
     {:pages-and-blocks pages
-     :properties properties-config}))
+     :properties properties}))
 
 (def spec
   "Options spec"
@@ -225,6 +256,7 @@
                                (count (:pages-and-blocks init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))
     (d/transact! conn blocks-tx)
+    (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
