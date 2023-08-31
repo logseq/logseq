@@ -77,7 +77,7 @@
          :radio (ui/radio-list options #(update-setting! key %) nil)
          :checkbox (ui/checkbox-list options #(update-setting! key %) nil)
          ;; select
-         (ui/select options (fn [_ value ] (update-setting! key value)) nil))
+         (ui/select options (fn [_ value ] (update-setting! key value))))
        ]]]))
 
 (rum/defc render-item-object

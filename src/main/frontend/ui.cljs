@@ -17,9 +17,11 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -883,13 +885,15 @@
 
 (rum/defc select
   ([options on-change]
-   (select options on-change nil))
-  ([options on-change class]
+   (select options on-change {}))
+  ([options on-change select-options]
    [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
-    {:class     (or class "form-select")
-     :on-change (fn [e]
-                  (let [value (util/evalue e)]
-                    (on-change e value)))}
+    (merge
+     {:class     "form-select"
+      :on-change (fn [e]
+                   (let [value (util/evalue e)]
+                     (on-change e value)))}
+     select-options)
     (for [{:keys [label value selected disabled]
            :or {selected false disabled false}} options]
       [:option (cond->

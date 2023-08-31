@@ -63,8 +63,7 @@
           {:label "m"}
           {:label "y"}])
         (fn [_e value]
-          (swap! *timestamp assoc-in [:repeater :duration] value))
-        nil)
+          (swap! *timestamp assoc-in [:repeater :duration] value)))
 
        [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
