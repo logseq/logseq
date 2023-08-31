@@ -77,7 +77,6 @@
     }
 
     .property-key a {
-        @apply whitespace-nowrap;
         color: var(--ls-primary-text-color);
     }
 
