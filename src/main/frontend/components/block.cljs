@@ -599,7 +599,7 @@
                        (util/trim-safe page-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
-           s)))
+           (if tag? (str "#" s) s))))
 
      (let [repo (state/get-current-repo)
            block-id (:block/uuid config)
