@@ -429,7 +429,15 @@
                       options)]
     (ui/select options
                (fn [_e value]
-                 (on-select value)))))
+                 (on-select value))
+               {:on-mouse-down
+                (fn [e]
+                  (when (util/meta-key? e)
+                    (if-let [page-name (:block/name (db/entity [:block/uuid (some-> (util/evalue e) uuid)]))]
+                      (do
+                        (route-handler/redirect-to-page! page-name)
+                        (.preventDefault e))
+                      (js/console.error "No selected option found to navigate to"))))})))
 
 (rum/defcs configure < rum/reactive
   [state page {:keys [journal?] :as opts}]
@@ -703,7 +711,7 @@
               ;;      {:label "dagre"}])
               ;;    (fn [_e value]
               ;;      (set-setting! :layout value))
-              ;;    "graph-layout")]
+              ;;    {:class "graph-layout"})]
               [:div.flex.items-center.justify-between.mb-2
                [:span (t :settings-page/enable-journals)]
                ;; FIXME: why it's not aligned well?
