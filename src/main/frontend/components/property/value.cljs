@@ -138,8 +138,7 @@
 
 (defn- new-text-editor-opts
   [repo block property value type editor-id *add-new-item? opts]
-  {:placeholder "Input something"
-   :style {:padding 0
+  {:style {:padding 0
            :background "none"}
    :on-blur
    (fn [e]
@@ -280,20 +279,20 @@
            (editor-handler/keydown-up-down-handler :up {:pos :max})
            (property-handler/delete-property-value! repo block (:block/uuid property) value)))))})
 
+(rum/defc empty-block
+  [on-click]
+  [:div.flex.flex-row.cursor-text {:on-click on-click}
+   [:div.flex.flex-row.items-center.mr-2.ml-1
+    [:span.bullet-container.cursor
+     [:span.bullet]]]
+   [:div.flex.flex-1
+    [:span.opacity-70 ""]]])
+
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (let [[block property value opts] (:rum/args state)
-                 type (:type (:block/schema property))]
-             (when (and (= type :block)
-                        (not (uuid? value))
-                        (empty? (get-in block [:block/properties (:block/uuid property)])))
-               ;; create a block to be ready for input
-               (create-new-block! block property opts))
-             state))}
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id row?
                                 editor-box editor-args
-                                editing? *add-new-item? *configure-show?
+                                editing? *add-new-item?
                                 blocks-container-id]
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
@@ -349,7 +348,8 @@
                              (let [ref? (contains? #{:page :block :object} type)]
                                (when (or (not ref?)
                                          (and (string/blank? value) ref?))
-                                 (set-editing! property editor-id dom-id value))))}
+                                 (when-not (and (= type :block) (string/blank? value))
+                                   (set-editing! property editor-id dom-id value)))))}
            (let [type (if (and (= type :default) (uuid? value))
                         (if-let [e (db/entity [:block/uuid value])]
                           (if (:block/name e) :page :block)
@@ -506,12 +506,21 @@
   (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id property))
         editor-id (str dom-id "-editor")
         schema (:block/schema property)
+        type (:type schema)
         multiple-values? (= :many (:cardinality schema))
         editor-args {:block property
                      :parent-block block
                      :format :markdown}]
-    (if multiple-values?
+    (cond
+      (and (= type :block) (or (string/blank? v) (empty? v)))
+      (empty-block (fn [e]
+                     (util/stop e)
+                     (create-new-block! block property {})))
+
+      multiple-values?
       (multiple-values block property v opts dom-id schema editor-id editor-args)
+
+      :else
       [:div.flex.flex-1.items-center.property-value-content
        (property-scalar-value block property v
                               (merge
