@@ -599,7 +599,7 @@
                        (util/trim-safe page-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
-           (if tag? (str "#" s) s))))
+           s)))
 
      (let [repo (state/get-current-repo)
            block-id (:block/uuid config)
@@ -607,16 +607,16 @@
            tags-id (:block/uuid (db/entity [:block/name "tags"]))]
        (when (and block tag? @*hover? (config/db-based-graph? repo))
          [:a.close.fade-in
-          {:class "absolute top-0 right-0"
+          {:class "absolute left-0"
+           :style {:top "0.15rem"}
            :title "Remove this tag"
            :on-mouse-down
            (fn [e]
              (util/stop e)
              (property-handler/delete-property-value! repo block
                                                       tags-id
-                                                      (:block/uuid page-entity))
-             (prn "remove this tag"))}
-          (ui/icon "x")]))]))
+                                                      (:block/uuid page-entity)))}
+          (ui/icon "x" {:size 15})]))]))
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
@@ -2280,16 +2280,13 @@
                (rum/with-key (block-child block)
                  (str uuid "-" idx)))))]))))
 
-(rum/defc named-block
+(rum/defc tags
   [config block]
-  [:div.flex.flex-1.flex-row.flex-wrap.items-center
-   (page-cp config block)
-   (when (:block/tags block)
-     [:div.flex.flex-1.flex-row.flex-wrap.items-center.ml-4
-      (for [tag (:block/tags block)]
-        (page-cp (assoc config
-                        :tag? true
-                        :disable-preview? true) tag))])])
+  [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
+   (for [tag (:block/tags block)]
+     (page-cp (assoc config
+                     :tag? true
+                     :disable-preview? true) tag))])
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
@@ -2345,8 +2342,11 @@
        (when-not plugin-slotted?
          [:div.flex-1.w-full
           (cond
-            (:block/original-name block)
-            (named-block config block)
+            (:block/name block)
+            [:div.flex.flex-1.flex-row.flex-wrap.justify-between.items-center
+             (page-cp config block)
+             (when (seq (:block/tags block))
+               (tags config block))]
 
             (or (seq title) (:block/marker block))
             (build-block-title config block)
@@ -2437,23 +2437,31 @@
         block-reference-only? (some->
                                (:block/content block)
                                string/trim
-                               block-ref/block-ref?)]
+                               block-ref/block-ref?)
+        named? (some? (:block/name block))
+        repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)]
     (if (and edit? editor-box)
       [:div.editor-wrapper
        {:id editor-id}
-       (ui/catch-error
-        (ui/block-error "Something wrong in the editor" {})
-        (editor-box {:block block
-                     :block-id uuid
-                     :block-parent-id block-id
-                     :format format
-                     :on-hide (fn [value event]
-                                (when (= event :esc)
-                                  (editor-handler/save-block! (editor-handler/get-state) value)
-                                  (let [select? (not (string/includes? value "```"))]
-                                    (editor-handler/escape-editing select?))))}
-                    edit-input-id
-                    config))]
+       (let [editor-cp (ui/catch-error
+                        (ui/block-error "Something wrong in the editor" {})
+                        (editor-box {:block block
+                                     :block-id uuid
+                                     :block-parent-id block-id
+                                     :format format
+                                     :on-hide (fn [value event]
+                                                (when (= event :esc)
+                                                  (editor-handler/save-block! (editor-handler/get-state) value)
+                                                  (let [select? (not (string/includes? value "```"))]
+                                                    (editor-handler/escape-editing select?))))}
+                                    edit-input-id
+                                    config))]
+         (if (and named? (seq (:block/tags block)) db-based?)
+           [:div.flex.flex-1.flex-row.justify-between
+            editor-cp
+            (tags config block)]
+           editor-cp))]
       (let [refs-count (count (:block/_refs block))]
         [:div.flex.flex-col.block-content-wrapper
          [:div.flex.flex-row
@@ -2468,7 +2476,8 @@
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide? selected?))]
 
-          (when-not hide-block-refs-count?
+          (when (and (not hide-block-refs-count?)
+                     (not named?))
             [:div.flex.flex-row.items-center
              (when (and (:embed? config)
                         (:embed-parent config))
