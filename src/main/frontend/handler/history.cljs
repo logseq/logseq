@@ -42,6 +42,8 @@
   (util/stop e)
   (state/set-editor-op! :undo)
   (state/clear-editor-action!)
+  (state/set-block-op-type! nil)
+  (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
   (editor/save-current-block!)
   (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
     (restore-cursor! editor-cursor)

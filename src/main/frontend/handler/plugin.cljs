@@ -7,6 +7,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
@@ -41,7 +42,7 @@
   [s]
   (try
     (if (string? s)
-      (js/window.marked s) s)
+      (js/window.marked.parse s) s)
     (catch js/Error e
       (js/console.error e) s)))
 
@@ -175,7 +176,7 @@
 
 (defn has-setting-schema?
   [id]
-  (when-let [pl (and id (get-plugin-inst (name id)))]
+  (when-let [^js pl (and id (get-plugin-inst (name id)))]
     (boolean (.-settingsSchema pl))))
 
 (defn get-enabled-plugins-if-setting-schema
@@ -297,7 +298,7 @@
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
         binding (some->> (if (string? binding) [binding] (seq binding))
-                         (map util/normalize-user-keyname))
+                         (map shortcut-utils/undecorate-binding))
         binding (if util/mac?
                   (or (:mac keybinding) binding) binding)
         mode    (or (:mode keybinding) :global)
@@ -376,7 +377,7 @@
   (when-let [hook (and uuid (str "hook:db:block_" (string/replace (str uuid) "-" "_")))]
     (boolean (seq (get (get-installed-hooks) hook)))))
 
-(def *fenced-code-providers (atom #{}))
+(defonce *fenced-code-providers (atom #{}))
 
 (defn register-fenced-code-renderer
   [pid type {:keys [before subs render edit] :as _opts}]
@@ -389,8 +390,10 @@
 (defn hook-fenced-code-by-type
   [type]
   (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
-    (first (map #(state/get-plugin-resource % :fenced-code-renderers key)
-                @*fenced-code-providers))))
+    (->> @*fenced-code-providers
+         (map #(state/get-plugin-resource % :fenced-code-renderers key))
+         (remove nil?)
+         (first))))
 
 (def *extensions-enhancer-providers (atom #{}))
 
@@ -656,6 +659,15 @@
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
 
+(defn hook-lifecycle-fn!
+  [type f & args]
+  (when (and type (fn? f))
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :before-command-invoked type) nil))
+    (apply f args)
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :after-command-invoked type) nil))))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
@@ -785,7 +797,6 @@
   (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))
-
 
 (comment
   {:pending        (count (:plugin/updates-pending @state/state))

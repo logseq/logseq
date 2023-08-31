@@ -22,7 +22,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -75,7 +75,8 @@
    [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
     (for [color built-in-colors]
       [:a
-       {:title (t (keyword "color" color))
+       {:key (str "key-" color)
+        :title (t (keyword "color" color))
         :on-click #(add-bgcolor-fn color)}
        [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
     [:a
@@ -89,7 +90,7 @@
                 (let [^js el (rum/dom-node state)]
                   ;; Passing aria-label as a prop to TextareaAutosize removes the dash
                   (.setAttribute el "aria-label" "editing block")
-                  (. el addEventListener "mouseup"
+                  (. el addEventListener "select"
                      #(let [start (util/get-selection-start el)
                             end (util/get-selection-end el)]
                         (when (and start end)
@@ -163,11 +164,11 @@
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
-                       (string/split  #" |\+"))
+                       (string/split  #" "))
                    sequence)]
     [:span.keyboard-shortcut
      (map-indexed (fn [i key]
-                    (let [key' (shortcut-helper/decorate-binding (str key))]
+                    (let [key' (shortcut-utils/decorate-binding (str key))]
                       [:code {:key i}
                       ;; Display "cmd" rather than "meta" to the user to describe the Mac
                       ;; mod key, because that's what the Mac keyboards actually say.
@@ -177,7 +178,7 @@
                   sequence)]))
 
 (rum/defc menu-link
-  [{:keys [only-child? no-padding? class] :as options} child shortcut]
+  [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
@@ -224,7 +225,7 @@
                  (if hr
                    [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
-                    (menu-link new-options child nil)
+                    (menu-link new-options child)
                     title)))))
 
            wrapper-children
@@ -507,7 +508,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (shortcut/mixin :shortcut.handler/auto-complete)
+  (shortcut/mixin* :shortcut.handler/auto-complete)
   [state
    matched
    {:keys [on-chosen
@@ -539,7 +540,7 @@
                                         (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                           (on-shift-chosen item)
                                           (on-chosen item)))}
-                      (if item-render (item-render item chosen?) item) nil))]]
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -567,10 +568,10 @@
        :aria-hidden "true"}]]]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
-  (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
+  (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
-        binding         (or custom-binding default-binding)]
-    (shortcut-helper/decorate-binding binding)))
+        binding         (or custom-binding built-in-binding)]
+    (shortcut-utils/decorate-binding binding)))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]
@@ -734,7 +735,7 @@
   ([] (loading (t :loading)))
   ([content] (loading content nil))
   ([content opts]
-   [:div.flex.flex-row.items-center.inline
+   [:div.flex.flex-row.items-center.inline.icon-loading
     [:span.icon.flex.items-center (svg/loader-fn opts)
      (when-not (string/blank? content)
        [:span.text.pl-2 content])]]))
@@ -1006,6 +1007,10 @@
 (def get-adapt-icon-class
   (memoize (fn [klass] (r/adapt-class klass))))
 
+(defn tabler-icon
+  [name]
+  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
+
 (rum/defc icon
   ([name] (icon name nil))
   ([name {:keys [extension? font? class] :as opts}]
@@ -1021,7 +1026,7 @@
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
+         (when-let [klass (tabler-icon name)]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" name " " class)}
@@ -1166,15 +1171,16 @@
    [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
     [:div.flex.flex-row.justify-between.flex-1.px-1
      (for [i (range 1 7)]
-       (button
-        ""
-        :disabled? (and (some? heading) (= heading i))
-        :icon (str "h-" i)
-        :title (t :heading i)
-        :class "to-heading-button"
-        :on-click #(add-heading-fn i)
-        :intent "link"
-        :small? true))
+       (rum/with-key (button
+                      ""
+                      :disabled? (and (some? heading) (= heading i))
+                      :icon (str "h-" i)
+                      :title (t :heading i)
+                      :class "to-heading-button"
+                      :on-click #(add-heading-fn i)
+                      :intent "link"
+                      :small? true)
+         (str "key-h-" i)))
      (button
       ""
       :icon "h-auto"

@@ -34,6 +34,7 @@ import { KeyboardShortcut } from '../KeyboardShortcut'
 
 export const contextBarActionTypes = [
   // Order matters
+  'EditPdf',
   'LogseqPortalViewMode',
   'Geometry',
   'AutoResizing',
@@ -55,6 +56,7 @@ const singleShapeActions: ContextBarActionType[] = [
   'TwitterLink',
   'IFrameSource',
   'Links',
+  'EditPdf',
 ]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
@@ -76,6 +78,7 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
+  pdf: ['EditPdf', 'Links'],
 }
 
 export const withFillShapes = Object.entries(shapeMapping)
@@ -263,6 +266,24 @@ const TwitterLinkAction = observer(() => {
         <TablerIcon name="external-link" />
       </Button>
     </span>
+  )
+})
+
+const EditPdfAction = observer(() => {
+  const app = useApp<Shape>()
+  const {
+    handlers: { t, setCurrentPdf },
+  } = React.useContext(LogseqContext)
+  const shape = app.selectedShapesArray[0]
+
+  return (
+    <Button
+      tooltip={t('whiteboard/edit-pdf')}
+      type="button"
+      onClick={() => setCurrentPdf(app.assets[shape.props.assetId].src)}
+    >
+      <TablerIcon name="edit" />
+    </Button>
   )
 })
 
@@ -509,7 +530,7 @@ contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
 contextBarActionMapping.set('TextStyle', TextStyleAction)
 contextBarActionMapping.set('Links', LinksAction)
-
+contextBarActionMapping.set('EditPdf', EditPdfAction)
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)
 }

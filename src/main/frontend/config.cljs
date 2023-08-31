@@ -29,7 +29,7 @@
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
-;; this is a feature flag to enable the account tab 
+;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
@@ -44,7 +44,9 @@
       (def REGION "us-east-1")
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com"))
+      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
+      )
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
@@ -56,7 +58,8 @@
       (def REGION "us-east-2")
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")))
+      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
 
 ;; Feature flags
 ;; =============

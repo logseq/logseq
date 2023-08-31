@@ -46,12 +46,10 @@
       (protocol/rebuild-blocks-indice! e1)))
 
   (transact-blocks! [_this data]
-    (println "D:Search > Transact blocks!:" repo)
     (doseq [e (get-flatten-registered-engines repo)]
       (protocol/transact-blocks! e data)))
 
   (transact-pages! [_this data]
-    (println "D:Search > Transact pages!:" repo)
     (doseq [e (get-flatten-registered-engines repo)]
       (protocol/transact-pages! e data)))
 

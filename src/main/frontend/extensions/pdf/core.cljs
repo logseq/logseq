@@ -260,11 +260,12 @@
       rects)]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
-  [^js viewer vw-hl hl {:keys [show-ctx-menu! upd-hl!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu!] :as ops}]
 
-  (let [{:keys [id]} hl
+  (let [{:keys [id]}      hl
         *el               (rum/use-ref nil)
         *dirty            (rum/use-ref nil)
+        *ops-ref          (rum/use-ref ops)
         open-ctx-menu!    (fn [^js/MouseEvent e]
                             (.preventDefault e)
                             (when-not (rum/deref *dirty)
@@ -275,7 +276,13 @@
 
         dragstart-handle! (fn [^js e]
                             (when-let [^js dt (and id (.-dataTransfer e))]
-                              (.setData dt "text/plain" (str "((" id "))"))))]
+                              (.setData dt "text/plain" (str "((" id "))"))))
+        update-hl!        (fn [hl] (some-> (rum/deref *ops-ref) (:upd-hl!) (apply [hl])))]
+
+    (rum/use-effect!
+      (fn []
+        (rum/set-ref! *ops-ref ops))
+      [ops])
 
     ;; resizable
     (rum/use-effect!
@@ -321,7 +328,7 @@
                                                                 (.removeAttribute target "data-x")
                                                                 (.removeAttribute target "data-y")
 
-                                                                (upd-hl! hl')) 200))))
+                                                                (update-hl! hl')) 200))))
 
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
@@ -541,16 +548,17 @@
                           (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
                             (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
-        add-hl!         (fn [hl] (when (:id hl)
-                                   ;; fix js object
-                                   (let [highlights (pdf-utils/fix-nested-js highlights)]
-                                     (set-highlights! (conj highlights hl)))
+        add-hl! (fn [hl]
+                  (when (:id hl)
+                    ;; fix js object
+                    (let [highlights (pdf-utils/fix-nested-js highlights)]
+                      (set-highlights! (conj highlights hl)))
 
-                                   (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                                          (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
-                                     ;; exceptions
-                                     (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                                        hl nil (:bounding vw-pos)))))
+                    (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                      ;; exceptions
+                      (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                                         hl nil (:bounding vw-pos)))))
 
         upd-hl!         (fn [hl]
                           (let [highlights (pdf-utils/fix-nested-js highlights)]
@@ -815,11 +823,38 @@
             (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
           (rum/with-key (pdf-toolbar viewer {:on-external-window! #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
 
+(rum/defcs pdf-password-input <
+  (rum/local "" ::password)
+  [state confirm-fn]
+  (let [password (get state ::password)]
+    [:div.container
+     [:div.text-lg.mb-4 "Password required"]
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "This document is password protected. Please enter a password:"]]]
+
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:auto-focus true
+       :on-change (fn [e]
+                    (reset! password (util/evalue e)))}]
+
+     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click (fn []
+                     (let [password @password]
+                       (confirm-fn password)))}
+        "Submit"]]]]))
+
+
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
+        [doc-password, set-doc-password!] (rum/use-state nil) ;; use nil to handle empty string
         [initial-page, set-initial-page!] (rum/use-state 1)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
@@ -873,18 +908,20 @@
        (let [^js loader-el (rum/deref *doc-ref)
              get-doc$      (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
              opts          {:url           url
+                            :password      (or doc-password "")
                             :ownerDocument (.-ownerDocument loader-el)
-                            :cMapUrl       "./cmaps/"
-                            ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
+                            :cMapUrl       "./js/pdfjs/cmaps/"
+                            ;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/cmaps/"
                             :cMapPacked    true}]
 
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
-             (p/then #(set-loader-state! {:pdf-document % :status :completed}))
+             (p/then (fn [doc]
+                       (set-loader-state! {:pdf-document doc :status :completed})))
              (p/catch #(set-loader-state! {:error %})))
          #()))
-     [url])
+     [url doc-password])
 
     (rum/use-effect!
      (fn []
@@ -908,6 +945,16 @@
               :error
               false)
              (state/set-state! :pdf/current nil))
+
+           "PasswordException"
+           (do
+             (set-loader-state! {:error nil})
+             (state/set-modal! (fn [close-fn]
+                                 (let [on-password-fn
+                                       (fn [password]
+                                         (close-fn)
+                                         (set-doc-password! password))]
+                                   (pdf-password-input on-password-fn)))))
 
            (do
              (notification/show!
@@ -940,6 +987,11 @@
                              :initial-error initial-error}
                             {:set-dirty-hls! set-dirty-hls!
                              :set-hls-extra! set-hls-extra!}) "pdf-viewer")])))])))
+
+(rum/defc pdf-container-outer
+  < (shortcut/mixin :shortcut.handler/pdf false)
+  [child]
+  [:<> child])
 
 (rum/defc pdf-container
   [{:keys [identity] :as pdf-current}]
@@ -982,8 +1034,7 @@
 
 (rum/defcs default-embed-playground
   < rum/static rum/reactive
-    (shortcut/mixin :shortcut.handler/pdf)
-  []
+  [state]
   (let [pdf-current (state/sub :pdf/current)
         system-win? (state/sub :pdf/system-win?)]
     [:div.extensions__pdf-playground
@@ -993,8 +1044,9 @@
 
      (when (and (not system-win?) pdf-current)
        (js/ReactDOM.createPortal
-        (pdf-container pdf-current)
-        (js/document.querySelector "#app-single-container")))]))
+         (pdf-container-outer
+           (pdf-container pdf-current))
+         (js/document.querySelector "#app-single-container")))]))
 
 (rum/defcs system-embed-playground
   < rum/reactive

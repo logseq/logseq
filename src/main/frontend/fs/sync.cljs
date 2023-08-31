@@ -1655,7 +1655,7 @@
                                                                     (p/catch (fn [_] nil)))
                                                 current-content (or current-content "")
                                                 incoming-content (fs/read-file repo-dir incoming-file)
-                                                merged-content (diff-merge/three-way-merge current-content current-content incoming-content format)]
+                                                merged-content (diff-merge/three-way-merge "" incoming-content current-content format)]
                                           (if (= incoming-content merged-content)
                                             (p/do!
                                              (fs/copy! repo
@@ -1671,9 +1671,6 @@
                                           ;; else
                                             (p/do!
                                              (fs/write-file! repo repo-dir current-change-file merged-content {:skip-compare? true})
-                                             (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
-                                                                                                               :from-disk? true
-                                                                                                               :fs/event :fs/remote-file-change})
                                              (file-handler/alter-file repo current-change-file merged-content {:re-render-root? true
                                                                                                                :from-disk? true
                                                                                                                :fs/event :fs/remote-file-change})))))))))))))))))
@@ -2481,7 +2478,7 @@
                 local-all-files-meta    (<! local-all-files-meta-c)
                 {diff-remote-files :result elapsed-time :time}
                 (util/with-time (diff-file-metadata-sets remote-all-files-meta local-all-files-meta))
-                _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
+                 _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
                 recent-10-days-range    ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                                         (sort-by
@@ -2869,7 +2866,7 @@
   Object
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
-    (println (str "[SyncManager " graph-uuid "]")
+    (println "[SyncManager]"
              (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :args args :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
@@ -3266,7 +3263,7 @@
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopping")
+      (println "[SyncManager]" "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
 
@@ -3274,7 +3271,7 @@
 
       (reset! *sync-entered? false)
 
-      (println (str "[SyncManager " (:graph-uuid sm) "]") "stopped"))
+      (println "[SyncManager]" "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 
@@ -3335,55 +3332,74 @@
   (when-let [graph-uuid (second @graphs-txid)]
     (get-pwd graph-uuid)))
 
+
+(defn- <connectivity-testing
+  []
+  (go
+    (let [api-url (str "https://" config/API-DOMAIN "/logseq/version")
+          r1 (http/get api-url)
+          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL)
+          r1* (<! r1)
+          r2* (<! r2)
+          ok? (and (= 200 (:status r1*))
+                   (= 200 (:status r2*))
+                   (= "OK" (:body r2*)))]
+      (if ok?
+        (println :connectivity-testing-succ)
+        (notification/show! (str (t :file-sync/connectivity-testing-failed)
+                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url])) :warning false))
+      ok?)))
+
 (declare network-online-cursor)
 
 (defn <sync-start
   []
-  (when-not (false? (state/enable-sync?))
-    (go
-      (when (false? @*sync-entered?)
-        (reset! *sync-entered? true)
-        (let [*sync-state                 (atom (sync-state))
-              current-user-uuid           (<! (user/<user-uuid))
+  (go
+    (when (and (state/enable-sync?)
+               (false? @*sync-entered?)
+               (<! (<connectivity-testing)))
+      (reset! *sync-entered? true)
+      (let [*sync-state                 (atom (sync-state))
+            current-user-uuid           (<! (user/<user-uuid))
               ;; put @graph-uuid & get-current-repo together,
               ;; prevent to get older repo dir and current graph-uuid.
-              _                           (<! (p->c (persist-var/-load graphs-txid)))
-              [user-uuid graph-uuid txid] @graphs-txid
-              txid                        (or txid 0)
-              repo                        (state/get-current-repo)]
-          (when-not (instance? ExceptionInfo current-user-uuid)
-            (when (and repo
-                       @network-online-cursor
-                       user-uuid graph-uuid txid
-                       (graph-sync-off? graph-uuid)
-                       (user/logged-in?)
-                       (not (config/demo-graph? repo)))
-              (try
-                (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                      (config/get-repo-dir repo) repo
-                                                      txid *sync-state)]
-                  (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                    (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                      (clear-graphs-txid! repo)
-                      (do
-                        (state/set-file-sync-state graph-uuid @*sync-state)
-                        (state/set-file-sync-manager graph-uuid sm)
+            _                           (<! (p->c (persist-var/-load graphs-txid)))
+            [user-uuid graph-uuid txid] @graphs-txid
+            txid                        (or txid 0)
+            repo                        (state/get-current-repo)]
+        (when-not (instance? ExceptionInfo current-user-uuid)
+          (when (and repo
+                     @network-online-cursor
+                     user-uuid graph-uuid txid
+                     (graph-sync-off? graph-uuid)
+                     (user/logged-in?)
+                     (not (config/demo-graph? repo)))
+            (try
+              (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                    (config/get-repo-dir repo) repo
+                                                    txid *sync-state)]
+                (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                  (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                    (clear-graphs-txid! repo)
+                    (do
+                      (state/set-file-sync-state graph-uuid @*sync-state)
+                      (state/set-file-sync-manager graph-uuid sm)
 
                         ;; update global state when *sync-state changes
-                        (add-watch *sync-state ::update-global-state
-                                   (fn [_ _ _ n]
-                                     (state/set-file-sync-state graph-uuid n)))
+                      (add-watch *sync-state ::update-global-state
+                                 (fn [_ _ _ n]
+                                   (state/set-file-sync-state graph-uuid n)))
 
-                        (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+                      (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                        (.start sm)
+                      (.start sm)
 
-                        (offer! remote->local-full-sync-chan true)
-                        (offer! full-sync-chan true)))))
-                (catch :default e
-                  (prn "Sync start error: ")
-                  (log/error :exception e)))))
-          (reset! *sync-entered? false))))))
+                      (offer! remote->local-full-sync-chan true)
+                      (offer! full-sync-chan true)))))
+              (catch :default e
+                (prn "Sync start error: ")
+                (log/error :exception e)))))
+        (reset! *sync-entered? false)))))
 
 (defn- restart-if-stopped!
   [is-active?]

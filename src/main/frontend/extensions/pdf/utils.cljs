@@ -56,7 +56,7 @@
 (defn resolve-hls-layer!
   [^js viewer page]
   (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
-    (let [cnt (.-textLayerDiv text-layer)
+    (let [cnt (.-div text-layer)
           cls "extensions__pdf-hls-layer"
           doc js/document
           layer (.querySelector cnt (str "." cls))]

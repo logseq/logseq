@@ -3,22 +3,25 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [logseq.common.path :as path]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.property :as editor-property]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [promesa.core :as p]
-            [frontend.handler.global-config :as global-config-handler]))
+            [promesa.core :as p]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -129,22 +132,83 @@
       ;; return nil, otherwise the entire db will be transferred by ipc
       nil)))
 
+(defn preload-graph-homepage-files!
+  "Preload the homepage file for the current graph. Return loaded file paths.
+
+   Prerequisites:
+   - current graph is set
+   - config is loaded"
+  []
+  (when-let [repo (state/get-current-repo)]
+    (when (and (not (state/loading-files? repo))
+               (config/local-db? repo))
+      (let [repo-dir (config/get-repo-dir repo)
+            page-name (if (state/enable-journals? repo)
+                        (date/today)
+                        (or (:page (state/get-default-home)) "Contents"))
+            page-name (util/page-name-sanity-lc page-name)
+            file-rpath (or (:file/path (db/get-page-file page-name))
+                           (let [format (state/get-preferred-format repo)
+                                 ext (config/get-file-extension format)
+                                 file-name (if (state/enable-journals? repo)
+                                             (date/journal-title->default (date/today))
+                                             (or (:page (state/get-default-home)) "contents"))
+                                 parent-dir (if (state/enable-journals? repo)
+                                              (config/get-journals-directory)
+                                              (config/get-pages-directory))]
+                             (str parent-dir "/" file-name "." ext)))]
+        (prn ::preload-homepage file-rpath)
+        (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
+                _ (when file-exists?
+                    ;; BUG: avoid active-editing block content overwrites incoming fs changes
+                    (editor-handler/escape-editing false))
+                file-content (when file-exists?
+                               (fs/read-file repo-dir file-rpath))
+                file-mtime (when file-exists?
+                             (:mtime (fs/stat repo-dir file-rpath)))
+                db-empty? (db/page-empty? repo page-name)
+                db-content (if-not db-empty?
+                             (db/get-file repo file-rpath)
+                             "")]
+          (p/do!
+           (cond
+             (and file-exists?
+                  db-empty?)
+             (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
+
+             (and file-exists?
+                  (not db-empty?)
+                  (not= file-content db-content))
+             (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))
+
+           (ui-handler/re-render-root!)
+
+           [file-rpath]))))))
+
 (defn load-graph-files!
-  [graph]
+  "This fn replaces the former initial fs watcher"
+  [graph exclude-files]
   (when graph
     (let [repo-dir (config/get-repo-dir graph)
           db-files (->> (db/get-files graph)
-                        (map first))]
+                        (map first))
+          exclude-files (set (or exclude-files []))]
       ;; read all files in the repo dir, notify if readdir error
       (p/let [[files deleted-files]
               (-> (fs/readdir repo-dir :path-only? true)
                   (p/chain (fn [files]
                              (->> files
                                   (map #(path/relative-path repo-dir %))
-                                  (remove #(fs-util/ignored-path? repo-dir %))))
+                                  (remove #(fs-util/ignored-path? repo-dir %))
+                                  (sort-by (fn [f] [(not (string/starts-with? f "logseq/"))
+                                                    (not (string/starts-with? f "journals/"))
+                                                    (not (string/starts-with? f "pages/"))
+                                                    (string/lower-case f)]))))
                            (fn [files]
                              (let [deleted-files (set/difference (set db-files) (set files))]
-                               [files deleted-files])))
+                               [(->> files
+                                     (remove #(contains? exclude-files %)))
+                                deleted-files])))
                   (p/catch (fn [error]
                              (when-not (config/demo-graph? graph)
                                (js/console.error "reading" graph)
@@ -152,26 +216,44 @@
                                                   {:content (str "The graph " graph " can not be read:" error)
                                                    :status :error
                                                    :clear? false}]))
-                             [nil nil])))]
-        (prn ::init-watcher repo-dir {:deleted (count deleted-files)
-                                      :total (count files)})
+                             [nil nil])))
+              ;; notifies user when large initial change set is detected
+              ;; NOTE: this is an estimation, not accurate
+              notification-uid (when (or (> (abs (- (count db-files) (count files)))
+                                            100)
+                                         (> (count deleted-files)
+                                            100))
+                                 (prn ::init-watcher-large-change-set)
+                                 (notification/show! "Loading changes from disk..."
+                                                     :info
+                                                     false))]
+        (prn ::initial-watcher repo-dir {:deleted (count deleted-files)
+                                         :total (count files)})
         (when (seq deleted-files)
           (let [delete-tx-data (->> (db/delete-files deleted-files)
                                     (concat (db/delete-blocks graph deleted-files nil))
                                     (remove nil?))]
             (db/transact! graph delete-tx-data {:delete-files? true})))
-        (doseq [file-rpath files]
-          (when-let [_ext (util/get-file-ext file-rpath)]
-            (->
-             (p/let [content (fs/read-file repo-dir file-rpath)
-                     stat (fs/stat repo-dir file-rpath)
-                     type (if (db/file-exists? graph file-rpath)
-                            "change"
-                            "add")]
-               (handle-changed! type
-                                {:dir repo-dir
-                                 :path file-rpath
-                                 :content content
-                                 :stat stat}))
-             (p/catch (fn [error]
-                        (js/console.dir error))))))))))
+        (-> (p/delay 500) ;; workaround for notification ui not showing
+            (p/then #(p/all (map (fn [file-rpath]
+                                   (p/let [stat (fs/stat repo-dir file-rpath)
+                                           content (fs/read-file repo-dir file-rpath)
+                                           type (if (db/file-exists? graph file-rpath)
+                                                  "change"
+                                                  "add")]
+                                     (handle-changed! type
+                                                      {:dir repo-dir
+                                                       :path file-rpath
+                                                       :content content
+                                                       :stat stat})))
+                                 files)))
+            (p/then (fn []
+                      (when notification-uid
+                        (prn ::init-notify)
+                        (notification/clear! notification-uid)
+                        (state/pub-event! [:notification/show {:content (str "The graph " graph " is loaded.")
+                                                               :status :success
+                                                               :clear? true}]))))
+            (p/catch (fn [error]
+                       (js/console.dir error))))))))
+

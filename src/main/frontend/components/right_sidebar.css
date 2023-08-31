@@ -11,7 +11,12 @@ html[data-theme=light] {
   }
 }
 
+.cp__right-sidebar-settings-btn {
+  background-color: var(--ls-secondary-background-color);
+}
+
 .sidebar-item-list {
+  margin-top: -8px;
   padding-bottom: 150px;
   height: calc(100vh - 48px);
 }
@@ -21,7 +26,7 @@ html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
 }
 
-.cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
+.cp__header a, .cp__header button {
     opacity: 1;
     color: or(--logseq-og-header-button-text-color, --lx-gray-11, --ls-header-button-background);
 }
@@ -30,8 +35,16 @@ html[data-theme=light] a.toggle:hover {
     color: or(--logseq-og-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
 }
 
+.cp__right-sidebar-topbar {
+  background-color: var(--ls-primary-background-color);
+
+  button {
+    opacity: 1;
+  }
+}
+
 html[data-theme=dark] {
-    .cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
+    .cp__header a, .cp__header button {
         opacity: 0.7;
     }
 }

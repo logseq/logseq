@@ -530,4 +530,5 @@
 (defn graph-ready!
   ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
   [graph]
-  (ipc/ipc "graphReady" graph))
+  (when (util/electron?)
+    (ipc/ipc "graphReady" graph)))

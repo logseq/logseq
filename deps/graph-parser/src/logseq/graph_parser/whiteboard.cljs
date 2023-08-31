@@ -78,14 +78,11 @@
   (let [shape? (shape-block? block)
         shape (block->shape block)
         default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
-    (merge (if shape?
+    (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
               (with-whiteboard-block-refs shape page-name)
-              (with-whiteboard-content shape))
-
-             ;; TODO: remove?
-             {:block/unordered true})
+              (with-whiteboard-content shape)))
            (when (nil? (:block/parent block)) {:block/parent default-page-ref})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page default-page-ref})))

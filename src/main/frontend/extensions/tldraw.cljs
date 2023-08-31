@@ -7,11 +7,11 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -79,8 +79,10 @@
 
 (rum/defc keyboard-shortcut
   [props]
-  (let [shortcut (shortcut-helper/gen-shortcut-seq (keyword (gobj/get props "action")))]
-    (ui/render-keyboard-shortcut shortcut)))
+  (let [shortcut (ui/keyboard-shortcut-from-config (keyword (gobj/get props "action")))]
+    (cond
+      (string? shortcut) (ui/render-keyboard-shortcut shortcut)
+      :else (interpose " | " (map ui/render-keyboard-shortcut shortcut)))))
 
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
@@ -105,6 +107,8 @@
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
+   :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))

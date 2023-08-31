@@ -10,7 +10,6 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.block :as block]
             [frontend.components.cmdk :as cmdk]
@@ -26,7 +25,6 @@
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
-            [frontend.components.shortcut :as shortcut]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -147,7 +145,7 @@
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
 
-;; FIXME: awful multi-arty function.
+;; FIXME(andelf): awful multi-arty function.
 ;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
   ([graph]
@@ -274,11 +272,12 @@
         (not (mobile-util/native-platform?)))
    (fn [close-fn]
      [:div
+      ;; TODO: fn translation with args
       [:p
        "Grant native filesystem permission for directory: "
        [:b (config/get-local-dir repo)]]
       (ui/button
-       "Grant"
+       (t :settings-permission/start-granting)
        :class "ui__modal-enter"
        :on-click (fn []
                    (nfs/check-directory-permission! repo)
@@ -296,7 +295,7 @@
   [block shown-properties all-properties _close-fn]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
-     [:div.font-bold "Properties settings for this query:"]
+     [:div.font-bold (t :query/config-property-settings)]
      (for [property all-properties]
        (let [property-value (get query-properties property)
              shown? (if (nil? property-value)
@@ -383,22 +382,24 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-  (repo-handler/graph-ready! repo)
-  ;; Replace initial fs watcher
-  (fs-watcher/load-graph-files! repo))
-  ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
-  ;; (when-not config/test?
-  ;;   (js/setTimeout
-  ;;    (fn []
-  ;;      (let [filename-format (state/get-filename-format repo)]
-  ;;        (when (and (util/electron?)
-  ;;                   (not (util/ci?))
-  ;;                   (not (config/demo-graph?))
-  ;;                   (not= filename-format :triple-lowbar))
-  ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-  ;;    3000))
-  
+  (p/let [loaded-homepage-files (fs-watcher/preload-graph-homepage-files!)
+          ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+          _ (js/setTimeout #(mobile/mobile-postinit) 1000)
+          ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+          _ (repo-handler/graph-ready! repo)
+          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]))
+
+    ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
+    ;; (when-not config/test?
+    ;;   (js/setTimeout
+    ;;    (fn []
+    ;;      (let [filename-format (state/get-filename-format repo)]
+    ;;        (when (and (util/electron?)
+    ;;                   (not (util/ci?))
+    ;;                   (not (config/demo-graph?))
+    ;;                   (not= filename-format :triple-lowbar))
+    ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+    ;;    3000))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -467,8 +468,8 @@
   (commands/exec-plugin-simple-command! pid cmd action))
 
 (defmethod handle :shortcut-handler-refreshed [[_]]
-  (when-not @st/*inited?
-    (reset! st/*inited? true)
+  (when-not @st/*pending-inited?
+    (reset! st/*pending-inited? true)
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
@@ -519,22 +520,7 @@
       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
         (set! (.. toolbar -style -bottom) 0)))))
 
-(defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
-  (let [files (db-model/get-files-entity deprecated-repo)
-        conn (conn/get-db deprecated-repo false)
-        tx (mapv (fn [[id path]]
-                   (let [new-path (string/replace path deprecated-app-id current-app-id)]
-                     {:db/id id
-                      :file/path new-path}))
-                 files)]
-    (d/transact! conn tx)
-    (reset! conn/conns
-            (update-keys @conn/conns
-                         (fn [key] (if (string/includes? key deprecated-repo)
-                                     (string/replace key deprecated-repo current-repo)
-                                     key))))))
-
-(defn get-ios-app-id
+(defn- get-ios-app-id
   [repo-url]
   (when repo-url
     (let [app-id (-> (first (string/split repo-url "/Documents"))
@@ -544,11 +530,12 @@
 
 (defmethod handle :validate-appId [[_ graph-switch-f graph]]
   (when-let [deprecated-repo (or graph (state/get-current-repo))]
-    ;; Installation is not changed for iCloud
     (if (mobile-util/in-iCloud-container-path? deprecated-repo)
+      ;; Installation is not changed for iCloud
       (when graph-switch-f
         (graph-switch-f graph true)
         (state/pub-event! [:graph/ready (state/get-current-repo)]))
+      ;; Installation is changed for App Documents directory
       (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
               current-document-url (.getUri Filesystem #js {:path ""
                                                             :directory (.-Documents Directory)})
@@ -557,24 +544,34 @@
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do
+            (notification/show! [:div "Migrating from previous App installation..."]
+                                :warning
+                                true)
+            (prn ::migrate-app-id :from deprecated-app-id :to current-app-id)
             (file-sync-stop!)
             (.unwatch mobile-util/fs-watcher)
             (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
                   current-repo-dir (config/get-repo-dir current-repo)]
               (try
-                (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
-                (db-persist/delete-graph! deprecated-repo)
+                ;; replace app-id part of repo url
+                (reset! conn/conns
+                        (update-keys @conn/conns
+                                     (fn [key]
+                                       (if (string/includes? key deprecated-app-id)
+                                         (string/replace key deprecated-app-id current-app-id)
+                                         key))))
+                (db-persist/rename-graph! deprecated-repo current-repo)
                 (search/remove-db! deprecated-repo)
-                (state/delete-repo! {:url deprecated-repo})
                 (state/add-repo! {:url current-repo :nfs? true})
+                (state/delete-repo! {:url deprecated-repo})
                 (catch :default e
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
               (repo-config-handler/restore-repo-config! current-repo)
-              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true))
+              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (file-sync-restart!))))
         (state/pub-event! [:graph/ready (state/get-current-repo)])))))
 
@@ -950,10 +947,8 @@
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
-(defmethod handle :modal/keymap-manager [[_]]
-  (state/set-modal!
-    #(shortcut/keymap-pane)
-    {:label "keymap-manager"}))
+(defmethod handle :modal/keymap [[_]]
+  (state/open-settings! :keymap))
 
 (defmethod handle :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)

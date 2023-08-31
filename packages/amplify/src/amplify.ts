@@ -5,7 +5,6 @@ import { dict } from 'aws-amplify-react/lib-esm/AmplifyI18n'
 
 // fix i18n
 dict.zh['Reset Password'] = '重置密码'
-dict.zh['Enter your username'] = '请输入用户名'
 dict.zh['Enter your email'] = '请输入邮箱'
 dict.zh['Enter your password'] = '请输入密码'
 dict.zh['Confirm Password'] = '确认密码'
@@ -26,7 +25,7 @@ const fixesMapping = {
   'Forgot Password': ['Forgot your password?'],
   'Enter your email': ['Enter your Email'],
   'Enter your password': ['Enter your Password'],
-  'Enter your username': ['Enter your Username']
+  'Enter your username': ['Enter your Username or Email']
 }
 
 Object.keys(dict).forEach((k) => {

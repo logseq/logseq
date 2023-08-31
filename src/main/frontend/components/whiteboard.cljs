@@ -292,7 +292,7 @@
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route <
-(shortcut/mixin :shortcut.handler/whiteboard)
+(shortcut/mixin :shortcut.handler/whiteboard false)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]

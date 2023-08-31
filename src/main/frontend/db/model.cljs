@@ -198,18 +198,6 @@
          ;; (sort-by last)
          (reverse))))
 
-(defn get-files-entity
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (->> (d/q
-          '[:find ?file ?path
-            :where
-            [?file :file/path ?path]]
-          db)
-         (seq)
-         ;; (sort-by last)
-         (reverse))))
-
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)
