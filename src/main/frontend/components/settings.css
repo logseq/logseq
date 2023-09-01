@@ -81,6 +81,8 @@
       color: or(--lx-gray-12, --ls-primary-text-color);
     }
 
+  }
+
   &-inner {
     @apply flex flex-col md:flex-row;
 
