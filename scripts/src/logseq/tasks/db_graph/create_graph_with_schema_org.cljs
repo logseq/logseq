@@ -37,7 +37,15 @@
                        (vector? parent-class*)
                        (do (when verbose
                              (println "Picked first class for multi-parent class" (pr-str (class-m "@id"))))
-                           (get (first parent-class*) "@id")))
+                           (get (first parent-class*) "@id"))
+                       ;; DataTypes are weird in that they are subclassed from
+                       ;; rdfs:class but that info is omitted. It seems schema
+                       ;; does this on purpose to display it as a separate tree but
+                       ;; we want all classes under one tree
+                       (contains? (set (as-> (class-m "@type") type'
+                                         (if (string? type') [type'] type')))
+                                  "schema:DataType")
+                       "schema:DataType")
         properties (sort (class-properties (class-m "@id")))]
     (cond-> {:block/original-name (string/replace-first (class-m "@id") "schema:" "")
              :block/type "class"
@@ -166,6 +174,10 @@
         pages (mapv #(hash-map :page
                                (->class-page % class-db-ids class-uuids class-to-properties property-uuids options))
                     select-classes)]
+    (assert (= ["Thing"] (keep #(when-not (:block/namespace (:page %))
+                                  (:block/original-name (:page %)))
+                               pages))
+            "Thing is the only class that doesn't have a parent class")
     pages))
 
 (defn- generate-properties
