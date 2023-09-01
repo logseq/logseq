@@ -8,7 +8,8 @@
             [frontend.ui :as ui]
             [medley.core :as medley]
             [rum.core :as rum]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.config :as config]))
 
 (defn- get-relation
   "Get all parent pages along the namespace hierarchy path.
@@ -33,33 +34,72 @@
               page-namespace (util/get-page-original-name page-namespace)]
           (cond
             (seq pages)
-            pages
+            {:namespaces pages
+             :namespace-pages namespace-pages}
 
             page-namespace
-            [(string/split page-namespace "/")]
+            {:namespaces [(string/split page-namespace "/")]
+             :namespace-pages namespace-pages}
 
             :else
             nil))))))
 
+(rum/defc page-children
+  [page-id parent-children-map namespace-page-map options]
+  [:.ml-4.mb-2
+   (->> (parent-children-map page-id)
+        (sort-by #(get-in namespace-page-map [% :block/original-name]))
+        (map #(let [child-name (get-in namespace-page-map [% :block/original-name])]
+                (if (seq (parent-children-map %))
+                  (ui/foldable (block/page-reference false child-name {} child-name)
+                               (page-children % parent-children-map namespace-page-map options)
+                               (select-keys options [:default-collapsed?]))
+                  [:div
+                   (block/page-reference false child-name {} child-name)]))))])
+
+(rum/defc db-version-hierarchy
+  [page namespace-pages]
+  ;; TODO: Add check for cyclic hierarchies
+  (let [parent-children-map (reduce (fn [acc m]
+                                      (update acc
+                                              (get-in m [:block/namespace :db/id])
+                                              (fnil conj [])
+                                              (:db/id m)))
+                                    {}
+                                    namespace-pages)
+        namespace-page-map (into {} (map (juxt :db/id identity) namespace-pages))
+        page-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))
+        ;; Expand children if there are about a page-ful of total blocks to display
+        default-collapsed? (> (count namespace-pages) 30)]
+    [:div.page-hierarchy.mt-6
+     (ui/foldable
+      [:h2.font-bold.opacity-30 (str "Hierarchy (" (count namespace-pages) ")")]
+      [:div.p-4
+       (page-children page-id parent-children-map namespace-page-map {:default-collapsed? default-collapsed?})]
+      {:default-collapsed? false
+       :title-trigger? true})]))
+
 (rum/defc structures
   [page]
-  (let [namespaces (get-relation page)]
+  (let [{:keys [namespaces namespace-pages]} (get-relation page)]
     (when (seq namespaces)
-      [:div.page-hierarchy.mt-6
-       (ui/foldable
-        [:h2.font-bold.opacity-30 "Hierarchy"]
-        [:ul.namespaces {:style {:margin "12px 24px"}}
-         (for [namespace namespaces]
-           [:li.my-2
-            (->>
-             (for [[idx page] (medley/indexed namespace)]
-               (when (and (string? page) page)
-                 (let [full-page (->> (take (inc idx) namespace)
-                                      util/string-join-path)]
-                   (block/page-reference false
-                                         full-page
-                                         {}
-                                         page))))
-             (interpose [:span.mx-2.opacity-30 "/"]))])]
-        {:default-collapsed? false
-         :title-trigger? true})])))
+      (if (config/db-based-graph? (state/get-current-repo))
+        (db-version-hierarchy page namespace-pages)
+        [:div.page-hierarchy.mt-6
+         (ui/foldable
+          [:h2.font-bold.opacity-30 "Hierarchy"]
+          [:ul.namespaces {:style {:margin "12px 24px"}}
+           (for [namespace namespaces]
+             [:li.my-2
+              (->>
+               (for [[idx page] (medley/indexed namespace)]
+                 (when (and (string? page) page)
+                   (let [full-page (->> (take (inc idx) namespace)
+                                        util/string-join-path)]
+                     (block/page-reference false
+                                           full-page
+                                           {}
+                                           page))))
+               (interpose [:span.mx-2.opacity-30 "/"]))])]
+          {:default-collapsed? false
+           :title-trigger? true})]))))
