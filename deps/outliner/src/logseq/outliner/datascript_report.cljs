@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible frontend.modules.datascript-report.core
+(ns logseq.outliner.datascript-report
   (:require [clojure.set :as set]
             [datascript.core :as d]))
 

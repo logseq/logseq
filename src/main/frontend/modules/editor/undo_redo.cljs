@@ -1,9 +1,7 @@
 (ns frontend.modules.editor.undo-redo
-  (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
+  (:require [frontend.db :as db]
             [frontend.handler.notification :as notification]
-            [frontend.modules.datascript-report.core :as db-report]
+            [logseq.outliner.datascript-report :as ds-report]
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
@@ -255,7 +253,7 @@
       (let [removed-e (pop-undo)
             entity (update removed-e :txs concat tx-data)]
         (push-undo entity))
-      (let [updated-blocks (db-report/get-blocks tx-report)
+      (let [updated-blocks (ds-report/get-blocks tx-report)
             entity {:tx-id (get-in tx-report [:tempids :db/current-tx])
                     :blocks updated-blocks
                     :txs tx-data

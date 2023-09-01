@@ -5,9 +5,9 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
-            [frontend.modules.datascript-report.core :as ds-report]
             [frontend.modules.outliner.file :as file]
-            [frontend.modules.outliner.pipeline-util :as pipeline-util]
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -108,13 +108,13 @@
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)
             importing? (:graph/importing @state/state)
-            deleted-block-uuids (set (pipeline-util/filter-deleted-blocks (:tx-data tx-report)))]
+            deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))]
 
         (when-not importing?
           (react/refresh! repo tx-report'))
 
         (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta)))
-          (let [upsert-blocks (pipeline-util/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))]
+          (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))]
             (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
                     _ipc-result (comment ipc/ipc :db-transact-data repo
                                          (pr-str

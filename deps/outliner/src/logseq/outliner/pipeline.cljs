@@ -1,5 +1,5 @@
-(ns ^:nbb-compatible frontend.modules.outliner.pipeline-util
-  "Util fns for frontend.modules.outliner.pipeline"
+(ns logseq.outliner.pipeline
+  "Core fns for use with frontend.modules.outliner.pipeline"
   (:require [logseq.db.schema :as db-schema]
             [datascript.core :as d]
             [cognitect.transit :as t]))

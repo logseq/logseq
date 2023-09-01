@@ -7,17 +7,16 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
-            ;; TODO: Move these namespaces to more stable deps/ namespaces
-            [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.modules.outliner.pipeline-util :as pipeline-util]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- invoke-hooks
   "Modified copy frontend.modules.outliner.pipeline/invoke-hooks that doesn't
   handle :block/path-refs recalculation"
   [{:keys [db-after] :as tx-report}]
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-        deleted-block-uuids (set (pipeline-util/filter-deleted-blocks (:tx-data tx-report)))
-        upsert-blocks (pipeline-util/build-upsert-blocks blocks deleted-block-uuids db-after)]
+        deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+        upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids db-after)]
     {:blocks upsert-blocks
      :deleted-block-uuids deleted-block-uuids}))
 
