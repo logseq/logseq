@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :deps
+ {logseq/db
+  {:local/root "../db"}}}

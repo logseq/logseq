@@ -123,6 +123,8 @@
              logseq.graph-parser.util.block-ref block-ref
              logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
+             logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.datascript-report ds-report
              medley.core medley
              "path" node-path
              promesa.core p}}

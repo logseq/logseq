@@ -2,6 +2,8 @@
  :deps
  {logseq/graph-parser
   {:local/root "../deps/graph-parser"}
+  logseq/outliner
+  {:local/root "../deps/outliner"}
   logseq/publishing
   {:local/root "../deps/publishing"}
   logseq/frontend
