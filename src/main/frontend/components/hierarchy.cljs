@@ -59,7 +59,6 @@
 
 (rum/defc db-version-hierarchy
   [page namespace-pages]
-  ;; TODO: Add check for cyclic hierarchies
   (let [parent-children-map (reduce (fn [acc m]
                                       (update acc
                                               (get-in m [:block/namespace :db/id])

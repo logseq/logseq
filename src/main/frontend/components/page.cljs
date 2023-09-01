@@ -411,14 +411,16 @@
   [page class on-select]
   (let [repo (state/get-current-repo)
         children-pages (model/get-namespace-children repo (:db/id page))
+        ;; Disallows cyclic hierarchies
         exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                         (conj (:block/uuid page))) ; break cycle
         classes (->> (model/get-all-classes repo)
                      (remove (fn [[_name id]] (contains? exclude-ids id))))
-        options (map (fn [[name id]] {:label name
-                                      :value id
-                                      :selected (= class id)})
-                     classes)
+        options (sort-by :label
+                         (map (fn [[name id]] {:label name
+                                               :value id
+                                               :selected (= class id)})
+                              classes))
         options (cons (if class
                         {:label "Choose parent page"
                          :value ""}
