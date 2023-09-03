@@ -252,7 +252,7 @@
                  (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
-  [state block edit-input-id properties new-property? *hover? opts]
+  [state block edit-input-id properties new-property? opts]
   (let [*property-key (::property-key state)
         *property-value (::property-value state)]
     (cond
@@ -265,8 +265,8 @@
                (seq (:block/alias block))
                (seq (:block/tags block)))
            (not config/publishing?)
-           (or (:page-configure? opts)  @*hover?))
-      [:a.fade-link.my-1
+           (or (:page-configure? opts) (not (:in-block-container? opts))))
+      [:a.fade-link.my-2.flex
        {:on-click (fn []
                     (property-handler/set-editing-new-property! edit-input-id)
                     (reset! *property-key nil)
@@ -335,7 +335,7 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
-(defn- get-namespace-properties
+(defn- get-namespace-parents
   [tags]
   (let [tags' (filter (fn [tag] (= "class" (:block/type tag))) tags)
         *namespaces (atom #{})]
@@ -348,18 +348,31 @@
                  (not (contains? @*namespaces (:db/id ns))))
             (swap! *namespaces conj current-ns)
             (recur (:block/namespace current-ns))))))
-    (mapcat
-     (fn [e] (:properties (:block/schema e)))
-     @*namespaces)))
+    @*namespaces))
+
+(rum/defc properties-section
+  [block properties opts]
+  (when (seq properties)
+    (for [[k v] properties]
+      (when (uuid? k)
+        (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
+          (let [block? (= :block (get-in property [:block/schema :type]))]
+            [:div.property-pair
+             [:div.property-key.col-span-1
+              (property-key block property (select-keys opts [:class-schema?]))]
+             (if (:class-schema? opts)
+               [:div.property-description.col-span-3.font-light
+                (get-in property [:block/schema :description])]
+               [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
+                                                                  {:style {:margin-left -20}})
+                (pv/property-value block property v opts)])]))))))
 
 (rum/defcs properties-area < rum/reactive
-  (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
   [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
-  (let [*hover? (::hover? state)
-        block (resolve-linked-block-if-exists target-block)
+  (let [block (resolve-linked-block-if-exists target-block)
         properties (if (and (:class-schema? opts) (:block/schema block))
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
@@ -370,48 +383,65 @@
                            [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
         tags-properties (when (and (seq tags) (not in-block-container?))
                           [[(:block/uuid (db/entity [:block/name "tags"])) tags]])
-        class-properties (->> (:block/tags block)
-                              (mapcat (fn [tag]
-                                        (when (= "class" (:block/type tag))
-                                          (let [e (db/entity (:db/id tag))]
-                                            (:properties (:block/schema e))))))
-                              (map (fn [id] [id nil])))
-        namespace-properties (->> (:block/tags block)
-                                  (get-namespace-properties)
-                                  (map (fn [id] [id nil])))
-        properties (->> (concat (seq tags-properties)
-                                (seq alias-properties)
-                                (seq properties)
-                                class-properties
-                                namespace-properties)
-                        (util/distinct-by first)
-                        (remove (fn [[k _v]]
-                                  (when (uuid? k)
-                                    (contains? gp-property/db-hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid k]))))))))
+        remove-built-in-properties (fn [properties]
+                                     (remove (fn [x]
+                                               (let [id (if (uuid? x) x (first x))]
+                                                 (when (uuid? id)
+                                                   (contains? gp-property/db-hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
+                                             properties))
+        classes (->> (:block/tags block)
+                     (sort-by :block/name)
+                     (filter (fn [tag]
+                               (= "class" (:block/type tag)))))
+        one-class? (= 1 (count classes))
+        namespace-parents (get-namespace-parents classes)
+        all-classes (->> (concat classes namespace-parents)
+                         (filter (fn [class]
+                                   (seq (:properties (:block/schema class))))))
+        classes-properties (mapcat (fn [class]
+                                     (seq (:properties (:block/schema class)))) all-classes)
+        own-properties (cond->
+                        (->> (concat (seq tags-properties)
+                                     (seq alias-properties)
+                                     (seq properties))
+                             remove-built-in-properties
+                             (remove (fn [[id _]] ((set classes-properties) id))))
+                         one-class?
+                         (concat (map (fn [id] [id (get properties id)]) classes-properties)))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
+        class->properties (loop [classes all-classes
+                                 properties #{}
+                                 result []]
+                            (if-let [class (first classes)]
+                              (let [cur-properties (remove properties (:properties (:block/schema class)))]
+                                (recur (rest classes)
+                                       (set/union properties (set cur-properties))
+                                       (conj result [class cur-properties])))
+                              result))
         opts (assoc opts :blocks-container-id (::blocks-container-id state))]
     (when-not (and (empty? properties)
+                   (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area
-       (cond->
-        {:on-mouse-over #(reset! *hover? true)
-         :on-mouse-out #(reset! *hover? false)}
-         (:selected? opts)
-         (assoc :class "select-none"))
-       (when (seq properties)
-         (for [[k v] properties]
-           (when (uuid? k)
-             (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-               (let [block? (= :block (get-in property [:block/schema :type]))]
-                 [:div.property-pair
-                  [:div.property-key.col-span-1
-                   (property-key block property (select-keys opts [:class-schema?]))]
-                  (if (:class-schema? opts)
-                    [:div.property-description.col-span-3.font-light
-                     (get-in property [:block/schema :description])]
-                    [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
-                                                                       {:style {:margin-left -20}})
-                     (pv/property-value block property v opts)])])))))
-       (when (or new-property? (not in-block-container?))
-         (new-property block edit-input-id properties new-property? *hover? opts))])))
+       [:div.own-properties
+        (cond->
+         {}
+          (:selected? opts)
+          (assoc :class "select-none"))
+        (properties-section block own-properties opts)
+        (when (or new-property? (not in-block-container?))
+          (new-property block edit-input-id properties new-property? opts))]
+
+       (when (and (seq class->properties) (not one-class?))
+         (let [page-cp (:page-cp opts)]
+           [:div.parent-properties.flex.flex-1.flex-col.gap-1.mt-2
+            (for [[class class-properties] class->properties]
+              (let [id-properties (->> class-properties
+                                       remove-built-in-properties
+                                       (map (fn [id] [id (get properties id)])))]
+                (when (seq id-properties)
+                  [:div
+                   (when page-cp
+                     (page-cp {} class))
+                   (properties-section block id-properties opts)])))]))])))
