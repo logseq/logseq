@@ -274,7 +274,7 @@
                     (reset! *property-value nil))}
        [:div.flex.flex-row.items-center
         (ui/icon "circle-plus" {:size 16})
-        [:div.ml-1.text-sm "Add property"]]]
+        [:div.ml-1 "Add property"]]]
 
       :else
       [:div {:style {:height 28}}])))
@@ -314,7 +314,7 @@
           :data-class-schema (boolean class-schema?)
           :title (str "Configure property: " (:block/original-name property))
           :on-click toggle-fn}
-         [:div.ml-1.text-sm (:block/original-name property)]])
+         [:div.ml-1 (:block/original-name property)]])
       (fn [{:keys [toggle-fn]}]
         (when (not config/publishing?)
           [:div.p-8
@@ -406,7 +406,8 @@
                                      (seq alias-properties)
                                      (seq properties))
                              remove-built-in-properties
-                             (remove (fn [[id _]] ((set classes-properties) id))))
+                             (remove (fn [[id _]] ((set classes-properties) id)))
+                             (sort-by first))
                          one-class?
                          (concat (map (fn [id] [id (get properties id)]) classes-properties)))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
