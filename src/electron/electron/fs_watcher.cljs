@@ -1,22 +1,26 @@
 (ns electron.fs-watcher
   "This ns is a wrapper around the chokidar file watcher,
-  https://www.npmjs.com/package/chokidar. File watcher events are sent to the
-  `file-watcher` ipc channel"
-  (:require [cljs-bean.core :as bean]
-            ["fs" :as fs]
-            ["chokidar" :as watcher]
-            [electron.utils :as utils]
-            [electron.logger :as logger]
-            ["electron" :refer [app]]
-            [electron.window :as window]
-            [logseq.common.graph :as common-graph]))
 
-;; TODO: explore different solutions for different platforms
-;; 1. https://github.com/Axosoft/nsfw
+
+  File watcher events are sent to the `file-watcher` ipc channel"
+  (:require ["@parcel/watcher" :as parcel-watcher]
+            ["chokidar" :as watcher]
+            ["electron" :refer [app]]
+            ["fs" :as fs]
+            ["fs/promises" :as fsp]
+            [cljs-bean.core :as bean]
+            [electron.logger :as logger]
+            [electron.utils :as utils]
+            [electron.window :as window]
+            [logseq.common.graph :as common-graph]
+            [promesa.core :as p]
+            [logseq.common.path :as path]))
 
 (defonce polling-interval 10000)
 ;; dir -> Watcher
 (defonce *file-watcher (atom {})) ;; val: [watcher watcher-del-f]
+
+(defonce *parcel-watcher (atom {}))
 
 (defonce file-watcher-chan "file-watcher")
 (defn- send-file-watcher! [dir type payload]
@@ -60,6 +64,71 @@
                                          (select-keys options [:global-dir])))))
 (defn- create-dir-watcher
   [dir options]
+  (p/let [_ (prn :watcher @*parcel-watcher)
+          handle-event (fn [event]
+                         (prn ::handle-evt event)
+                         (let [path (.-path event)
+                               type (.-type event)
+                               rpath (path/trim-dir-prefix dir path)]
+                           (prn :event :dir dir :path rpath :type type)
+                           (p/let [^js stat (-> (fsp/stat path)
+                                            (p/catch (fn [] nil)))]
+                             (cond
+                               (= type "delete")
+                               (p/let [^js stat (-> (p/delay 500)
+                                                (p/then (fn [] (fsp/stat path)))
+                                                (p/catch (fn [] nil)))]
+                                 (cond (and (= dir path)
+                                            (nil? stat))
+                                       (prn "top dir gone")
+
+                                       stat ;; deleted then appeared, ignore this event
+                                       nil
+
+                                       rpath
+                                       (prn "file gone" rpath)))
+
+
+                               (nil? stat)
+                               (prn :dir-gone event)
+
+                               (.isDirectory stat)
+                               (when (= dir path)
+                                 (prn "top dir event" :top-dir-gone {:dir dir})
+                                 )
+
+                               ;; file updated or created
+                               (or (contains? #{"create" "update"} type)
+                                   (.isFile stat))
+                               (let [size (.-size stat)
+                                     mtime (.-mtimeMs stat)
+                                     ctime (.-birthtimeMs stat)
+                                     stat {:size size
+                                           :mtime mtime
+                                           :ctime ctime}]
+                                 (prn "create/update event" type stat))
+
+                               :else
+                               (prn "change/add event")))))
+          subscription (.subscribe parcel-watcher
+                                   dir
+                                   (fn [err #^js events]
+                                     (prn ::watcher err events)
+                                     (doseq [event events]
+                                       (handle-event event)))
+                                   (clj->js {
+                                             :ignore ["**/.*"
+                                                      "**/.*/**"
+                                                      "**/node_modules"
+                                                      "**/node_modules/**"
+                                                      "**/*.swp"
+                                                      "logseq/bak"
+                                                      "logseq/version-files"
+                                                      "logseq/broken-config.edn"
+                                                      "logseq/metadata.edn"
+                                                      "logseq/pages-metadata.edn"
+                                                      "logseq/graphs-txid.edn"]}))]
+    (swap! *parcel-watcher assoc dir subscription))
   (let [watcher-opts (clj->js
                       {:ignored (fn [path]
                                   (common-graph/ignored-path? dir path))
