@@ -64,8 +64,8 @@
                         (when (= (util/ekey e) "Enter")
                           toggle-fn))}
         [:span.inline-flex.items-center
-         (ui/icon "calendar")
-         [:span.ml-1 (or title "Pick a date")]]])
+         [:span.mr-1 (or title "Pick a date")]
+         (when-not title (ui/icon "calendar" {:size 15}))]])
      (fn [{:keys [toggle-fn]}]
        (ui/datepicker value' {:on-change (fn [_e date]
                                            (let [repo (state/get-current-repo)

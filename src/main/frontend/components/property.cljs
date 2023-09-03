@@ -29,10 +29,9 @@
        (if id
          [:a {:on-click toggle-fn}
           [:em-emoji {:id id}]]
-         [:a {:on-click toggle-fn}
-          [:div.flex.flex-row.items-center
-           (ui/icon "letter-p" {:size 16})
-           [:div.ml-1.text-sm "Pick another icon"]]]))
+         [:a.flex.flex-row.items-center {:on-click toggle-fn}
+          (ui/icon "point" {:size 16})
+          [:div.ml-1.text-sm "Pick another icon"]]))
      (fn [{:keys [toggle-fn]}]
        (ui/emoji-picker
         {:auto-focus true
@@ -86,19 +85,20 @@
 
      [:div.grid.gap-2.p-1.mt-4
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-       [:label "Name:"]
-       [:input.form-input
+       [:label.col-span-1 "Name:"]
+       [:input.form-input.col-span-2
         {:on-change #(reset! *property-name (util/evalue %))
          :disabled built-in-property?
          :value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-       [:label "Icon:"]
+       [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
-         (icon property icon-value))]
+         [:div.col-span-3
+          (icon property icon-value)])]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
-       [:label "Schema type:"]
+       [:label.col-span-1 "Schema type:"]
        (let [schema-types (->> property-handler/user-face-builtin-schema-types
                                (remove property-handler/internal-builtin-schema-types)
                                (map (comp string/capitalize name))
@@ -108,10 +108,11 @@
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
                                                     (:type @*property-schema))})))]
-         (ui/select schema-types
-                    (fn [_e v]
-                      (let [type (keyword (string/lower-case v))]
-                        (swap! *property-schema assoc :type type)))))]
+         [:div.col-span-2
+          (ui/select schema-types
+                     (fn [_e v]
+                       (let [type (keyword (string/lower-case v))]
+                         (swap! *property-schema assoc :type type))))])]
 
       (when (= :object (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.leading-8
@@ -291,7 +292,7 @@
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
           ;; default property icon
-          (ui/icon "letter-p" {:size 16}))])
+          (ui/icon "point" {:size 16}))])
       (fn [{:keys [toggle-fn]}]
         (ui/emoji-picker
          {:auto-focus true
@@ -313,7 +314,7 @@
           :data-class-schema (boolean class-schema?)
           :title (str "Configure property: " (:block/original-name property))
           :on-click toggle-fn}
-         [:div.ml-1 (:block/original-name property)]])
+         [:div.ml-1.text-sm (:block/original-name property)]])
       (fn [{:keys [toggle-fn]}]
         (when (not config/publishing?)
           [:div.p-8
@@ -357,7 +358,7 @@
       (when (uuid? k)
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
           (let [block? (= :block (get-in property [:block/schema :type]))]
-            [:div.property-pair
+            [:div.property-pair (cond-> {} (not block?) (assoc :class "items-center"))
              [:div.property-key.col-span-1
               (property-key block property (select-keys opts [:class-schema?]))]
              (if (:class-schema? opts)
@@ -419,7 +420,7 @@
                                        (conj result [class cur-properties])))
                               result))
         opts (assoc opts :blocks-container-id (::blocks-container-id state))]
-    (when-not (and (empty? properties)
+    (when-not (and (empty? own-properties)
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
