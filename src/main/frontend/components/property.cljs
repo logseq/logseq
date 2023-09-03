@@ -445,5 +445,5 @@
                 (when (seq id-properties)
                   [:div
                    (when page-cp
-                     (page-cp {} class))
+                     [:span.text-sm (page-cp {} class)])
                    (properties-section block id-properties opts)])))]))])))
