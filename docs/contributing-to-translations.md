@@ -14,7 +14,7 @@ In order to run the commands in this doc, you will need to install
 ## Where to Contribute
 
 Language translations are under,
-[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/) with each language having it's own file. For example, the es locale is in `es.edn`.
+[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/) with each language having its own file. For example, the es locale is in `es.edn`.
 
 ## Language Overview
 
@@ -83,7 +83,7 @@ Almost all translations are small. The only exceptions to this are the keys `:tu
 ### Editing Tips
 
 * Some translations may include punctuation like `:` or `!`. When translating them, please use the punctuation that makes the most sense for your language as you don't have to follow the English ones.
-* Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
+* Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used for something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
 * Rarely, a translation may need to translate formatted text by returning [hiccup-style HTML](https://github.com/weavejester/hiccup#syntax). In this case, a Clojure function is the recommended approach. For example, a function translation would look like `(fn [] [:div "FOO"])`. See `:on-boarding/main-title` for an example.
 ## Fix Mistakes
 
