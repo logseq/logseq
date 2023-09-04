@@ -85,13 +85,14 @@
 
 (rum/defc page-blocks-inner <
   {:did-mount open-root-block!}
-  [page-name _block hiccup sidebar? whiteboard? _block-uuid]
-  [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
-   (rum/with-key
-     (content/content page-name
-                      {:hiccup   hiccup
-                       :sidebar? sidebar?})
-     (str page-name "-hiccup"))])
+  [page-name _block blocks config sidebar? whiteboard? _block-uuid]
+  (let [hiccup (component-block/->hiccup blocks config {})]
+    [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
+     (rum/with-key
+       (content/content page-name
+                        {:hiccup   hiccup
+                         :sidebar? sidebar?})
+       (str page-name "-hiccup"))]))
 
 (declare page)
 
@@ -124,7 +125,8 @@
      [:a.add-button-link.block
       (ui/icon "circle-plus")]]]])
 
-(rum/defc page-blocks-cp < rum/reactive db-mixins/query
+(rum/defcs page-blocks-cp < rum/reactive db-mixins/query
+  (rum/local nil ::ref)
   {:will-mount (fn [state]
                  (let [page-e (second (:rum/args state))
                        page-name (:block/name page-e)]
@@ -133,7 +135,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [repo page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -151,7 +153,8 @@
         (dummy-block page-name)
 
         :else
-        (let [document-mode? (state/sub :document/mode?)
+        (let [*ref (::ref state)
+              document-mode? (state/sub :document/mode?)
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
                               :db/id (:db/id block)
@@ -159,13 +162,10 @@
                               :editor-box editor/box
                               :document/mode? document-mode?}
                              config)
-              hiccup-config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))
-              non-collapsed-blocks-count (count (remove :block/collapsed? (:block/_page (db/entity (:db/id page-e)))))
-              lazy? (> non-collapsed-blocks-count 50)
-              hiccup (component-block/->hiccup blocks (assoc hiccup-config :lazy? lazy?) {})]
-          [:div
-           (page-blocks-inner page-name block hiccup sidebar? whiteboard? block-id)
+              config (common-handler/config-with-document-mode hiccup-config)
+              blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))]
+          [:div {:ref #(reset! *ref %)}
+           (page-blocks-inner page-name block blocks config sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}

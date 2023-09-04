@@ -1351,6 +1351,10 @@ Similar to re-frame subscriptions"
   ([value path]
    (set-state! :ui/paths-scroll-positions value :path-in-sub-atom path)))
 
+(defn save-main-container-position!
+  [value]
+  (set-state! :ui/main-container-scroll-top value))
+
 (defn get-saved-scroll-position
   ([]
    (get-saved-scroll-position js/window.location.hash))
