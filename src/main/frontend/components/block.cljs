@@ -2788,19 +2788,19 @@
                 linked-block
 
                 :else
-                block*)]
-    (merge (db/sub-block (:db/id block))
-           (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))))
+                block*)
+        result (merge (db/sub-block (:db/id block))
+                      (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))]
+    (if linked-block
+      [block* result]
+      [nil result])))
 
 (rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config* block* {:keys [edit? edit-input-id]}]
+  [state repo config* block {:keys [edit? edit-input-id navigating-block navigated?]}]
   (let [ref? (:ref? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get state ::navigating-block)
-        navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block*) navigating-block) navigating-block)
-        block (build-block config* block* {:navigating-block navigating-block :navigated? navigated?})
         {:block/keys [uuid pre-block? refs content properties]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
@@ -2927,12 +2927,16 @@
   [old-block new-block]
   (not= (:block/tx-id old-block) (:block/tx-id new-block)))
 
-(rum/defcs block-container < rum/reactive
+(rum/defcs block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
+  (rum/local false ::blocks-container-id-changed?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)]
+                 block-id (:block/uuid block)
+                 container-id (if (:original-block config)
+                                (state/next-blocks-container-id)
+                                (:blocks-container-id config))]
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -2943,13 +2947,10 @@
 
                :else
                nil)
-             (let [container-id (if (:original-block config)
-                                  (state/next-blocks-container-id)
-                                  (:blocks-container-id config))]
-               (assoc state
-                      ::control-show? (atom false)
-                      ::navigating-block (atom (:block/uuid block))
-                      ::blocks-container-id container-id))))
+             (assoc state
+                    ::control-show? (atom false)
+                    ::navigating-block (atom (:block/uuid block))
+                    ::blocks-container-id (atom container-id))))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
@@ -2959,15 +2960,25 @@
                    state)}
   [state config block]
   (let [repo (state/get-current-repo)
-        blocks-container-id (::blocks-container-id state)
+        *blocks-container-id (::blocks-container-id state)
+        *blocks-container-id-changed? (::blocks-container-id-changed? state)
         unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block)))
-        config (assoc config :blocks-container-id blocks-container-id)
-        edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
+        *navigating-block (get state ::navigating-block)
+        navigating-block (rum/react *navigating-block)
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        [original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
+        _ (when (and original-block (false? @*blocks-container-id-changed?))
+            (reset! *blocks-container-id (state/next-blocks-container-id))
+            (reset! *blocks-container-id-changed? true))
+        config' (-> (if original-block
+                      (assoc config :original-block original-block)
+                      config)
+                    (assoc :blocks-container-id @*blocks-container-id))
+        edit-input-id (str "edit-block-" @*blocks-container-id "-" (:block/uuid block))
         edit? (state/sub [:editor/editing? edit-input-id])
         opts {:edit? edit?
               :edit-input-id edit-input-id}]
-    (cond
-      unloaded?
+    (if unloaded?
       [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
        [:div.flex.flex-row
         [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
@@ -2976,8 +2987,9 @@
         [:div.flex.flex-1
          [:span.opacity-70
           "Loading..."]]]]
-      :else
-      (block-container-inner state repo config block opts))))
+      (block-container-inner state repo config' block
+                             (merge opts {:navigating-block navigating-block :navigated? navigated?})))))
+
 
 (defn divide-lists
   [[f & l]]
@@ -3349,7 +3361,7 @@
 
 (rum/defc block-item <
   {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
