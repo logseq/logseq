@@ -2818,7 +2818,7 @@
 
     [:div {:ref (fn [r] (when-not @*ref (reset! *ref r)))}
      (if (and (not edit?) @*hidden?)
-       [:div {:style {:height 120}}]
+       [:div {:style {:height 24}}]
        (let [ref? (:ref? config*)
              custom-query? (boolean (:custom-query? config*))
              ref-or-custom-query? (or ref? custom-query?)
