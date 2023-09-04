@@ -193,7 +193,7 @@
 
 ;;; ### configs ends
 
-(defn- exp
+(defn- guard-ex
   [x]
   (when (instance? ExceptionInfo x) x))
 
@@ -849,7 +849,7 @@
   (<get-local-all-files-meta [this graph-uuid base-path]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
-        (or (exp r)
+        (or (guard-ex r)
             (<! (<build-local-file-metadatas this graph-uuid r))))))
   (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
@@ -865,19 +865,19 @@
     (go
       (<! (<rsapi-cancel-all-requests))
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token-or-exp)))))))
   (<fetch-remote-files [this graph-uuid base-path filepaths]
     (go
       (<! (<rsapi-cancel-all-requests))
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (<! (p->c (ipc/ipc "fetch-remote-files" graph-uuid base-path filepaths token-or-exp)))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (<! (<retry-rsapi #(p->c (ipc/ipc "download-version-files" graph-uuid base-path filepaths token-or-exp))))))))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
@@ -892,7 +892,7 @@
       (go
         (<! (<rsapi-cancel-all-requests))
         (let [token-or-exp (<! (<get-token this))]
-          (or (exp token-or-exp)
+          (or (guard-ex token-or-exp)
               (<! (<retry-rsapi
                    #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token-or-exp)))))))))
 
@@ -900,7 +900,7 @@
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token-or-exp (<! (<get-token this))]
-          (or (exp token-or-exp)
+          (or (guard-ex token-or-exp)
               (<!
                (<retry-rsapi
                 #(p->c
@@ -943,7 +943,7 @@
     (go
       (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                                :basePath base-path}))))]
-        (or (exp r)
+        (or (guard-ex r)
             (<! (<build-local-file-metadatas this graph-uuid (.-result r)))))))
 
   (<get-local-files-meta [this graph-uuid base-path filepaths]
@@ -966,7 +966,7 @@
     (go
       (let [token-or-exp (<! (<get-token this))
             filepaths' (map path-normalize filepaths)]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                          :basePath base-path
                                                                          :filePaths filepaths'
@@ -974,7 +974,7 @@
   (<fetch-remote-files [this graph-uuid base-path filepaths]
     (go
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (js->clj
              (.-value
               (<! (<retry-rsapi
@@ -986,7 +986,7 @@
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (<! (<retry-rsapi
                  #(p->c (.updateLocalVersionFiles mobile-util/file-sync
                                                   (clj->js {:graphUUID graph-uuid
@@ -1007,7 +1007,7 @@
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token-or-exp (<! (<get-token this))
-              r (or (exp token-or-exp)
+              r (or (guard-ex token-or-exp)
                     (<! (p->c (.updateRemoteFiles mobile-util/file-sync
                                                   (clj->js {:graphUUID graph-uuid
                                                             :basePath base-path
@@ -1015,21 +1015,21 @@
                                                             :txid local-txid
                                                             :token token-or-exp
                                                             :fnameEncryption true})))))]
-          (or (exp r)
+          (or (guard-ex r)
               (get (js->clj r) "txid"))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token-or-exp (<! (<get-token this))
-              r (or (exp token-or-exp)
+              r (or (guard-ex token-or-exp)
                     (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
                                                   (clj->js {:graphUUID graph-uuid
                                                             :basePath base-path
                                                             :filePaths normalized-filepaths
                                                             :txid local-txid
                                                             :token token-or-exp})))))]
-          (or (exp r)
+          (or (guard-ex r)
               (get (js->clj r) "txid"))))))
 
   (<encrypt-fnames [_ graph-uuid fnames]
@@ -1037,7 +1037,7 @@
       (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
                                         (clj->js {:graphUUID graph-uuid
                                                   :filePaths fnames}))))]
-        (or (exp r)
+        (or (guard-ex r)
             (get (js->clj r) "value")))))
   (<decrypt-fnames [_ graph-uuid fnames]
     (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
@@ -1161,7 +1161,7 @@
   (<request [this api-name body]
     (go
       (let [token-or-exp (<! (<get-token this))]
-        (or (exp token-or-exp)
+        (or (guard-ex token-or-exp)
             (let [resp (<! (<request api-name body token-or-exp *stopped?))]
               (if (http/unexceptional-status? (:status resp))
                 (get-resp-json-body resp)
@@ -1247,7 +1247,7 @@
                                       {}
                                       (remove (comp nil? second)
                                               {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
-                (or (exp r)
+                (or (guard-ex r)
                     (let [next-continuation-token (:NextContinuationToken r)
                           objs                    (:Objects r)]
                       (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
@@ -1261,11 +1261,11 @@
                               objs))
                       (when-not (empty? next-continuation-token)
                         (recur next-continuation-token)))))))]
-       (or (exp exp-r)
+       (or (guard-ex exp-r)
            (let [file-meta-list*      (persistent! file-meta-list)
                  encrypted-path-list* (persistent! encrypted-path-list)
                  path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
-             (or (exp path-list-or-exp)
+             (or (guard-ex path-list-or-exp)
                  (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
                    (set
                     (mapv
@@ -1286,10 +1286,10 @@
     (user/<wrap-ensure-id&access-token
      (let [encrypted-paths* (<! (<encrypt-fnames rsapi graph-uuid filepaths))
            r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
-       (or (exp r)
+       (or (guard-ex r)
            (let [encrypted-paths (mapv :FilePath r)
                  paths-or-exp    (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths))]
-             (or (exp paths-or-exp)
+             (or (guard-ex paths-or-exp)
                  (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
                    (into #{}
                          (comp
@@ -1330,7 +1330,7 @@
   (<get-deletion-logs [this graph-uuid from-txid]
     (user/<wrap-ensure-id&access-token
      (let [r (<! (.<request this "get_deletion_log_v20221212" {:GraphUUID graph-uuid :FromTXId from-txid}))]
-       (or (exp r)
+       (or (guard-ex r)
            (let [txns-with-encrypted-paths (mapv (fn [txn]
                                                    (assoc txn :paths
                                                           (mapv remove-user-graph-uuid-prefix (:paths txn))))
@@ -1428,7 +1428,7 @@
        (loop [[files & others] partitioned-files]
          (when files
            (let [r (<! (<get-remote-txid this graph-uuid))]
-             (or (exp r)
+             (or (guard-ex r)
                  (let [current-txid (:TXId r)]
                    (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))
                    (recur others))))))))))
@@ -1456,7 +1456,7 @@
       (if (< now expired-at)
         r
         (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
-          (or (exp r)
+          (or (guard-ex r)
               (do (swap! *get-graph-salt-memoize-cache conj [graph-uuid r])
                   r)))))))
 
@@ -1525,7 +1525,7 @@
   []
   (when-let [local-txid (last @graphs-txid)]
     (go (let [r (<! (<get-remote-txid remoteapi (second @graphs-txid)))]
-          (when-not (exp r)
+          (when-not (guard-ex r)
             (let [remote-txid (:TXId r)]
               (assert (<= local-txid remote-txid)
                       [@graphs-txid local-txid remote-txid])))))))
@@ -2052,7 +2052,7 @@
                                      (<! (<get-graph-salt-memoize remoteapi graph-uuid)))]
       (if gone?
         (let [r (<! (<create-graph-salt remoteapi graph-uuid))]
-          (or (exp r)
+          (or (guard-ex r)
               (do (update-graph-salt-cache graph-uuid r)
                   (let [[salt-value _expired-at] ((juxt :value :expired-at) r)
                         encrypted-pwd (<! (<encrypt-content pwd salt-value))]
@@ -2440,7 +2440,7 @@
     (go
       (let [r
             (let [diff-r (<! (<get-diff remoteapi graph-uuid @*txid))]
-              (or (exp diff-r)
+              (or (guard-ex diff-r)
                   (let [[diff-txns latest-txid min-txid] diff-r]
                     (if (> (dec min-txid) @*txid) ;; min-txid-1 > @*txid, need to remote->local-full-sync
                       (do (println "min-txid" min-txid "request-txid" @*txid)
@@ -2947,7 +2947,7 @@
           (let [txid
                 (if (true? remote->local)
                   (let [r (<! (<get-remote-txid remoteapi graph-uuid))]
-                    (when-not (exp r) {:txid (:TXId r)}))
+                    (when-not (guard-ex r) {:txid (:TXId r)}))
                   remote->local)]
             (when (some? txid)
               (>! ops-chan {:remote->local txid}))
