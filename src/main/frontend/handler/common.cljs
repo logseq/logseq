@@ -84,5 +84,5 @@
                          (gobj/get "scrollTop")))
                     (reset! *scroll-timer (js/setTimeout
                                            (fn [] (state/set-state! :ui/scrolling? false)) 500)))
-        debounced-on-scroll (debounce on-scroll 50)]
+        debounced-on-scroll (debounce on-scroll 100)]
     (.addEventListener element "scroll" debounced-on-scroll false)))
