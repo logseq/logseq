@@ -140,7 +140,7 @@
 
       :editor/code-block-context             {}
 
-      :db/last-transact-time                 {}
+      :db/last-transact-time                 (atom {})
       ;; whether database is persisted
       :db/persisted?                         {}
       :cursor-range                          nil
@@ -1687,7 +1687,7 @@ Similar to re-frame subscriptions"
 
 (defn set-last-transact-time!
   [repo time]
-  (set-state! [:db/last-transact-time repo] time)
+  (set-state! :db/last-transact-time time :path-in-sub-atom repo)
 
   ;; THINK: new block, indent/outdent, drag && drop, etc.
   (set-editor-last-input-time! repo time))
@@ -1699,7 +1699,7 @@ Similar to re-frame subscriptions"
 (defn db-idle?
   [repo]
   (when repo
-    (when-let [last-time (get-in @state [:db/last-transact-time repo])]
+    (when-let [last-time (get (:db/last-transact-time @state) repo)]
       (let [now (util/time-ms)]
         (>= (- now last-time) 3000)))))
 

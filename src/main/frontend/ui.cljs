@@ -1118,15 +1118,18 @@
 
 (rum/defc lazy-loading-placeholder
   [height]
-  [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.opacity-70 {:style {:height height}}
-   [:div.animate-pulse.flex.space-x-4
-    [:div.flex-1.space-y-3.py-1
-     [:div.h-2.rounded]
-     [:div.space-y-3
-      [:div.grid.grid-cols-3.gap-4
-       [:div.h-2.rounded.col-span-2]
-       [:div.h-2.rounded.col-span-1]]
-      [:div.h-2.rounded]]]]])
+  [:div {:style {:height height}}]
+  ;; [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.opacity-70 {:style {:height height}}
+  ;;  ;; [:div.animate-pulse.flex.space-x-4
+  ;;  ;;  [:div.flex-1.space-y-3.py-1
+  ;;  ;;   [:div.h-2.rounded]
+  ;;  ;;   [:div.space-y-3
+  ;;  ;;    [:div.grid.grid-cols-3.gap-4
+  ;;  ;;     [:div.h-2.rounded.col-span-2]
+  ;;  ;;     [:div.h-2.rounded.col-span-1]]
+  ;;  ;;    [:div.h-2.rounded]]]]
+  ;;  ]
+  )
 
 (rum/defc lazy-visible-inner
   [visible? content-fn ref fade-in?]

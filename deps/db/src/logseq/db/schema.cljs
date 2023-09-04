@@ -99,6 +99,9 @@
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
+   ;; latest tx that affected the block
+   :block/tx-id {}
+
    ;; file
    :file/path {:db/unique :db.unique/identity}
    ;; only store the content of logseq's files
