@@ -170,7 +170,7 @@
               rs (db/transact! repo txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
           ;; TODO: disable this when db is stable
-          (when config/dev? (validate-db! rs))
+          ;; (when config/dev? (validate-db! rs))
           (state/update-state! :history/tx->editor-cursor
                                (fn [m] (assoc m tx-id before-editor-cursor)))
 

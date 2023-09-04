@@ -7,7 +7,9 @@
             [frontend.util :as util]
             [frontend.handler.property :as property-handler]
             [goog.object :as gobj]
-            ["ignore" :as Ignore]))
+            [goog.dom :as gdom]
+            ["ignore" :as Ignore]
+            [goog.functions :refer [debounce]]))
 
 (defn copy-to-clipboard-without-id-property!
   [repo format raw-text html blocks]
@@ -71,13 +73,16 @@
 
 (defn listen-to-scroll!
   [element]
-  (let [*scroll-timer (atom nil)]
-    (.addEventListener element "scroll"
-                       (fn []
-                         (when @*scroll-timer
-                           (js/clearTimeout @*scroll-timer))
-                         (state/set-state! :ui/scrolling? true)
-                         (state/save-scroll-position! (util/scroll-top))
-                         (reset! *scroll-timer (js/setTimeout
-                                                (fn [] (state/set-state! :ui/scrolling? false)) 500)))
-                       false)))
+  (let [*scroll-timer (atom nil)
+        on-scroll (fn []
+                    (when @*scroll-timer
+                      (js/clearTimeout @*scroll-timer))
+                    (state/set-state! :ui/scrolling? true)
+                    (state/save-scroll-position! (util/scroll-top))
+                    (state/save-main-container-position!
+                     (-> (gdom/getElement "main-content-container")
+                         (gobj/get "scrollTop")))
+                    (reset! *scroll-timer (js/setTimeout
+                                           (fn [] (state/set-state! :ui/scrolling? false)) 500)))
+        debounced-on-scroll (debounce on-scroll 100)]
+    (.addEventListener element "scroll" debounced-on-scroll false)))
