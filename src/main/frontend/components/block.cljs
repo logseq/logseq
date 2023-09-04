@@ -2800,7 +2800,7 @@
   (boolean
    (when ref
      (let [top (.-top (.getBoundingClientRect ref))]
-       (not (<= top (+ js/window.innerHeight 500)))))))
+       (not (<= top (+ js/window.innerHeight 1000)))))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   (rum/local nil ::ref)
