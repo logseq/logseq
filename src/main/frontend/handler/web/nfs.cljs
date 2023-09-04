@@ -20,7 +20,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.common.path :as path]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -86,6 +87,32 @@
                        (keyword (util/get-file-ext (:file/path file)))))
           files))
 
+(defn- precheck-graph-dir
+  "Check graph dir, notify user if:
+
+   - Grame dir name is `logseq`, the same as app, which might cause confusion
+   - Graph dir contains a nested graph, which should be avoided
+   - Over 10000 files found in graph dir, which might cause performance issues"
+  [dir files]
+  (when (= (string/lower-case (path/basename dir))
+           "logseq")
+    (state/pub-event!
+     [:notification/show {:content [:div "The folder name "
+                                    [:code "logseq"]
+                                    " is not suitable for a graph name. Please unlink this graph and choose a different name."]
+                          :status :warning
+                          :clear?  false}]))
+  (when (some #(string/ends-with? (:path %) "/logseq/config.edn") files)
+    (state/pub-event!
+     [:notification/show {:content "It seems that you are trying to open a Logseq graph folder with nested graph. Please unlink this graph and choose a correct folder."
+                          :status :warning
+                          :clear? false}]))
+  (when (>= (count files) 10000)
+    (state/pub-event!
+     [:notification/show {:content "It seems that you are trying to open a Logseq graph folder that contains an excessive number of files, This might lead to performance issues."
+                          :status :warning
+                          :clear? true}])))
+
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
@@ -113,6 +140,7 @@
         (reset! *repo repo)
         (when-not (string/blank? root-dir)
           (p/let [files (:files result)
+                  _ (precheck-graph-dir root-dir (:files result))
                   files (-> (->db-files files nfs?)
                             ;; filter again, in case fs backend does not handle this
                             (remove-ignore-files root-dir nfs?))
