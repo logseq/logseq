@@ -227,10 +227,10 @@
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
-                              (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
-                                               [:block/uuid block-id]
-                                               block-id)]
-                                (db-utils/entity block-id))) blocks)
+                               (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                                                [:block/uuid block-id]
+                                                block-id)]
+                                 (db-utils/entity block-id))) blocks)
         affected-keys (concat
                        (mapcat
                         (fn [block]

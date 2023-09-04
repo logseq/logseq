@@ -2925,19 +2925,7 @@
 
 (defn- block-changed?
   [old-block new-block]
-  (let [ks [:block/uuid :block/content :block/collapsed? :block/link
-            :block/properties :block.temp/bottom? :block.temp/top?]]
-    (not
-     (and (= (select-keys old-block ks)
-             (select-keys new-block ks))
-          (= (:db/id (:block/left old-block))
-             (:db/id (:block/left new-block)))
-          (= (:db/id (:block/parent old-block))
-             (:db/id (:block/parent new-block)))
-          (= (map :db/id (:block/_refs old-block))
-             (map :db/id (:block/_refs new-block)))
-          (= (map :db/id (:block/_parent old-block))
-             (map :db/id (:block/_parent new-block)))))))
+  (not= (:block/tx-id old-block) (:block/tx-id new-block)))
 
 (rum/defcs block-container < rum/reactive
   (rum/local false ::show-block-left-menu?)
@@ -2962,16 +2950,6 @@
                       ::control-show? (atom false)
                       ::navigating-block (atom (:block/uuid block))
                       ::blocks-container-id container-id))))
-   :should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
-                          b1                  (second (:rum/args old-state))
-                          b2                  (second (:rum/args new-state))
-                          result              (or
-                                               (block-changed? b1 b2)
-                                               ;; config changed
-                                               (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                                     (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
@@ -2987,27 +2965,19 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
         edit? (state/sub [:editor/editing? edit-input-id])
         opts {:edit? edit?
-              :edit-input-id edit-input-id}
-        ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))]
+              :edit-input-id edit-input-id}]
     (cond
       unloaded?
       [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-     [:div.flex.flex-row
-      [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-       [:span.bullet-container.cursor
-        [:span.bullet]]]
-      [:div.flex.flex-1
-       [:span.opacity-70
-        "Loading..."]]]]
+       [:div.flex.flex-row
+        [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+         [:span.bullet-container.cursor
+          [:span.bullet]]]
+        [:div.flex.flex-1
+         [:span.opacity-70
+          "Loading..."]]]]
       :else
-      (if (or ref? custom-query? (:lazy? config))
-       (ui/lazy-visible
-        (fn [] (block-container-inner state repo config block opts))
-        {:debug-id (str "block-container-ref " (:db/id block))
-         :fade-in? false
-         :initial-state edit?})
-       (block-container-inner state repo config block opts)))))
+      (block-container-inner state repo config block opts))))
 
 (defn divide-lists
   [[f & l]]
@@ -3377,31 +3347,56 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(defn- block-item
-  [config blocks idx item]
+(rum/defc block-item <
+  {:should-update (fn [old-state new-state]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index]
+                          b1                  (second (:rum/args old-state))
+                          b2                  (second (:rum/args new-state))
+                          result              (or
+                                               (block-changed? b1 b2)
+                                               ;; config changed
+                                               (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                                     (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                      (boolean result)))}
+  [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
         item (or linked-block item)
         item (cond-> (dissoc item :block/meta)
                (not (:block-children? config))
-               (assoc :block.temp/top? (zero? idx)
-                      :block.temp/bottom? (= (count blocks) (inc idx))))
-        config (assoc config :block/uuid (:block/uuid item)
-                      :idx idx)
+               (assoc :block.temp/top? top?
+                      :block.temp/bottom? bottom?))
+        config (assoc config :block/uuid (:block/uuid item))
         config' (if linked-block
                   (assoc config :original-block original-block)
-                  config)]
-    (rum/with-key (block-container config' item)
-      (str (:blocks-container-id config')
-           "-"
-           (:block/uuid item)
-           (when linked-block
-             (str "-" (:block/uuid original-block)))))))
+                  config)
+        ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))
+        lazy? (:lazy? config)
+        cp-f (fn []
+               (rum/with-key (block-container config' item)
+                 (str (:blocks-container-id config')
+                      "-"
+                      (:block/uuid item)
+                      (when linked-block
+                        (str "-" (:block/uuid original-block))))))]
+    (if (or ref? custom-query? lazy?)
+      (ui/lazy-visible cp-f
+                       {:debug-id (str "block-container-ref " (:db/id item))
+                        :fade-in? false})
+      (cp-f))))
 
 (defn- block-list
   [config blocks]
   (for [[idx item] (medley/indexed blocks)]
-    (block-item config blocks idx item)))
+    (let [top? (zero? idx)
+          bottom? (= (count blocks) (inc idx))]
+      (rum/with-key
+        (block-item (assoc config :idx idx) item {:top? top?
+                                                  :bottom? bottom?})
+        (str "blocks-" (:blocks-container-id config)
+             "-"
+             (:block/uuid item))))))
 
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}

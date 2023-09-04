@@ -147,9 +147,7 @@
 
         (and
          (not block?)
-             (empty? (:block/_parent block))
-
-             )
+             (empty? (:block/_parent block)))
         (dummy-block page-name)
 
         :else
@@ -164,7 +162,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))
               non-collapsed-blocks-count (count (remove :block/collapsed? (:block/_page (db/entity (:db/id page-e)))))
-              lazy? (> non-collapsed-blocks-count 300)
+              lazy? (> non-collapsed-blocks-count 50)
               hiccup (component-block/->hiccup blocks (assoc hiccup-config :lazy? lazy?) {})]
           [:div
            (page-blocks-inner page-name block hiccup sidebar? whiteboard? block-id)

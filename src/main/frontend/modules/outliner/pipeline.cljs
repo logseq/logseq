@@ -114,7 +114,15 @@
           (react/refresh! repo tx-report'))
 
         (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta)))
-          (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))]
+          (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))
+                updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
+                tx-id (get-in tx-report' [:tempids :db/current-tx])
+                update-tx-ids (map (fn [b]
+                                     (when-let [db-id (:db/id b)]
+                                       {:db/id db-id
+                                        :block/tx-id tx-id})) updated-blocks)]
+            (when (seq update-tx-ids)
+              (db/transact! repo update-tx-ids {:replace? true}))
             (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
                     _ipc-result (comment ipc/ipc :db-transact-data repo
                                          (pr-str
