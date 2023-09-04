@@ -478,20 +478,13 @@
     (reset! last-scroll-top scroll-top)
     down?))
 
-(defn bottom-reached?
-  [node threshold]
-  (let [full-height (gobj/get node "scrollHeight")
-        scroll-top (gobj/get node "scrollTop")
-        client-height (gobj/get node "clientHeight")]
-    (<= (- full-height scroll-top client-height) threshold)))
-
 (defn on-scroll
   [node {:keys [on-load on-top-reached threshold bottom-reached]
          :or {threshold 500}}]
   (let [scroll-top (gobj/get node "scrollTop")
         bottom-reached? (if (fn? bottom-reached)
                           (bottom-reached)
-                          (bottom-reached? node threshold))
+                          (util/bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
     (when (and bottom-reached? down? on-load)
@@ -1150,25 +1143,24 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [initial-state trigger-once? fade-in? debug-id]
+  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin _debug-id]
                 :or {initial-state false
                      trigger-once? false
-                     fade-in? true}}]
+                     fade-in? true
+                     root-margin 100}}]
    (let [[visible? set-visible!] (rum/use-state initial-state)
-         root-margin 100
          inViewState (useInView #js {:initialInView initial-state
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? entry]
-                                                 (when in-view?
-                                                   (prn :debug "render: " debug-id))
-                                                 (let [self-top (.-top (.-boundingClientRect entry))]
-                                                   (when (or (and (not visible?) in-view?)
-                                                             ;; hide only the components below the current top for better ux
-                                                             ;; visible?
-                                                             (and visible? (not in-view?) (> self-top root-margin))
-                                                             )
-                                                     (set-visible! in-view?))))})
+                                                 (set-visible! in-view?)
+                                                 ;; (let [self-top (.-top (.-boundingClientRect entry))]
+                                                 ;;   (when (or (and (not visible?) in-view?)
+                                                 ;;             ;; hide only the components below the current top for better ux
+                                                 ;;             ;; visible?
+                                                 ;;             (and visible? (not in-view?) (> self-top root-margin)))
+                                                 ;;     (set-visible! in-view?)))
+                                                 )})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
 

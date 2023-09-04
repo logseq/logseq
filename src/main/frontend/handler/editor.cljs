@@ -2447,11 +2447,22 @@
             (outdent-on-enter current-node)
 
             :else
-            (profile
-             "Insert block"
-             (outliner-tx/transact!
-              {:outliner-op :insert-blocks}
-              (insert-new-block! state)))))))))
+            (let [main-container (gdom/getElement "main-content-container")
+                  ;; Lazy blocks will not be rendered by default if it's below the screen
+                  input-top (some-> (state/get-input)
+                                    (.getBoundingClientRect)
+                                    (gobj/get "top"))
+                  bottom-reached? (when input-top
+                                    (< (- js/window.innerHeight input-top) 100))]
+              (when (and bottom-reached? main-container)
+                (util/scroll-to main-container (+ (.-scrollTop main-container)
+                                                  200)
+                                false))
+              (profile
+               "Insert block"
+               (outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (insert-new-block! state))))))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"

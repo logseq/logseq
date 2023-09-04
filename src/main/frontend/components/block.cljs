@@ -3358,7 +3358,7 @@
                                                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                                                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
-  [config item {:keys [top? bottom?]}]
+  [config item {:keys [top? bottom? edit-block]}]
   (let [original-block item
         linked-block (:block/link item)
         item (or linked-block item)
@@ -3372,7 +3372,8 @@
                   config)
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
-        lazy? (:lazy? config)
+        lazy? (or ref? custom-query? (:lazy? config))
+        initial-state (= (:block/uuid item) (:block/uuid edit-block))
         cp-f (fn []
                (rum/with-key (block-container config' item)
                  (str (:blocks-container-id config')
@@ -3380,23 +3381,26 @@
                       (:block/uuid item)
                       (when linked-block
                         (str "-" (:block/uuid original-block))))))]
-    (if (or ref? custom-query? lazy?)
+    (if lazy?
       (ui/lazy-visible cp-f
                        {:debug-id (str "block-container-ref " (:db/id item))
+                        :initial-state initial-state
                         :fade-in? false})
       (cp-f))))
 
 (defn- block-list
   [config blocks]
-  (for [[idx item] (medley/indexed blocks)]
-    (let [top? (zero? idx)
-          bottom? (= (count blocks) (inc idx))]
-      (rum/with-key
-        (block-item (assoc config :idx idx) item {:top? top?
-                                                  :bottom? bottom?})
-        (str "blocks-" (:blocks-container-id config)
-             "-"
-             (:block/uuid item))))))
+  (let [edit-block (state/get-edit-block)]
+    (for [[idx item] (medley/indexed blocks)]
+      (let [top? (zero? idx)
+            bottom? (= (count blocks) (inc idx))]
+        (rum/with-key
+          (block-item (assoc config :idx idx) item {:top? top?
+                                                    :bottom? bottom?
+                                                    :edit-block edit-block})
+          (str "blocks-" (:blocks-container-id config)
+               "-"
+               (:block/uuid item)))))))
 
 (rum/defcs blocks-container <
   {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
