@@ -461,19 +461,17 @@
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
-      [:div.ls-properties-area
-       [:div
-        (cond->
-         {}
-          (:selected? opts)
-          (assoc :class "select-none"))
-        (properties-section block (if class-schema? properties own-properties) opts)
+      [:div.ls-properties-area (cond->
+                                {}
+                                 (:selected? opts)
+                                 (assoc :class "select-none"))
+       (properties-section block (if class-schema? properties own-properties) opts)
 
-        (when (and (seq full-hidden-properties) (not class-schema?))
-          (hidden-properties block full-hidden-properties opts))
+       (when (and (seq full-hidden-properties) (not class-schema?))
+         (hidden-properties block full-hidden-properties opts))
 
-        (when (or new-property? (not in-block-container?))
-          (new-property block edit-input-id properties new-property? opts))]
+       (when (or new-property? (not in-block-container?))
+         (new-property block edit-input-id properties new-property? opts))
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]
