@@ -176,7 +176,8 @@
             :search-item/whiteboard :settings-page/enable-flashcards :settings-page/enable-whiteboards
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
             :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global}
-   :tr #{:help/awesome-logseq}})
+   :tr #{:help/awesome-logseq}
+   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"
