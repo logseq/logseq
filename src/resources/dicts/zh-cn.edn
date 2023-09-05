@@ -477,6 +477,7 @@
  :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
  :file-sync/graph-deleted "当前远程图谱已经删除"
  :file-sync/rsapi-cannot-upload-err "无法同步，请检查本机时间是否准确"
+ :file-sync/connectivity-testing-failed "网络连接检查失败，请检查网络设置。测试URLs: "
 
  :notification/clear-all "清除全部通知"
 
