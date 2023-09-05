@@ -120,7 +120,7 @@
                                                        (do
                                                          (when close-modal? (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen (if multiple-choices? @*selected-choices x)))))))
+                                                           (on-chosen (if multiple-choices? @*selected-choices matched)))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when multiple-choices?

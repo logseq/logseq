@@ -228,40 +228,6 @@
       (db/transact! repo [tx-data]
                     {:outliner-op :save-block}))))
 
-(defn delete-property-value!
-  "Delete value if a property has multiple values"
-  [repo block property-id property-value]
-  (when (and block (uuid? property-id))
-    (when (not= property-id (:block/uuid block))
-      (when-let [property (db/pull [:block/uuid property-id])]
-        (let [schema (:block/schema property)
-              k-name (:block/name property)
-              tags-or-alias? (and (contains? #{"tags" "alias"} k-name)
-                                  (uuid? property-value))]
-          (if tags-or-alias?
-            (let [property-value-id (:db/id (db/entity [:block/uuid property-value]))
-                  attribute (case k-name
-                              "alias"
-                              :block/alias
-                              "tags"
-                              :block/tags)]
-              (when property-value-id
-                (db/transact! repo
-                  [[:db/retract (:db/id block) attribute property-value-id]]
-                  {:outliner-op :save-block})))
-            (when (= :many (:cardinality schema))
-              (let [properties (:block/properties block)
-                    properties' (update properties property-id
-                                        (fn [col]
-                                          (set (remove #{property-value} col))))
-                    refs (outliner-core/rebuild-block-refs block properties')]
-                (db/transact! repo
-                  [[:db/retract (:db/id block) :block/refs]
-                   {:block/uuid (:block/uuid block)
-                    :block/properties properties'
-                    :block/refs refs}]
-                  {:outliner-op :save-block})))))))))
-
 (defn class-add-property!
   [repo class k-name]
   (when (= "class" (:block/type class))
@@ -362,6 +328,42 @@
           [[:db/retract (:db/id block) attribute]]
           {:outliner-op :save-block}))
       (batch-remove-property! repo [block-id] key))))
+
+(defn delete-property-value!
+  "Delete value if a property has multiple values"
+  [repo block property-id property-value]
+  (when (and block (uuid? property-id))
+    (when (not= property-id (:block/uuid block))
+      (when-let [property (db/pull [:block/uuid property-id])]
+        (let [schema (:block/schema property)
+              k-name (:block/name property)
+              tags-or-alias? (and (contains? #{"tags" "alias"} k-name)
+                                  (uuid? property-value))]
+          (if tags-or-alias?
+            (let [property-value-id (:db/id (db/entity [:block/uuid property-value]))
+                  attribute (case k-name
+                              "alias"
+                              :block/alias
+                              "tags"
+                              :block/tags)]
+              (when property-value-id
+                (db/transact! repo
+                  [[:db/retract (:db/id block) attribute property-value-id]]
+                  {:outliner-op :save-block})))
+            (if (= :many (:cardinality schema))
+              (let [properties (:block/properties block)
+                    properties' (update properties property-id
+                                        (fn [col]
+                                          (set (remove #{property-value} col))))
+                    refs (outliner-core/rebuild-block-refs block properties')]
+                (db/transact! repo
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:block/uuid (:block/uuid block)
+                    :block/properties properties'
+                    :block/refs refs}]
+                  {:outliner-op :save-block}))
+              ;; remove block property if cardinality is not many
+              (remove-block-property! repo (:block/uuid block) property-id))))))))
 
 (defn replace-key-with-id!
   "Notice: properties need to be created first"
