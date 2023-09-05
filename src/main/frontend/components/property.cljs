@@ -263,30 +263,31 @@
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
   [state block edit-input-id properties new-property? opts]
-  (let [*property-key (::property-key state)
-        *property-value (::property-value state)]
-    (cond
-      new-property?
-      [:div#edit-new-property
-       (property-input block *property-key *property-value opts)]
+  [:div.py-1
+   (let [*property-key (::property-key state)
+         *property-value (::property-value state)]
+     (cond
+       new-property?
+       [:div#edit-new-property
+        (property-input block *property-key *property-value opts)]
 
-      (and (or (:page-configure? opts)
-               (seq properties)
-               (seq (:block/alias block))
-               (seq (:block/tags block)))
-           (not config/publishing?)
-           (or (:page-configure? opts) (not (:in-block-container? opts))))
-      [:a.fade-link.my-2.flex
-       {:on-click (fn []
-                    (property-handler/set-editing-new-property! edit-input-id)
-                    (reset! *property-key nil)
-                    (reset! *property-value nil))}
-       [:div.flex.flex-row.items-center
-        (ui/icon "circle-plus" {:size 16})
-        [:div.ml-1 "Add property"]]]
+       (and (or (:page-configure? opts)
+                (seq properties)
+                (seq (:block/alias block))
+                (seq (:block/tags block)))
+            (not config/publishing?)
+            (or (:page-configure? opts) (not (:in-block-container? opts))))
+       [:a.fade-link.flex
+        {:on-click (fn []
+                     (property-handler/set-editing-new-property! edit-input-id)
+                     (reset! *property-key nil)
+                     (reset! *property-value nil))}
+        [:div.flex.flex-row.items-center
+         (ui/icon "circle-plus" {:size 15})
+         [:div.ml-1.text-sm "Add property"]]]
 
-      :else
-      [:div {:style {:height 28}}])))
+       :else
+       [:div {:style {:height 28}}]))])
 
 (rum/defcs property-key
   [state block property {:keys [class-schema?]}]
@@ -368,10 +369,12 @@
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
           (let [block? (= :block (get-in property [:block/schema :type]))]
             [:div.property-pair (cond-> {} (not block?) (assoc :class "items-center"))
-             [:div.property-key.col-span-1
+             [:div.property-key
+              {:class (if (:class-schema? opts) "col-span-2" "col-span-1")}
               (property-key block property (select-keys opts [:class-schema?]))]
              (if (:class-schema? opts)
-               [:div.property-description.col-span-3.font-light
+               [:div.property-description.text-sm.opacity-70
+                {:class (if (:class-schema? opts) "col-span-2" "col-span-3")}
                 (get-in property [:block/schema :description])]
                [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
                                                                   {:style {:margin-left -20}})

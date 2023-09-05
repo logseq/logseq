@@ -420,7 +420,7 @@
                                                :selected (= class id)})
                               classes))
         options (cons (if class
-                        {:label "Choose parent page"
+                        {:label "Choose parent class"
                          :value ""}
                         {:label "Choose parent page"
                          :disabled true
@@ -449,10 +449,10 @@
                                opts)
         class? (= type "class")]
     (when page
-      [:div.property-configure.grid.gap-1.p-1
+      [:div.property-configure.grid.gap-2.p-1
        (when-not journal?
          [:div.grid.grid-cols-4.gap-1
-          [:div.col-span-1 "Class page?"]
+          [:div.col-span-1 "Is it a class?"]
           [:div.col-span-3
            (ui/checkbox {:checked class?
                          :on-change (fn []
@@ -463,7 +463,7 @@
 
        (when class?
          [:div.grid.grid-cols-4.gap-1.items-center.class-parent
-          [:div.col-span-1 "Parent:"]
+          [:div.col-span-1 "Parent class:"]
           [:div.col-span-3
            (let [namespace (some-> (:db/id (:block/namespace page))
                                    db/entity
@@ -478,11 +478,13 @@
                                                 [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]])
 
        (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-         (component-block/db-properties-cp
-          {:editor-box editor/box}
-          page
-          edit-input-id
-          (assoc properties-opts :class-schema? class?)))])))
+         [:div
+          [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
+          (component-block/db-properties-cp
+           {:editor-box editor/box}
+           page
+           edit-input-id
+           (assoc properties-opts :class-schema? class?))])])))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive
