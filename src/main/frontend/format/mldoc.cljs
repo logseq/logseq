@@ -144,7 +144,8 @@
            ;; tag
          (and (vector? f)
               (= "Tag" (first f)))
-         (let [tag (gp-block/get-tag f)]
+         (let [tag (-> (gp-block/get-tag f)
+                       text/page-ref-un-brackets!)]
            (swap! *result conj tag)
            nil)
 
