@@ -484,24 +484,39 @@
            edit-input-id
            (assoc properties-opts :class-schema? class?))])])))
 
+(defn- get-path-page-name
+  [state page-name]
+  (or page-name
+      (get-block-uuid-by-block-route-name state)
+      ;; is page name or uuid
+      (get-page-name state)
+      (state/get-current-page)))
+
 ;; A page is just a logical block
-(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::configure-show?)
   [state {:keys [repo page-name preview? sidebar?] :as option}]
-  (when-let [path-page-name (or page-name
-                                (get-block-uuid-by-block-route-name state)
-                                ;; is page name or uuid
-                                (get-page-name state)
-                                (state/get-current-page))]
+  (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           *configure-show? (::configure-show? state)
           page-name (util/page-name-sanity-lc path-page-name)
           block-id (parse-uuid page-name)
           block? (boolean block-id)
+          db-id (if block?
+                  (let [entity (db/entity [:block/uuid block-id])]
+                    (:db/id entity))
+                  (do
+                    (when-not (db/entity repo [:block/name page-name])
+                      (let [m (block/page-name->map path-page-name true)]
+                        (db/transact! repo [m])))
+                    (:db/id (db/entity [:block/name page-name]))))
+          page (db/sub-block db-id)
+          block-id (:block/uuid page)
+          block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
           built-in-property? (and (= "property" (:block/type page))
@@ -510,14 +525,6 @@
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
-          page (if block?
-                 (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
-                      (db/entity repo))
-                 (do
-                   (when-not (db/entity repo [:block/name page-name])
-                     (let [m (block/page-name->map path-page-name true)]
-                       (db/transact! repo [m])))
-                   (db/pull [:block/name page-name])))
           {:keys [icon]} (:block/properties page)
           page-name (:block/name page)
           page-original-name (:block/original-name page)

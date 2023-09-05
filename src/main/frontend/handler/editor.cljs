@@ -1105,7 +1105,7 @@
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (js/setTimeout #(edit-block! {:block/uuid id} pos id) 0)))
+        (js/setTimeout #(edit-block! {:block/uuid id} pos id) 50)))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1120,14 +1120,14 @@
                        (:block/uuid block-parent))]
             (do
               (route-handler/redirect-to-page! id)
-              (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 0))
+              (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 50))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
                                   :db/id)]
 
               (when-let [page-name (:block/name (db/entity page-id))]
                 (route-handler/redirect-to-page! page-name)
-                (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 0)))))))
+                (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 50)))))))
     (js/window.history.back)))
 
 (defn cut-block!
