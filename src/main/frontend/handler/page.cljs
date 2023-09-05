@@ -38,6 +38,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.db.schema :as db-schema]
+            [logseq.db.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
@@ -966,7 +967,7 @@
                    (or (util/uuid-string? name)
                        (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))
-                       (gp-property/db-built-in-properties-keys-str name)
+                       (db-property/built-in-properties-keys-str name)
                        (contains? #{"macro"} (:block/type p))))))
        (common-handler/fix-pages-timestamps)))
 

@@ -17,7 +17,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.db.property :as db-property]
             [frontend.handler.property.util :as pu]))
 
 ;; Util fns
@@ -108,7 +108,7 @@
                             ;; TODO: Support additional hidden properties e.g. from user config
                             ;; or gp-property/built-in-extended properties
                             (set (map #(:block/uuid (db/entity repo [:block/name %]))
-                                      gp-property/db-built-in-properties-keys-str))
+                                      db-property/built-in-properties-keys-str))
                             (conj (file-property/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))

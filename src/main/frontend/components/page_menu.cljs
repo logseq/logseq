@@ -19,7 +19,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.db.property :as db-property]))
 
 (defn- delete-page!
   [page-name]
@@ -81,7 +81,7 @@
                                     (file-sync-handler/enable-sync?)
                                     (file-sync-handler/get-current-graph-uuid))
           built-in-property? (and (= "property" (:block/type page))
-                                  (contains? gp-property/db-built-in-properties-keys-str page-name))]
+                                  (contains? db-property/built-in-properties-keys-str page-name))]
       (when (and page (not block?))
         (->>
          [(when-not config/publishing?

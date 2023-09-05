@@ -28,7 +28,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.db.property :as db-property]
             [frontend.config :as config]))
 
 ;; TODO i18n support
@@ -349,7 +349,7 @@
 (rum/defc property-custom-context-menu-content
   [block property {:keys [class-schema?]}]
   (let [repo (state/get-current-repo)
-        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/name property))]
+        built-in-property? (contains? db-property/built-in-properties-keys-str (:block/name property))]
     [:.menu-links-wrapper
      (when-not built-in-property?
        (ui/menu-link

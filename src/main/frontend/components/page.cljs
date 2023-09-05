@@ -42,7 +42,7 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.property.util :as pu]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.db.property :as db-property]))
 
 (defn- get-page-name
   [state]
@@ -331,7 +331,7 @@
                                     (not fmt-journal?)
                                     (not config/publishing?)
                                     (not (and (= "property" (:block/type page))
-                                              (contains? gp-property/db-built-in-properties-keys-str page-name))))
+                                              (contains? db-property/built-in-properties-keys-str page-name))))
                            (reset! *input-value (if untitled? "" old-name))
                            (reset! *edit? true)))))}
         (when (not= icon "") [:span.page-icon icon])
@@ -505,7 +505,7 @@
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
           built-in-property? (and (= "property" (:block/type page))
-                                  (contains? gp-property/db-built-in-properties-keys-str page-name))
+                                  (contains? db-property/built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
