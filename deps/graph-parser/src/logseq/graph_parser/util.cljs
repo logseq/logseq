@@ -61,7 +61,7 @@
 (defn tag-valid?
   [tag-name]
   (when (string? tag-name)
-    (not (re-find #"[# \t\r\n]+" tag-name))))
+    (not (re-find #"[#\t\r\n]+" tag-name))))
 
 (defn safe-subs
   ([s start]

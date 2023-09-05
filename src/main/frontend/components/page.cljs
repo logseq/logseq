@@ -292,7 +292,7 @@
   (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview? journal?]}]
+  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           *hover? (::hover? state)
@@ -309,8 +309,7 @@
                     (date/journal-title->custom-format title)
                     title))
           old-name (or title page-name)
-          db-based? (config/db-based-graph? repo)
-          object? (= (:block/type page) "object")]
+          db-based? (config/db-based-graph? repo)]
       [:div.ls-page-title.flex-1.flex-row.w-full.relative
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(reset! *hover? false)}
@@ -365,9 +364,7 @@
                   db-based?
                   (not built-in-property?)
                   (not @*edit?)
-                  (not config/publishing?)
-                  (not journal?)
-                  (not object?))
+                  (not config/publishing?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center
