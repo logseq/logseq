@@ -83,49 +83,60 @@
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
 
 (defn- select-page
-  [block property {:keys [class] :as opts}]
+  [block property {:keys [classes multiple-values?] :as opts}]
   (let [repo (state/get-current-repo)
-        pages (if class
-                (some->> (:db/id (db/entity [:block/uuid class]))
-                         (model/get-class-objects repo)
-                         (map #(:block/original-name (db/entity %))))
-                (model/get-all-page-original-names repo))
-        options (map (fn [p] {:value p}) pages)]
-    (select/select {:items options
-                    :dropdown? true
-                    :on-chosen (fn [chosen]
-                                 (let [page (string/trim (:value chosen))
-                                       id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
-                                       class? (= (:block/name property) "tags")]
-                                   (cond
-                                     (nil? id)
-                                     (page-handler/create! page {:redirect? false
-                                                                 :create-first-block? false
-                                                                 :tags [class]
-                                                                 :class? class?})
-                                     ;; user typed a new option to get here so update the existing page
-                                     ;; to make their option valid
-                                     (some? class)
-                                     (db/transact! repo
-                                                   [{:block/uuid id
-                                                     :block/tags [{:db/id (:db/id (db/entity repo [:block/uuid class]))}]}]
-                                                   {:outliner-op :save-block}))
-                                   (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
-                                     (add-property! block (:block/original-name property) id'))
-                                   (when-let [f (:on-chosen opts)] (f))))
-                    :show-new-when-not-exact-match? true
-                    :input-opts (fn [_]
-                                  {:on-blur (fn []
-                                              (exit-edit-property)
-                                              (when-let [f (:on-chosen opts)] (f)))
-                                   :on-key-down
-                                   (fn [e]
-                                     (case (util/ekey e)
-                                       "Escape"
-                                       (do
-                                         (exit-edit-property)
-                                         (when-let [f (:on-chosen opts)] (f)))
-                                       nil))})})))
+        pages (->>
+               (if (seq classes)
+                 (mapcat
+                  (fn [class]
+                    (some->> (:db/id (db/entity [:block/uuid class]))
+                             (model/get-class-objects repo)
+                             (map #(:block/original-name (db/entity %)))))
+                  classes)
+                 (model/get-all-page-original-names repo))
+               distinct)
+        options (map (fn [p] {:value p}) pages)
+        type (:type (:block/schema property))
+        opts {:items options
+              :dropdown? true
+              :input-default-placeholder (if multiple-values?
+                                           (str "Choose " (if (= type :object) "objects" "pages"))
+                                           (str "Choose " (if (= type :object) "object" "page")))
+              :on-chosen (fn [chosen]
+                           (let [page (string/trim (if (string? chosen) chosen (:value chosen)))
+                                 id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
+                                 class? (= (:block/name property) "tags")]
+                             (cond
+                               (nil? id)
+                               (page-handler/create! page {:redirect? false
+                                                           :create-first-block? false
+                                                           :tags classes
+                                                           :class? class?})
+                               ;; user typed a new option to get here so update the existing page
+                               ;; to make their option valid
+                               (seq classes)
+                               (db/transact! repo
+                                             [{:block/uuid id
+                                               :block/tags (map (fn [class]
+                                                                  {:db/id (:db/id (db/entity repo [:block/uuid class]))}) classes)}]
+                                             {:outliner-op :save-block}))
+                             (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
+                               (add-property! block (:block/original-name property) id'))
+                             (when-let [f (:on-chosen opts)] (f))))
+              :show-new-when-not-exact-match? true
+              :input-opts (fn [_]
+                            {:on-blur (fn []
+                                        (exit-edit-property)
+                                        (when-let [f (:on-chosen opts)] (f)))
+                             :on-key-down
+                             (fn [e]
+                               (case (util/ekey e)
+                                 "Escape"
+                                 (do
+                                   (exit-edit-property)
+                                   (when-let [f (:on-chosen opts)] (f)))
+                                 nil))})}]
+    (select/select opts)))
 
 (defn- move-cursor
   [up? opts]
@@ -330,7 +341,9 @@
            [:div.h-6 (select block property select-opts)]
 
            :object
-           [:div.h-6 (select-page block property (assoc select-opts :class (:class schema)))]
+           [:div.h-6 (select-page block property (assoc select-opts
+                                                        :classes (:classes schema)
+                                                        :multiple? multiple-values?))]
 
            :page
            [:div.h-6 (select-page block property select-opts)]
@@ -360,15 +373,21 @@
                           type)
                         type)]
              (if (string/blank? value)
-               [:div.opacity-50.text-sm "Input something"]
+               [:div.opacity-70.text-sm
+                (case type
+                  :object
+                  (if multiple-values? "Choose objects" "Choose object")
+                  :page
+                  (if multiple-values? "Choose pages" "Choose page")
+                  "Input something")]
                (case type
                  :object
                  (when-let [object (db/entity [:block/uuid value])]
-                   (page-cp {} object))
+                   (page-cp {:disable-preview? true} object))
 
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
-                   (page-cp {} page))
+                   (page-cp {:disable-preview? true} page))
 
                  :block
                  (if-let [item-block (db/entity [:block/uuid value])]
@@ -424,9 +443,10 @@
                                                    item))}
        (ui/icon "x")])))
 
-(rum/defcs multiple-value-item < rum/static rum/reactive
+(rum/defcs item-with-close < rum/static rum/reactive
   (rum/local false ::show-close?)
-  [state entity property item {:keys [editor-id row? *add-new-item?]
+  [state entity property item {:keys [editor-id row? show-close-button? *add-new-item?]
+                               :or {show-close-button? true}
                                :as opts}]
   (let [*show-close? (::show-close? state)
         editing? (state/sub [:editor/editing? editor-id])]
@@ -438,7 +458,10 @@
             row?
             (assoc :class "relative pr-4"))
      (property-scalar-value entity property item (assoc opts :editing? editing?))
-     (when (and @*show-close? (not editing?) (not @*add-new-item?))
+     (when (and @*show-close?
+                (not editing?)
+                show-close-button?
+                (not @*add-new-item?))
        (delete-value-button entity property item))]))
 
 (rum/defcs multiple-values <
@@ -469,16 +492,16 @@
        (let [dom-id' (str dom-id "-" idx)
              editor-id' (str editor-id "-" idx)]
          (rum/with-key
-           (multiple-value-item block property item
-                                (merge
-                                 opts
-                                 {:parent-dom-id dom-id
-                                  :idx idx
-                                  :dom-id dom-id'
-                                  :editor-id editor-id'
-                                  :editor-args editor-args
-                                  :row? row?
-                                  :*add-new-item? *add-new-item?}))
+           (item-with-close block property item
+                            (merge
+                             opts
+                             {:parent-dom-id dom-id
+                              :idx idx
+                              :dom-id dom-id'
+                              :editor-id editor-id'
+                              :editor-args editor-args
+                              :row? row?
+                              :*add-new-item? *add-new-item?}))
            dom-id')))
 
      (cond
@@ -497,7 +520,7 @@
        [:div.rounded-sm {:on-click (fn [] (reset! *add-new-item? true))}
         [:div.opacity-50.text-sm "Input something"]]
 
-       (and @*show-add? row? (not config/publishing?))
+       (and (or @*show-add? (empty? items)) row? (not config/publishing?))
        [:a.add-button-link.flex
         {:on-click (fn [] (reset! *add-new-item? true))}
         (ui/icon "circle-plus")]
@@ -523,6 +546,18 @@
 
       multiple-values?
       (multiple-values block property v opts dom-id schema editor-id editor-args)
+
+      (contains? #{:page :object} type)
+      [:div.flex.flex-1.items-center.property-value-content
+       (item-with-close block property v
+                        (merge
+                         opts
+                         {:editor-args editor-args
+                          :editor-id editor-id
+                          :dom-id dom-id
+                          :row? true
+                          :*add-new-item? (atom nil)
+                          :show-close-button? (not (string/blank? v))}))]
 
       :else
       [:div.flex.flex-1.items-center.property-value-content
