@@ -237,17 +237,25 @@
     (when-let [ws (:ws @*ws)]
       (.close ws))))
 
+(def *ws-connect-retries (atom 0))
+(declare <sync-stop)
 (defn- ws-listen!*
   [graph-uuid *ws remote-changes-chan]
   (reset! *ws {:ws (js/WebSocket. (util/format ws-addr graph-uuid)) :stop false})
   (ws-ping-loop (:ws @*ws))
-  ;; (set! (.-onopen (:ws @*ws)) #(println (util/format "ws opened: graph '%s'" graph-uuid %)))
+  (set! (.-onopen (:ws @*ws)) #(reset! *ws-connect-retries 0))
   (set! (.-onclose (:ws @*ws)) (fn [_e]
-                                 (when-not (true? (:stop @*ws))
-                                   (go
-                                     (timeout 1000)
-                                     (println "re-connecting graph" graph-uuid)
-                                     (ws-listen!* graph-uuid *ws remote-changes-chan)))))
+                                 (if (> @*ws-connect-retries 3)
+                                   (do (println "ws-listen! retry count > 3, stop retry")
+                                       (reset! *ws-connect-retries 0)
+                                       (swap! *ws (fn [o] (assoc o :stop true)))
+                                       (<sync-stop))
+                                   (when-not (true? (:stop @*ws))
+                                     (go
+                                       (timeout 1000)
+                                       (println "re-connecting graph" graph-uuid)
+                                       (swap! *ws-connect-retries inc)
+                                       (ws-listen!* graph-uuid *ws remote-changes-chan))))))
   (set! (.-onmessage (:ws @*ws)) (fn [e]
                                    (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
                                      (when (some? (:txid data))
@@ -3357,9 +3365,13 @@
                    (= 200 (:status r2*))
                    (= "OK" (:body r2*)))]
       (if ok?
-        (println :connectivity-testing-succ)
+        (do (println :connectivity-testing-succ)
+            (notification/clear! :sync-connection-failed))
         (notification/show! (str (t :file-sync/connectivity-testing-failed)
-                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url])) :warning false))
+                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url]))
+                            :warning
+                            false
+                            :sync-connection-failed))
       ok?)))
 
 (declare network-online-cursor)
@@ -3492,8 +3504,10 @@
 ;; try to re-start sync when state=stopped every 1min
 (go-loop []
   (<! (timeout 60000))
-  (when (and @network-online-cursor       ; is online
-             (= ::stop (:state (state/get-file-sync-state))))
+  (when (and (state/enable-sync?)
+             @network-online-cursor       ; is online
+             (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
+                 (nil? (state/get-file-sync-state)))) ;; the whole sync state not inited yet, happens when app starts without network
     (println "trying to restart sync...")
     (<sync-start))
   (recur))
