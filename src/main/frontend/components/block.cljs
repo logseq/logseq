@@ -2282,11 +2282,12 @@
 
 (rum/defc tags
   [config block]
-  [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
-   (for [tag (:block/tags block)]
-     (page-cp (assoc config
-                     :tag? true
-                     :disable-preview? true) tag))])
+  (when (seq (:block/tags block))
+    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
+     (for [tag (:block/tags block)]
+       (page-cp (assoc config
+                       :tag? true
+                       :disable-preview? true) tag))]))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
@@ -2340,19 +2341,21 @@
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
-         [:div.flex-1.w-full
-          (cond
-            (:block/name block)
-            [:div.flex.flex-1.flex-row.flex-wrap.justify-between.items-center
-             (page-cp config block)
-             (when (seq (:block/tags block))
-               (tags config block))]
+         (let [block-tags (:block/tags block)]
+           [:div.flex-1.w-full
+            [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
+             (cond
+               (:block/name block)
+               (page-cp config block)
 
-            (or (seq title) (:block/marker block))
-            (build-block-title config block)
+               (or (seq title) (:block/marker block))
+               (build-block-title config block)
 
-            :else
-            nil)])
+               :else
+               nil)
+
+             (when (seq block-tags)
+               (tags config block))]]))
 
        (clock-summary-cp block body)]
 
