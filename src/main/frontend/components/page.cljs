@@ -10,6 +10,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]

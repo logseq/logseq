@@ -115,12 +115,16 @@
                                    (when-let [f (:on-chosen opts)] (f))))
                     :show-new-when-not-exact-match? true
                     :input-opts (fn [_]
-                                  {:on-blur (or (:on-chosen opts) identity)
+                                  {:on-blur (fn []
+                                              (exit-edit-property)
+                                              (when-let [f (:on-chosen opts)] (f)))
                                    :on-key-down
                                    (fn [e]
                                      (case (util/ekey e)
                                        "Escape"
-                                       (when-let [f (:on-chosen opts)] (f))
+                                       (do
+                                         (exit-edit-property)
+                                         (when-let [f (:on-chosen opts)] (f)))
                                        nil))})})))
 
 (defn- move-cursor
