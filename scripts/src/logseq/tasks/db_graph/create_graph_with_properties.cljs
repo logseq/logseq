@@ -39,8 +39,9 @@
       {:block/content "number-many property block" :properties {:number-many #{5 10}}}
       {:block/content "page property block" :properties {:page [:page "page 1"]}}
       {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-      {:block/content "block property block" :properties {:block [:block "yee"]}}
-      {:block/content "block-many property block" :properties {:block-many #{[:block "yee"] [:block "haw"]}}}]}
+      ;; TODO: Update block examples
+      #_{:block/content "block property block" :properties {:block [:block "yee"]}}
+      #_{:block/content "block-many property block" :properties {:block-many #{[:block "yee"] [:block "haw"]}}}]}
     {:page {:block/name "queries"}
      :blocks
      [{:block/content "{{query (property :default \"haha\")}}"}
