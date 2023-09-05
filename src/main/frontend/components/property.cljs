@@ -18,7 +18,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.graph-parser.property :as gp-property]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
@@ -136,6 +137,14 @@
                        (swap! *property-schema assoc :description (util/evalue e)))
           :disabled built-in-property?
           :value (:description @*property-schema)})]]
+
+      (when-not built-in-property?
+        (let [hide? (:hide? @*property-schema)]
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label "Hide by default:"]
+           (ui/checkbox {:checked hide?
+                         :on-change (fn []
+                                      (swap! *property-schema assoc :hide? (not hide?)))})]))
 
       [:div
        (when-not built-in-property?
@@ -351,7 +360,7 @@
             (recur (:block/namespace current-ns))))))
     @*namespaces))
 
-(rum/defc properties-section
+(rum/defc properties-section < rum/reactive db-mixins/query
   [block properties opts]
   (when (seq properties)
     (for [[k v] properties]
@@ -368,13 +377,25 @@
                                                                   {:style {:margin-left -20}})
                 (pv/property-value block property v opts)])]))))))
 
+(rum/defcs hidden-properties < (rum/local true ::hide?)
+  [state block hidden-properties opts]
+  (let [*hide? (::hide? state)]
+    [:div.hidden-properties.flex.flex-col.gap-1
+     (when-not @*hide?
+       (properties-section block hidden-properties opts))
+     [:a.block.text-sm.fade-link {:on-click #(swap! *hide? not)}
+      [:div.flex.flex-row.items-center.gap-1
+       (ui/icon (if @*hide? "caret-right" "caret-down") {:size 16})
+       [:div "Hidden properties"]]]]))
+
 (rum/defcs properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
   [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
   (let [block (resolve-linked-block-if-exists target-block)
-        properties (if (and (:class-schema? opts) (:block/schema block))
+        class-schema? (and (:class-schema? opts) (:block/schema block))
+        properties (if class-schema?
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
                      (:block/properties block))
@@ -392,30 +413,42 @@
                                              properties))
         classes (->> (:block/tags block)
                      (sort-by :block/name)
-                     (filter (fn [tag]
-                               (= "class" (:block/type tag)))))
+                     (filter (fn [tag] (= "class" (:block/type tag)))))
         one-class? (= 1 (count classes))
         namespace-parents (get-namespace-parents classes)
         all-classes (->> (concat classes namespace-parents)
                          (filter (fn [class]
                                    (seq (:properties (:block/schema class))))))
-        classes-properties (mapcat (fn [class]
-                                     (seq (:properties (:block/schema class)))) all-classes)
-        own-properties (cond->
-                        (->> (concat (seq tags-properties)
-                                     (seq alias-properties)
-                                     (seq properties))
-                             remove-built-in-properties
-                             (remove (fn [[id _]] ((set classes-properties) id)))
-                             (sort-by first))
+        classes-properties (-> (mapcat (fn [class]
+                                         (seq (:properties (:block/schema class)))) all-classes)
+                               distinct)
+        block-own-properties (->> (concat (seq tags-properties)
+                                          (seq alias-properties)
+                                          (seq properties))
+                                  remove-built-in-properties
+                                  (remove (fn [[id _]] ((set classes-properties) id)))
+                                  (sort-by first))
+        property-hide-f (fn [property-id]
+                          (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
+                            (boolean (:hide? (:block/schema (db/entity eid))))))
+        {block-hidden-properties' true
+         block-own-properties' false} (group-by (fn [[id _]] (property-hide-f id)) block-own-properties)
+        block-hidden-properties (map first block-hidden-properties')
+        own-properties (cond-> block-own-properties'
                          one-class?
-                         (concat (map (fn [id] [id (get properties id)]) classes-properties)))
+                         (concat (map (fn [id] [id (get properties id)])
+                                      (remove property-hide-f classes-properties))))
+        classes-hidden-properties (filter property-hide-f classes-properties)
+        full-hidden-properties (->> (distinct (concat block-hidden-properties classes-hidden-properties))
+                                    (map (fn [id] [id nil])))
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
                                  properties #{}
                                  result []]
                             (if-let [class (first classes)]
-                              (let [cur-properties (remove properties (:properties (:block/schema class)))]
+                              (let [cur-properties (->> (:properties (:block/schema class))
+                                                        (remove properties)
+                                                        (remove property-hide-f))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
@@ -426,18 +459,22 @@
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area
-       [:div.own-properties
+       [:div
         (cond->
          {}
           (:selected? opts)
           (assoc :class "select-none"))
-        (properties-section block own-properties opts)
+        (properties-section block (if class-schema? properties own-properties) opts)
+
+        (when (and (seq full-hidden-properties) (not class-schema?))
+          (hidden-properties block full-hidden-properties opts))
+
         (when (or new-property? (not in-block-container?))
           (new-property block edit-input-id properties new-property? opts))]
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]
-           [:div.parent-properties.flex.flex-1.flex-col.gap-1.mt-2
+           [:div.parent-properties.flex.flex-1.flex-col.gap-1
             (for [[class class-properties] class->properties]
               (let [id-properties (->> class-properties
                                        remove-built-in-properties
