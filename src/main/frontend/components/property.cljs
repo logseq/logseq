@@ -8,7 +8,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
-            [frontend.handler.db-based.property :as db-property]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -18,8 +18,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.graph-parser.property :as gp-property]
-            [reitit.frontend.easy :as rfe]
+            [logseq.db.property :as db-property]
             [rum.core :as rum]))
 
 (rum/defc icon
@@ -91,7 +90,7 @@
   [state repo property {:keys [toggle-fn block] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
-        built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
+        built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
         property (db/sub-block (:db/id property))]
     [:div.property-configure.flex.flex-1.flex-col
      [:div.font-bold.text-xl
@@ -189,7 +188,7 @@
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
     (if-let [property (get-property-from-db property-name)]
-      (if (contains? gp-property/db-hidden-built-in-properties (keyword property-name))
+      (if (contains? db-property/hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (pv/exit-edit-property))
         (if (= "class" (:block/type entity))
@@ -200,11 +199,11 @@
           (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
             (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
-      (if (gp-property/db-valid-property-name? property-name)
+      (if (db-property/valid-property-name? property-name)
         (if (= "class" (:block/type entity))
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
-            (db-property/upsert-property! repo property-name {:type :default} {})
+            (db-property-handler/upsert-property! repo property-name {:type :default} {})
             (when *show-new-property-config?
               (reset! *show-new-property-config? true))))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
@@ -221,8 +220,8 @@
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
         existing-tag-alias (reduce (fn [acc prop]
-                                     (if (seq (get entity (get-in gp-property/db-built-in-properties [prop :attribute])))
-                                       (conj acc (get-in gp-property/db-built-in-properties [prop :original-name]))
+                                     (if (seq (get entity (get-in db-property/built-in-properties [prop :attribute])))
+                                       (conj acc (get-in db-property/built-in-properties [prop :original-name]))
                                        acc))
                                    #{}
                                    [:tags :alias])
@@ -428,7 +427,7 @@
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]
                                                  (when (uuid? id)
-                                                   (contains? gp-property/db-hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
+                                                   (contains? db-property/hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
                                              properties))
         classes (->> (:block/tags block)
                      (sort-by :block/name)

@@ -18,7 +18,7 @@
             [datascript.core :as d]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.config :as config]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.db.property :as db-property]))
 
 (defn get-engine
   [repo]
@@ -186,7 +186,7 @@
 (defn get-all-properties
   []
   (let [hidden-props (if (config/db-based-graph? (state/get-current-repo))
-                       (set (map name gp-property/db-hidden-built-in-properties))
+                       (set (map name db-property/hidden-built-in-properties))
                        (set (map name (property-util/hidden-properties))))]
     (remove hidden-props (db-model/get-all-properties))))
 

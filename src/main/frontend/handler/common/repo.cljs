@@ -1,6 +1,6 @@
 (ns ^:nbb-compatible frontend.handler.common.repo
   (:require [datascript.core :as d]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.db.property :as db-property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -24,5 +24,5 @@
                                   :block/name (gp-util/page-name-sanity-lc k-name)
                                   :block/uuid (d/squuid)
                                   :block/type "property"})))
-                            gp-property/db-built-in-properties)]
+                            db-property/built-in-properties)]
     (concat initial-files default-properties)))

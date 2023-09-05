@@ -18,7 +18,7 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.db.property :as db-property]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -87,7 +87,7 @@
                        :block/name (util/page-name-sanity-lc k-name)
                        :block/uuid (db/new-block-id)
                        :block/type "property"})))))
-             gp-property/db-built-in-properties)]
+             db-property/built-in-properties)]
     (when (seq txs)
       (d/transact! conn txs))))
 

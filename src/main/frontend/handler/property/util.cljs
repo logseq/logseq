@@ -1,7 +1,7 @@
 (ns frontend.handler.property.util
   (:require [frontend.config :as config]
             [frontend.state :as state]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.db.property :as db-property]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]
             [clojure.set :as set]))
@@ -12,7 +12,7 @@
   (let [repo (state/get-current-repo)]
     (if (and (config/db-based-graph? repo)
              (keyword? key)
-             (contains? gp-property/db-built-in-properties-keys key))
+             (contains? db-property/built-in-properties-keys key))
       (when-let [property (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name key))])]
         (get coll (:block/uuid property)))
       (get coll key))))
@@ -47,6 +47,6 @@
       (let [built-in-properties (set (map
                                       (fn [p]
                                         (:block/uuid (db/entity [:block/name (name p)])))
-                                      gp-property/db-built-in-properties-keys))]
+                                      db-property/built-in-properties-keys))]
         (swap! *db-built-in-properties assoc repo built-in-properties)))
     (set/subset? (set properties) (get @*db-built-in-properties repo))))
