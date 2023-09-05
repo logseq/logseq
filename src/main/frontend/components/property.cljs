@@ -2,10 +2,11 @@
   "Block properties management."
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property]
             [frontend.handler.notification :as notification]
@@ -18,8 +19,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.graph-parser.property :as gp-property]
-            [rum.core :as rum]
-            [frontend.db-mixins :as db-mixins]))
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
@@ -42,27 +43,41 @@
                                                                                                                           :id id}}}))
                             (toggle-fn))})))))
 
-(rum/defc class-select
-  [*property-schema class]
-  (let [classes (db-model/get-all-classes (state/get-current-repo))
-        options (map (fn [[name id]] {:label name
-                                      :value id
-                                      :selected (= class id)})
-                     classes)
-        options' (cons
-                  (if class
-                    {:label "Choose a class"
-                     :value ""}
-                    {:label "Choose a class"
-                     :disabled true
-                     :selected true
-                     :value ""})
-                  options)]
-    (ui/select options'
-               (fn [_e value]
-                 (if (seq value)
-                   (swap! *property-schema assoc :class (uuid value))
-                   (swap! *property-schema dissoc :class))))))
+(rum/defcs class-select < (rum/local false ::open?)
+  [state *property-schema schema-classes _opts]
+  (let [*open? (::open? state)]
+    (if @*open?
+      (let [classes (db-model/get-all-classes (state/get-current-repo))
+            options (map (fn [[name id]] {:label name
+                                          :value id})
+                         classes)
+            opts {:items options
+                  :input-default-placeholder "Choose classes"
+                  :dropdown? true
+                  :multiple-choices? true
+                  :selected-choices schema-classes
+                  :on-apply (fn [choices]
+                              (swap! *property-schema assoc :classes choices)
+                              (reset! *open? false))
+                  :input-opts {:on-blur (fn [] (reset! *open? false))
+                               :on-key-down
+                               (fn [e]
+                                 (case (util/ekey e)
+                                   "Escape"
+                                   (do
+                                     (util/stop e)
+                                     (reset! *open? false))
+                                   nil))}}]
+        (select/select opts))
+      [:div.flex.flex-1.flex-row.cursor.items-center.flex-wrap.gap-2.col-span-3
+       {:on-click #(reset! *open? true)}
+       (if (seq schema-classes)
+         (for [class schema-classes]
+           (when-let [page (db/entity [:block/uuid class])]
+             (let [page-name (:block/original-name page)]
+               [:a.text-sm (str "#" page-name)])))
+         [:div.text-sm
+          "Click to add classes"])])))
 
 (rum/defcs property-config <
   rum/reactive
@@ -73,7 +88,7 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property {:keys [toggle-fn block]}]
+  [state repo property {:keys [toggle-fn block] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? gp-property/db-built-in-properties-keys-str (:block/original-name property))
@@ -117,8 +132,8 @@
 
       (when (= :object (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.leading-8
-         [:label "Choose class:"]
-         (class-select *property-schema (:class @*property-schema))])
+         [:label "Specify classes:"]
+         (class-select *property-schema (:classes @*property-schema) opts)])
 
       (when-not (= (:type @*property-schema) :checkbox)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -129,6 +144,14 @@
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
+      (when-not built-in-property?
+        (let [hide? (:hide? @*property-schema)]
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label "Hide by default:"]
+           (ui/checkbox {:checked hide?
+                         :on-change (fn []
+                                      (swap! *property-schema assoc :hide? (not hide?)))})]))
+
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label "Description:"]
        [:div.col-span-3
@@ -137,14 +160,6 @@
                        (swap! *property-schema assoc :description (util/evalue e)))
           :disabled built-in-property?
           :value (:description @*property-schema)})]]
-
-      (when-not built-in-property?
-        (let [hide? (:hide? @*property-schema)]
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label "Hide by default:"]
-           (ui/checkbox {:checked hide?
-                         :on-change (fn []
-                                      (swap! *property-schema assoc :hide? (not hide?)))})]))
 
       [:div
        (when-not built-in-property?
@@ -227,8 +242,9 @@
                  (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
                (fn [{:keys [toggle-fn]}]
                  [:div.p-6
-                  (property-config repo property {:toggle-fn toggle-fn
-                                                  :block entity})])
+                  (property-config repo property (merge opts
+                                                        {:toggle-fn toggle-fn
+                                                         :block entity}))])
                {:initial-open? true
                 :modal-class (util/hiccup->class
                               "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})

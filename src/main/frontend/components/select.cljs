@@ -23,10 +23,10 @@
         selected-choices (rum/react *selected-choices)]
     [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
      [:span
-      (when multiple-choices? (ui/checkbox {:checked (selected-choices value)
-                                            :style {:margin-right 4}
-                                            :on-click (fn [e]
-                                                        (.preventDefault e))}))
+      (when multiple-choices?
+        (ui/checkbox {:checked (boolean (selected-choices (:value result)))
+                      :style {:margin-right 4}
+                      :on-click (fn [e] (.preventDefault e))}))
       value]
      (when (and (map? result) (:id result))
        [:div.tip.flex
@@ -43,6 +43,7 @@
   < rum/reactive
   shortcut/disable-all-shortcuts
   (rum/local "" ::input)
+  (rum/local nil ::toggle)
   {:init (fn [state]
            (assoc state ::selected-choices
                   (atom (set (:selected-choices (first (:rum/args state)))))))
@@ -57,14 +58,17 @@
                  extract-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply _selected-choices
-                 dropdown? show-new-when-not-exact-match? exact-match-exclude-items]
+                 dropdown? show-new-when-not-exact-match? exact-match-exclude-items
+                 input-container initial-open?]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
                close-modal? true
                extract-fn :value
-               exact-match-exclude-items #{}}}]
+               exact-match-exclude-items #{}
+               initial-open? true}}]
   (let [input (::input state)
+        *toggle (::toggle state)
         *selected-choices (::selected-choices state)
         search-result' (->>
                         (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
@@ -86,17 +90,19 @@
                          (remove nil?))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
-        input-container [:div.input-wrap
-                         [:input.cp__select-input.w-full
-                          (merge {:type        "text"
-                                  :placeholder (or input-default-placeholder (t prompt-key))
-                                  :auto-focus  true
-                                  :value       @input
-                                  :on-change   (fn [e]
-                                                 (let [v (util/evalue e)]
-                                                   (reset! input v)
-                                                   (and (fn? on-input) (on-input v))))}
-                                 input-opts')]]
+        input-container (or
+                         input-container
+                         [:div.input-wrap
+                          [:input.cp__select-input.w-full
+                           (merge {:type        "text"
+                                   :placeholder (or input-default-placeholder (t prompt-key))
+                                   :auto-focus  true
+                                   :value       @input
+                                   :on-change   (fn [e]
+                                                  (let [v (util/evalue e)]
+                                                    (reset! input v)
+                                                    (and (fn? on-input) (on-input v))))}
+                                  input-opts')]])
         results-container [:div
                            [:div.item-results-wrap
                             (ui/auto-complete
@@ -104,20 +110,27 @@
                              {:item-render       (or item-cp (fn [result chosen?]
                                                                (render-item result chosen? multiple-choices? *selected-choices)))
                               :class             "cp__select-results"
-                              :on-chosen         (fn [x]
+                              :on-chosen         (fn [matched]
                                                    (reset! input "")
-                                                   (if multiple-choices?
-                                                     (if (@*selected-choices x)
-                                                       (swap! *selected-choices disj x)
-                                                       (swap! *selected-choices conj x))
-                                                     (do
-                                                       (when close-modal? (state/close-modal!))
-                                                       (when on-chosen
-                                                         (on-chosen (if multiple-choices? @*selected-choices x))))))
+                                                   (let [x (extract-fn matched)]
+                                                     (if multiple-choices?
+                                                       (if (@*selected-choices x)
+                                                         (swap! *selected-choices disj x)
+                                                         (swap! *selected-choices conj x))
+                                                       (do
+                                                         (when close-modal? (state/close-modal!))
+                                                         (when on-chosen
+                                                           (on-chosen (if multiple-choices? @*selected-choices x)))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when multiple-choices?
-                             [:div.p-4 (ui/button "Apply updates" :on-click on-apply)])]]
+                             [:div.p-4 (ui/button "Apply updates"
+                                                  {:small? true
+                                                   :on-mouse-down (fn [e]
+                                                                    (util/stop e)
+                                                                    (when @*toggle (@*toggle))
+                                                                    (when (fn? on-apply)
+                                                                      (on-apply @*selected-choices)))})])]]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
@@ -125,11 +138,12 @@
 
      (if dropdown?
        (ui/dropdown
-        (fn [] input-container)
+        (if (fn? input-container) input-container (fn [] input-container))
         (fn [] results-container)
-        :initial-open? true)
+        {:initial-open? initial-open?
+         :*toggle-fn *toggle})
        [:<>
-        input-container
+        (if (fn? input-container) (input-container) input-container)
         results-container])]))
 
 (defn select-config

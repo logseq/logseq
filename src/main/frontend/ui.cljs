@@ -161,9 +161,13 @@
                (reset! (:open? state) true)))
            state)}
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index trigger-class _initial-open?]
+   & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
+        _ (when (and (util/atom? *toggle-fn)
+                     (nil? @*toggle-fn)
+                     (:toggle-fn state))
+            (reset! *toggle-fn (:toggle-fn state)))
         modal-content (modal-content-fn state)
         close-fn (:close-fn state)]
     [:div.relative.ui__dropdown-trigger {:class trigger-class}
