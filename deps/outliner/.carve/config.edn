@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :api-namespaces [logseq.outliner.datascript-report
+                  logseq.outliner.pipeline]
+ :report {:format :ignore}}

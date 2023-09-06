@@ -1,10 +1,11 @@
 (ns logseq.outliner.datascript-report
+  "Datascript fns related to getting data from a connection listener's tx-report"
   (:require [clojure.set :as set]
             [datascript.core :as d]))
 
-(def keys-of-deleted-entity 1)
+(def ^:private keys-of-deleted-entity 1)
 
-(defn get-entity-from-db-after-or-before
+(defn- get-entity-from-db-after-or-before
   "Get the entity from db after if possible; otherwise get entity from db before
    Useful for fetching deleted elements"
   [db-before db-after db-id]
