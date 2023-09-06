@@ -102,8 +102,6 @@
  :settings-page/enable-tooltip "Suggerimenti"
  :settings-page/enable-journals "Diario"
  :settings-page/enable-all-pages-public "Tutte le pagine pubbliche durante la pubblicazione"
- :settings-page/customize-shortcuts "Scorciatoie da tastiera"
- :settings-page/shortcut-settings "Personalizza scorciatoie"
  :settings-page/home-default-page "Imposta la home page predefinita"
  :settings-page/enable-block-time "Indicatori temporali sui blocchi"
  :settings-page/clear-cache "Pulisci cache"

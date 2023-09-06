@@ -107,8 +107,6 @@
  :settings-page/enable-tooltip "Podpowiedzi"
  :settings-page/enable-journals "Dzienniki"
  :settings-page/enable-all-pages-public "Publikuj wszystkie strony"
- :settings-page/customize-shortcuts "Skróty klawiszowe"
- :settings-page/shortcut-settings "Zmień skróty"
  :settings-page/home-default-page "Ustaw domyślną stronę startową"
  :settings-page/enable-block-time "Włącz czas dla bloków"
  :settings-page/clear-cache "Wyczyść cache"

@@ -298,8 +298,6 @@
  :settings-page/enable-tooltip "Araç ipuçları"
  :settings-page/enable-journals "Günlük"
  :settings-page/enable-all-pages-public "Yayımlanan tüm sayfaları herkese açık yap"
- :settings-page/customize-shortcuts "Klavye kısayolları"
- :settings-page/shortcut-settings "Kısayolları özelleştir"
  :settings-page/home-default-page "Varsayılan ana sayfayı ayarla"
  :settings-page/enable-block-time "Blok zaman damgaları"
  :settings-page/clear-cache "Önbelleği temizle"

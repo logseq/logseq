@@ -58,7 +58,8 @@
    :ko      (edn-resource "dicts/ko.edn")
    :pl      (edn-resource "dicts/pl.edn")
    :sk      (edn-resource "dicts/sk.edn")
-   :uk      (edn-resource "dicts/uk.edn")})
+   :uk      (edn-resource "dicts/uk.edn")
+   :id      (edn-resource "dicts/id.edn")})
 
 (def languages
   "List of languages presented to user"
@@ -80,7 +81,8 @@
    {:label "Türkçe" :value :tr}
    {:label "Українська" :value :uk}
    {:label "한국어" :value :ko}
-   {:label "Slovenčina" :value :sk}])
+   {:label "Slovenčina" :value :sk}
+   {:label "Bahasa Indonesia" :value :id}])
 
 (assert (= (set (keys dicts)) (set (map :value languages)))
         "List of user-facing languages must match list of dictionaries")

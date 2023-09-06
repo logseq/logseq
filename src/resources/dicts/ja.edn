@@ -308,8 +308,6 @@
  :settings-page/enable-tooltip "ツールチップ"
  :settings-page/enable-journals "日誌"
  :settings-page/enable-all-pages-public "パブリッシュ時には全てのページを公開する"
- :settings-page/customize-shortcuts "キーボードショートカット"
- :settings-page/shortcut-settings "ショートカットをカスタマイズ"
  :settings-page/home-default-page "デフォルトのホームページを設定"
  :settings-page/enable-block-time "ブロックタイムスタンプ"
  :settings-page/clear-cache "キャッシュをクリア"
