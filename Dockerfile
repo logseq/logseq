@@ -10,6 +10,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Install reqs
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     curl \
     ca-certificates \
     apt-transport-https \
@@ -31,7 +32,7 @@ RUN git clone -b master https://github.com/logseq/logseq.git .
 
 RUN yarn config set network-timeout 240000 -g && yarn install
 
-RUN  yarn release 
+RUN  yarn release
 
 # Web App Runner image
 FROM nginx:1.24.0-alpine3.17
