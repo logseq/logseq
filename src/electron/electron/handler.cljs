@@ -6,6 +6,7 @@
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
             ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
@@ -617,6 +618,10 @@
 
 (defmethod handle :window-close [^js win]
   (.close win))
+
+(defmethod handle :theme-loaded [^js win]
+  (.manage (windowStateKeeper) win)
+  (.show win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
