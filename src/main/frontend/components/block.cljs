@@ -81,7 +81,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [clojure.data :as data]))
 
 
 
@@ -3401,30 +3402,49 @@
 
 (defn- get-hidden-atom
   [sub-id *ref {:keys [initial-value]}]
-  (let [*initial? (atom true)]
+  (let [*initial? (atom true)
+        *prev-scroll-top (atom @(:ui/main-container-scroll-top @state/state))
+        *latest-value (atom nil)]
     (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
-                      (fn [_top]
-                        (if (and @*initial? (some? initial-value))
-                          (do
-                            (reset! *initial? false)
-                            initial-value)
-                          (boolean (hide-block? @*ref)))))))
+                      (fn [top]
+                        (let [prev @*prev-scroll-top
+                              minor-update? (< (abs (- prev top)) 64)
+                              _ (reset! *prev-scroll-top top)
+                              value (cond
+                                      (and @*initial? (some? initial-value))
+                                      (do
+                                        (reset! *initial? false)
+                                        initial-value)
+
+                                      (and minor-update? (some? @*latest-value))
+                                      @*latest-value
+
+                                      :else
+                                      (boolean (hide-block? @*ref)))]
+                          value)))))
 
 (rum/defcs block-item < rum/reactive
   {:init (fn [state]
            (let [id (random-uuid)
+                 disable-lazy? (:disable-lazy-load? (first (:rum/args state)))
                  *ref (atom nil)
-                 *hidden? (get-hidden-atom id *ref {:initial-value true})]
+                 *hidden? (if disable-lazy?
+                            (atom false)
+                            (get-hidden-atom id *ref {:initial-value true}))]
              (assoc state ::sub-id id ::ref *ref ::hidden? *hidden?)))
    :should-update (fn [old-state new-state]
                     (let [args-1 (:rum/args old-state)
                           args-2 (:rum/args new-state)]
-                      (not= [(first args-1) (last args-1)]
-                            [(first args-2) (last args-2)])))
+                      (not= [(dissoc (first args-1) :query-result)
+                             (last args-1)]
+                            [(dissoc (first args-2) :query-result)
+                             (last args-2)])))
    :did-mount (fn [state]
-                (let [hide? (hide-block? @(::ref state))]
-                  (reset! (::hidden? state) hide?)
-                  state))}
+                (if (:disable-lazy-load? (first (:rum/args state)))
+                  state
+                  (let [hide? (hide-block? @(::ref state))]
+                    (reset! (::hidden? state) hide?)
+                    state)))}
   [state config item opts]
   (let [*hidden? (::hidden? state)
         hidden? (rum/react *hidden?)
