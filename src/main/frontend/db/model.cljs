@@ -20,6 +20,7 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             ;; add map ops to datascript Entity
@@ -535,19 +536,10 @@ independent of format as format specific heading characters are stripped"
      (when-let [block (db-utils/entity db [:block/uuid block-id])]
        (:block/parent block)))))
 
-;; non recursive query
 (defn get-block-parents
-  ([repo block-id]
-   (get-block-parents repo block-id 100))
-  ([repo block-id depth]
-   (loop [block-id block-id
-          parents (list)
-          d 1]
-     (if (> d depth)
-       parents
-       (if-let [parent (get-block-parent repo block-id)]
-         (recur (:block/uuid parent) (conj parents parent) (inc d))
-         parents)))))
+  [repo block-id opts]
+  (when-let [db (conn/get-db repo)]
+    (outliner-pipeline/get-block-parents db block-id opts)))
 
 ;; Use built-in recursive
 (defn get-block-parents-v2
@@ -702,28 +694,6 @@ independent of format as format specific heading characters are stripped"
           (db-utils/pull-many repo
                               '[:db/id :block/name :block/original-name]
                               ids))))))
-(defn get-block-children-ids-in-db
-  [db block-uuid]
-  (when-let [eid (:db/id (db-utils/entity db [:block/uuid block-uuid]))]
-    (let [seen   (volatile! [])]
-      (loop [steps          100      ;check result every 100 steps
-             eids-to-expand [eid]]
-        (when (seq eids-to-expand)
-          (let [eids-to-expand*
-                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
-                uuids-to-add (remove nil? (map #(:block/uuid (db-utils/entity db %)) eids-to-expand*))]
-            (when (and (zero? steps)
-                       (seq (set/intersection (set @seen) (set uuids-to-add))))
-              (throw (ex-info "bad outliner data, need to re-index to fix"
-                              {:seen @seen :eids-to-expand eids-to-expand})))
-            (vswap! seen (partial apply conj) uuids-to-add)
-            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
-      @seen)))
-
-(defn get-block-children-ids
-  ([repo block-uuid]
-   (when-let [db (conn/get-db repo)]
-     (get-block-children-ids-in-db db block-uuid))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
@@ -735,10 +705,11 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-children
   "Including nested children."
   [repo block-uuid]
-  (let [ids (get-block-children-ids repo block-uuid)]
-    (when (seq ids)
-      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-        (db-utils/pull-many repo '[*] ids')))))
+  (when-let [db (conn/get-db repo)]
+    (let [ids (outliner-pipeline/get-block-children-ids db block-uuid)]
+     (when (seq ids)
+       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+         (db-utils/pull-many repo '[*] ids'))))))
 
 ;; TODO: use the tree directly
 (defn- flatten-tree
