@@ -13,7 +13,7 @@
        (:v d)))
    datoms))
 
-(defn datom->av-vector
+(defn- datom->av-vector
   [db datom]
   (let [a (:a datom)
         v (:v datom)
@@ -51,7 +51,7 @@
                   (assoc b :block/uuid uuid)))))))
 
 ;; non recursive query
-(defn get-block-parents
+(defn ^:api get-block-parents
   [db block-id {:keys [depth] :or {depth 100}}]
   (loop [block-id block-id
          parents (list)
@@ -62,7 +62,7 @@
         (recur (:block/uuid parent) (conj parents parent) (inc d))
         parents))))
 
-(defn get-block-children-ids
+(defn ^:api get-block-children-ids
   [db block-uuid]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
     (let [seen   (volatile! [])]
@@ -138,8 +138,7 @@
                                          children-maps)]
                   (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                   (concat
-                   (when (and (seq new-refs)
-                              refs-changed?)
+                   (when (and (seq new-refs) refs-changed?)
                      [{:db/id (:db/id block)
                        :block/path-refs new-refs}])
                    children-refs))))
