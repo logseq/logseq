@@ -198,8 +198,6 @@
  :settings-page/enable-tooltip "Підказки"
  :settings-page/enable-journals "Журнали"
  :settings-page/enable-all-pages-public "Усі сторінки є відкритими під час публікації"
- :settings-page/customize-shortcuts "Гарячі клавіші"
- :settings-page/shortcut-settings "Налаштуваня ярликів"
  :settings-page/home-default-page "Встановити домашню сторінку за умовчанням"
  :settings-page/enable-block-time "Блокувати позначки часу"
  :settings-page/clear-cache "Очистити кеш"

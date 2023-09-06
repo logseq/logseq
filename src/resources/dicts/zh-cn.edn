@@ -216,8 +216,6 @@
  :settings-page/enable-journals "开启日记"
  :settings-page/enable-all-pages-public "发布所有页面"
  :settings-page/enable-whiteboards "激活白板功能"
- :settings-page/customize-shortcuts "自定义快捷键"
- :settings-page/shortcut-settings "快捷键设置"
  :settings-page/home-default-page "设置首页默认页面"
  :settings-page/enable-block-time "记录 block 创建/修改时间"
  :settings-page/clear-cache "清除缓存"
