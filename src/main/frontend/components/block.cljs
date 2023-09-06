@@ -3400,16 +3400,21 @@
              (str "-" (:block/uuid original-block)))))))
 
 (defn- get-hidden-atom
-  [sub-id *ref]
-  (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
-                    (fn [top]
-                      (boolean (hide-block? @*ref)))))
+  [sub-id *ref {:keys [initial-value]}]
+  (let [*initial? (atom true)]
+    (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
+                      (fn [_top]
+                        (if (and @*initial? (some? initial-value))
+                          (do
+                            (reset! *initial? false)
+                            initial-value)
+                          (boolean (hide-block? @*ref)))))))
 
 (rum/defcs block-item < rum/reactive
   {:init (fn [state]
            (let [id (random-uuid)
                  *ref (atom nil)
-                 *hidden? (get-hidden-atom id *ref)]
+                 *hidden? (get-hidden-atom id *ref {:initial-value true})]
              (assoc state ::sub-id id ::ref *ref ::hidden? *hidden?)))
    :should-update (fn [old-state new-state]
                     (let [args-1 (:rum/args old-state)
