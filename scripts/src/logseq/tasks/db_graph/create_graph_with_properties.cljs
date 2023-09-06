@@ -2,6 +2,7 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
@@ -11,7 +12,7 @@
 (defn- date-journal-title [date]
   (let [title (.toLocaleString date "en-US" #js {:month "short" :day "numeric" :year "numeric"})
         suffixes {1 "st" 21 "st" 31 "st" 2 "nd" 22 "nd" 3 "rd" 23 "rd" 33 "rd"}]
-    (string/lower-case
+    (sqlite-util/sanitize-page-name
      (string/replace-first title #"(\d+)" (str "$1" (suffixes (.getDate date) "th"))))))
 
 (defn- date-journal-day [date]
@@ -78,7 +79,7 @@
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     (d/transact! conn blocks-tx)
-    (println "Created graph" (str db-name "!"))))
+    (println "Created graph" (str db-name " with " (count (d/datoms @conn :eavt)) " datoms!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))

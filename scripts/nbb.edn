@@ -5,7 +5,4 @@
   logseq/outliner
   {:local/root "../deps/outliner"}
   logseq/publishing
-  {:local/root "../deps/publishing"}
-  logseq/frontend
-  {:local/root ".."
-   :deps/root "src/main"}}}
+  {:local/root "../deps/publishing"}}}

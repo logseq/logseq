@@ -9,6 +9,7 @@
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :object properties are given a :cardinality :many"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
@@ -133,7 +134,7 @@
   [property-ids class-ids {:keys [verbose]}]
   (let [conflicts
         (->> (concat property-ids class-ids)
-             (group-by (comp string/lower-case first))
+             (group-by (comp sqlite-util/sanitize-page-name first))
              (filter #(> (count (val %)) 1))
              vals)
         ;; If this assertion fails then renamed-classes approach to resolving
