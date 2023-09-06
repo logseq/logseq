@@ -459,10 +459,10 @@
                                     max-height))
                                 max-height)
 
-                              (= modal-name "commands")
-                              (min 500))
+                        (= modal-name "commands")
+                        (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
-        editing-key    (first (keys (:editor/editing? @state/state)))
+        editing-key    (:editor/editing @state/state)
         *el (rum/use-ref nil)
         _ (rum/use-effect! (fn []
                              (when-let [^js/HTMLElement cnt

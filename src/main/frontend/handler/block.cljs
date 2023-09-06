@@ -108,7 +108,7 @@
   (when-let [touches (.-targetTouches event)]
     (let [selection-type (.-type (.getSelection js/document))]
       (when-not (= selection-type "Range")
-        (when (or (not (state/sub :editor/editing?))
+        (when (or (not (state/sub :editor/editing))
                   (< (- (js/Date.now) @*touch-start) 600))
           (when (and (= (.-length touches) 1) @*swipe)
             (let [{:keys [x0 xi direction]} @*swipe
