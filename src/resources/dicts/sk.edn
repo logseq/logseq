@@ -167,8 +167,6 @@
  :settings-page/enable-tooltip                     "Povoliť okno s nápovedou"
  :settings-page/enable-journals                    "Denníky"
  :settings-page/enable-all-pages-public            "Všetky stránky označiť ako verejné"
- :settings-page/customize-shortcuts                "Klávesové skratky"
- :settings-page/shortcut-settings                  "Prispôsobiť skratky"
  :settings-page/home-default-page                  "Nastaviť predvolenú domovskú stránku"
  :settings-page/enable-block-time                  "Povoliť časové pečiatky bloku"
  :settings-page/clear-cache                        "Vymazať vyrovnávaciu pamäť"
