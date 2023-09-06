@@ -12,7 +12,6 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.file :as file-common-handler]
-            [frontend.handler.common.repo :as repo-common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -28,6 +27,7 @@
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.db.sqlite.util :as sqlite-util]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -547,7 +547,7 @@
           _ (route-handler/redirect-to-home!)
           _ (db/transact! full-graph-name [(react/kv :db/type "db")]
                           {:skip-persist? true})
-          initial-data (repo-common-handler/build-db-initial-data config/config-default-content)
+          initial-data (sqlite-util/build-db-initial-data config/config-default-content)
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph

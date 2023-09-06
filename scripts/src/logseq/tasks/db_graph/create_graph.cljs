@@ -11,9 +11,7 @@
             [datascript.core :as d]
             ["fs" :as fs]
             ["path" :as node-path]
-            [nbb.classpath :as cp]
-            ;; TODO: Move this namespace to more stable deps/ namespaces
-            [frontend.handler.common.repo :as repo-common-handler]))
+            [nbb.classpath :as cp]))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -29,7 +27,7 @@
   (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
                            (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                                "{}"))]
-    (d/transact! conn (repo-common-handler/build-db-initial-data config-content))))
+    (d/transact! conn (sqlite-util/build-db-initial-data config-content))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
@@ -86,7 +84,7 @@
                             (into {}))
         page-uuids (->> pages-and-blocks
                         (map :page)
-                        (map (juxt #(or (:block/name %) (string/lower-case (:block/original-name %)))
+                        (map (juxt #(or (:block/name %) (sqlite-util/sanitize-page-name (:block/original-name %)))
                                    :block/uuid))
                         (into {}))
         block-uuids (->> pages-and-blocks
@@ -173,7 +171,7 @@
                                           :block/schema (merge {:type :default}
                                                                (get-in properties [prop-name :block/schema]))
                                           :block/original-name (name prop-name)
-                                          :block/name (string/lower-case (name prop-name))
+                                          :block/name (sqlite-util/sanitize-page-name (name prop-name))
                                           :block/type "property"
                                           :block/created-at created-at
                                           :block/updated-at created-at}
@@ -191,7 +189,7 @@
                [(merge (dissoc page :properties)
                        {:db/id page-id
                         :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                        :block/name (or (:block/name page) (string/lower-case (:block/original-name page)))
+                        :block/name (or (:block/name page) (sqlite-util/sanitize-page-name (:block/original-name page)))
                         :block/created-at created-at
                         :block/updated-at created-at}
                        (when (seq (:properties page))

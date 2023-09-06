@@ -2,8 +2,11 @@
   "Utils fns for backend sqlite db"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [clojure.string :as string]
             [cognitect.transit :as transit]
-            [logseq.db.schema :as db-schema]))
+            [datascript.core :as d]
+            [logseq.db.schema :as db-schema]
+            [logseq.db.property :as db-property]))
 
 (defn- type-of-block
   "
@@ -67,3 +70,33 @@
                 (nil? (:block/created-at block))
                 (assoc :block/created-at updated-at))]
     block))
+
+(defn sanitize-page-name
+  "Prepares a string for insertion to :block/name. Not using
+  gp-util/page-name-sanity-lc yet because it's unclear if db graphs have all the
+  same naming constraints"
+  [s]
+  (string/lower-case s))
+
+(defn build-db-initial-data
+  [config-content]
+  (let [initial-files [{:block/uuid (d/squuid)
+                        :file/path (str "logseq/" "config.edn")
+                        :file/content config-content}
+                       {:block/uuid (d/squuid)
+                        :file/path (str "logseq/" "custom.css")
+                        :file/content ""}
+                       {:block/uuid (d/squuid)
+                        :file/path (str "logseq/" "custom.js")
+                        :file/content ""}]
+        default-properties (map
+                            (fn [[k-keyword {:keys [schema original-name]}]]
+                              (let [k-name (name k-keyword)]
+                                (block-with-timestamps
+                                 {:block/schema schema
+                                  :block/original-name (or original-name k-name)
+                                  :block/name (sanitize-page-name k-name)
+                                  :block/uuid (d/squuid)
+                                  :block/type "property"})))
+                            db-property/built-in-properties)]
+    (concat initial-files default-properties)))
