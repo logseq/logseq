@@ -127,7 +127,6 @@
       (ui/icon "circle-plus")]]]])
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
-  (rum/local nil ::ref)
   {:will-mount (fn [state]
                  (let [page-e (second (:rum/args state))
                        page-name (:block/name page-e)]
@@ -150,12 +149,11 @@
 
         (and
          (not block?)
-             (empty? (:block/_parent block)))
+         (empty? (:block/_parent block)))
         (dummy-block page-name)
 
         :else
-        (let [*ref (::ref state)
-              document-mode? (state/sub :document/mode?)
+        (let [document-mode? (state/sub :document/mode?)
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
                               :db/id (:db/id block)
@@ -165,7 +163,7 @@
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))]
-          [:div {:ref #(reset! *ref %)}
+          [:div
            (page-blocks-inner page-name block blocks config sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
@@ -506,15 +504,14 @@
           page-name (util/page-name-sanity-lc path-page-name)
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          db-id (if block?
-                  (let [entity (db/entity [:block/uuid block-id])]
-                    (:db/id entity))
-                  (do
-                    (when-not (db/entity repo [:block/name page-name])
-                      (let [m (block/page-name->map path-page-name true)]
-                        (db/transact! repo [m])))
-                    (:db/id (db/entity [:block/name page-name]))))
-          page (db/sub-block db-id)
+          page (if block?
+                 (let [entity (db/entity [:block/uuid block-id])]
+                   entity)
+                 (do
+                   (when-not (db/entity repo [:block/name page-name])
+                     (let [m (block/page-name->map path-page-name true)]
+                       (db/transact! repo [m])))
+                   (db/entity [:block/name page-name])))
           block-id (:block/uuid page)
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
@@ -600,10 +597,7 @@
                  {:selected? false}))])
 
            ;; blocks
-           (let [page (if block?
-                        (db/entity repo [:block/uuid block-id])
-                        page)
-                 _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
+           (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                  _ (when (and block? (not page))
                      (route-handler/redirect-to-page! @*current-block-page))]
              (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
