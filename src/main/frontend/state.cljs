@@ -1897,46 +1897,44 @@ Similar to re-frame subscriptions"
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
-   (util/profile
-    "set-editing!"
-    (if (> (count content)
-           (block-content-max-length (get-current-repo)))
-      (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
-        (when (first elements)
-          (util/scroll-to-element (gobj/get (first elements) "id")))
-        (exit-editing-and-set-selected-blocks! elements))
-      (when (and edit-input-id block
-                 (or
-                  (publishing-enable-editing?)
-                  (not @publishing?)))
-        (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-              container (util/get-block-container block-element)
-              block (if container
-                      (assoc block
-                             :block.temp/container (gobj/get container "id"))
-                      block)
-              content (string/trim (or content ""))]
-          (set-state! :editor/editing edit-input-id)
-          (swap! state
-                 (fn [state]
-                   (-> state
-                       (assoc
-                        :editor/set-timestamp-block nil
-                        :cursor-range cursor-range))))
-          (set-state! :editor/block block)
-          (set-state! :editor/content content :path-in-sub-atom edit-input-id)
-          (set-state! :editor/last-key-code nil)
+   (if (> (count content)
+          (block-content-max-length (get-current-repo)))
+     (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
+       (when (first elements)
+         (util/scroll-to-element (gobj/get (first elements) "id")))
+       (exit-editing-and-set-selected-blocks! elements))
+     (when (and edit-input-id block
+                (or
+                 (publishing-enable-editing?)
+                 (not @publishing?)))
+       (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+             container (util/get-block-container block-element)
+             block (if container
+                     (assoc block
+                            :block.temp/container (gobj/get container "id"))
+                     block)
+             content (string/trim (or content ""))]
+         (set-state! :editor/editing edit-input-id)
+         (swap! state
+                (fn [state]
+                  (-> state
+                      (assoc
+                       :editor/set-timestamp-block nil
+                       :cursor-range cursor-range))))
+         (set-state! :editor/block block)
+         (set-state! :editor/content content :path-in-sub-atom edit-input-id)
+         (set-state! :editor/last-key-code nil)
 
-          (when-let [input (gdom/getElement edit-input-id)]
-            (let [pos (count cursor-range)]
-              (when content
-                (util/set-change-value input content))
+         (when-let [input (gdom/getElement edit-input-id)]
+           (let [pos (count cursor-range)]
+             (when content
+               (util/set-change-value input content))
 
-              (when move-cursor?
-                (cursor/move-cursor-to input pos))
+             (when move-cursor?
+               (cursor/move-cursor-to input pos))
 
-              (when (or (util/mobile?) (mobile-util/native-platform?))
-                (set-state! :mobile/show-action-bar? false))))))))))
+             (when (or (util/mobile?) (mobile-util/native-platform?))
+               (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn remove-watch-state [key]
   (remove-watch state key))
