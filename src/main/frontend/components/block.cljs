@@ -3434,7 +3434,7 @@
                      (:blocks-container-id config)
                      "-"
                      (:block/uuid item))}
-     (if hidden?
+     (if (and hidden? (not (:disable-lazy-load? config)))
        [:div {:style {:height 24}}]
        (block-item-inner config item opts))]))
 
