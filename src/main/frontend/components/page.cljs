@@ -154,12 +154,15 @@
 
         :else
         (let [document-mode? (state/sub :document/mode?)
+              short-page? (when-not block?
+                            (<= (count (:block/_page block)) 200))
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
-                              :document/mode? document-mode?}
+                              :document/mode? document-mode?
+                              :disable-lazy-load? short-page?}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))]

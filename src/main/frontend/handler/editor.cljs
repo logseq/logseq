@@ -1150,7 +1150,9 @@
           blocks (if (= :up direction)
                    (reverse blocks)
                    blocks)]
-      (state/exit-editing-and-set-selected-blocks! blocks direction))))
+      (if (state/get-edit-input-id)
+        (state/exit-editing-and-set-selected-blocks! blocks direction)
+        (state/set-selection-blocks! blocks direction)))))
 
 (defn- select-block-up-down
   [direction]
