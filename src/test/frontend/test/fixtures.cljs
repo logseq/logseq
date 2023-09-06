@@ -1,15 +1,10 @@
 (ns frontend.test.fixtures
   (:require [datascript.core :as d]
-            [frontend.config :as config]
             [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]))
-
-(defn load-test-env
-  [f]
-  (with-redefs [config/test? true] (f)))
 
 (defn react-components
   [f]

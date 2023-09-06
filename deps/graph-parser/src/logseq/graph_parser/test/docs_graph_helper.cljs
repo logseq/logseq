@@ -161,7 +161,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 303 (count files)) "Correct file count")
-    (is (= 63731 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 63733 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 5866
            (ffirst

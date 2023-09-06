@@ -11,12 +11,19 @@
             [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.state :as state]
             [clojure.set :as set]))
 
 (def test-db test-helper/test-db)
 
+(defn disable-browser-fns
+  [f]
+  ;; get-selection-blocks has a js/document reference
+  (with-redefs [state/get-selection-blocks (constantly [])]
+    (f)))
+
 (use-fixtures :each
-  fixtures/load-test-env
+  disable-browser-fns
   fixtures/react-components
   fixtures/reset-db)
 
