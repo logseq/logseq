@@ -369,43 +369,53 @@
     (state/set-editor-last-input-time! repo (util/time-ms))
     (db-listener/clear-repo-persistent-job! repo)))
 
+(defn- edit-block-aux
+  [repo block content id text-range {:keys [direction retry-times]
+                                     :or {retry-times 0}
+                                     :as opts}]
+  (when (<= retry-times 6)
+    (let [block-id (:block/uuid block)
+          edit-input-id (if (uuid? id)
+                          (get-edit-input-id-with-block-id id direction retry-times nil)
+                          (let [id (str (subs id 0 (- (count id) 36)) block-id)]
+                            (if (gdom/getElement id)
+                              (string/replace id "ls-block" "edit-block")
+                              (get-edit-input-id-with-block-id block-id direction retry-times id))))]
+      (if edit-input-id
+        (do
+          (state/set-editing! edit-input-id content block text-range)
+          (mark-last-input-time! repo))
+        (js/setTimeout (fn [] (edit-block-aux repo block content id text-range (update opts :retry-times inc)))
+                       5)))))
+
 (defn edit-block!
   ([block pos id]
    (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len retry-times direction]
-                  :or {tail-len 0
-                       retry-times 0}
+  ([block pos id {:keys [custom-content tail-len _direction]
+                  :or {tail-len 0}
                   :as opts}]
-   (when-not (> retry-times 3)
-     (when-not config/publishing?
-       (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/entity [:block/uuid block-id]) block)
-               edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id direction retry-times nil)
-                               (let [id (str (subs id 0 (- (count id) 36)) block-id)]
-                                 (if (gdom/getElement id)
-                                   (string/replace id "ls-block" "edit-block")
-                                   (get-edit-input-id-with-block-id block-id direction retry-times id))))
-               content (or custom-content (:block/content block) "")
-               content-length (count content)
-               text-range (cond
-                            (vector? pos)
-                            (text-range-by-lst-fst-line content pos)
+   (when-not config/publishing?
+     (when-let [block-id (:block/uuid block)]
+       (let [repo (state/get-current-repo)
+             db-graph? (config/db-based-graph? repo)
+             block (or (db/entity [:block/uuid block-id]) block)
+             content (or custom-content (:block/content block) "")
+             content-length (count content)
+             text-range (cond
+                          (vector? pos)
+                          (text-range-by-lst-fst-line content pos)
 
-                            (and (> tail-len 0) (>= (count content) tail-len))
-                            (subs content 0 (- (count content) tail-len))
+                          (and (> tail-len 0) (>= (count content) tail-len))
+                          (subs content 0 (- (count content) tail-len))
 
-                            (or (= :max pos) (<= content-length pos))
-                            content
+                          (or (= :max pos) (<= content-length pos))
+                          content
 
-                            :else
-                            (subs content 0 pos))
-               content (-> (property-util/remove-built-in-properties (:block/format block) content)
-                           (drawer/remove-logbook))]
-           (state/clear-selection!)
-           (if edit-input-id
-             (do
-               (state/set-editing! edit-input-id content block text-range)
-               (mark-last-input-time! (state/get-current-repo)))
-             ;; Block may not be rendered yet
-             (js/setTimeout (fn [] (edit-block! block pos id (update opts :retry-times inc))) 10))))))))
+                          :else
+                          (subs content 0 pos))
+             content (if db-graph?
+                       content
+                       (-> (property-util/remove-built-in-properties (:block/format block) content)
+                           (drawer/remove-logbook)))]
+         (state/clear-selection!)
+         (edit-block-aux repo block content id text-range opts))))))
