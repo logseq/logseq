@@ -472,15 +472,6 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
-(rum/defc keyboard-shortcuts-row [t]
-  (row-with-button-action
-    {:left-label   (t :settings-page/customize-shortcuts)
-     :button-label (t :settings-page/shortcut-settings)
-     :on-click      (fn []
-                      (state/close-settings!)
-                      (route-handler/redirect! {:to :shortcut-setting}))
-     :-for         "customize_shortcuts"}))
-
 (defn zotero-settings-row []
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -646,8 +637,7 @@
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
-     (when current-repo (edit-export-css))
-     (keyboard-shortcuts-row t)]))
+     (when current-repo (edit-export-css))]))
 
 (rum/defcs settings-editor < rum/reactive
   [_state current-repo]
