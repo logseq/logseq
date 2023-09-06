@@ -436,7 +436,7 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (state/sub [:editor/editing? id])]
+  (let [edit? (state/sub-editing? id)]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}

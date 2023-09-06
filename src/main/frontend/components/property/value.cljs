@@ -311,7 +311,7 @@
         type (:type schema)
         multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
-        editing? (or editing? (state/sub [:editor/editing? editor-id]))
+        editing? (or editing? (state/sub-editing? editor-id))
         select-opts {:on-chosen (fn []
                                   ;; (when *configure-show? (reset! *configure-show? false))
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
@@ -406,7 +406,7 @@
 
 (rum/defc multiple-blocks-add-button < rum/reactive
   [block property opts]
-  (let [editing? (state/sub :editor/editing?)]
+  (let [editing? (state/sub :editor/editing)]
     (when-not editing?
       [:div.absolute.fade-in
        {:style {:left "-1.75rem"
@@ -425,7 +425,7 @@
 
 (rum/defc delete-value-button < rum/reactive
   [entity property item]
-  (let [editing? (state/sub :editor/editing?)]
+  (let [editing? (state/sub :editor/editing)]
     (when-not (or editing? config/publishing?)
       [:a.close.fade-in
        {:class "absolute top-0 right-0"
@@ -444,7 +444,7 @@
                                :or {show-close-button? true}
                                :as opts}]
   (let [*show-close? (::show-close? state)
-        editing? (state/sub [:editor/editing? editor-id])]
+        editing? (state/sub-editing? editor-id)]
     [:div (cond->
            {:on-mouse-over #(reset! *show-close? true)
             :on-mouse-out  #(reset! *show-close? false)}

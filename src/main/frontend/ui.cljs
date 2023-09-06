@@ -952,7 +952,7 @@
   [state {:keys [fixed-position? open? in-editor? html] :as opts} child]
   (let [*mounted? (::mounted? state)
         manual (not= open? nil)
-        edit-id (ffirst (state/sub :editor/editing?))
+        edit-id (state/sub :editor/editing)
         editing-node (when edit-id (gdom/getElement edit-id))
         editing? (some? editing-node)
         scrolling? (state/sub :ui/scrolling?)

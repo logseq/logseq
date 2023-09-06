@@ -632,7 +632,7 @@
                                     (fn []
                                       (let [el-popup (rum/deref *el-popup)
                                             cb (fn [^js e]
-                                                 (when-not (:editor/editing? @state/state)
+                                                 (when-not (:editor/editing @state/state)
                                            ;; Esc
                                                    (and (= e.which 27)
                                                         (when-let [tp (rum/deref *tippy-ref)]
@@ -2528,7 +2528,7 @@
                 :block? true
                 :editor-box (state/get-component :editor/box)}
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
-        edit? (state/sub [:editor/editing? edit-input-id])
+        edit? (state/sub-editing? edit-input-id)
         block (block/parse-title-and-body block)]
     (when (:block/content block)
       [:div.single-block.ls-block
@@ -2986,7 +2986,7 @@
                       config)
                     (assoc :blocks-container-id @*blocks-container-id))
         edit-input-id (str "edit-block-" @*blocks-container-id "-" (:block/uuid block))
-        edit? (state/sub [:editor/editing? edit-input-id])
+        edit? (state/sub-editing? edit-input-id)
         opts {:edit? edit?
               :edit-input-id edit-input-id}]
     (if unloaded?

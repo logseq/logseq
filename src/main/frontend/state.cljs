@@ -117,7 +117,7 @@
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              nil
-      :editor/editing?                       nil
+      :editor/editing                        (atom nil)
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
@@ -570,6 +570,13 @@ Similar to re-frame subscriptions"
       ks-coll? (util/react (rum/cursor-in state ks))
       :else    (util/react (rum/cursor state ks)))))
 
+(defn sub-editing?
+  [editor-id]
+  (when editor-id
+    (rum/react
+     (rum/derived-atom [(:editor/editing @state)] [:ui/editing editor-id]
+                       (fn [id] (= editor-id id))))))
+
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
@@ -913,7 +920,7 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-input-id
   []
-  (ffirst (:editor/editing? @state)))
+  @(:editor/editing @state))
 
 (defn get-input
   []
@@ -1002,9 +1009,7 @@ Similar to re-frame subscriptions"
 
 (defn set-edit-input-id!
   [input-id]
-  (swap! state update :editor/editing?
-         (fn [_m]
-           (and input-id {input-id true}))))
+  (set-state! :editor/editing input-id))
 
 (defn get-edit-pos
   []
@@ -1215,16 +1220,16 @@ Similar to re-frame subscriptions"
 
 (defn clear-edit!
   []
-  (swap! state merge {:editor/editing? nil
-                      :cursor-range    nil
+  (set-state! :editor/editing nil)
+  (swap! state merge {:cursor-range    nil
                       :editor/last-saved-cursor nil})
   (set-state! :editor/content {})
   (set-state! :editor/block nil))
 
 (defn into-code-editor-mode!
   []
-  (swap! state merge {:editor/editing?   nil
-                      :cursor-range      nil
+  (set-state! :editor/editing nil)
+  (swap! state merge {:cursor-range      nil
                       :editor/code-mode? true}))
 
 (defn set-editor-last-pos!
@@ -1892,8 +1897,9 @@ Similar to re-frame subscriptions"
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
-   (util/profile "set-editing!"
-                 (if (> (count content)
+   (util/profile
+    "set-editing!"
+    (if (> (count content)
            (block-content-max-length (get-current-repo)))
       (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
         (when (first elements)
@@ -1910,11 +1916,11 @@ Similar to re-frame subscriptions"
                              :block.temp/container (gobj/get container "id"))
                       block)
               content (string/trim (or content ""))]
+          (set-state! :editor/editing edit-input-id)
           (swap! state
                  (fn [state]
                    (-> state
                        (assoc
-                        :editor/editing? {edit-input-id true}
                         :editor/set-timestamp-block nil
                         :cursor-range cursor-range))))
           (set-state! :editor/block block)
