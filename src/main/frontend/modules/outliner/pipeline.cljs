@@ -1,9 +1,6 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.modules.outliner.file :as file]
             [logseq.outliner.datascript-report :as ds-report]
@@ -20,73 +17,10 @@
          (not (get-in tx-report [:tx-meta :created-from-journal-template?])))
     (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
-;; TODO: it'll be great if we can calculate the :block/path-refs before any
-;; outliner transaction, this way we can group together the real outliner tx
-;; and the new path-refs changes, which makes both undo/redo and
-;; react-query/refresh! easier.
-
-;; TODO: also need to consider whiteboard transactions
-
-;; Steps:
-;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
-;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
-  [{:keys [tx-meta db-before]} blocks]
-  (let [repo (state/get-current-repo)
-        blocks (remove :block/name blocks)]
-    (when (:outliner-op tx-meta)
-      (when (react/path-refs-need-recalculated? tx-meta)
-        (let [*computed-ids (atom #{})]
-          (mapcat (fn [block]
-                    (when (and (not (@*computed-ids (:block/uuid block))) ; not computed yet
-                               (not (:block/name block)))
-                      (let [parents (db-model/get-block-parents repo (:block/uuid block))
-                            parents-refs (->> (mapcat :block/path-refs parents)
-                                              (map :db/id))
-                            old-refs (if db-before
-                                       (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
-                                       #{})
-                            new-refs (set (util/concat-without-nil
-                                           [(:db/id (:block/page block))]
-                                           (map :db/id (:block/refs block))
-                                           parents-refs))
-                            refs-changed? (not= old-refs new-refs)
-                            children (db-model/get-block-children-ids repo (:block/uuid block))
-                            ;; Builds map of children ids to their parent id and :block/refs ids
-                            children-maps (into {}
-                                                (map (fn [id]
-                                                       (let [entity (db/entity [:block/uuid id])]
-                                                         [(:db/id entity)
-                                                          {:parent-id (get-in entity [:block/parent :db/id])
-                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))
-                                                     children))
-                            children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
-                                                 {:db/id id
-                                                  ;; Recalculate :block/path-refs as db contains stale data for this attribute
-                                                  :block/path-refs
-                                                  (set/union
-                                                   ;; Refs from top-level parent
-                                                   new-refs
-                                                   ;; Refs from current block
-                                                   block-ref-ids
-                                                   ;; Refs from parents in between top-level
-                                                   ;; parent and current block
-                                                   (loop [parent-refs #{}
-                                                          parent-id (:parent-id child-map)]
-                                                     (if-let [parent (children-maps parent-id)]
-                                                       (recur (into parent-refs (:block-ref-ids parent))
-                                                              (:parent-id parent))
-                                                       ;; exits when top-level parent is reached
-                                                       parent-refs)))})
-                                               children-maps)]
-                        (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
-                        (util/concat-without-nil
-                         [(when (and (seq new-refs)
-                                     refs-changed?)
-                            {:db/id (:db/id block)
-                             :block/path-refs new-refs})]
-                         children-refs))))
-                  blocks))))))
+  [{:keys [tx-meta] :as tx-report} blocks]
+  (when (and (:outliner-op tx-meta) (react/path-refs-need-recalculated? tx-meta))
+    (outliner-pipeline/computer-block-path-refs tx-report blocks)))
 
 (defn invoke-hooks
   [tx-report]

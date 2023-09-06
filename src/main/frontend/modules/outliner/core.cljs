@@ -18,10 +18,10 @@
             [frontend.format.block :as block]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
-            [frontend.db.rtc.op :as rtc-op]
             [frontend.format.mldoc :as mldoc]
             [dommy.core :as dom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -858,7 +858,7 @@
                           (db/get-block-parents
                            (state/get-current-repo)
                            (tree/-get-id end-node)
-                           1000)
+                           {:depth 1000})
                           (map :block/uuid)
                           (set))
         self-block? (contains? end-node-parents (tree/-get-id start-node))]
@@ -878,7 +878,7 @@
                                               (db/get-block-parents
                                                (state/get-current-repo)
                                                (tree/-get-id start-node)
-                                               1000)
+                                               {:depth 1000})
                                               (map :block/uuid)
                                               (set))
                                      result (first (set/intersection (set end-node-left-nodes) parents))]
@@ -917,7 +917,7 @@
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
-      (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block))
+      (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block) {})
                          (map :db/id)
                          (set))
             move-parents-to-child? (some parents (map :db/id blocks))]
@@ -933,7 +933,8 @@
                     move-blocks-next-tx [(build-move-blocks-next-tx target-block blocks {:sibling? sibling?
                                                                                          :non-consecutive-blocks? non-consecutive-blocks?})]
                     children-page-tx (when not-same-page?
-                                       (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
+                                       (let [children-ids (mapcat #(outliner-pipeline/get-block-children-ids (db/get-db (state/get-current-repo)) (:block/uuid %))
+                                                                  blocks)]
                                          (map (fn [id] {:block/uuid id
                                                         :block/page target-page}) children-ids)))
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)

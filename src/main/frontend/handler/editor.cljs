@@ -1600,7 +1600,7 @@
   (let [current-block (state/get-edit-block)
         block-parents (set (->> (db/get-block-parents (state/get-current-repo)
                                                       block-id
-                                                      99)
+                                                      {:depth 99})
                                 (map (comp str :block/uuid))))
         current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
     (p/let [result (search/block-search (state/get-current-repo) q {:limit 20})]
