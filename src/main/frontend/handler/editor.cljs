@@ -197,7 +197,7 @@
 (defn open-block-in-sidebar!
   [block-id]
   (when block-id
-    (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
