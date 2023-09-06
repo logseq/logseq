@@ -2190,9 +2190,7 @@
           (outliner-tx/transact!
            {:outliner-op :move-blocks
             :real-outliner-op :indent-outdent}
-           (outliner-core/move-blocks! [(:data node)] target true))
-          (js/setTimeout #(edit-block! (:data node) (state/get-edit-pos)
-                                       (:block/uuid (:data node))) 20))))))
+            (outliner-core/move-blocks! [(:data node)] target true)))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2777,8 +2775,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?))
-      (js/setTimeout #(edit-block! block (state/get-edit-pos) (:block/uuid block)) 20))
+       (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler

@@ -373,7 +373,7 @@
   [repo block content id text-range {:keys [direction retry-times]
                                      :or {retry-times 0}
                                      :as opts}]
-  (when (<= retry-times 6)
+  (when (<= retry-times 10)
     (let [block-id (:block/uuid block)
           edit-input-id (if (uuid? id)
                           (get-edit-input-id-with-block-id id direction retry-times nil)
