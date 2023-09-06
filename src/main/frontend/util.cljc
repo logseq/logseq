@@ -1538,3 +1538,13 @@ Arg *stop: atom, reset to true to stop the loop"
      (if (satisfies? IMeta o)
        (with-meta o meta)
        o)))
+
+   ;; from rum
+#?(:cljs
+   (def schedule
+     (or (and (exists? js/window)
+              (or js/window.requestAnimationFrame
+                  js/window.webkitRequestAnimationFrame
+                  js/window.mozRequestAnimationFrame
+                  js/window.msRequestAnimationFrame))
+         #(js/setTimeout % 16))))

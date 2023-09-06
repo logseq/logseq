@@ -1105,7 +1105,7 @@
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (js/setTimeout #(edit-block! {:block/uuid id} pos id) 50)))
+        (util/schedule #(edit-block! {:block/uuid id} pos id))))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1120,14 +1120,14 @@
                        (:block/uuid block-parent))]
             (do
               (route-handler/redirect-to-page! id)
-              (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 50))
+              (util/schedule #(edit-block! {:block/uuid block-id} :max block-id)))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
                                   :db/id)]
 
               (when-let [page-name (:block/name (db/entity page-id))]
                 (route-handler/redirect-to-page! page-name)
-                (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 50)))))))
+                (util/schedule #(edit-block! {:block/uuid block-id} :max block-id))))))))
     (js/window.history.back)))
 
 (defn cut-block!
@@ -1684,12 +1684,17 @@
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]
-          (let [blocks [block]]
-            (move-nodes blocks))
-          (when-let [input-id (state/get-edit-input-id)]
-            (when-let [input (gdom/getElement input-id)]
-              (.focus input)
-              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
+          (let [blocks [block]
+                pos (state/get-edit-pos)]
+            (move-nodes blocks)
+            (when-let [input-id (state/get-edit-input-id)]
+              (when-let [input (gdom/getElement input-id)]
+                (.focus input)
+                (util/scroll-editor-cursor input))
+              (util/schedule (fn []
+                               (when-not (gdom/getElement input-id)
+                                 ;; could be crossing containers
+                                 (edit-block! block pos (:block/uuid block))))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -1937,13 +1942,12 @@
 
 (defn- edit-last-block-after-inserted!
   [result]
-  (js/setTimeout
+  (util/schedule
    (fn []
      (when-let [last-block (last (:blocks result))]
        (clear-when-saved!)
        (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-         (edit-block! last-block' :max (:block/uuid last-block')))))
-   0))
+         (edit-block! last-block' :max (:block/uuid last-block')))))))
 
 (defn- nested-blocks
   [blocks]
@@ -2184,13 +2188,17 @@
       (let [parent-node (tree/-get-parent node)
             target (if (parent-is-page? node)
                      original-block
-                     (:data parent-node))]
+                     (:data parent-node))
+            pos (state/get-edit-pos)
+            block (:data node)]
         (save-current-block!)
         (when target
           (outliner-tx/transact!
            {:outliner-op :move-blocks
             :real-outliner-op :indent-outdent}
-            (outliner-core/move-blocks! [(:data node)] target true)))))))
+           (outliner-core/move-blocks! [block] target true))
+          (when original-block
+            (util/schedule #(edit-block! block pos (:block/uuid block)))))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2768,14 +2776,22 @@
   [indent?]
   (save-current-block!)
   (state/set-editor-op! :indent-outdent)
-  (let [pos (some-> (state/get-input) cursor/pos)
+  (let [editor (state/get-input)
+        crossing-container? (when editor
+                              (or (and (not indent?) (outliner-core/get-current-editing-original-block))
+                                  (and indent?
+                                       (when-let [sibling (db-model/get-prev-sibling (db/get-db) (:db/id (state/get-edit-block)))]
+                                         (some? (:block/link sibling))))))
+        pos (some-> editor cursor/pos)
         {:keys [block]} (get-state)]
     (when block
       (state/set-editor-last-pos! pos)
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?))
+      (when crossing-container?
+        (util/schedule #(edit-block! block (state/get-edit-pos) (:block/uuid block)))))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
