@@ -98,6 +98,7 @@
                                                  false)
       ;; remember scroll positions of visited paths
       :ui/paths-scroll-positions             (atom {})
+      :ui/main-container-scroll-top          (atom nil)
       :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                                false
                                                true)
@@ -120,11 +121,11 @@
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
-      :editor/block-dom-id                   nil
+      :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
       :editor/document-mode?                 document-mode?
-      :editor/args                           nil
+      :editor/args                           (atom nil)
       :editor/on-paste?                      (atom false)
       :editor/last-key-code                  (atom nil)
       :editor/block-op-type                  nil             ;; :cut, :copy
@@ -1301,7 +1302,7 @@ Similar to re-frame subscriptions"
 
 (defn get-editing-block-dom-id
   []
-  (:editor/block-dom-id @state))
+  @(:editor/block-dom-id @state))
 
 (defn set-root-component!
   [component]
@@ -1353,7 +1354,8 @@ Similar to re-frame subscriptions"
 
 (defn save-main-container-position!
   [value]
-  (set-state! :ui/main-container-scroll-top value))
+  (when (not= value @(:ui/main-container-scroll-top @state))
+    (set-state! :ui/main-container-scroll-top value)))
 
 (defn get-saved-scroll-position
   ([]
@@ -1860,7 +1862,7 @@ Similar to re-frame subscriptions"
 
 (defn get-editor-args
   []
-  (:editor/args @state))
+  @(:editor/args @state))
 
 (defn set-page-blocks-cp!
   [value]
@@ -1907,13 +1909,15 @@ Similar to re-frame subscriptions"
                             :block.temp/container (gobj/get container "id"))
                      block)
              content (string/trim (or content ""))]
-         (swap! state
-                (fn [state]
-                  (-> state
-                      (assoc
-                       :editor/editing? {edit-input-id true}
-                       :editor/set-timestamp-block nil
-                       :cursor-range cursor-range))))
+         (util/profile
+          "swap! state"
+          (swap! state
+                 (fn [state]
+                   (-> state
+                       (assoc
+                        :editor/editing? {edit-input-id true}
+                        :editor/set-timestamp-block nil
+                        :cursor-range cursor-range)))))
          (set-state! :editor/block block)
          (set-state! :editor/content content :path-in-sub-atom edit-input-id)
          (set-state! :editor/last-key-code nil)
