@@ -3365,8 +3365,7 @@
                    (= 200 (:status r2*))
                    (= "OK" (:body r2*)))]
       (if ok?
-        (do (println :connectivity-testing-succ)
-            (notification/clear! :sync-connection-failed))
+        (notification/clear! :sync-connection-failed)
         (notification/show! [:div
                              (t :file-sync/connectivity-testing-failed)
                              [:a {:href api-url} api-url]
