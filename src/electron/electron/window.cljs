@@ -35,7 +35,6 @@
                       :titleBarStyle        "hiddenInset"
                       :trafficLightPosition {:x 16 :y 16}
                       :autoHideMenuBar      (not mac?)
-                      :show                 false
                       :webPreferences
                       {:plugins                 true        ; pdf
                        :nodeIntegration         false
@@ -56,6 +55,7 @@
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
          win       (BrowserWindow. (clj->js win-opts))]
+     (.manage win-state win)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
