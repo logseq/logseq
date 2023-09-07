@@ -3397,12 +3397,9 @@
 (defn <sync-start
   []
   (go
-    (when (and (not @*sync-starting)
-               (<! (<should-start-sync?)))
+    (when-not @*sync-starting
       (reset! *sync-starting true)
-      (if-not (and (state/enable-sync?)
-                   (or (nil? (state/get-file-sync-state))
-                       (= ::stop (:state (state/get-file-sync-state))))
+      (if-not (and (<! (<should-start-sync?))
                    (<! (<connectivity-testing)))
         (reset! *sync-starting false)
         (try
