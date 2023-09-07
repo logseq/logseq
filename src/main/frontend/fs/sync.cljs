@@ -3357,8 +3357,8 @@
   []
   (go
     (let [api-url (str "https://" config/API-DOMAIN "/logseq/version")
-          r1 (http/get api-url)
-          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL)
+          r1 (http/get api-url {:with-credentials? false})
+          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL {:with-credentials? false})
           r1* (<! r1)
           r2* (<! r2)
           ok? (and (= 200 (:status r1*))
@@ -3367,8 +3367,13 @@
       (if ok?
         (do (println :connectivity-testing-succ)
             (notification/clear! :sync-connection-failed))
-        (notification/show! (str (t :file-sync/connectivity-testing-failed)
-                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url]))
+        (notification/show! [:div
+                             (t :file-sync/connectivity-testing-failed)
+                             [:a {:href api-url} api-url]
+                             " and "
+                             [:a
+                              {:href config/CONNECTIVITY-TESTING-S3-URL}
+                              config/CONNECTIVITY-TESTING-S3-URL]]
                             :warning
                             false
                             :sync-connection-failed))
