@@ -36,7 +36,9 @@
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
    * :limit - Limit number of items to search. Default is 100
-   * :extract-fn - Fn applied to each item when extracting a value from it. Default is :value
+   * :on-chosen - Optional fn to perform an action with chosen item
+   * :extract-fn - Fn applied to each item during search. Default is :value
+   * :extract-chosen-fn - Fn applied to each item when choosing an item. Default is identity
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
    * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
    TODO: Describe more options"
@@ -55,7 +57,7 @@
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
-                 extract-fn host-opts on-input input-opts
+                 extract-fn extract-chosen-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply _selected-choices
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
@@ -65,6 +67,7 @@
                empty-placeholder (fn [_t] [:div])
                close-modal? true
                extract-fn :value
+               extract-chosen-fn identity
                exact-match-exclude-items #{}
                initial-open? true}}]
   (let [input (::input state)
@@ -110,17 +113,17 @@
                              {:item-render       (or item-cp (fn [result chosen?]
                                                                (render-item result chosen? multiple-choices? *selected-choices)))
                               :class             "cp__select-results"
-                              :on-chosen         (fn [matched]
+                              :on-chosen         (fn [raw-chosen]
                                                    (reset! input "")
-                                                   (let [x (extract-fn matched)]
+                                                   (let [chosen (extract-chosen-fn raw-chosen)]
                                                      (if multiple-choices?
-                                                       (if (@*selected-choices x)
-                                                         (swap! *selected-choices disj x)
-                                                         (swap! *selected-choices conj x))
+                                                       (if (@*selected-choices chosen)
+                                                         (swap! *selected-choices disj chosen)
+                                                         (swap! *selected-choices conj chosen))
                                                        (do
                                                          (when close-modal? (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen (if multiple-choices? @*selected-choices matched)))))))
+                                                           (on-chosen (if multiple-choices? @*selected-choices chosen)))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when multiple-choices?

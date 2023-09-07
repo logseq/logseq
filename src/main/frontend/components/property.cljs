@@ -55,6 +55,8 @@
                   :dropdown? true
                   :multiple-choices? true
                   :selected-choices schema-classes
+                  :extract-fn :label
+                  :extract-chosen-fn :value
                   :on-apply (fn [choices]
                               (swap! *property-schema assoc :classes choices)
                               (reset! *open? false))
