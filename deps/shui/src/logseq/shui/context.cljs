@@ -16,8 +16,8 @@
    ;; Wrap the old inline function to allow for interception, but fallback to the old inline function
    :inline-block (inline->inline-block inline block-config)
    :map-inline-block (inline->map-inline-block inline block-config)
-   ;; Currently frontend component are provided an object map containin at least the following keys:
-   ;; These will be passed through in a whitelisted fashion so as to be able to track the dependencies
+   ;; Currently frontend component are provided an object map containing at least the following keys:
+   ;; These will be passed through in a whitelisted fashion so as to be able to track the dependencies  
    ;; back to the core application
    ;; TODO: document the following
    :block (:block block-config)  ;; the db entity of the current block

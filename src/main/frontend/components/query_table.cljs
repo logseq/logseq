@@ -139,7 +139,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [row column {:keys [page? ->elem map-inline config comma-separated-property?]}]
+  [row column {:keys [page? ->elem map-inline comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
@@ -150,13 +150,14 @@
 
     :block       ; block title
     (let [content (:block/content row)
+          uuid (:block/uuid row)
           {:block/keys [title]} (block/parse-title-and-body
                                  (:block/uuid row)
                                  (:block/format row)
                                  (:block/pre-block? row)
                                  content)]
       (if (seq title)
-        [:element (->elem :div (map-inline config title))]
+        [:element (->elem :div (map-inline {:block/uuid uuid} title))]
         [:string content]))
 
     :created-at

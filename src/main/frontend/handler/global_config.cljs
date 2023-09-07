@@ -8,6 +8,7 @@
             [shadow.resource :as rc]
             [clojure.edn :as edn]
             [electron.ipc :as ipc]
+            [borkdude.rewrite-edn :as rewrite]
             [logseq.common.path :as path]))
 
 ;; Use defonce to avoid broken state on dev reload
@@ -38,7 +39,7 @@
 (defn set-global-config-state!
   [content]
   (let [config (edn/read-string content)]
-    (state/set-global-config! config)
+    (state/set-global-config! config content)
     config))
 
 (def default-content (rc/inline "templates/global-config.edn"))
@@ -58,6 +59,22 @@
   (let [config-path (global-config-path)]
     (p/let [config-content (fs/read-file nil config-path)]
            (set-global-config-state! config-content))))
+
+(defn set-global-config-kv!
+  [k v]
+  (let [result (rewrite/parse-string
+                 (or (state/get-global-config-str-content) "{}"))
+        ks (if (sequential? k) k [k])
+        v (cond->> v
+                   (map? v)
+                   (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
+        new-result (if (and (= 1 (count ks))
+                            (nil? v))
+                     (rewrite/dissoc result (first ks))
+                     (rewrite/assoc-in result ks v))
+        new-str-content (str new-result)]
+    (fs/write-file! nil nil (global-config-path) new-str-content {:skip-compare? true})
+    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
 
 (defn start
   "This component has four responsibilities on start:
