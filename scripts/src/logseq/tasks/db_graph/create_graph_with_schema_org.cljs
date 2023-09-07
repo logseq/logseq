@@ -5,6 +5,8 @@
    * All schema.org classes with their name, url, parent class (namespace) and properties
      * Some classes are renamed due to naming conflicts
    * All properties with their property type, url, description
+     * Property type is determined by looking for the first range value that is
+       a subclass of https://schema.org/DataType and then falling back to :object.
      * Some properties are skipped because they are superseded/deprecated or because they have a property
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :object properties are given a :cardinality :many"
@@ -72,16 +74,25 @@
   "Schema datatypes, https://schema.org/DataType, that don't have Logseq equivalents"
   #{"schema:Time" "schema:DateTime"})
 
-(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose]}]
+(defn- get-range-includes [property-m]
   (let [range-includes (as-> (property-m "schema:rangeIncludes") range-includes*
                          (map (fn [m] (m "@id"))
-                              (if (map? range-includes*) [range-includes*] range-includes*)))
+                              (if (map? range-includes*) [range-includes*] range-includes*)))]
+        ;; Prioritize (sort first) DataType subclasses because they are easier to enter in the app
+    (sort-by #(if (schema->logseq-data-types %) -1 1) range-includes)))
+
+(defn- get-schema-type [range-includes class-map]
+  (some #(or (schema->logseq-data-types %)
+             (when (class-map %) :object))
+        range-includes))
+
+(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose]}]
+  (let [range-includes (get-range-includes property-m)
+        schema-type (get-schema-type range-includes class-map)
         ;; Pick first range to determine type as only one range is supported currently
-        schema-type (some #(or (schema->logseq-data-types %)
-                               (when (class-map %) :object))
-                          range-includes)
         _ (when (and verbose (> (count range-includes) 1))
-            (println "Picked first property type for" (pr-str (property-m "@id"))))
+            (println "Picked property type:"
+                     {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
@@ -90,8 +101,14 @@
                  (property-m "rdfs:comment")
                  (assoc :description (property-m "rdfs:comment"))
                  (= schema-type :object)
-                 (assoc :class (or (some class-uuids range-includes)
-                                   (throw (ex-info (str "No uuids found for range(s): " range-includes) {})))))]
+                 (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
+                                       _ (when (seq invalid-classes)
+                                           (throw (ex-info (str "No uuids found for range(s): " invalid-classes) {})))
+                                       datatype-classes (set/intersection (set range-includes) (set (keys schema->logseq-data-types)))
+                                       _ (when (seq datatype-classes)
+                                           (throw (ex-info (str "property " (pr-str (property-m "@id"))
+                                                                " has DataType class values which aren't supported: " datatype-classes) {})))]
+                                   (set (map class-uuids range-includes)))))]
     {(keyword (string/replace-first (property-m "@id") "schema:" ""))
      {:block/uuid prop-uuid
       :block/schema schema
@@ -183,6 +200,13 @@
 
 (defn- generate-properties
   [select-properties property-uuids class-map class-uuids options]
+  (when (:verbose options)
+    (println "Properties by type:"
+             (->> select-properties
+                  (mapv (fn [property-m]
+                          (get-schema-type (get-range-includes property-m) class-map)))
+                  frequencies)
+             "\n"))
   (apply merge
          (mapv #(->property-page % (property-uuids (% "@id")) class-map class-uuids options)
                select-properties)))
