@@ -109,7 +109,11 @@
                              (when (nil? id)
                                (page-handler/create! page {:redirect? false
                                                            :create-first-block? false
-                                                           :tags classes
+                                                           ;; TODO: Allow users to choose a preferred class
+                                                           ;; when a property supports multiple classes
+                                                           ;; Only 1 class because properties normally have one of these classes,
+                                                           ;; not all these classes
+                                                           :tags (take 1 classes)
                                                            :class? class?}))
                              (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                (add-property! block (:block/original-name property) id'))
