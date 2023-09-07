@@ -15,7 +15,7 @@
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]))
 
-(def *url (atom nil))
+(def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
 ;; they are from the same intent share.
@@ -28,6 +28,15 @@
   (when (mobile-util/native-ios?)
     ;; Caution: This must be called before any file accessing
     (capacitor-fs/ios-ensure-documents!)))
+
+
+(defn mobile-postinit
+  "postinit logic of mobile platforms: handle deeplink and intent"
+  []
+  (when (mobile-util/native-ios?)
+    (when @*init-url
+      (deeplink/deeplink @*init-url)
+      (reset! *init-url nil))))
 
 (defn- ios-init
   "Initialize iOS-specified event listeners"
@@ -44,19 +53,11 @@
   (when (not (config/demo-graph?))
     (state/pub-event! [:validate-appId]))
 
-  (.addEventListener js/window
-                     "load"
-                     (fn [_event]
-                       (when @*url
-                         (js/setTimeout #(deeplink/deeplink @*url)
-                                        1000))))
-
   (mobile-util/check-ios-zoomed-display)
 
   ;; keep this the same logic as src/main/electron/listener.cljs
   (.addListener mobile-util/file-sync "debug"
                 (fn [event]
-                  (js/console.log "🔄" event)
                   (let [event (js->clj event :keywordize-keys true)
                         payload (:data event)]
                     (when (or (= (:event event) "download:progress")
@@ -115,7 +116,7 @@
                 (fn [^js data]
                   (when-let [url (.-url data)]
                     (if-not (= (.-readyState js/document) "complete")
-                      (reset! *url url)
+                      (reset! *init-url url)
                       (when-not (and (= @*last-shared-url url)
                                      (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
                         (reset! *last-shared-url url)

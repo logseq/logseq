@@ -73,7 +73,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   allKeys(): Promise<Array<string>> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'list-plugin-storage-files',
-      args: [this.ctxId, this.opts?.assets]
+      args: [this.ctxId, this.opts?.assets],
     })
   }
 

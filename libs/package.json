@@ -18,6 +18,7 @@
   "dependencies": {
     "csstype": "3.1.0",
     "debug": "4.3.4",
+    "deepmerge": "4.3.1",
     "dompurify": "2.3.8",
     "eventemitter3": "4.0.7",
     "fast-deep-equal": "3.1.3",

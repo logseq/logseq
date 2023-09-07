@@ -1,23 +1,35 @@
 .cp__settings {
-  &-main {
-    aside {
+  &-inner {
+    @apply flex flex-col md:flex-row;
+
+    > aside {
       @apply bg-gray-400/5 p-4;
-    }
 
-    article {
-      @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
-      @apply md:max-h-[70vh] md:w-[40rem];
-      /* margin-right: -17px; */
-      /* margin-bottom: -17px; */
+      > ul > li {
+        > a {
+          @apply mb-2;
 
-      @screen md {
-        /* max-height: 70vh; */
-        /* width: 680px; */
+          > strong {
+            font-size: 14px;
+            font-weight: normal;
+            padding-left: 5px;
+            opacity: .9;
+          }
+        }
+
+        &.active {
+          background-color: var(--ls-quaternary-background-color);
+        }
       }
     }
 
-    aside > .cp__settings-header,
-    article > .cp__settings-header {
+    > article {
+      @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
+      @apply md:max-h-[70vh] md:w-[40rem];
+    }
+
+    > aside > .cp__settings-header,
+    > article > .cp__settings-header {
       @apply h-10 py-2 flex flex-row items-center justify-start gap-2;
     }
 
@@ -41,13 +53,13 @@
       @apply text-xl lowercase;
     }
 
-    h1.cp__settings-modal-title:first-letter, 
+    h1.cp__settings-modal-title:first-letter,
     h1.cp__settings-category-title:first-letter {
       @apply uppercase;
     }
 
     .settings-menu {
-      @apply p-0 m-0 mt-4 pr-3; 
+      @apply p-0 m-0 mt-4;
     }
 
     .settings-menu-item {
@@ -56,46 +68,10 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none; 
+      @apply px-2 py-1.5 select-none;
       color: var(--ls-primary-text-color);
     }
-  }
 
-  &-inner {
-    @apply flex flex-col md:flex-row;
-
-    > aside {
-
-      ul {
-
-        > li {
-
-          > a {
-
-            > i {
-              overflow: hidden;
-              opacity: .9;
-            }
-
-            > strong {
-              font-size: 14px;
-              font-weight: normal;
-              padding-left: 5px;
-              margin-top: 2px;
-              opacity: .9;
-            }
-          }
-
-          &.active {
-            background-color: var(--ls-quaternary-background-color);
-
-            i {
-              opacity: 1;
-            }
-          }
-        }
-      }
-    }
 
     &.no-aside {
       > article {
@@ -392,7 +368,7 @@
         z-index: 1;
         width: 100px;
         max-height: 180px;
-        border:1px solid var(--ls-border-color);
+        border: 1px solid var(--ls-border-color);
         border-radius: 4px;
         overflow: auto;
         overflow: overlay;
@@ -464,4 +440,16 @@ svg.git {
 
 svg.cmd {
   margin-left: -1px;
+}
+
+body[data-settings-tab=keymap] {
+  .cp__settings-inner {
+    > article {
+      @apply md:w-[70vw] xl:max-w-[850px] p-0;
+
+      > header {
+        @apply p-4 pb-2 h-auto;
+      }
+    }
+  }
 }

@@ -8,7 +8,7 @@ Appuyez sur `Entrée` pour créer un nouveau bloc.
 Appuyez sur `Maj+Entrée` pour créer une nouvelle ligne.
 Tapez `/` pour afficher toutes les commandes.
 #+END_TIP
-- 1. Créeons une page appelée [[Comment prendre des notes factices ?]]. Vous pouvez cliquer pour aller sur cette page, ou vous pouvez faire `Maj+clic` pour l'ouvrir dans la barre latérale droite. Maintenant, vous devriez voir les _Références liées_  et les _Références non-liées_.
+- 1. Créons une page appelée [[Comment prendre des notes factices ?]]. Vous pouvez cliquer pour aller sur cette page, ou vous pouvez faire `Maj+clic` pour l'ouvrir dans la barre latérale droite. Maintenant, vous devriez voir les _Références liées_  et les _Références non-liées_.
 - 2. Maintenant, référençons quelques blocs sur [[Comment prendre des notes factices ?]], vous pouvez faire `Maj+clic` sur la référence de n'importe quel bloc pour l'ouvrir dans la barre latérale droite. Essayez de faire quelques changements depuis la barre latérale droite, les blocs référencés devraient changer également !
     - ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : Il s'agit d'une référence de bloc.
     - ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : Voici une autre référence de bloc.

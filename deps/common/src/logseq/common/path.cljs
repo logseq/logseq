@@ -294,7 +294,7 @@
 ;; compat
 (defn basename
   [path]
-  (let [path (string/replace path #"/$" "")]
+  (let [path (string/replace path #"/+$" "")]
     (filename path)))
 
 (defn dirname

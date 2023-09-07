@@ -24,7 +24,7 @@
     ```
 - Working directory: Logseq root directory
 - Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync ios` in another termimal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
+- Run `npx cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
 - Connect your iOS device to MacBook.
 - Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
 
@@ -70,13 +70,13 @@ or, you can run `bb release:ios-app` to do those steps with one command.
         } 
     ```
 - Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync android` in another termimal.
+- Run `npx cap sync android` in another terminal.
 - Run `npx cap run android` to install app into your device.
 
 or, you can run `bb dev:android-app` to do those steps with one command if you are on macOS.
 
 Then,
-- In Android Studio, open **Tools** -> **AVD Manager** to create Android Virtual Device (AVD), and lanuch it in the emulator.
+- In Android Studio, open **Tools** -> **AVD Manager** to create Android Virtual Device (AVD), and launch it in the emulator.
 - In Android Studio, open **Run** -> **Run** to run Logseq.
 - After logseq startup in Android virtual device, repl should be able to connect
 - For browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect

@@ -47,3 +47,14 @@
     (if (util/electron?)
       (ipc/ipc "deleteGraph" graph key db-based?)
      (idb/remove-item! key))))
+
+(defn rename-graph!
+  [old-repo new-repo]
+  (let [old-key (db-conn/datascript-db old-repo)
+        new-key (db-conn/datascript-db new-repo)]
+    (if (util/electron?)
+      (do
+        (js/console.error "rename-graph! is not supported in electron")
+        (idb/rename-item! old-key new-key))
+      (idb/rename-item! old-key new-key))))
+

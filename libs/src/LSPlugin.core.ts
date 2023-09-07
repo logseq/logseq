@@ -91,7 +91,7 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
       if (this._settings[k] == v) return
       this._settings[k] = v
     } else if (isObject(k)) {
-      deepMerge(this._settings, k)
+      this._settings = deepMerge(this._settings, k)
     } else {
       return
     }
@@ -395,11 +395,9 @@ class ExistedImportedPluginPackageError extends Error {
 /**
  * Host plugin for local
  */
-class PluginLocal extends EventEmitter<'loaded'
-  | 'unloaded'
-  | 'beforeunload'
-  | 'error'
-  | string> {
+class PluginLocal extends EventEmitter<
+  'loaded' | 'unloaded' | 'beforeunload' | 'error' | string
+> {
   private _sdk: Partial<PluginLocalSDKMetadata> = {}
   private _disposes: Array<() => Promise<any>> = []
   private _id: PluginLocalIdentity
@@ -534,7 +532,7 @@ class PluginLocal extends EventEmitter<'loaded'
     const localRoot = (this._localRoot = safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
 
-      // Pick legal attrs
+    // Pick legal attrs
     ;[
       'name',
       'author',
@@ -594,7 +592,9 @@ class PluginLocal extends EventEmitter<'loaded'
     // Validate id
     const { registeredPlugins, isRegistering } = this._ctx
     if (isRegistering && registeredPlugins.has(this.id)) {
-      throw new ExistedImportedPluginPackageError('Registered plugin package Error')
+      throw new ExistedImportedPluginPackageError(
+        'Registered plugin package Error'
+      )
     }
 
     return async () => {
@@ -642,10 +642,10 @@ class PluginLocal extends EventEmitter<'loaded'
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
     ${
-        IS_DEV
-          ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
-          : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-      }
+      IS_DEV
+        ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+        : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
+    }
     
   </head>
   <body>
@@ -924,7 +924,7 @@ class PluginLocal extends EventEmitter<'loaded'
           )
           this.emit('beforeunload', eventBeforeUnload)
         } catch (e) {
-          this.logger.error('[beforeunload Error]', e)
+          this.logger.error('[beforeunload]', e)
         }
 
         await this.dispose()
@@ -1103,7 +1103,8 @@ class LSPluginCore
     | 'beforereload'
     | 'reloaded'
   >
-  implements ILSPluginThemeManager {
+  implements ILSPluginThemeManager
+{
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
@@ -1117,8 +1118,10 @@ class LSPluginCore
     externals: [],
   }
   private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
-  private readonly _registeredPlugins = new Map<PluginLocalIdentity,
-    PluginLocal>()
+  private readonly _registeredPlugins = new Map<
+    PluginLocalIdentity,
+    PluginLocal
+  >()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1194,14 +1197,18 @@ class LSPluginCore
       return
     }
 
-    const perfTable = new Map<string,
-      { o: PluginLocal; s: number; e: number }>()
+    const perfTable = new Map<
+      string,
+      { o: PluginLocal; s: number; e: number }
+    >()
     const debugPerfInfo = () => {
       const data: any = Array.from(perfTable.values()).reduce((ac, it) => {
         const { id, options, status, disabled } = it.o
 
-        if (disabled !== true &&
-          (options.entry || (!options.name && !options.entry))) {
+        if (
+          disabled !== true &&
+          (options.entry || (!options.name && !options.entry))
+        ) {
           ac[id] = {
             name: options.name,
             entry: options.entry,
@@ -1234,17 +1241,19 @@ class LSPluginCore
       // valid externals
       if (externals?.size) {
         try {
-          const validatedExternals: Record<string, boolean> = await invokeHostExportedApi(
-            'validate_external_plugins', [...externals]
-          )
+          const validatedExternals: Record<string, boolean> =
+            await invokeHostExportedApi('validate_external_plugins', [
+              ...externals,
+            ])
 
-          externals = new Set([...Object.entries(validatedExternals)].reduce(
-            (a, [k, v]) => {
+          externals = new Set(
+            [...Object.entries(validatedExternals)].reduce((a, [k, v]) => {
               if (v) {
                 a.push(k)
               }
               return a
-            }, []))
+            }, [])
+          )
         } catch (e) {
           console.error('[validatedExternals Error]', e)
         }
@@ -1557,12 +1566,12 @@ class LSPluginCore
       await this.saveUserPreferences(
         theme.mode
           ? {
-            themes: {
-              ...this._userPreferences.themes,
-              mode: theme.mode,
-              [theme.mode]: theme,
-            },
-          }
+              themes: {
+                ...this._userPreferences.themes,
+                mode: theme.mode,
+                [theme.mode]: theme,
+              },
+            }
           : { theme: theme }
       )
     }

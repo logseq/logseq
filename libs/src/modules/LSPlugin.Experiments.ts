@@ -76,7 +76,8 @@ export class LSPluginExperiments {
 
     return host.logseq.api.exper_register_extensions_enhancer(
       this.ctx.baseInfo.id,
-      type, enhancer
+      type,
+      enhancer
     )
   }
 

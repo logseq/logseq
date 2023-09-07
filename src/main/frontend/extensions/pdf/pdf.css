@@ -1,5 +1,3 @@
-@import "_viewer.css";
-
 :root {
   --ph-highlight-color-blue: var(--color-blue-300);
   --ph-highlight-color-green: var(--color-green-300);
@@ -736,9 +734,12 @@ input::-webkit-inner-spin-button {
     background-color: #042f3c;
 
     .pdfViewer {
-      -webkit-filter: invert(100%);
-      filter: invert(100%);
       background: transparent;
+
+      .page {
+        -webkit-filter: invert(100%);
+        filter: invert(100%);
+      }
     }
 
     .textLayer {
@@ -1039,4 +1040,8 @@ html.is-system-window {
   to {
     opacity: 1;
   }
+}
+
+.pdfViewer .page.loadingIcon::after {
+  background: none;
 }

@@ -609,7 +609,7 @@
 
     .cp__settings-inner {
       aside {
-        @apply max-h-[70vh] overflow-auto mb-[-17px] p-3;
+        @apply max-h-[70vh] overflow-auto p-3;
 
         ul {
           @apply list-none p-0 m-0;
@@ -991,7 +991,7 @@ html[data-theme='dark'] {
 .ui__modal[label=plugins-dashboard] {
   .panel-content {
     overflow-y: auto;
-    max-height: calc(100vh - 100px);
+    max-height: calc(100vh - 50px);
   }
 }
 

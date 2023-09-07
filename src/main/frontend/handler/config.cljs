@@ -18,6 +18,9 @@
       (repo-config-handler/read-repo-config content)
       (let [result (parse-repo-config content)
             ks (if (vector? k) k [k])
+            v (cond->> v
+                       (map? v)
+                       (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
         (file-handler/set-file-content! repo path new-content) nil))))

@@ -16,6 +16,7 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [logseq.common.path :as path]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
@@ -203,7 +204,7 @@
 (defn open-block-in-sidebar!
   [block-id]
   (when block-id
-    (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
@@ -252,7 +253,9 @@
                :block/content value}]
     (profile
      "Save block: "
-     (let [original-uuid (:block/uuid (db/entity (:db/id block)))
+     (let [original-block (db/entity (:db/id block))
+           original-uuid (:block/uuid original-block)
+           original-props (:block/properties original-block)
            uuid-changed? (not= (:block/uuid block) original-uuid)
            block' (-> (wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
@@ -265,7 +268,12 @@
 
        (outliner-tx/transact!
         opts'
-        (outliner-core/save-block! block'))
+        (outliner-core/save-block! block')
+        ;; page properties changed
+        (when-let [page-name (and (:block/pre-block? block')
+                                  (not= original-props (:block/properties block'))
+                                  (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
+          (state/set-page-properties-changed! page-name)))
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
@@ -3122,7 +3130,8 @@
   "shortcut copy action:
   * when in selection mode, copy selected blocks
   * when in edit mode but no text selected, copy current block ref
-  * when in edit mode with text selected, copy selected text as normal"
+  * when in edit mode with text selected, copy selected text as normal
+  * when text is selected on a PDF, copy the highlighted text"
   [e]
   (when-not (auto-complete?)
     (cond
@@ -3135,7 +3144,13 @@
             selected-end (util/get-selection-end input)]
         (save-current-block!)
         (when (= selected-start selected-end)
-          (copy-current-block-ref "ref"))))))
+          (copy-current-block-ref "ref")))
+
+      (and (state/get-current-pdf)
+           (.closest (.. js/window getSelection -baseNode -parentElement)  ".pdfViewer"))
+      (util/copy-to-clipboard!
+       (pdf-utils/fix-selection-text-breakline (.. js/window getSelection toString))
+       nil))))
 
 (defn shortcut-copy-text
   "shortcut copy action:

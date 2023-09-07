@@ -29,31 +29,33 @@
 
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node visibilitychange? outside?]}]
-  (try
-    (let [dom-node (rum/dom-node state)]
-      (when-let [dom-node (or node dom-node)]
-        (let [click-fn (fn [e]
-                         (let [target (.. e -target)]
-                           ;; If the click target is outside of current node
-                           (when (and
-                                  (not (dom/contains dom-node target))
-                                  (not (.contains (.-classList target) "ignore-outside-event")))
-                             (on-hide state e :click))))]
-          (when-not (false? outside?)
-            (listen state js/window "mousedown" click-fn)))
-        (listen state js/window "keydown"
-                (fn [e]
-                  (case (.-keyCode e)
-                    ;; Esc
-                    27 (on-hide state e :esc)
-                    nil)))
-        (when visibilitychange?
-          (listen state js/window "visibilitychange"
+  (let [opts (last (:rum/args state))
+        outside? (cond-> opts (nil? outside?) (:outside?))]
+    (try
+      (let [dom-node (rum/dom-node state)]
+        (when-let [dom-node (or node dom-node)]
+          (let [click-fn (fn [e]
+                           (let [target (.. e -target)]
+                             ;; If the click target is outside of current node
+                             (when (and
+                                     (not (dom/contains dom-node target))
+                                     (not (.contains (.-classList target) "ignore-outside-event")))
+                               (on-hide state e :click))))]
+            (when-not (false? outside?)
+              (listen state js/window "mousedown" click-fn)))
+          (listen state js/window "keydown"
                   (fn [e]
-                    (on-hide state e :visibilitychange))))))
-    (catch :default _e
-      ;; TODO: Unable to find node on an unmounted component.
-      nil)))
+                    (case (.-keyCode e)
+                      ;; Esc
+                      27 (on-hide state e :esc)
+                      nil)))
+          (when visibilitychange?
+            (listen state js/window "visibilitychange"
+                    (fn [e]
+                      (on-hide state e :visibilitychange))))))
+      (catch :default _e
+        ;; TODO: Unable to find node on an unmounted component.
+        nil))))
 
 (defn on-enter
   [state & {:keys [on-enter node]}]

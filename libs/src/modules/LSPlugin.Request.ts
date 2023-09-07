@@ -31,23 +31,19 @@ export class LSPluginRequestTask<R = any> {
     private _requestId: RequestTaskID,
     private _requestOptions: Partial<IRequestOptions> = {}
   ) {
-
     this._promise = new Promise<any>((resolve, reject) => {
       if (!this._requestId) {
         return reject(null)
       }
 
       // task result listener
-      this._client.once(
-        genTaskCallbackType(this._requestId),
-        (e) => {
-          if (e && e instanceof Error) {
-            reject(e)
-          } else {
-            resolve(e)
-          }
+      this._client.once(genTaskCallbackType(this._requestId), (e) => {
+        if (e && e instanceof Error) {
+          reject(e)
+        } else {
+          resolve(e)
         }
-      )
+      })
     })
 
     const { success, fail, final } = this._requestOptions
@@ -65,15 +61,9 @@ export class LSPluginRequestTask<R = any> {
   }
 
   abort() {
-    if (
-      !this._requestOptions.abortable ||
-      this._aborted
-    ) return
+    if (!this._requestOptions.abortable || this._aborted) return
 
-    this._client.ctx._execCallableAPI(
-      'http_request_abort',
-      this._requestId
-    )
+    this._client.ctx._execCallableAPI('http_request_abort', this._requestId)
 
     this._aborted = true
   }
@@ -99,15 +89,12 @@ export class LSPluginRequest extends EventEmitter {
     super()
 
     // request callback listener
-    this.ctx.caller.on(
-      CLIENT_MSG_CALLBACK,
-      (e: any) => {
-        const reqId = e?.requestId
-        if (!reqId) return
+    this.ctx.caller.on(CLIENT_MSG_CALLBACK, (e: any) => {
+      const reqId = e?.requestId
+      if (!reqId) return
 
-        this.emit(genTaskCallbackType(reqId), e?.payload)
-      }
-    )
+      this.emit(genTaskCallbackType(reqId), e?.payload)
+    })
   }
 
   static createRequestTask(
@@ -115,21 +102,32 @@ export class LSPluginRequest extends EventEmitter {
     requestID: RequestTaskID,
     requestOptions: Partial<IRequestOptions>
   ) {
-    return new LSPluginRequestTask(
-      client, requestID, requestOptions
-    )
+    return new LSPluginRequestTask(client, requestID, requestOptions)
   }
 
-  async _request<R extends {},
-    T extends WithOptional<IRequestOptions<R>, keyof Omit<IRequestOptions, 'url'>>>(options: T):
-    Promise<T extends Pick<IRequestOptions, 'abortable'> ? LSPluginRequestTask<R> : R> {
+  async _request<
+    R extends {},
+    T extends WithOptional<
+      IRequestOptions<R>,
+      keyof Omit<IRequestOptions, 'url'>
+    >
+  >(
+    options: T
+  ): Promise<
+    T extends Pick<IRequestOptions, 'abortable'> ? LSPluginRequestTask<R> : R
+  > {
     const pid = this.ctx.baseInfo.id
     const { success, fail, final, ...requestOptions } = options
-    const reqID = this.ctx.Experiments.invokeExperMethod('request', pid, requestOptions)
+    const reqID = this.ctx.Experiments.invokeExperMethod(
+      'request',
+      pid,
+      requestOptions
+    )
 
     const task = LSPluginRequest.createRequestTask(
       this.ctx.Request,
-      reqID, options
+      reqID,
+      options
     )
 
     if (!requestOptions.abortable) {

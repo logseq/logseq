@@ -66,8 +66,8 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-              #(js->clj % :keywordize-keys true)
-              :files)
+               #(js->clj % :keywordize-keys true)
+               :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
                  nil))))
@@ -98,7 +98,7 @@
     result))
 
 (defn- get-files
-  "get all files recursively"
+  "get all files and contents recursively"
   [path]
   (p/let [result (p/loop [result []
                           dirs [path]]
@@ -150,17 +150,18 @@
                                           ""))]
     (path/path-join repo-dir bak-dir relative-path)))
 
-(defn- truncate-old-versioned-files!
+(defn- <truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
-  (->
-   (p/let [files (get-files dir)
-           files (js->clj files :keywordize-keys true)
-           old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
-     (mapv (fn [file]
-             (.deleteFile Filesystem (clj->js {:path (:path file)})))
-           old-versioned-files))
-   (p/catch (fn [_]))))
+  (-> (p/let [files (.readdir Filesystem (clj->js {:path dir}))
+
+              files (:files (js->clj files :keywordize-keys true))]
+        (drop 6 (reverse (sort-by :mtime files))))
+      (p/then (fn [old-version-files]
+                (p/all (mapv (fn [file]
+                               (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+                             old-version-files))))
+      (p/catch (fn [_]))))
 
 ;; TODO: move this to FS protocol
 (defn backup-file
@@ -177,7 +178,7 @@
         new-path (path/path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) "." ext))]
 
     (<write-file-with-utf8 new-path content)
-    (truncate-old-versioned-files! dir)))
+    (<truncate-old-versioned-files! dir)))
 
 (defn backup-file-handle-changed!
   [repo-dir file-path content]
@@ -197,7 +198,7 @@
         file-path (path/path-join file-root
                                   (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
     (<write-file-with-utf8 file-path content)
-    (truncate-old-versioned-files! file-root)))
+    (<truncate-old-versioned-files! file-root)))
 
 (defn- write-file-impl!
   [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
@@ -253,7 +254,7 @@
   (if (mobile-util/native-ios?)
     (cond
       (or (string/includes? path "///private/")
-          ;; virtual matchine
+          ;; virtual machine
           (string/starts-with? path "file:///Users/"))
       path
 
@@ -303,7 +304,7 @@
               (state/pub-event! [:modal/show-instruction]))
           exists? (<dir-exists? path)
           _ (when-not exists?
-             (p/rejected (str "Cannot access selected directory: " path)))
+              (p/rejected (str "Cannot access selected directory: " path)))
           _ (when (mobile-util/is-iCloud-container-path? path)
               (p/rejected (str "Please avoid accessing the top-level iCloud container path: " path)))
           path (if (mobile-util/native-ios?)

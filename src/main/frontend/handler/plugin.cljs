@@ -7,6 +7,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
@@ -175,7 +176,7 @@
 
 (defn has-setting-schema?
   [id]
-  (when-let [pl (and id (get-plugin-inst (name id)))]
+  (when-let [^js pl (and id (get-plugin-inst (name id)))]
     (boolean (.-settingsSchema pl))))
 
 (defn get-enabled-plugins-if-setting-schema
@@ -297,7 +298,7 @@
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
         binding (some->> (if (string? binding) [binding] (seq binding))
-                         (map util/normalize-user-keyname))
+                         (map shortcut-utils/undecorate-binding))
         binding (if util/mac?
                   (or (:mac keybinding) binding) binding)
         mode    (or (:mode keybinding) :global)
@@ -658,6 +659,15 @@
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
 
+(defn hook-lifecycle-fn!
+  [type f & args]
+  (when (and type (fn? f))
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :before-command-invoked type) nil))
+    (apply f args)
+    (when config/lsp-enabled?
+      (hook-plugin-app (str :after-command-invoked type) nil))))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
@@ -787,7 +797,6 @@
   (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))
-
 
 (comment
   {:pending        (count (:plugin/updates-pending @state/state))

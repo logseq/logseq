@@ -40,6 +40,14 @@
   (when (and key @store)
     (idb-keyval/set key value @store)))
 
+(defn rename-item!
+  [old-key new-key]
+  (when (and old-key new-key @store)
+    (p/let [value (idb-keyval/get old-key @store)]
+      (when value
+        (idb-keyval/set new-key value @store)
+        (idb-keyval/del old-key @store)))))
+
 (defn set-batch!
   [items]
   (when (and (seq items) @store)
