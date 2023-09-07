@@ -3513,7 +3513,7 @@
              @network-online-cursor       ; is online
              (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
                  (nil? (state/get-file-sync-state)))) ;; the whole sync state not inited yet, happens when app starts without network
-    (println "trying to restart sync...")
+    (println "trying to restart sync..." (tc/to-string (t/now)))
     (<sync-start))
   (recur))
 
