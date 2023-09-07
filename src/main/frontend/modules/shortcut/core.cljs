@@ -102,7 +102,7 @@
    (when-let [handler (-> (get @*installed-handlers install-id)
                           :handler)]
      (.dispose ^js handler)
-     (js/console.debug "[shortcuts]" "uninstall handler" (-> @*installed-handlers (get install-id) :group str) (if refresh? "*" ""))
+     (log/debug :shortcuts/uninstall-handler (-> @*installed-handlers (get install-id) :group (str (if refresh? "*" ""))))
      (swap! *installed-handlers dissoc install-id))))
 
 (defn install-shortcut-handler!
@@ -146,7 +146,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (js/console.debug "[shortcuts] install handler" (str handler-id))
+      (log/debug :shortcuts/install-handler (str handler-id))
       (swap! *installed-handlers merge data)
 
       install-id)))
@@ -181,9 +181,9 @@
        :will-remount
        (fn [old-state new-state]
          (util/profile "[shortcuts] reinstalled:"
-           (uninstall-shortcut-handler! (::install-id old-state))
-           (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-             (assoc new-state ::install-id install-id))))))))
+                       (uninstall-shortcut-handler! (::install-id old-state))
+                       (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+                         (assoc new-state ::install-id install-id))))))))
 
 (defn mixin*
   "This is an optimized version compared to (mixin).
