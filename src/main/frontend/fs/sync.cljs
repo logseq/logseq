@@ -3384,10 +3384,21 @@
   "Avoid running multiple sync instances simultaneously."
   (atom false))
 
+(defn- <should-start-sync?
+  []
+  (go
+    (and (state/enable-sync?)
+         @network-online-cursor     ;; is online
+         (user/has-refresh-token?)  ;; has refresh token, should bring up sync
+         (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
+             (nil? (state/get-file-sync-state)))  ;; the whole sync state not inited yet, happens when app starts without network
+         (<! (p->c (persist-var/-load graphs-txid))))))  ;; not a sync graph))
+
 (defn <sync-start
   []
   (go
-    (when-not @*sync-starting
+    (when (and (not @*sync-starting)
+               (<! (<should-start-sync?)))
       (reset! *sync-starting true)
       (if-not (and (state/enable-sync?)
                    (or (nil? (state/get-file-sync-state))
@@ -3508,11 +3519,7 @@
 ;; try to re-start sync when state=stopped every 1min
 (go-loop []
   (<! (timeout 60000))
-  (when (and (state/enable-sync?)
-             @network-online-cursor  ;; is online
-             (user/has-refresh-token?)  ;; has refresh token, user should be logged in
-             (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
-                 (nil? (state/get-file-sync-state)))) ;; the whole sync state not inited yet, happens when app starts without network
+  (when (<! (<should-start-sync?))
     (println "trying to restart sync..." (tc/to-string (t/now)))
     (<sync-start))
   (recur))
