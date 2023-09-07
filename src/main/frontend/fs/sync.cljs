@@ -3509,7 +3509,8 @@
 (go-loop []
   (<! (timeout 60000))
   (when (and (state/enable-sync?)
-             @network-online-cursor       ; is online
+             @network-online-cursor  ;; is online
+             (user/has-refresh-token?)  ;; has refresh token, user should be logged in
              (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
                  (nil? (state/get-file-sync-state)))) ;; the whole sync state not inited yet, happens when app starts without network
     (println "trying to restart sync..." (tc/to-string (t/now)))

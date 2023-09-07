@@ -161,6 +161,11 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
+(defn has-refresh-token?
+  "Has refresh-token"
+  []
+  (boolean (js/localStorage.getItem "refresh-token")))
+
 (defn login-callback
   [session]
   (set-tokens!
