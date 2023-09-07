@@ -12,12 +12,13 @@
             [nbb.core :as nbb]))
 
 (defn- create-init-data []
-  (let [[actor-id person-id comment-id attendee-id duration-id] (repeatedly random-uuid)]
+  (let [[actor-id person-id comment-id attendee-id duration-id] (repeatedly random-uuid)
+        person-db-id (create-graph/new-db-id)]
     {:pages-and-blocks
      [{:page
        {:block/name "person"
         :block/type "class"
-        :db/id -1
+        :db/id person-db-id
         :block/uuid person-id}}
       {:page
        {:block/name "movie"
@@ -25,30 +26,30 @@
         :block/schema {:properties [actor-id comment-id]}}}
       {:page
        {:block/original-name "Matt-Damon"
-        :block/tags [{:db/id -1}]}}
+        :block/tags [{:db/id person-db-id}]}}
       {:page
        {:block/original-name "Ben-Affleck"
-        :block/tags [{:db/id -1}]}}
+        :block/tags [{:db/id person-db-id}]}}
       {:page
        {:block/name "meeting"
         :block/type "class"
         :block/schema {:properties [attendee-id duration-id]}}}
       {:page
        {:block/original-name "Tienson"
-        :block/tags [{:db/id -1}]}}
+        :block/tags [{:db/id person-db-id}]}}
       {:page
        {:block/original-name "Zhiyuan"
-        :block/tags [{:db/id -1}]}}]
+        :block/tags [{:db/id person-db-id}]}}]
      :properties
      {:actor
       {:block/uuid actor-id
        :block/schema {:type :object
-                      :class person-id
+                      :classes #{person-id}
                       :cardinality :many}}
       :attendee
       {:block/uuid attendee-id
        :block/schema {:type :object
-                      :class person-id
+                      :classes #{person-id}
                       :cardinality :many}}
       :comment {:block/uuid comment-id}
       :duration {:block/uuid duration-id}}}))
