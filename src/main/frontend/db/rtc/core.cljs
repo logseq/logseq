@@ -14,9 +14,7 @@
             [frontend.db :as db]
             [frontend.db.rtc.ws :as ws]
             [clojure.set :as set]
-            [frontend.state :as state]
             [frontend.db.rtc.op :as op]
-            [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.handler.page :as page-handler]))
 
 ;;; TODO:
@@ -448,35 +446,6 @@
       (<! ws-opened-ch)
       (init-state ws data-from-ws-chan user-uuid))))
 
-(defonce debug-state (atom nil))
-(def debug-graph-uuid "6478874f-20a7-4335-9379-4cfb1cfa1b25")
-(defn ^:export debug-init
-  []
-  (go
-    (let [state (<! (<init))]
-      (reset! debug-state state)
-      (<! (<loop-for-rtc state debug-graph-uuid (state/get-current-repo)))
-      state)))
-
-(defn ^:export debug-stop-rtc-loop
-  []
-  (async/close! (:*stop-rtc-loop-chan @debug-state)))
-
-(defn ^:export download-graph
-  [repo graph-uuid]
-  (go
-    (let [state (<! (<init))]
-      (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
-
-;; (defn ^:export upload-graph
-;;   []
-;;   (go
-;;     (let [state (<! (<init))]
-;;       (<! (full-upload-download-graph/<upload-graph state)))))
-
-(defn ^:export debug-client-push-updates
-  []
-  (async/put! (:client-op-update-chan @debug-state) true))
 
 (comment
   (go
