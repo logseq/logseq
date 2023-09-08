@@ -16,5 +16,6 @@ nd = "nd"
 deleteable = "deleteable"
 fom = "fom"
 tne = "tne"
+Damon = "Damon"
 [files]
 extend-exclude = ["resources/*", "src/resources/*", "scripts/resources/*"]

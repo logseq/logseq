@@ -20,7 +20,7 @@
 (defn compute-block-path-refs
   [{:keys [tx-meta] :as tx-report} blocks]
   (when (and (:outliner-op tx-meta) (react/path-refs-need-recalculated? tx-meta))
-    (outliner-pipeline/computer-block-path-refs tx-report blocks)))
+    (outliner-pipeline/compute-block-path-refs tx-report blocks)))
 
 (defn invoke-hooks
   [tx-report]
