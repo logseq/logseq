@@ -2,7 +2,7 @@
   "This ns allows DB graphs to persist datascript changes to their respective
   sqlite db. Since changes are persisted, this can be used to create or update graphs.
    Known limitations:
-   * Changes to block references don't update :block/path-refs"
+   * Deleted blocks don't update effected :block/tx-id"
   (:require [datascript.core :as d]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -11,14 +11,19 @@
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- invoke-hooks
-  "Modified copy frontend.modules.outliner.pipeline/invoke-hooks that doesn't
-  handle :block/path-refs recalculation"
-  [{:keys [db-after] :as tx-report}]
-  (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-        deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-        upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids db-after)]
-    {:blocks upsert-blocks
-     :deleted-block-uuids deleted-block-uuids}))
+  "Modified copy of frontend.modules.outliner.pipeline/invoke-hooks that doesn't
+  handle :block/tx-id"
+  [conn {:keys [db-after] :as tx-report}]
+  (when (not (get-in tx-report [:tx-meta :replace?]))
+    (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+          block-path-refs-tx (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)
+          db-after' (if (seq block-path-refs-tx)
+                      (:db-after (d/transact! conn block-path-refs-tx {:replace? true}))
+                      db-after)
+          deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+          upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids db-after')]
+      {:blocks upsert-blocks
+       :deleted-block-uuids deleted-block-uuids})))
 
 (defn- update-sqlite-db
   "Modified copy of :db-transact-data defmethod in electron.handler"
@@ -34,4 +39,4 @@
   sqlite db name"
   [conn db-name]
   (d/listen! conn :persist-to-sqlite (fn persist-to-sqlite [tx-report]
-                                       (update-sqlite-db db-name (invoke-hooks tx-report)))))
+                                       (update-sqlite-db db-name (invoke-hooks conn tx-report)))))
