@@ -2,7 +2,8 @@
 
 
 (defmacro with-sub-data-from-ws
-  "- sub :data-from-ws-pub
+  "TODO: handle exceptions for ws
+  - sub :data-from-ws-pub
   - run body, use `get-req-id` to get req-id, and `get-result-ch` to get result-ch
   - unsub :data-from-ws-pub"
   [state & body]

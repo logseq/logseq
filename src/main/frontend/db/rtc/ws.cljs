@@ -55,3 +55,11 @@
   (set! (.-onmessage ws) nil)
   (set! (.-onerror ws) nil)
   (.close ws))
+
+(defn get-state
+  [ws]
+  (case (.-readyState ws)
+    0 :connecting
+    1 :open
+    2 :closing
+    3 :closed))
