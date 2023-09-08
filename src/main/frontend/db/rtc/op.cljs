@@ -52,3 +52,7 @@
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (op-store/<update-graph-uuid! repo graph-uuid))
+
+(defn <get-graph-uuid
+  [repo]
+  (op-store/<get-graph-uuid repo))

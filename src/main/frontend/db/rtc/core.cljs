@@ -8,7 +8,6 @@
             [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
                                                poll! timeout]]
             [cljs.core.async.interop :refer [p->c]]
-            [electron.ipc :as ipc]
             [malli.core :as m]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.modules.outliner.core :as outliner-core]
@@ -19,6 +18,10 @@
             [frontend.db.rtc.op :as op]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.handler.page :as page-handler]))
+
+;;; TODO:
+;;; 1. two clients, each one has a page with same name but different block-uuid.
+;;;    happens when generating journal page everyday automatically.
 
 
 
@@ -33,6 +36,7 @@
   | :client-op-update-chan | channel to notify that there're some new operations |
   | :*stop-rtc-loop-chan   | atom of chan to stop <loop-for-rtc                  |
   | :*ws                   | atom of websocket                                   |
+  | :*rtc-state            | atom of state of current rtc progress               |
 "
   [:map
    [:user-uuid :string]
@@ -42,8 +46,13 @@
    [:data-from-ws-pub :any]
    [:client-op-update-chan :any]
    [:*stop-rtc-loop-chan :any]
-   [:*ws :any]])
+   [:*ws :any]
+   [:*rtc-state :any]])
 (def state-validator (m/validator state-schema))
+
+(def rtc-state-schema
+  [:enum :open :closed])
+(def rtc-state-validator (m/validator rtc-state-schema))
 
 (def data-from-ws-schema
   [:map
@@ -342,9 +351,10 @@
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
                                    (let [left-uuid (some-> b :block/left :block/uuid str)
                                          parent-uuid (some-> b :block/parent :block/uuid str)]
-                                     ["update" {:block-uuid block-uuid
-                                                :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
-                                                :content (:block/content b)}])))))
+                                     (when (and left-uuid parent-uuid)
+                                       ["update" {:block-uuid block-uuid
+                                                  :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
+                                                  :content (:block/content b "")}]))))))
         update-page-ops* (->> update-page-uuids
                               (keep (fn [block-uuid]
                                       (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
@@ -388,7 +398,7 @@
     (let [{:keys [data-from-ws-pub client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100))
           stop-rtc-loop-chan (chan)]
-      (reset! (:*stop-rtc-loop-chan state) (chan))
+      (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
       (with-sub-data-from-ws state
         (<! (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
         (<! (get-result-ch)))
@@ -407,7 +417,9 @@
                 client-op-update
                 (do (<! (<client-op-update-handler state))
                     (recur))
-                stop (prn :stop-loop-for-rtc graph-uuid)
+                stop
+                (do (ws/stop @(:*ws state))
+                    (reset! (:*rtc-state state) :closed))
                 :else
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
@@ -415,7 +427,8 @@
 (defn init-state
   [ws data-from-ws-chan user-uuid]
   (m/parse state-schema
-           {:user-uuid user-uuid
+           {:*rtc-state (atom :open :validator rtc-state-validator)
+            :user-uuid user-uuid
             :*graph-uuid (atom nil)
             :*repo (atom nil)
             :data-from-ws-chan data-from-ws-chan
@@ -455,11 +468,11 @@
     (let [state (<! (<init))]
       (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
-(defn ^:export upload-graph
-  []
-  (go
-    (let [state (<! (<init))]
-      (<! (full-upload-download-graph/<upload-graph state)))))
+;; (defn ^:export upload-graph
+;;   []
+;;   (go
+;;     (let [state (<! (<init))]
+;;       (<! (full-upload-download-graph/<upload-graph state)))))
 
 (defn ^:export debug-client-push-updates
   []

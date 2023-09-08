@@ -12,7 +12,8 @@
             [cognitect.transit :as transit]
             [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db :as persist-db]
+            [frontend.db.rtc.op :as op]))
 
 
 (defn- export-as-blocks
@@ -30,12 +31,12 @@
 
 (defn <upload-graph
   "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
-  [state]
+  [state repo]
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
             (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj" :graph-uuid "not-yet"}))
-            (let [all-blocks (export-as-blocks (state/get-current-repo))
+            (let [all-blocks (export-as-blocks repo)
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
@@ -44,7 +45,8 @@
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
-            r))))))
+            (do (<! (p->c (op/<update-graph-uuid! repo (:graph-uuid r))))
+                r)))))))
 
 
 (defn- replace-db-id-with-temp-id
@@ -98,10 +100,10 @@
             (mapv (fn [b]
                     (cond-> (assoc b :datoms (sqlite-util/block-map->datoms-str blocks* b))
                       (:block/parent b) (assoc :page_uuid (str (:block/uuid (d/entity db (:db/id (:block/page b))))))))
-                  blocks*)
-            repo (str "logseq_db_rtc-" repo)]
+                  blocks*)]
         (<! (p->c (persist-db/<new repo)))
-        (<! (persist-db/<transact-data repo blocks** nil))))))
+        (<! (persist-db/<transact-data repo blocks** nil))
+        (<! (p->c (op/<update-local-tx! repo t)))))))
 
 
 (defn <download-graph
@@ -111,9 +113,11 @@
           (with-sub-data-from-ws state
             (<send! state {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
             (<! (get-result-ch)))
-          {:keys [status body] :as r} (<! (http/get url))]
+          {:keys [status body] :as r} (<! (http/get url))
+          repo (str "logseq_db_rtc-" repo)]
       (if (not= 200 status)
         (ex-info "<download-graph failed" r)
         (let [reader (transit/reader :json)
               all-blocks (transit/read reader body)]
-          (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo)))))))
+          (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
+          (<! (p->c (op/<update-graph-uuid! repo graph-uuid))))))))

@@ -61,3 +61,8 @@
           keys (idb-keyval/keys store)]
     (-> (p/all (mapv (fn [k] (p/chain (idb-keyval/get k store) (partial vector k))) keys))
         (p/then (fn [items] (mapv #(js->clj % :keywordize-keys true) items))))))
+
+(defn <get-graph-uuid
+  [repo]
+  (p/let [store (ensure-store repo)]
+    (idb-keyval/get "graph-uuid" store)))

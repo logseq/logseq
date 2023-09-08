@@ -21,7 +21,8 @@
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
 
 (rum/defc toggle
   []
@@ -133,8 +134,8 @@
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-       [(t :right-side-bar/block-ref)
-        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+        [(t :right-side-bar/block-ref)
+         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
@@ -163,6 +164,10 @@
     :shortcut-settings
     [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
      (shortcut-settings)]
+
+    :rtc
+    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+     (rtc-debug-ui/rtc-debug-ui)]
 
     ["" [:span]]))
 
@@ -417,7 +422,14 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "history" :history))}
-            (t :right-side-bar/history)]])]]
+            (t :right-side-bar/history)]])
+
+        (when (and config/dev? (state/sub [:ui/developer-mode?]))
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
+            "(Dev) RTC"]])
+        ]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
        (if @*anim-finished?
