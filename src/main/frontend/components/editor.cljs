@@ -462,7 +462,7 @@
                         (= modal-name "commands")
                         (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
-        editing-key    (:editor/editing @state/state)
+        editing-key    (state/get-edit-input-id)
         *el (rum/use-ref nil)
         _ (rum/use-effect! (fn []
                              (when-let [^js/HTMLElement cnt
