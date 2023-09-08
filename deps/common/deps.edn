@@ -1,4 +1,5 @@
-{:aliases
+{:paths ["src" "resources"]
+ :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
                        org.clojure/clojurescript {:mvn/version "1.11.54"}}
