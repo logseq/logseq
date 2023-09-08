@@ -109,21 +109,16 @@
   #(swap! current-db-id dec))
 
 (defn- ->block-tx [m uuid-maps property-db-ids page-id last-block]
-  (let [property-refs (when (seq (:properties m))
-                        (build-property-refs (:properties m) property-db-ids))]
-    (merge (dissoc m :properties)
-           (sqlite-util/block-with-timestamps
-            {:db/id (new-db-id)
-             :block/format :markdown
-             :block/path-refs (cond-> [{:db/id page-id}]
-                                (seq (:properties m))
-                                (into property-refs))
-             :block/page {:db/id page-id}
-             :block/left {:db/id (or (:db/id last-block) page-id)}
-             :block/parent {:db/id page-id}})
-           (when (seq (:properties m))
-             {:block/properties (->block-properties-tx (:properties m) uuid-maps)
-              :block/refs property-refs}))))
+  (merge (dissoc m :properties)
+         (sqlite-util/block-with-timestamps
+          {:db/id (new-db-id)
+           :block/format :markdown
+           :block/page {:db/id page-id}
+           :block/left {:db/id (or (:db/id last-block) page-id)}
+           :block/parent {:db/id page-id}})
+         (when (seq (:properties m))
+           {:block/properties (->block-properties-tx (:properties m) uuid-maps)
+            :block/refs (build-property-refs (:properties m) property-db-ids)})))
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a

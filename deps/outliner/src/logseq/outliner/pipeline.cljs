@@ -90,7 +90,7 @@
 ;; Steps:
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.
-(defn compute-block-path-refs
+(defn- compute-block-path-refs
   [{:keys [db-before db-after]} blocks*]
   (let [blocks (remove :block/name blocks*)
         *computed-ids (atom #{})]
@@ -143,3 +143,9 @@
                        :block/path-refs new-refs}])
                    children-refs))))
             blocks)))
+
+(defn compute-block-path-refs-tx
+  [tx-report blocks]
+  (let [refs-tx (compute-block-path-refs tx-report blocks)
+        truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)]
+    (concat truncate-refs-tx refs-tx)))

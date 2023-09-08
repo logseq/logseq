@@ -15,7 +15,7 @@
        (map first)))
 
 ;; TODO: Move this test to outliner dep when there is a load-test-files helper for deps
-(deftest compute-block-path-refs
+(deftest compute-block-path-refs-tx
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "prop:: #bar
 - parent #foo
@@ -32,9 +32,8 @@
                                          :block/path-refs [{:db/id new-tag-id}])
                                   %)
                                blocks)
-          refs-tx (pipeline/compute-block-path-refs {:tx-meta {:outliner-op :save-block} :db-after @conn} modified-blocks)
-          _ (d/transact! conn (concat (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
-                                      refs-tx))
+          refs-tx (pipeline/compute-block-path-refs-tx {:tx-meta {:outliner-op :save-block} :db-after @conn} modified-blocks)
+          _ (d/transact! conn refs-tx)
           updated-blocks (->> (get-blocks @conn)
                               (map #(hash-map :block/content (:block/content %)
                                               :path-ref-names (mapv :block/name (:block/path-refs %)))))]

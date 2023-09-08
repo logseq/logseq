@@ -17,10 +17,10 @@
          (not (get-in tx-report [:tx-meta :created-from-journal-template?])))
     (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
-(defn compute-block-path-refs
+(defn compute-block-path-refs-tx
   [{:keys [tx-meta] :as tx-report} blocks]
   (when (and (:outliner-op tx-meta) (react/path-refs-need-recalculated? tx-meta))
-    (outliner-pipeline/compute-block-path-refs tx-report blocks)))
+    (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
 
 (defn invoke-hooks
   [tx-report]
@@ -30,11 +30,9 @@
                (not (:replace? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
-            refs-tx (util/profile
+            tx (util/profile
                      "Compute path refs: "
-                     (set (compute-block-path-refs tx-report blocks)))
-            truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
-            tx (util/concat-without-nil truncate-refs-tx refs-tx)
+                     (set (compute-block-path-refs-tx tx-report blocks)))
             tx-report' (if (seq tx)
                          (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
                                                                               :replace? true}))]
